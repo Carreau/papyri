@@ -950,6 +950,21 @@ def pygment_css() -> Response:
     return Response(CSS_DATA, mimetype="text/css")
 
 
+async def serve_app(subpath):
+    print("subpath...", subpath)
+    here = Path(os.path.dirname(__file__))
+    if "main" in subpath:
+        import glob
+
+        res = glob.glob(glob.glob(f"{here}/app/js/main.*.js")[0])
+        new = "/".join(res[0].split("/")[-2:])
+        print("Did you mean ", subpath, new)
+        subpath = new
+
+    static = here / "app"
+    return await send_from_directory(static, subpath)
+
+
 def serve(*, sidebar: bool, port=1234):
     app = QuartTrio(__name__, static_folder=None)
 
@@ -976,6 +991,7 @@ def serve(*, sidebar: bool, port=1234):
 
     app.route("/logo.png")(static("papyri-logo.png"))
     app.route("/static/pygments.css")(pygment_css)
+    app.route("/app/<path:subpath>")(serve_app)
     # sub here is likely incorrect
     app.route(f"{prefix}<package>/<version>/img/<path:subpath>")(img)
     app.route(f"{prefix}<package>/<version>/examples/<path:subpath>")(

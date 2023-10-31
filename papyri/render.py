@@ -956,7 +956,7 @@ async def serve_app(subpath):
     if "main" in subpath:
         import glob
 
-        res = glob.glob(glob.glob(f"{here}/app/js/main.*.js")[0])
+        res = glob.glob(glob.glob(f"{here}/app/static/js/main.*.js")[0])
         new = "/".join(res[0].split("/")[-2:])
         print("Did you mean ", subpath, new)
         subpath = new

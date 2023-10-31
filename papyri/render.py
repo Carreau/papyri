@@ -961,7 +961,7 @@ async def serve_app(subpath):
         print("Did you mean ", subpath, new)
         subpath = new
 
-    static = here / "app"
+    static = here / "app" / "static"
     return await send_from_directory(static, subpath)
 
 

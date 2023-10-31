@@ -57,4 +57,5 @@ const render = (name) => {
   );
 }
 
+window.render = render
 

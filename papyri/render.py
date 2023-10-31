@@ -952,11 +952,12 @@ def pygment_css() -> Response:
 
 async def serve_app(subpath):
     print("subpath...", subpath)
+    import glob
     here = Path(os.path.dirname(__file__))
     if "main" in subpath:
-        import glob
+        ext = subpath.split(".")[-1]
 
-        res = glob.glob(glob.glob(f"{here}/app/static/js/main.*.js")[0])
+        res = glob.glob(glob.glob(f"{here}/app/static/{ext}/main.*.{ext}")[0])
         new = "/".join(res[0].split("/")[-2:])
         print("Did you mean ", subpath, new)
         subpath = new

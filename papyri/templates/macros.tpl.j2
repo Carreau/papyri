@@ -55,12 +55,7 @@
     {% set key = uuid() %}
     <div id="{{ key }}"></div>
     <script>
-        function init() {
-            const myst = new MyST();
-            const html = myst.renderMdast({{ astJson|tojson }});
-            document.getElementById("{{ key }}").innerHTML = html;
-        }
-        init();
+      render("{{ key }}", {"type": "root", "children":[{{ astJson|tojson(indent=2) }}]})
     </script>
 {%- endmacro %}
 

@@ -20,7 +20,9 @@ const SignatureRenderer = ({ node }) => {
   );
 };
 
-const LOC = { signature: SignatureRenderer };
+
+
+const LOC = { signature: SignatureRenderer};
 const RENDERERS = { ...DEFAULT_RENDERERS, ...LOC };
 
 function MyComponent({ node }) {
@@ -45,8 +47,8 @@ const mytree = {
 
 console.log('Loading X');
 
-const render = (name) => {
-  const root = ReactDOM.createRoot(document.getElementById("root"));
+const render = (id, tree) => {
+  const root = ReactDOM.createRoot(document.getElementById(id));
 
   root.render(
     <React.StrictMode>

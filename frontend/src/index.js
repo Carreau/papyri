@@ -60,4 +60,5 @@ const render = (id, tree) => {
 }
 
 window.render = render
+window.fromMarkdown = fromMarkdown
 

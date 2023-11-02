@@ -4,16 +4,7 @@
     {%- elif type_ == 'Directive' -%}
          <code class='not-implemented'>:{{obj.domain}}:{{obj.role}}:`{{obj.value}}`</code>
     {%- elif type_ == 'Link' -%}
-    <!--link-->
-        {# Links have : value, reference, kind exists#}
-        {%- if obj.reference.kind=='local' -%}
-            <code><a href="#{{obj.reference.path}}" class='{{obj.kind}}'>{{obj.value}}</a></code>
-        {%- elif obj.kind in ('api', 'exists', 'module', 'assets') -%}
-        <code><a href="{{url(obj.reference)}}" class='exists'>{{obj.value}}</a></code>
-        {% else %}
-            <!--link ur {{obj}}-->
-            {{unreachable(type_, obj.__class__.__name__, obj.__dict__)}}
-        {%- endif -%}
+         {{ render_myst(obj) }}
     {%- elif type_ == 'RefInfo' -%}
         {# Links have : value, reference, kind exists#}
         {%- if obj.kind=='local' -%}

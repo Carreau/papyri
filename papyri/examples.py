@@ -4,7 +4,8 @@ Examples Modules Heading 1
 ==========================
 
 This module contains examples, none of the functions, classes or other attribute
-should have any effects when called.
+should have any effects when called. Paragraphs should be able to contain plain 
+`links <https://github.com/jupyter/papyri>`__, or link via directives: :any:`papyri`
 
 
 :fieldlistitem:

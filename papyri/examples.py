@@ -60,39 +60,13 @@ Math
 
     \\pi = 3.14159
 
+Literal Blocks (verbatim)
+-------------------------
 
-"""
+::
 
-"""
-
-term
-: definition
-
-## Math
-
-
-## Figures
-
-```{figure} https://via.placeholder.com/150
-:width: 100px
-:align: center
-
-Figure caption
-```
-
-## Tables
-
-```{list-table}
-:header-rows: 1
-:align: center
-
-* - Header 1
-  - Header 2
-* - Item 1 a
-  - Item 2 a
-* - Item 1 b
-  - Item 2 b
-```
+    This should be a verb-
+    -batim block
 
 """
 

@@ -21,8 +21,20 @@ const SignatureRenderer = ({ node }) => {
 };
 
 
+const Directive = ({ node }) => {
+  return (
+    <>
+      <code className='not-implemented'>
+        <span> {JSON.stringify(node)}</span>
+        <MyST ast={node.children} />
+      </code>
+    </>
+  );
+};
 
-const LOC = { signature: SignatureRenderer};
+
+
+const LOC = { signature: SignatureRenderer, Directive:Directive};
 const RENDERERS = { ...DEFAULT_RENDERERS, ...LOC };
 
 function MyComponent({ node }) {

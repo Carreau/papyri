@@ -103,7 +103,10 @@ class Directive(Node):
         return prefix
 
     def __repr__(self):
-        return f"<Directive {self.prefix}`{self.value}`>"
+        return f"<Directive {self.prefix}`{self.value}` `{self.to_dict()}`>"
+
+    def __str__(self):
+        assert False
 
 
 @register(4002)

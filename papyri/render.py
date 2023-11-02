@@ -67,8 +67,13 @@ def minify(s: str) -> str:
     )
 
 
-def unreachable(*obj):
+def unimplemented(*obj):
+    print("Unimplemtned:", str(obj))
     return str(obj)
+
+
+def unreachable(*obj):
+    #return str(obj)
     assert False, f"Unreachable: {obj=}"
 
 
@@ -240,6 +245,7 @@ class HtmlRenderer:
         self.LR = LinkReifier(resolver=self.resolver)
         self.env.globals["len"] = len
         self.env.globals["url"] = self.resolver.resolve
+        self.env.globals["unimplemented"] = unimplemented
         self.env.globals["unreachable"] = unreachable
         self.env.globals["sidebar"] = sidebar
         self.env.globals["dothtml"] = extension

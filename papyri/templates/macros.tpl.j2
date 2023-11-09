@@ -1,10 +1,6 @@
 e{% macro render_inner(type_, obj) -%}
-    {% if type_[0] == 'M' %}
-         {{ render_myst(obj) }}
-    {%- elif type_ == 'Directive' -%}
-    <!-- In theory we should never get Raw directive in final output --!>
-         {{ render_myst(obj) }}
-    {%- elif type_ == 'RefInfo' -%}
+    {%- if type_ == 'RefInfo' -%}
+        {{unreachable(type_, obj.__class__.__name__, obj.__dict__)}}
         {# Links have : value, reference, kind exists#}
         {%- if obj.kind=='local' -%}
             <code><a link href="#{{obj.path}}" class='{{obj.kind}}'>{{obj.path}}</a></code>
@@ -13,7 +9,10 @@ e{% macro render_inner(type_, obj) -%}
         {%- else %}
             {{unreachable(type_, obj.__class__.__name__, obj.__dict__)}}
         {%- endif -%}
-    {%- elif type_ in ('Math', 'Verbatim', 'Link') -%}
+    {%- elif type_ == 'Directive' -%}
+    <!-- In theory we should never get Raw directive in final output --!>
+         {{ render_myst(obj) }}
+    {%- elif type_ in ('Math', 'Verbatim', 'Link', 'MText','MEmphasis','MInlineCode') -%}
         {{ render_myst(obj) }}
     {%- elif type_ in ['SubstitutionRef','Unimplemented'] %}
         {{unimplemented(type_, obj.__class__.__name__, obj.__dict__)}}

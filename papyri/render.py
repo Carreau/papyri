@@ -31,7 +31,7 @@ from .config import ingest_dir
 from .crosslink import IngestedBlobs, find_all_refs
 from .graphstore import GraphStore, Key
 from .myst_ast import MLink, MText
-from .take2 import RefInfo, Section, encoder
+from .take2 import RefInfo, Section, encoder, Link
 from .tree import TreeReplacer, TreeVisitor
 from .utils import dummy_progress, progress
 
@@ -579,6 +579,7 @@ class HtmlRenderer:
             <Multiline Description Here>
 
         """
+        assert template is not None
 
         assert isinstance(meta, dict)
         # TODO : move this to ingest likely.
@@ -753,11 +754,15 @@ class HtmlRenderer:
         gfiles = list(self.store.glob((None, None, "module", None)))
         random.shuffle(gfiles)
         if config.ascii:
-            env, template = _ascii_env()
+            env, ascii_template = _ascii_env()
+        else:
+            env, ascii_template = None, None
         for _, key in progress(gfiles, description="Rendering API..."):
             module, version = key.module, key.version
             if config.ascii:
-                await _ascii_render(key, store=self.store, env=env, template=template)
+                await _ascii_render(
+                    key, store=self.store, env=env, template=ascii_template
+                )
             if config.html:
                 doc_blob, qa, siblings, parts_links, backward, forward = await loc(
                     key,
@@ -1143,7 +1148,7 @@ class LinkReifier(TreeReplacer):
     def __init__(self, resolver):
         self.resolver = resolver
 
-    def replace_Link(self, link):
+    def replace_Link(self, link: Link):
         """
         By default our links resolution is delayed,
         Here we resolve them.
@@ -1164,6 +1169,19 @@ class LinkReifier(TreeReplacer):
                 return [MLink(children=[MText(link.value)], url=turl, title="")]
             else:
                 return [MText(link.value + "(?)")]
+
+    def replace_RefInfo(self, refinfo: RefInfo):
+        """
+        By default our links resolution is delayed,
+        Here we resolve them.
+
+        Some of this resolution should be moved to earlier.
+        """
+        exists, turl = self.resolver.exists_resolve(refinfo)
+        if exists:
+            return [MLink(children=[MText(refinfo.path)], url=turl, title=refinfo.path)]
+        else:
+            return [MText(refinfo.path + "(?)")]
 
 
 def old_render_one(
@@ -1186,7 +1204,6 @@ def old_render_one(
         a Doc object with the informations for current obj
     qa : str
         fully qualified name for current object
-
     """
 
     assert isinstance(meta, dict)

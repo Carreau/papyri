@@ -12,7 +12,11 @@ e{% macro render_inner(type_, obj) -%}
     {%- elif type_ == 'Directive' -%}
     <!-- In theory we should never get Raw directive in final output --!>
          {{ render_myst(obj) }}
-    {%- elif type_ in ('Math', 'Verbatim', 'Link', 'MText','MEmphasis','MInlineCode') -%}
+    {%- elif type_ in ('Link',) -%}
+    <!-- Likely replace with MLink-->
+        {{ unreachable(obj)}}
+        {{ render_myst(obj) }}
+    {%- elif type_ in ('Math', 'Verbatim', 'MText','MEmphasis','MInlineCode') -%}
         {{ render_myst(obj) }}
     {%- elif type_ in ['SubstitutionRef','Unimplemented'] %}
         {{unimplemented(type_, obj.__class__.__name__, obj.__dict__)}}

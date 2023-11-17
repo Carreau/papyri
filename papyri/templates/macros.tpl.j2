@@ -16,7 +16,7 @@
     <!-- Likely replace with MLink-->
         {{ unreachable(obj)}}
         {{ render_myst(obj) }}
-    {%- elif type_ in ('Math', 'Verbatim', 'MText','MEmphasis','MInlineCode') -%}
+    {%- elif type_ in ('Math', 'Verbatim', 'MText','MEmphasis','MInlineCode', 'MLink') -%}
         {{ render_myst(obj) }}
     {%- elif type_ in ['SubstitutionRef','Unimplemented'] %}
         {{unimplemented(type_, obj.__class__.__name__, obj.__dict__)}}

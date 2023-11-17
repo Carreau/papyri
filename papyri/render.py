@@ -51,7 +51,9 @@ log = logging.getLogger("papyri")
 CSS_DATA = HtmlFormatter(style="pastie").get_style_defs(".highlight")
 
 
-def group_backrefs(backrefs: List[RefInfo]) -> Dict[str, List[RefInfo]]:
+def group_backrefs(
+    backrefs: List[RefInfo], LR: "LinkReifier"
+) -> Dict[str, List[MLink]]:
     """
     Take a list of backreferences and group them by the module they are comming from
     """
@@ -63,7 +65,9 @@ def group_backrefs(backrefs: List[RefInfo]) -> Dict[str, List[RefInfo]]:
             mod, _ = ref.path.split(".", maxsplit=1)
         else:
             mod = ref.path
-        group[mod].append(ref)
+        [link] = LR.replace_RefInfo(ref)
+        assert isinstance(link, MLink), link
+        group[mod].append(link)
     return group
 
 
@@ -592,7 +596,8 @@ class HtmlRenderer:
         # TODO : move this to ingest likely.
         # Here if we have too many references we group them on where they come from.
         assert not hasattr(doc, "logo")
-        backrefs_ = (None, group_backrefs(backrefs))
+
+        backrefs_ = (None, group_backrefs(backrefs, self.LR))
 
         try:
             for k, v in doc.content.items():
@@ -1440,13 +1445,6 @@ async def main(ascii: bool, html, dry_run, sidebar: bool, graph: bool, minify: b
     html_renderer = HtmlRenderer(
         gstore, sidebar=config.html_sidebar, prefix=prefix, trailing_html=True
     )
-    await html_renderer._write_gallery(config)
-
-    await html_renderer._write_example_files(config)
-    await html_renderer._write_index(html_dir_)
-    await html_renderer.copy_assets(config)
-    await html_renderer.copy_static(config.output_dir)
-    await html_renderer._write_narrative_files(config)
 
     await html_renderer._write_api_file(
         tree,
@@ -1455,3 +1453,10 @@ async def main(ascii: bool, html, dry_run, sidebar: bool, graph: bool, minify: b
         config,
         graph,
     )
+    await html_renderer._write_gallery(config)
+
+    await html_renderer._write_example_files(config)
+    await html_renderer._write_index(html_dir_)
+    await html_renderer.copy_assets(config)
+    await html_renderer.copy_static(config.output_dir)
+    await html_renderer._write_narrative_files(config)

@@ -1,4 +1,4 @@
-e{% macro render_inner(type_, obj) -%}
+{% macro render_inner(type_, obj) -%}
     {%- if type_ == 'RefInfo' -%}
         {{unreachable(type_, obj.__class__.__name__, obj.__dict__)}}
         {# Links have : value, reference, kind exists#}

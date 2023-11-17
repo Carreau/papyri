@@ -14,7 +14,13 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple
 
 from flatlatex import converter
-from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoescape
+from jinja2 import (
+    Environment,
+    FileSystemLoader,
+    StrictUndefined,
+    select_autoescape,
+    Template,
+)
 from pygments.formatters import HtmlFormatter
 from quart import Response, redirect, send_from_directory
 from quart_trio import QuartTrio
@@ -408,6 +414,7 @@ class HtmlRenderer:
         doc.arbitrary = acc
         return self.env.get_template("html.tpl.j2").render(
             graph=None,
+            # TODO: next 2
             backrefs=[[], []],
             module="*",
             doc=doc,
@@ -543,16 +550,16 @@ class HtmlRenderer:
 
     def render_one(
         self,
-        template,
+        template: Template,
         doc: IngestedBlobs,
-        qa,
+        qa: str,
         *,
-        current_type,
-        backrefs,
-        parts=(),
+        current_type: str,
+        backrefs: List[RefInfo],
+        parts: Dict[str, List[Tuple[RefInfo, str]]] = dict(),
         parts_links=(),
-        graph="{}",
-        meta,
+        graph: str = "{}",
+        meta: dict,
         toctrees,
     ):
         """
@@ -561,14 +568,14 @@ class HtmlRenderer:
         Parameters
         ----------
         template
-            a Jinja@ template object used to render.
+            a Jinja template object used to render.
         doc : DocBlob
             a Doc object with the informations for current obj
         qa : str
             fully qualified name for current object
         backrefs : list of str
             backreferences of document pointing to this.
-        parts : Dict[str, list[(str, str)]
+        parts : Dict[str, list[Tuple[str, str]]
             used for navigation and for parts of the breakcrumbs to have navigation to siblings.
             This is not directly related to current object.
         parts_links : <Insert Type here>
@@ -585,10 +592,7 @@ class HtmlRenderer:
         # TODO : move this to ingest likely.
         # Here if we have too many references we group them on where they come from.
         assert not hasattr(doc, "logo")
-        if len(backrefs) > 30:
-            backrefs = (None, group_backrefs(backrefs))
-        else:
-            backrefs = (backrefs, None)
+        backrefs_ = (None, group_backrefs(backrefs))
 
         try:
             for k, v in doc.content.items():
@@ -603,7 +607,8 @@ class HtmlRenderer:
                 version=meta["version"],
                 module=module,
                 name=qa.split(":")[-1].split(".")[-1],
-                backrefs=backrefs,
+                # TODO: next 1
+                backrefs=backrefs_,
                 parts_mods=parts.get(module, []),
                 parts=list(parts.items()),
                 parts_links=parts_links,

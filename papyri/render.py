@@ -1366,10 +1366,14 @@ async def loc(document: Key, *, store: GraphStore, tree, known_refs, ref_map):
     these heuristics break down.
 
     """
-    assert isinstance(document, Key), type(document)
-    qa = document.path
-    bytes_, backward, forward = store.get_all(document)
-    doc_blob: IngestedBlobs = encoder.decode(bytes_)
+    try:
+        assert isinstance(document, Key), type(document)
+        qa = document.path
+        bytes_, backward, forward = store.get_all(document)
+        doc_blob: IngestedBlobs = encoder.decode(bytes_)
+    except Exception as e:
+        e.add_note(f"Reading {document.path}")
+        raise
 
     siblings = cs2(qa, tree, ref_map)
 

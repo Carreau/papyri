@@ -130,6 +130,8 @@ class Link(Node):
     directive from it.
     - A Link might get several token for multiline; I'm not sure about that either, and wether the inner text should be
       a block or not.
+
+    - In general link won't end up in the final Json that is rendered as they will need to be resolved at runtime ?
     """
 
     value: str

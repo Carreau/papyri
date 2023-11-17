@@ -1,21 +1,7 @@
 {% macro render_inner(type_, obj) -%}
-    {%- if type_ == 'RefInfo' -%}
-        {{unreachable(type_, obj.__class__.__name__, obj.__dict__)}}
-        {# Links have : value, reference, kind exists#}
-        {%- if obj.kind=='local' -%}
-            <code><a link href="#{{obj.path}}" class='{{obj.kind}}'>{{obj.path}}</a></code>
-        {%- elif obj.kind in ('api', 'exists', 'module','assets', 'examples') -%}
-            <code><a link href="{{url(obj)}}" class='exists'>{{obj.path}}</a></code>
-        {%- else %}
-            {{unreachable(type_, obj.__class__.__name__, obj.__dict__)}}
-        {%- endif -%}
-    {%- elif type_ == 'Directive' -%}
-    <!-- In theory we should never get Raw directive in final output --!>
+    {%- if type_ == 'Directive' -%}
+         <!-- In theory we should never get Raw directive in final output --!>
          {{ render_myst(obj) }}
-    {%- elif type_ in ('Link',) -%}
-    <!-- Likely replace with MLink-->
-        {{ unreachable(obj)}}
-        {{ render_myst(obj) }}
     {%- elif type_ in ('Math', 'Verbatim', 'MText','MEmphasis','MInlineCode', 'MLink') -%}
         {{ render_myst(obj) }}
     {%- elif type_ in ['SubstitutionRef','Unimplemented'] %}
@@ -51,21 +37,6 @@
 {%- endmacro %}
 
 
-{%- macro lines(self) -%}{%- for x in self %}
-{{x.text}}
-{%- endfor -%}
-{%- endmacro %}
-
-
-{% macro block(self) -%}
-{{-lines(self.lines)}}
-{%- if self.wh -%}
-{{lines(self.wh)}}
-{%- endif -%}
-{%- if self.ind -%}
-    {{-lines(self.ind)-}}
-{%- endif -%}
-{%- endmacro %}
 
 {% macro myst_directive(dve) -%}
     <pre class='not-implemented'>
@@ -130,12 +101,6 @@
                </dd>
                {%endfor %}
            </dl>
-       {% elif type == 'DefListItem' %}
-           <pre>
-           {{-block(obj)-}}
-           </pre>
-       {% elif type == 'Example' %}
-           <pre>{{block(obj)-}}</pre>
        {% elif type == 'Section' %}
            {% for item in obj %}
                {{ render_II(item) }}

@@ -37,7 +37,7 @@ from .config import ingest_dir
 from .crosslink import IngestedBlobs, find_all_refs
 from .graphstore import GraphStore, Key
 from .myst_ast import MLink, MText
-from .take2 import RefInfo, Section, encoder, Link
+from .take2 import RefInfo, Section, encoder, Link, SeeAlsoItem
 from .tree import TreeReplacer, TreeVisitor
 from .utils import dummy_progress, progress
 
@@ -604,6 +604,9 @@ class HtmlRenderer:
                 doc.content[k] = self.LR.visit(v)
 
             doc.arbitrary = [self.LR.visit(x) for x in doc.arbitrary]
+            # TODO: techically invalid See Also here
+            doc.see_also = [self.LR.visit(s) for s in doc.see_also]
+            # assert False, doc.see_also
             module = qa.split(".")[0]
             return template.render(
                 current_type=current_type,
@@ -1180,7 +1183,18 @@ class LinkReifier(TreeReplacer):
             else:
                 return [MText(link.value + "(?)")]
 
-    def replace_RefInfo(self, refinfo: RefInfo):
+    def replace_SeeAlsoItem(self, see_also: SeeAlsoItem) -> List[Any]:
+        name = see_also.name
+        type_ = see_also.type
+        descriptions = see_also.descriptions
+
+        name = self.visit(name)
+        descriptions = [self.visit(d) for d in descriptions]
+
+        # TODO: this is type incorrect for now. Fix later
+        return [SeeAlsoItem(name, descriptions, type_)]
+
+    def replace_RefInfo(self, refinfo: RefInfo) -> List[Any]:
         """
         By default our links resolution is delayed,
         Here we resolve them.

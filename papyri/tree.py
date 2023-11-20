@@ -318,7 +318,8 @@ class TreeReplacer:
     def visit(self, node):
         self._replacements = Counter()
         self._cr = 0
-        assert not isinstance(node, list)
+        assert not isinstance(node, list), node
+        assert node is not None
         res = self.generic_visit(node)
         assert len(res) == 1
         return res[0]
@@ -347,7 +348,7 @@ class TreeReplacer:
                 "MMath",
                 "MInlineMath",
                 "Options",
-                "SeeAlsoItems",
+                "SeeAlsoItem",
                 "SubstitutionRef",
                 "Transition",
                 "Unimplemented",

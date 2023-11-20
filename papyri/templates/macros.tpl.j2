@@ -12,16 +12,6 @@
     {%- endif -%}
 {%- endmacro %}
 
-{% macro block_paragraph(prg) -%}
-    {{unreachable(prg)}}
-    <p>
-        {%- for obj in prg.children -%}
-            {{- render_inner(obj.__class__.__name__, obj) -}}
-        {%- endfor -%}
-    </p>
-{% endmacro %}
-
-
 {% macro render_paragraph(prgs) -%}
     {% for prg in prgs %}
         {{ render_myst(prg) }}

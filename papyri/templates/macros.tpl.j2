@@ -57,19 +57,7 @@
            {{obj.value}}  {# TODO : likely smth wrong with field list #}
        {% elif type[0] == 'M' %}
             {{ render_myst(obj) }}
-       {%- elif type == 'Link' -%}
-            {{unreachable(obj)}}
-
-
-           {# Links have : value, reference, kind exists#}
-           {%- if obj.reference.kind=='local' -%}
-               <code><a href="#{{obj.reference.path}}" class='{{obj.kind}}'>{{obj.value}}</a></code>
-           {%- elif obj.kind in ('api', 'exists', 'module', 'assets') -%}
-               <code><a href="{{url(obj.reference)}}" class='exists'>{{obj.value}}</a></code>
-           {% else %}
-               {{unreachable(type_, obj.__class__.__name__, obj.__dict__)}}
-           {%- endif -%}
-       {%- elif type == 'MMystDirective' -%}
+        {%- elif type == 'MMystDirective' -%}
            {{myst_directive(obj)}}
        {% elif type == 'Admonition' %}
             {{block_admonition(obj)}}

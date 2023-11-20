@@ -13,6 +13,7 @@
 {%- endmacro %}
 
 {% macro block_paragraph(prg) -%}
+    {{unreachable(prg)}}
     <p>
         {%- for obj in prg.children -%}
             {{- render_inner(obj.__class__.__name__, obj) -}}
@@ -23,7 +24,7 @@
 
 {% macro render_paragraph(prgs) -%}
     {% for prg in prgs %}
-        {{block_paragraph(prg)}}
+        {{ render_myst(prg) }}
     {%- endfor %}
 {%- endmacro %}
 
@@ -60,10 +61,6 @@
 
 {% macro render_II(obj) -%}
 
-    {%- if obj.__class__.__name__ == 'Paragraph' -%}
-        {{-block_paragraph(obj)-}}
-    {%- else -%}
-      
     {%- set type = obj.__class__.__name__ -%}
        {%- if type in ('Directive', 'Math', 'Verbatim') -%}
            {# {{unreachable(obj)}} #}
@@ -84,8 +81,6 @@
            {{myst_directive(obj)}}
        {% elif type == 'Admonition' %}
             {{block_admonition(obj)}}
-       {% elif type == 'Paragraph' %}
-        {{block_paragraph(obj)}}
        {%- elif type == 'BlockVerbatim' -%}
             <pre>
            {{- obj.value -}}
@@ -179,7 +174,6 @@
            {{-unimplemented(type, obj)-}}
            </pre>
        {%- endif -%}
-    {%- endif %}
 {%- endmacro %}
 
 

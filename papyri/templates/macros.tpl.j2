@@ -58,6 +58,8 @@
        {% elif type[0] == 'M' %}
             {{ render_myst(obj) }}
        {%- elif type == 'Link' -%}
+            {{unreachable(obj)}}
+
 
            {# Links have : value, reference, kind exists#}
            {%- if obj.reference.kind=='local' -%}

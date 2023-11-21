@@ -8,12 +8,17 @@ should have any effects when called. Paragraphs should be able to contain plain
 `links <https://github.com/jupyter/papyri>`__, or link via directives: :any:`papyri`
 
 
+FieldList
+---------
 
 :fieldlistitem:
     at least that the name tree sitter rst give it.
 :another: is a another fieldlistItem in this field list
     and it's description
 
+
+Enumeration and unordered lists
+-------------------------------
 
 Enumeration list.
 
@@ -28,6 +33,9 @@ Unordered list
 - item 3
 
 
+Definition Lists
+----------------
+
 Definition list (not sure about the difference with field lists...)
 
 term 1
@@ -38,6 +46,9 @@ term 2
 
     Definition 2, paragraph 2.
 
+
+Admonitions
+-----------
 
 .. note::
 

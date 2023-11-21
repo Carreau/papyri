@@ -155,13 +155,27 @@ class Leaf(Node):
 
 @register(4027)
 class SubstitutionDef(Node):
-    name: str
-    directive: MMystDirective
+    value: str
+    children: List[MMystDirective]
+
+    def __init__(self, value, children):
+        print(f"Sdef {value=} {children=}")
+        self.value = value
+        self.children = children
+        pass
 
 
 @register(4041)
 class SubstitutionRef(Leaf):
-    pass
+    """
+    This will be in the for |XXX|, and need to be replaced.
+    """
+
+    value: str
+
+    def __init__(self, value: str) -> None:
+        print("SRef:", value)
+        self.value = value
 
 
 @register(4018)

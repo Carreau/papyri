@@ -78,7 +78,14 @@ This is q block quote, to do, we know that Attributions are not supported right 
 
     "We have weaponed the Tab Key"
 
-    -- Fernando Pérez
+
+
+Substitutions
+~~~~~~~~~~~~~
+
+In this paragraph: |SubstitutionRef| Should b replaced...
+
+.. |SubstitutionDef| replace:: ASUBSTITUTIONDEF
 
 """
 

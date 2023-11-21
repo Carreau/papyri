@@ -669,8 +669,8 @@ class TSVisitor:
         assert directive.type == "directive"
         return [
             SubstitutionDef(
-                self.bytes[sub.start_byte : sub.end_byte].decode(),
-                self.visit_directive(directive)[0],
+                value=self.bytes[sub.start_byte : sub.end_byte].decode(),
+                children=self.visit_directive(directive),
             )
         ]
 

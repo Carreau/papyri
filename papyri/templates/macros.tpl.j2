@@ -80,18 +80,18 @@
            </dl>
        {% elif type == 'TocTree' %}
             {{ unreachable()}}
-        {%if obj.children%}
-            <details class='toctree' open>
-            <summary><a class="toctree" href="{{url(obj.ref)}}">{{obj.title}}</a></summary>
-              <ul>
-               {% for c in obj.children %}
-                   <li>{{render_II(c)}}</li>
-               {% endfor %}
-              </ul>
-            </details>
-        {% else %}
-            <a class="toctree" href="{{url(obj.ref)}}">{{obj.title}}</a>
-        {%endif%}
+            {%if obj.children%}
+                <details class='toctree' open>
+                <summary><a class="toctree" href="{{url(obj.ref)}}">{{obj.title}}</a></summary>
+                  <ul>
+                   {% for c in obj.children %}
+                       <li>{{render_II(c)}}</li>
+                   {% endfor %}
+                  </ul>
+                </details>
+            {% else %}
+                <a class="toctree" href="{{url(obj.ref)}}">{{obj.title}}</a>
+            {%endif%}
          
        {% elif type in ['Options','Unimplemented','Comment','SubstitutionRef'] %}
            <pre class='not-implemented'>

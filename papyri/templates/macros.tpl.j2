@@ -59,16 +59,6 @@
            {{myst_directive(obj)}}
        {%- elif type == 'DefList' -%}
           {{ render_myst(obj) }}
-          <!-- deflist -->
-           <dl>
-               {% for item in obj.children %}
-               <dt>{{render_II(item.dt)}}</dt>
-               <dd>{%- for it in item.dd -%}
-                       {{-render_II(it)-}}
-                  {%- endfor -%}
-               </dd>
-               {%endfor %}
-           </dl>
        {% elif type == 'Section' %}
            {% for item in obj %}
                {{ render_II(item) }}

@@ -53,18 +53,14 @@
 
     {%- set type = obj.__class__.__name__ -%}
        {%- if type in ('Directive', 'Math', 'Verbatim') -%}
+            {{ unreachable()}}
            {# {{unreachable(obj)}} #}
            {{obj.value}}  {# TODO : likely smth wrong with field list #}
        {% elif type[0] == 'M' %}
             {{ render_myst(obj) }}
         {%- elif type == 'MMystDirective' -%}
+            {{ unreachable()}}
            {{myst_directive(obj)}}
-       {% elif type == 'Admonition' %}
-            {{block_admonition(obj)}}
-       {%- elif type == 'BlockVerbatim' -%}
-            <pre>
-           {{- obj.value -}}
-           </pre>
        {%- elif type == 'DefList' -%}
           <!-- deflist -->
            <dl>
@@ -80,24 +76,6 @@
            {% for item in obj %}
                {{ render_II(item) }}
            {% endfor %}
-        {% elif type == 'List' %}
-            {% if obj.ordered %}
-            <ol>
-               {%- for item in obj.children %}
-               <li>{{render_II(item)}}</li>
-               {% endfor %}
-            </ol>
-            {% else %}
-            <ul>
-               {%- for item in obj.children %}
-               <li>{{render_II(item)}}</li>
-               {% endfor %}
-            </ul>
-            {% endif %}
-       {% elif type == 'ListItem' %}
-               {%- for item in obj.children %}
-               {{render_II(item)}}
-               {% endfor %}
        {% elif type == 'FieldList' %}
            <dl> 
              {%- for item in obj.children %}
@@ -113,20 +91,8 @@
                </dd>
                {% endfor %}
            </dl>
-
-       {% elif type == 'FieldListItem' %}
-           <ol>
-               {%- for item in obj.children %}
-               <li>{{render_II(item)}}</li>
-               {% endfor %}
-           </ol>
-
-       {% elif type == 'BlockMath' %}
-        <span class="tex2jax_process">$${{obj.value}}$$</span>
-       {% elif type == 'Transition' %}
-         <hr/>
-
        {% elif type == 'TocTree' %}
+            {{ unreachable()}}
         {%if obj.children%}
             <details class='toctree' open>
             <summary><a class="toctree" href="{{url(obj.ref)}}">{{obj.title}}</a></summary>
@@ -140,10 +106,6 @@
             <a class="toctree" href="{{url(obj.ref)}}">{{obj.title}}</a>
         {%endif%}
          
-       {% elif type == 'BlockQuote' %}
-            <blockquote>
-               {%- for child in obj.children %}{{render_II(child)}}{% endfor -%}
-            </blockquote>
        {% elif type in ['Options','Unimplemented','Comment','SubstitutionRef'] %}
            <pre class='not-implemented'>
             {{obj}}

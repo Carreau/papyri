@@ -193,6 +193,10 @@ class MTarget(Node):
     # data: Any
 
 
+@register(4019)
+class MThematicBreak(Node):
+    type = "thematicBreak"
+
 StaticPhrasingContent = Union[
     MText,
     MInlineCode,
@@ -222,7 +226,7 @@ FlowContent = Union[
     MParagraph,
     # MDefinition,
     # MHeading,
-    # MThematicBreak,
+    MThematicBreak,
     MBlockquote,
     MList,
     # MHTML,

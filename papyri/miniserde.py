@@ -211,6 +211,7 @@ def deserialize(type_, annotation, data):
             try:
                 real_type = real_type[0]
             except IndexError:
+                breakpoint()
                 raise
             if data.get("data", _sentinel) is not _sentinel:
                 data_ = data["data"]

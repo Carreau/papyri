@@ -31,7 +31,7 @@ from .take2 import (
     Section,
     SubstitutionDef,
     SubstitutionRef,
-    Transition,
+    MThematicBreak,
     Unimplemented,
     compress_word,
     inline_nodes,
@@ -298,7 +298,7 @@ class TSVisitor:
         return []
 
     def visit_transition(self, node, prev_end=None):
-        return [Transition()]
+        return [MThematicBreak()]
 
     def visit_reference(self, node, prev_end=None):
         """

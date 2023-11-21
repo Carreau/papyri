@@ -260,7 +260,8 @@ class TreeVisitor:
         self.find = find
 
     def generic_visit(self, node):
-        from .take2 import Options, Transition
+        from .take2 import Options
+        from .myst_ast import MThematicBreak
 
         name = node.__class__.__name__
         if method := getattr(self, "visit_" + name, None):
@@ -296,7 +297,7 @@ class TreeVisitor:
             if type(node) not in self.skipped:
                 self.skipped.add(type(node))
             return {}
-        elif isinstance(node, (RefInfo, Options, Transition, SubstitutionDef)):
+        elif isinstance(node, (RefInfo, Options, MThematicBreak, SubstitutionDef)):
             return {}
         else:
             raise ValueError(f"{node.__class__} has no children, no values {node}")
@@ -336,7 +337,6 @@ class TreeReplacer:
                 self._replacements.update([name])
                 new_nodes = method(node)
             elif name in [
-                "BlockMath",
                 "Code",
                 "Comment",
                 "MComment",
@@ -350,7 +350,7 @@ class TreeReplacer:
                 "Options",
                 "SeeAlsoItem",
                 "SubstitutionRef",
-                "Transition",
+                "MThematicBreak",
                 "Unimplemented",
                 "MText",
                 "MCode",

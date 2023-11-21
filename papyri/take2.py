@@ -185,6 +185,7 @@ from .myst_ast import (
     MComment,
     MBlockquote,
     MTarget,
+    MThematicBreak,
 )
 
 
@@ -266,7 +267,7 @@ class NumpydocSignature(Node):
 class Section(Node):
     children: List[
         Union[
-            Transition,
+            MThematicBreak,
             # Code,
             MCode,
             MText,
@@ -413,10 +414,6 @@ def compress_word(stream) -> List[Any]:
         acc.append(MText(wds))
     return acc
 
-
-@register(4019)
-class Transition(Node):
-    pass
 
 
 inline_nodes = tuple(

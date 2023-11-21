@@ -39,15 +39,6 @@
     </pre>
 {% endmacro %}
 
-{% macro block_admonition(adm) -%}
-<div class='admonition'>
-    <div>{{adm.kind}} {{adm.title}}</div>
-    {% for it in adm.children %}
-        {{render_II(it)}}
-    {% endfor %}
-</div>
-{% endmacro %}
-
 
 {% macro render_II(obj) -%}
 

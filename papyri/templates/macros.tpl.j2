@@ -52,16 +52,13 @@
 {% macro render_II(obj) -%}
 
     {%- set type = obj.__class__.__name__ -%}
-       {%- if type in ('Directive', 'Math', 'Verbatim') -%}
-            {{ unreachable()}}
-           {# {{unreachable(obj)}} #}
-           {{obj.value}}  {# TODO : likely smth wrong with field list #}
-       {% elif type[0] == 'M' %}
+       {% if type[0] == 'M' %}
             {{ render_myst(obj) }}
-        {%- elif type == 'MMystDirective' -%}
-            {{ unreachable()}}
+       {%- elif type == 'MMystDirective' -%}
+           {{ unreachable()}}
            {{myst_directive(obj)}}
        {%- elif type == 'DefList' -%}
+          {{ render_myst(obj) }}
           <!-- deflist -->
            <dl>
                {% for item in obj.children %}

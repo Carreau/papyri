@@ -1242,6 +1242,7 @@ def old_render_one(
             doc.content[k] = LR.visit(v)
 
         doc.arbitrary = [LR.visit(x) for x in doc.arbitrary]
+        doc.see_also = [LR.visit(s) for s in doc.see_also]
         return template.render(
             current_type=current_type,
             doc=doc,

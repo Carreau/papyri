@@ -14,7 +14,7 @@
 {%block api %}
 
 
-{% from 'macros.tpl.j2' import render_inner, render_paragraph, myst_directive, example, render_myst, render_II with context %}
+{% from 'macros.tpl.j2' import render_paragraph, myst_directive, example, render_myst, render_II with context %}
 {% from 'graph.tpl.j2' import d3script with context%}
 
 
@@ -121,9 +121,7 @@
     <h3 id='section-backrefs'>Back References</h3>
     <p>The following pages refer to to this document either explicitly or contain code examples using this.</p>
 
-    {% if backrefs[0] is not none %}
-        {{unreachable()}}
-    {% endif%}
+
     {% if backrefs[1] is not none %}
         {% for k,v in backrefs[1].items() %}
         <h4>{{k}}</h4>
@@ -131,7 +129,7 @@
             <summary>{{v | length}} Elements</summary>
             <dl>
             {% for r in v %}
-                <dd>{{ render_inner('MLink', r) -}}</dd>
+                <dd>{{ render_II(r) -}}</dd>
             {% endfor %}
             </dl>
         </details>

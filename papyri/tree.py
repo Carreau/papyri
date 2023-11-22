@@ -303,7 +303,6 @@ class TreeVisitor:
             raise ValueError(f"{node.__class__} has no children, no values {node}")
 
 
-from there import print
 
 
 class TreeReplacer:
@@ -312,6 +311,8 @@ class TreeReplacer:
 
     define replace_XXX(xxx) that return a list of new nodes, and call visit(and the root tree)
     """
+
+    _replacements: Counter
 
     def __init__(self):
         self._replacements = Counter()
@@ -322,7 +323,7 @@ class TreeReplacer:
         assert not isinstance(node, list), node
         assert node is not None
         res = self.generic_visit(node)
-        assert len(res) == 1
+        assert len(res) == 1, res
         return res[0]
 
     def generic_visit(self, node) -> List[Node]:

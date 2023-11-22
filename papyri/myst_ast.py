@@ -1,7 +1,7 @@
 """
 An attempt to create AST from MyST spec.
 """
-from typing import List, Union, Optional, Dict
+from typing import List, Union, Optional, Dict, Any, TYPE_CHECKING
 
 from .common_ast import Node, register
 
@@ -197,6 +197,20 @@ class MTarget(Node):
 class MThematicBreak(Node):
     type = "thematicBreak"
 
+
+@register(4020)
+class MHeading(Node):
+    type = "heading"
+    depth: int
+    children: List["PhrasingContent"]
+
+
+@register(4001)
+class MRoot(Node):
+    type = "root"
+    children: List[Union["FlowContent", "take2.Parameters"]]
+
+
 StaticPhrasingContent = Union[
     MText,
     MInlineCode,
@@ -225,7 +239,7 @@ FlowContent = Union[
     MCode,
     MParagraph,
     # MDefinition,
-    # MHeading,
+    MHeading,
     MThematicBreak,
     MBlockquote,
     MList,

@@ -6,6 +6,28 @@ import { MyST, DEFAULT_RENDERERS } from "myst-to-react";
 
 import { fromMarkdown } from "mdast-util-from-markdown";
 
+const Param = ({ node }) => {
+  return <>
+    <dt>
+      {node.param}: {node.type_}
+    </dt>
+    <dd>
+      {node.desc.map((sub) => (
+        <MyST ast={sub} />
+      ))}
+    </dd>
+  </>;
+};
+const Parameters = ({ node }) => {
+  return (
+    <dl>
+      {node.children.map((item) => (
+        <MyST ast={item} />
+      ))}
+    </dl>
+  );
+};
+
 const DefList = ({ node }) => {
   return (
     <dl>
@@ -40,11 +62,12 @@ const SignatureRenderer = ({ node }) => {
 };
 
 const Directive = ({ node }) => {
+  const dom = node.domain !== null ? ":"+node.domain : ""
+  const role = node.role !== null ? ":"+node.role+":" : ""
   return (
     <>
       <code className="not-implemented">
-        <span> {JSON.stringify(node)}</span>
-        <MyST ast={node.children} />
+        <span>{dom}{role}`{node.value}`</span>
       </code>
     </>
   );
@@ -54,6 +77,8 @@ const LOC = {
   signature: SignatureRenderer,
   Directive: Directive,
   DefList: DefList,
+  Parameters: Parameters,
+  Param: Param,
 };
 const RENDERERS = { ...DEFAULT_RENDERERS, ...LOC };
 

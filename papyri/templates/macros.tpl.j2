@@ -37,7 +37,8 @@
            {{myst_directive(obj)}}
        {%- elif type == 'DefList' -%}
           {{ render_myst(obj) }}
-       {% elif type == 'Section' %}
+      {% elif type == 'Section' %}
+          {{unreachable()}}
            {% for item in obj %}
                {{ render_II(item) }}
            {% endfor %}

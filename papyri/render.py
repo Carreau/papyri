@@ -11,7 +11,7 @@ from collections import OrderedDict, defaultdict
 from dataclasses import dataclass
 from functools import lru_cache, partial
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 from flatlatex import converter
 from jinja2 import (
@@ -36,8 +36,23 @@ from . import take2
 from .config import ingest_dir
 from .crosslink import IngestedBlobs, find_all_refs
 from .graphstore import GraphStore, Key
-from .myst_ast import MLink, MText
-from .take2 import RefInfo, Section, encoder, Link, SeeAlsoItem, DefList, DefListItem
+from .myst_ast import MLink, MText, MHeading, StaticPhrasingContent, FlowContent, MRoot
+from .take2 import (
+    RefInfo,
+    Section,
+    encoder,
+    Link,
+    SeeAlsoItem,
+    DefList,
+    DefListItem,
+    FieldList,
+    Fig,
+    Options,
+    Parameters,
+    SubstitutionDef,
+    SubstitutionRef,
+    Unimplemented,
+)
 from .tree import TreeReplacer, TreeVisitor
 from .utils import dummy_progress, progress
 
@@ -253,6 +268,7 @@ class HtmlRenderer:
         extension = ".html" if trailing_html else ""
         self.resolver = Resolver(store, prefix, extension)
         self.LR = LinkReifier(resolver=self.resolver)
+        assert hasattr(self.LR, "_replacements"), self.LR
         self.env.globals["len"] = len
         self.env.globals["url"] = self.resolver.resolve
         self.env.globals["unimplemented"] = unimplemented
@@ -600,12 +616,20 @@ class HtmlRenderer:
         backrefs_ = (None, group_backrefs(backrefs, self.LR))
 
         try:
+            to_suppress = []
             for k, v in doc.content.items():
-                doc.content[k] = self.LR.visit(v)
+                assert isinstance(v, Section)
+                if v.children:
+                    ct = MRoot([MHeading(depth=1, children=[MText(k)]), *v.children])
+                    doc.content[k] = ct
+                else:
+                    to_suppress.append(k)
+            for k in to_suppress:
+                del doc.content[k]
 
             doc.arbitrary = [self.LR.visit(x) for x in doc.arbitrary]
             # TODO: techically invalid See Also here
-            doc.see_also = DefList([self.LR.visit(s) for s in doc.see_also])
+            doc.see_also = DefList([self.LR.visit(s) for s in doc.see_also])  # type: ignore
             # assert False, doc.see_also
             module = qa.split(".")[0]
             return template.render(
@@ -1160,6 +1184,7 @@ class Resolver:
 class LinkReifier(TreeReplacer):
     def __init__(self, resolver):
         self.resolver = resolver
+        super().__init__()
 
     def replace_Link(self, link: Link):
         """
@@ -1182,6 +1207,9 @@ class LinkReifier(TreeReplacer):
                 return [MLink(children=[MText(link.value)], url=turl, title="")]
             else:
                 return [MText(link.value + f"({link}?)")]
+
+    def replace_Section(self, section: Section) -> MRoot:
+        return [MRoot([MHeading(depth=section.level, children=[MText(section.title)]), *section.children])]  # type: ignore
 
     def replace_SeeAlsoItem(self, see_also: SeeAlsoItem) -> List[DefListItem]:
         name = see_also.name
@@ -1240,10 +1268,13 @@ def old_render_one(
         resolver = Resolver(store, prefix="/p/", extension="")
         LR = LinkReifier(resolver=resolver)
         for k, v in doc.content.items():
-            doc.content[k] = LR.visit(v)
+            assert isinstance(v, Section)
+            ct = MRoot([MHeading(depth=1, children=[MText(k)]), *v.children])
+            doc.content[k] = ct
 
         doc.arbitrary = [LR.visit(x) for x in doc.arbitrary]
-        doc.see_also = DefList([LR.visit(s) for s in doc.see_also])
+        # TODO: this is wrong for now
+        doc.see_also = DefList([LR.visit(s) for s in doc.see_also])  # type:ignore
         return template.render(
             current_type=current_type,
             doc=doc,

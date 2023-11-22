@@ -37,7 +37,7 @@ from .config import ingest_dir
 from .crosslink import IngestedBlobs, find_all_refs
 from .graphstore import GraphStore, Key
 from .myst_ast import MLink, MText
-from .take2 import RefInfo, Section, encoder, Link, SeeAlsoItem
+from .take2 import RefInfo, Section, encoder, Link, SeeAlsoItem, DefList, DefListItem
 from .tree import TreeReplacer, TreeVisitor
 from .utils import dummy_progress, progress
 
@@ -605,7 +605,7 @@ class HtmlRenderer:
 
             doc.arbitrary = [self.LR.visit(x) for x in doc.arbitrary]
             # TODO: techically invalid See Also here
-            doc.see_also = [self.LR.visit(s) for s in doc.see_also]
+            doc.see_also = DefList([self.LR.visit(s) for s in doc.see_also])
             # assert False, doc.see_also
             module = qa.split(".")[0]
             return template.render(
@@ -1181,9 +1181,9 @@ class LinkReifier(TreeReplacer):
             if exists:
                 return [MLink(children=[MText(link.value)], url=turl, title="")]
             else:
-                return [MText(link.value + "(?)")]
+                return [MText(link.value + f"({link}?)")]
 
-    def replace_SeeAlsoItem(self, see_also: SeeAlsoItem) -> List[Any]:
+    def replace_SeeAlsoItem(self, see_also: SeeAlsoItem) -> List[DefListItem]:
         name = see_also.name
         type_ = see_also.type
         descriptions = see_also.descriptions
@@ -1192,7 +1192,8 @@ class LinkReifier(TreeReplacer):
         descriptions = [self.visit(d) for d in descriptions]
 
         # TODO: this is type incorrect for now. Fix later
-        return [SeeAlsoItem(name, descriptions, type_)]
+        print("SAType_", type_)
+        return [DefListItem(dt=name, dd=descriptions)]
 
     def replace_RefInfo(self, refinfo: RefInfo) -> List[Any]:
         """
@@ -1242,7 +1243,7 @@ def old_render_one(
             doc.content[k] = LR.visit(v)
 
         doc.arbitrary = [LR.visit(x) for x in doc.arbitrary]
-        doc.see_also = [LR.visit(s) for s in doc.see_also]
+        doc.see_also = DefList([LR.visit(s) for s in doc.see_also])
         return template.render(
             current_type=current_type,
             doc=doc,

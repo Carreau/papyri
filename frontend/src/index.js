@@ -8,23 +8,20 @@ import { fromMarkdown } from "mdast-util-from-markdown";
 
 const DefList = ({ node }) => {
   return (
-    <>
-      <pre>HEYYY</pre>
-      <dl>
-        {node.children.map((item) => (
-          <>
-            <dt>
-              <MyST ast={item.dt} />
-            </dt>
-            <dd>
-              {item.dd.map((sub) => (
-                <MyST ast={sub} />
-              ))}
-            </dd>
-          </>
-        ))}
-      </dl>
-    </>
+    <dl>
+      {node.children.map((item) => (
+        <>
+          <dt>
+            <MyST ast={item.dt} />
+          </dt>
+          <dd>
+            {item.dd.map((sub) => (
+              <MyST ast={sub} />
+            ))}
+          </dd>
+        </>
+      ))}
+    </dl>
   );
 };
 

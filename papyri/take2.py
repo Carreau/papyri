@@ -501,7 +501,9 @@ class DefList(Node):
 
 @register(4037)
 class DefListItem(Node):
-    dt: Union[MParagraph]  # TODO: this is technically incorrect and should
+    dt: Union[
+        MParagraph, MText, MLink
+    ]  # TODO: this is technically incorrect and should
     # be a single term, (word, directive or link is my guess).
     dd: List[
         Union[

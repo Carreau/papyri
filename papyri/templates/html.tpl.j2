@@ -70,14 +70,8 @@
    {% endif -%}
 {% endfor%}
 {% if doc.see_also -%}
-    <h3> See Also</h3>
-    {% for sa in doc.see_also -%}
-        <dl>
-            <dt>{{render_II(sa.name)}}</dt>
-            <!-- This See also will be incorrect as the SeeAlsoItems are improperly deserialised. -->
-            <dd>{{render_paragraph(sa.descriptions)}}</dd>
-        </dl>
-    {% endfor -%}
+  <h3> See Also</h3>
+   {{render_II(doc.see_also)}}
 {% endif -%}
 
 {% for s in doc.arbitrary -%}

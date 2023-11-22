@@ -24,13 +24,13 @@
 {%- endif -%}
 
 {%- for section in doc.content.keys() if doc.content[section] -%}
-   {%- set root = doc.content[section] -%}
+  {%- set root = doc.content[section] -%}
+  
    {{ render_II(root) }}
  
 {% endfor%}
 {% if doc.see_also -%}
-  <h3> See Also</h3>
-   {{render_II(doc.see_also)}}
+   {{render_myst(doc.see_also)}}
 {% endif -%}
 
 {% for s in doc.arbitrary -%}

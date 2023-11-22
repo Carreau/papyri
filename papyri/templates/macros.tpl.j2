@@ -8,7 +8,7 @@
 {% macro render_myst(obj) -%}
     {% set astJson = obj.to_dict() %}
     {% set key = uuid() %}
-    <div id="{{ key }}"></div>
+    <div style='border: solid thin cyan' id="{{ key }}"></div>
     <script>
       render("{{ key }}", {"type": "root", "children":[{{ astJson|tojson(indent=2) }}]})
     </script>

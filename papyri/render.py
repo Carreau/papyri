@@ -629,7 +629,15 @@ class HtmlRenderer:
 
             doc.arbitrary = [self.LR.visit(x) for x in doc.arbitrary]
             # TODO: techically invalid See Also here
-            doc.see_also = DefList([self.LR.visit(s) for s in doc.see_also])  # type: ignore
+            doc.see_also = MRoot(
+                [
+                    MHeading(
+                        children=[MText("See Also")],
+                        depth=1,
+                    )
+                ]
+                + [DefList([self.LR.visit(s) for s in doc.see_also])],
+            )
             # assert False, doc.see_also
             module = qa.split(".")[0]
             return template.render(
@@ -1209,7 +1217,14 @@ class LinkReifier(TreeReplacer):
                 return [MText(link.value + f"({link}?)")]
 
     def replace_Section(self, section: Section) -> MRoot:
-        return [MRoot([MHeading(depth=section.level, children=[MText(section.title)]), *section.children])]  # type: ignore
+        return [
+            MRoot(
+                [
+                    MHeading(depth=section.level, children=[MText(section.title)]),
+                    *section.children,
+                ]
+            )
+        ]
 
     def replace_SeeAlsoItem(self, see_also: SeeAlsoItem) -> List[DefListItem]:
         name = see_also.name

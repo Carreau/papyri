@@ -639,6 +639,8 @@ class HtmlRenderer:
                 + [DefList([self.LR.visit(s) for s in doc.see_also])],
             )
             # assert False, doc.see_also
+            if doc.signature:
+                doc.signature.to_dict()
             module = qa.split(".")[0]
             return template.render(
                 current_type=current_type,
@@ -657,7 +659,8 @@ class HtmlRenderer:
                 toctrees=toctrees,
             )
         except Exception as e:
-            raise ValueError("qa=", qa) from e
+            e.add_note(f"Rendering with QA={qa}")
+            raise
 
     async def _serve_narrative(self, package: str, version: str, ref: str):
         """
@@ -1217,10 +1220,18 @@ class LinkReifier(TreeReplacer):
                 return [MText(link.value + f"({link}?)")]
 
     def replace_Section(self, section: Section) -> MRoot:
+        if section.title is not None:
+            return [
+                MRoot(
+                    [
+                        MHeading(depth=section.level, children=[MText(section.title)]),
+                        *section.children,
+                    ]
+                )
+            ]
         return [
             MRoot(
                 [
-                    MHeading(depth=section.level, children=[MText(section.title)]),
                     *section.children,
                 ]
             )
@@ -1235,7 +1246,8 @@ class LinkReifier(TreeReplacer):
         descriptions = [self.visit(d) for d in descriptions]
 
         # TODO: this is type incorrect for now. Fix later
-        print("SAType_", type_)
+        if type_ is not None:
+            print("SAType_", type_)
         return [DefListItem(dt=name, dd=descriptions)]
 
     def replace_RefInfo(self, refinfo: RefInfo) -> List[Any]:

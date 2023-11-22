@@ -20,6 +20,7 @@
 
 
 {% if doc.signature -%}
+    {{ render_myst(doc.signature) }}
     <code class='signature'>{{name}}{{doc.signature.to_signature()}}</code>
 {%- endif -%}
 

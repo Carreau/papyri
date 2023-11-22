@@ -48,6 +48,7 @@ class SignatureNode(Node):
     kind: str  # maybe enum, is it a function, async generator, generator, etc.
     parameters: List[ParameterNode]  # of pairs, we don't use dict because of ordering
     return_annotation: Union[Empty, str]
+    type = "signature"
 
     def to_signature(self):
         return inspect.Signature([p.to_parameter() for p in self.parameters])

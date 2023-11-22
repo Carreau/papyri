@@ -16,6 +16,11 @@ class MText(Node):
     # position: Any
     # data: Any
 
+    def __init__(self, value):
+        assert isinstance(value, str)
+        self.value = value
+        super().__init__()
+
 
 @register(4047)
 class MEmphasis(Node):
@@ -208,7 +213,14 @@ class MHeading(Node):
 @register(4001)
 class MRoot(Node):
     type = "root"
-    children: List[Union["FlowContent", "take2.Parameters"]]
+    children: List[
+        Union[
+            "FlowContent",
+            "take2.Parameters",
+            "take2.Unimplemented",
+            "take2.SubstitutionDef",
+        ]
+    ]
 
 
 StaticPhrasingContent = Union[

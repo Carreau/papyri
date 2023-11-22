@@ -161,6 +161,7 @@ class SubstitutionDef(Node):
     def __init__(self, value, children):
         print(f"Sdef {value=} {children=}")
         self.value = value
+        assert isinstance(children, list)
         self.children = children
         pass
 

@@ -7,16 +7,18 @@ import { MyST, DEFAULT_RENDERERS } from "myst-to-react";
 import { fromMarkdown } from "mdast-util-from-markdown";
 
 const Param = ({ node }) => {
-  return <>
-    <dt>
-      {node.param}: {node.type_}
-    </dt>
-    <dd>
-      {node.desc.map((sub) => (
-        <MyST ast={sub} />
-      ))}
-    </dd>
-  </>;
+  return (
+    <>
+      <dt>
+        {node.param}: {node.type_}
+      </dt>
+      <dd>
+        {node.desc.map((sub) => (
+          <MyST ast={sub} />
+        ))}
+      </dd>
+    </>
+  );
 };
 const Parameters = ({ node }) => {
   return (
@@ -47,27 +49,51 @@ const DefList = ({ node }) => {
   );
 };
 
+const ParameterNodeRenderer = ({ node }) => {
+  let acc = "";
+  if (node.kind === "VAR_POSITIONAL") {
+    acc += "*";
+  }
+  acc = acc + node.name;
+  if (node.default.type !== "Empty") {
+    acc += '='+node.default.data;
+  }
+  return acc;
+};
+
 const SignatureRenderer = ({ node }) => {
   return (
-    <>
-      <div className="flex my-5 group">
-        <div className="flex-grow overflow-x-auto overflow-y-hidden" />
-        {node.value}
-      </div>
-      <div>
-        <MyST ast={node.children} />
-      </div>
-    </>
+    <div className="flex my-5 group">
+      ONAME (
+      <>
+        {node.parameters.map((parameter, index, array) => {
+          if (index + 1 == array.length) {
+            return <MyST ast={parameter} />;
+          } else {
+            return (
+              <>
+                <MyST ast={parameter} />
+                {", "}
+              </>
+            );
+          }
+        })}
+      </>
+      )
+    </div>
   );
 };
 
 const Directive = ({ node }) => {
-  const dom = node.domain !== null ? ":"+node.domain : ""
-  const role = node.role !== null ? ":"+node.role+":" : ""
+  const dom = node.domain !== null ? ":" + node.domain : "";
+  const role = node.role !== null ? ":" + node.role + ":" : "";
   return (
     <>
       <code className="not-implemented">
-        <span>{dom}{role}`{node.value}`</span>
+        <span>
+          {dom}
+          {role}`{node.value}`
+        </span>
       </code>
     </>
   );
@@ -78,6 +104,7 @@ const LOC = {
   Directive: Directive,
   DefList: DefList,
   Parameters: Parameters,
+  ParameterNode: ParameterNodeRenderer,
   Param: Param,
 };
 const RENDERERS = { ...DEFAULT_RENDERERS, ...LOC };
@@ -87,18 +114,18 @@ function MyComponent({ node }) {
   return <MyST ast={node.children} />;
 }
 
-const tree = fromMarkdown("Some *emphasis*, **strong**, and `code`.");
-const mytree = {
-  type: "admonition",
-  children: [
-    { type: "text", value: "myValue" },
-    {
-      type: "signature",
-      value: "Foo",
-      children: [{ type: "text", value: "Child" }],
-    },
-  ],
-};
+//const tree = fromMarkdown("Some *emphasis*, **strong**, and `code`.");
+//const mytree = {
+//  type: "admonition",
+//  children: [
+//    { type: "text", value: "myValue" },
+//    {
+//      type: "signature",
+//      value: "Foo",
+//      children: [{ type: "text", value: "Child" }],
+//    },
+//  ],
+//};
 
 console.log("Loading X");
 

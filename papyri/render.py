@@ -542,7 +542,7 @@ class HtmlRenderer:
 
     async def _get_toc_for(self, package, version):
         keys = self.store.glob((package, version, "meta", "toc.cbor"))
-        assert len(keys) == 1
+        assert len(keys) == 1, (keys, package, version)
         data = self.store.get(keys[0])
         return encoder.decode(data)
 
@@ -1220,19 +1220,20 @@ class LinkReifier(TreeReplacer):
                 return [MText(link.value + f"({link}?)")]
 
     def replace_Section(self, section: Section) -> MRoot:
+        ch = [self.visit(c) for c in section.children]
         if section.title is not None:
             return [
                 MRoot(
                     [
                         MHeading(depth=section.level, children=[MText(section.title)]),
-                        *section.children,
+                        *ch,
                     ]
                 )
             ]
         return [
             MRoot(
                 [
-                    *section.children,
+                    *ch,
                 ]
             )
         ]

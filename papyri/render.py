@@ -1222,21 +1222,10 @@ class LinkReifier(TreeReplacer):
     def replace_Section(self, section: Section) -> MRoot:
         ch = [self.visit(c) for c in section.children]
         if section.title is not None:
-            return [
-                MRoot(
-                    [
-                        MHeading(depth=section.level, children=[MText(section.title)]),
-                        *ch,
-                    ]
-                )
-            ]
-        return [
-            MRoot(
-                [
-                    *ch,
-                ]
-            )
-        ]
+            h = [MHeading(depth=section.level, children=[MText(section.title)])]
+        else:
+            h = []
+        return [MRoot(h + ch)]
 
     def replace_SeeAlsoItem(self, see_also: SeeAlsoItem) -> List[DefListItem]:
         name = see_also.name

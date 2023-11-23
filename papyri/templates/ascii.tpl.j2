@@ -65,6 +65,10 @@
    |   |   |    |{{'\n'}}
    |   |{%- elif type == 'Directive' -%}
    |   |   |{{blue(':'+str(obj.domain)+':'+str(obj.role)+':`'+obj.value+'`')}}
+   |   |{% elif type == 'MRoot' %}
+   |   |{% for child in obj.children %}
+   |   |   |{{ render_II(child)}}
+   |   |{% endfor %}
    |   |{%- elif type == 'MMystDirective' -%}
    |   |   |{{'\n'}}{{myst_directive(obj)}}
    |   |{%- elif type == 'Verbatim' -%}

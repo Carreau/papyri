@@ -61,6 +61,25 @@ class RTokenList:
             yield s
 
 
+class RichVisitor:
+
+
+    def visit(self, node):
+        name = node.__class__.__name__
+
+        meth =  getattr(self, f'visit_{name}')
+        return meth(node)
+
+    def generic_visit(self, nodes):
+        print('siviting', nodes)
+        return [self.visit(node) for node in nodes]
+
+
+
+
+
+
+
 if __name__ == "__main__":
     print(
         Padding(

@@ -529,6 +529,14 @@ def ascii(name: str, color: bool = True):
 
     trio.run(_)
 
+@app.command()
+def rich(name: str):
+    import trio
+
+    from .render import rich_render
+
+    trio.run(rich_render, name)
+
 
 @app.command()
 def serve(sidebar: bool = True, port: int = 1234):

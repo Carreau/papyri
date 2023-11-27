@@ -5,11 +5,10 @@ Attempt to render using the rich protocol.
 from dataclasses import dataclass
 from rich.segment import Segment
 from typing import Any
-from rich.console import Console, ConsoleOptions, RenderResult
+from rich.console import Console, ConsoleOptions, RenderResult, Group
 from rich.style import Style
 from rich.panel import Panel
 from rich.padding import Padding
-
 from rich import print
 
 
@@ -39,6 +38,9 @@ class RToken:
         else:
             yield Segment(self.value)
 
+    def partition(self, needle=" "):
+        return [RToken(c, self.style) for c in part(self.value, needle)]
+
 
 @dataclass
 class Unimp:
@@ -60,7 +62,7 @@ class RTokenList:
     def __init__(self, children):
         acc = []
         for c in children:
-            assert isinstance(c, (RToken, Unimp))
+            assert isinstance(c, (RToken, Unimp)), c
         self.children = children
 
     @classmethod
@@ -74,6 +76,7 @@ class RTokenList:
         options.max_width
         # TODO:, on newline eat whitespace
         for s in self.children:
+                continue
             acc += len(s)
             if acc >= options.max_width:
                 acc = len(s)
@@ -129,16 +132,26 @@ class RichVisitor:
     # TODO...
 
     def visit_MInlineCode(self, node):
-        return [RToken(node.value, "m.inline_code")]
+        return RToken(node.value, "m.inline_code").partition()
 
     def visit_MList(self, node):
-        return [Panel(RTokenList([
-            RichBlocks(self.visit(c)) for c in node.children
+        return [Panel(RichBlocks(self.generic_visit(node.children)))]
+        # return [Panel(str(node.to_dict()))]
 
-            ]))]
+    def visit_MListItem(self, node):
+        return self.generic_visit(node.children)
 
     def visit_Directive(self, node):
-        return [RToken(f":{node.domain}:{node.role}:`{node.value}`", "m.directive")]
+        if node.domain:
+            assert node.role
+        content = ""
+        if node.domain:
+            content += f":{node.domain}"
+        if node.role:
+            content += f":{node.role}:"
+        content += f"`{node.value}`"
+
+        return RToken(content, "m.directive").partition()
 
     def visit_MLink(self, node):
         return [Unimp(str(node.to_dict()))]

@@ -132,7 +132,10 @@ class RichVisitor:
         return [RToken(node.value, "m.inline_code")]
 
     def visit_MList(self, node):
-        return [Panel(RTokenList([Unimp(str(node.to_dict()))]))]
+        return [Panel(RTokenList([
+            RichBlocks(self.visit(c)) for c in node.children
+
+            ]))]
 
     def visit_Directive(self, node):
         return [RToken(f":{node.domain}:{node.role}:`{node.value}`", "m.directive")]

@@ -1389,7 +1389,6 @@ async def _rich_render(key: Key, store: GraphStore) -> str:
     LR = LinkReifier(resolver=resolver)
     RV = RichVisitor()
     for k, v in doc.content.items():
-        print(k, v)
         doc.content[k] = RV.visit(LR.visit(v))
 
     return [doc.content[k] for k in doc.content.keys()] + [

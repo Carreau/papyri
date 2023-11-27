@@ -75,14 +75,18 @@ class RTokenList:
         acc = 0
         options.max_width
         # TODO:, on newline eat whitespace
-        print(s.value.iswhitespace())
         for s in self.children:
-                continue
             acc += len(s)
             if acc >= options.max_width:
-                acc = len(s)
-                yield Segment.line()
-            yield s
+                if not s.value.isspace():
+                    acc = len(s)
+                    yield Segment.line()
+                    yield s
+                else:
+                    acc = 0
+                    yield Segment.line()
+            else:
+                yield s
 
 
 @dataclass
@@ -130,17 +134,16 @@ class RichVisitor:
     def visit_MEmphasis(self, node):
         return self.generic_visit(node.children)
 
-    # TODO...
-
     def visit_MInlineCode(self, node):
         return RToken(node.value, "m.inline_code").partition()
 
     def visit_MList(self, node):
-        return [Panel(RichBlocks(self.generic_visit(node.children)))]
-        # return [Panel(str(node.to_dict()))]
+        return [Padding(RichBlocks(self.generic_visit(node.children)), (0, 0, 0, 2))]
 
     def visit_MListItem(self, node):
-        return self.generic_visit(node.children)
+        res = self.generic_visit(node.children)
+        assert len(res) == 1
+        return [RTokenList([RToken("- ")] + res[0].children)]
 
     def visit_Directive(self, node):
         if node.domain:
@@ -158,10 +161,10 @@ class RichVisitor:
         return [Unimp(str(node.to_dict()))]
 
     def visit_MAdmonition(self, node):
-        return []
+        return [Unimp(str(node.to_dict()))]
 
     def visit_Parameters(self, node):
-        return []
+        return [Unimp(str(node.to_dict()))]
 
 
 if __name__ == "__main__":

@@ -75,6 +75,7 @@ class RTokenList:
         acc = 0
         options.max_width
         # TODO:, on newline eat whitespace
+        print(s.value.iswhitespace())
         for s in self.children:
                 continue
             acc += len(s)

@@ -303,8 +303,6 @@ class TreeVisitor:
             raise ValueError(f"{node.__class__} has no children, no values {node}")
 
 
-
-
 class TreeReplacer:
     """
     Tree visitor with methods to replace nodes.
@@ -325,6 +323,7 @@ class TreeReplacer:
         res = self.generic_visit(node)
         assert len(res) == 1, res
         return res[0]
+        return res
 
     def generic_visit(self, node) -> List[Node]:
         assert node is not None

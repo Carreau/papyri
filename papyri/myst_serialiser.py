@@ -17,8 +17,6 @@ from typing import get_type_hints as gth
 base_types = {int, str, bool, type(None)}
 
 
-
-
 def serialize(instance, annotation):
     try:
         if annotation in base_types:

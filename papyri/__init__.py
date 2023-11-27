@@ -529,6 +529,7 @@ def ascii(name: str, color: bool = True):
 
     trio.run(_)
 
+
 @app.command()
 def rich(name: str):
     import trio

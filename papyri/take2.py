@@ -428,7 +428,6 @@ def compress_word(stream) -> List[Any]:
     return acc
 
 
-
 inline_nodes = tuple(
     [
         Directive,

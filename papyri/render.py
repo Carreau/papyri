@@ -98,7 +98,7 @@ def unimplemented(*obj):
 
 
 def unreachable(*obj):
-    #return str(obj)
+    # return str(obj)
     assert False, f"Unreachable: {obj=}"
 
 
@@ -1376,9 +1376,10 @@ async def _ascii_render(key: Key, store: GraphStore, *, env, template):
         qa=ref,
     )
 
-async def _rich_render(key: Key, store: GraphStore) -> str:
 
+async def _rich_render(key: Key, store: GraphStore) -> str:
     from .r import RichVisitor
+
     ref = key.path
 
     doc = encoder.decode(store.get(key))
@@ -1388,10 +1389,12 @@ async def _rich_render(key: Key, store: GraphStore) -> str:
     LR = LinkReifier(resolver=resolver)
     RV = RichVisitor()
     for k, v in doc.content.items():
+        print(k, v)
         doc.content[k] = RV.visit(LR.visit(v))
 
-
-    return [RV.visit(LR.visit(x)) for x in doc.arbitrary]
+    return [doc.content[k] for k in doc.content.keys()] + [
+        RV.visit(LR.visit(x)) for x in doc.arbitrary
+    ]
 
 
 async def ascii_render(name, store=None, color=True):
@@ -1402,12 +1405,23 @@ async def ascii_render(name, store=None, color=True):
 
     builtins.print(await _ascii_render(key, gstore, env=env, template=template))
 
+
 async def rich_render(name, store=None):
     gstore = GraphStore(ingest_dir, {})
     key = next(iter(gstore.glob((None, None, "module", name))))
-    import rich
 
-    rich.print(await _rich_render(key, gstore))
+    from rich.console import Console
+    from rich.theme import Theme
+
+    console = Console(
+        theme=Theme(
+            {"m.inline_code": "bold blue", "unimp": "red", "m.directive": "cyan"}
+        )
+    )
+
+    for it in await _rich_render(key, gstore):
+        for i2 in it:
+            console.print(i2)
 
 
 async def loc(document: Key, *, store: GraphStore, tree, known_refs, ref_map):

@@ -28,6 +28,12 @@ class RToken:
     value: str
     style: str = None
 
+    def __init__(self, value, style=None):
+        if value.strip():
+            value = value.replace("\n", " ").replace("  ", " ")
+        self.value = value
+        self.style = style
+
     def __len__(self):
         return len(self.value)
 
@@ -75,16 +81,19 @@ class RTokenList:
         # TODO:, on newline eat whitespace
         for s in self.children:
             acc += len(s)
+            assert isinstance(s, RToken)
             if acc >= options.max_width:
                 if not s.value == " ":
                     acc = len(s)
                     yield Segment.line()
                     yield s
+                    # yield str(acc)
                 else:
                     acc = 0
                     yield Segment.line()
             else:
                 yield s
+                # yield Segment(str(acc) + "|")
 
 
 DEBUG = False
@@ -149,6 +158,13 @@ class RichVisitor:
             )
         ]
 
+    def visit_DefList(self, node):
+        return [
+            Padding(
+                RichBlocks(self.generic_visit(node.children), "deflist"), (0, 0, 0, 2)
+            )
+        ]
+
     def visit_MListItem(self, node):
         res = self.generic_visit(node.children)
         assert len(res) == 1
@@ -167,7 +183,7 @@ class RichVisitor:
         return RToken(content, "m.directive").partition()
 
     def visit_MLink(self, node):
-        return [Unimp(str(node.to_dict()))]
+        return self.generic_visit(node.children)
 
     def visit_MAdmonitionTitle(self, node):
         return [Panel(Unimp(str(node.to_dict())))]
@@ -204,8 +220,10 @@ class RichVisitor:
     def visit_FieldList(self, node):
         return self.visit_unknown(node)
 
-    def visit_DefList(self, node):
-        return self.visit_unknown(node)
+    def visit_DefListItem(self, node):
+        return self.generic_visit([node.dt]) + [
+            Padding(Group(*self.generic_visit(node.dd)), (0, 0, 0, 2))
+        ]
 
     def visit_MCode(self, node):
         return self.visit_unknown(node)

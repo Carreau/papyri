@@ -7,10 +7,14 @@ from rich.segment import Segment
 from typing import Any
 from rich.console import Console, ConsoleOptions, RenderResult, Group
 from rich.style import Style
-from rich.panel import Panel
+from rich.panel import Panel, Box
 from rich.padding import Padding
 from rich import print
 import json
+
+
+def pad(arg):
+    return Padding(arg, (0, 0, 0, 2))
 
 
 def part(value, needle):
@@ -29,8 +33,6 @@ class RToken:
     style: str = None
 
     def __init__(self, value, style=None):
-        if value.strip():
-            value = value.replace("\n", " ").replace("  ", " ")
         self.value = value
         self.style = style
 
@@ -152,18 +154,10 @@ class RichVisitor:
         return RToken(node.value, "m.inline_code").partition()
 
     def visit_MList(self, node):
-        return [
-            Padding(
-                RichBlocks(self.generic_visit(node.children), "mlist"), (0, 0, 0, 2)
-            )
-        ]
+        return [pad(RichBlocks(self.generic_visit(node.children), "mlist"))]
 
     def visit_DefList(self, node):
-        return [
-            Padding(
-                RichBlocks(self.generic_visit(node.children), "deflist"), (0, 0, 0, 2)
-            )
-        ]
+        return [pad(RichBlocks(self.generic_visit(node.children), "deflist"))]
 
     def visit_MListItem(self, node):
         res = self.generic_visit(node.children)
@@ -212,7 +206,7 @@ class RichVisitor:
             RToken("\n"),
         ]
         sub = self.generic_visit(node.desc)
-        return [RTokenList(cs), Padding(Group(*sub), (0, 0, 0, 2))]
+        return [RTokenList(cs), pad(Group(*sub))]
 
     def visit_MMath(self, node):
         return self.visit_unknown(node)
@@ -222,15 +216,15 @@ class RichVisitor:
 
     def visit_DefListItem(self, node):
         return self.generic_visit([node.dt]) + [
-            Padding(Group(*self.generic_visit(node.dd)), (0, 0, 0, 2))
+            pad(Group(*self.generic_visit(node.dd)))
         ]
 
     def visit_MCode(self, node):
-        return self.visit_unknown(node)
+        return [pad(Panel(node.value, expand=True, title="Code", highlight=True))]
 
     def visit_MBlockquote(self, node):
         sub = self.generic_visit(node.children)
-        return [Padding(Group(*sub), (0, 0, 0, 2))]
+        return [pad(Group(*sub))]
 
     def visit_unknown(self, node):
         return [Unimp(json.dumps(node.to_dict(), indent=2))]
@@ -239,14 +233,30 @@ class RichVisitor:
         return self.generic_visit(node.children)
 
 
+xbox = Box(
+    """
+┌─┬┐
+│ ││
+├─┼┤
+│ ││
+├─┼┤
+├─┼┤
+│ ││
+└─┴┘
+""".strip(
+        "\n"
+    )
+)
+
+
 if __name__ == "__main__":
     print(
-        Padding(
+        Panel(
             Panel(
                 RTokenList.from_str(
                     "Here is a long sentence to see if we can wrap " * 10
-                )
+                ),
+                box=xbox,
             ),
-            (0, 0, 0, 2),
         )
     )

@@ -10,6 +10,7 @@ from rich.style import Style
 from rich.panel import Panel
 from rich.padding import Padding
 from rich import print
+import json
 
 
 def part(value, needle):
@@ -43,21 +44,18 @@ class RToken:
 
 
 @dataclass
-class Unimp:
-    value: str
-
-    def __len__(self):
-        return len(self.value)
-
-    def __rich_console__(
-        self, console: Console, options: ConsoleOptions
-    ) -> RenderResult:
-        yield Segment(self.value, console.get_style("unimp"))
+class Unimp(RToken):
+    style: str = "unimp"
 
 
 @dataclass
 class RTokenList:
     children: tuple[Any]
+
+    def __add__(self, other):
+        assert type(self) == type(other)
+
+        return RTokenList(self.children + other.children)
 
     def __init__(self, children):
         acc = []
@@ -78,7 +76,7 @@ class RTokenList:
         for s in self.children:
             acc += len(s)
             if acc >= options.max_width:
-                if not s.value.isspace():
+                if not s.value == " ":
                     acc = len(s)
                     yield Segment.line()
                     yield s
@@ -89,16 +87,21 @@ class RTokenList:
                 yield s
 
 
+DEBUG = False
 @dataclass
 class RichBlocks:
     children: list[Any]
+    name: str
 
     def __rich_console__(
         self, console: Console, options: ConsoleOptions
     ) -> RenderResult:
         for item in self.children:
-            yield item
-            yield "\n"
+            if DEBUG:
+                yield Panel(item, title=self.name)
+            else:
+                yield item
+            # yield RToken("\n")
 
 
 class RichVisitor:
@@ -106,7 +109,7 @@ class RichVisitor:
         res = self.generic_visit([node])
         assert len(res) in (1, 0)
         if res:
-            return res
+            return res[0]
         else:
             return []
 
@@ -122,14 +125,16 @@ class RichVisitor:
 
     def visit_MRoot(self, node):
         cs = self.generic_visit(node.children)
-        return [RichBlocks(cs)]
+        return [RichBlocks(cs, "root")]
 
     def visit_MParagraph(self, node):
         cs = self.generic_visit(node.children)
-        return [RTokenList(cs)]
+        return [RTokenList(cs) + RTokenList.from_str("\n\n")]
 
     def visit_MText(self, node):
-        return [RToken(v) for v in part(node.value, " ")]
+        res = [RToken(v) for v in part(node.value, " ")]
+        assert res[-1].value != "\n"
+        return res
 
     def visit_MEmphasis(self, node):
         return self.generic_visit(node.children)
@@ -138,7 +143,11 @@ class RichVisitor:
         return RToken(node.value, "m.inline_code").partition()
 
     def visit_MList(self, node):
-        return [Padding(RichBlocks(self.generic_visit(node.children)), (0, 0, 0, 2))]
+        return [
+            Padding(
+                RichBlocks(self.generic_visit(node.children), "mlist"), (0, 0, 0, 2)
+            )
+        ]
 
     def visit_MListItem(self, node):
         res = self.generic_visit(node.children)
@@ -160,11 +169,56 @@ class RichVisitor:
     def visit_MLink(self, node):
         return [Unimp(str(node.to_dict()))]
 
+    def visit_MAdmonitionTitle(self, node):
+        return [Panel(Unimp(str(node.to_dict())))]
+        return self.generic_visit(node.children)
+
     def visit_MAdmonition(self, node):
-        return [Unimp(str(node.to_dict()))]
+        title, *other = node.children
+        assert title.type == "admonitionTitle"
+        acc = self.generic_visit([title])
+        if other:
+            rd = self.generic_visit(other)
+            assert len(rd) == 1
+
+            acc.append(Panel(rd[0]))
+        return acc
+
+    def visit_MHeading(self, node):
+        cs = self.generic_visit(node.children)
+        return [RTokenList(cs) + RTokenList.from_str("\n\n")]
+
+    def visit_Param(self, node):
+        cs = [
+            RToken(node.param, "param"),
+            RToken(" : "),
+            RToken(node.type_, "param_type"),
+            RToken("\n"),
+        ]
+        sub = self.generic_visit(node.desc)
+        return [RTokenList(cs), Padding(Group(*sub), (0, 0, 0, 2))]
+
+    def visit_MMath(self, node):
+        return self.visit_unknown(node)
+
+    def visit_FieldList(self, node):
+        return self.visit_unknown(node)
+
+    def visit_DefList(self, node):
+        return self.visit_unknown(node)
+
+    def visit_MCode(self, node):
+        return self.visit_unknown(node)
+
+    def visit_MBlockquote(self, node):
+        sub = self.generic_visit(node.children)
+        return [Padding(Group(*sub), (0, 0, 0, 2))]
+
+    def visit_unknown(self, node):
+        return [Unimp(json.dumps(node.to_dict(), indent=2))]
 
     def visit_Parameters(self, node):
-        return [Unimp(str(node.to_dict()))]
+        return self.generic_visit(node.children)
 
 
 if __name__ == "__main__":

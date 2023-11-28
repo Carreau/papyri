@@ -1388,11 +1388,18 @@ async def _rich_render(key: Key, store: GraphStore) -> str:
     resolver = Resolver(store, prefix="/p/", extension="")
     LR = LinkReifier(resolver=resolver)
     RV = RichVisitor()
+    to_del = []
     for k, v in doc.content.items():
-        doc.content[k] = RV.visit(LR.visit(v))
+        if v.children:
+            ct = MRoot([MHeading(depth=1, children=[MText(k)]), *v.children])
+            doc.content[k] = RV.visit(LR.visit(ct))
+        else:
+            to_del.append(k)
+    for k in to_del:
+        del doc.content[k]
 
-    return [doc.content[k] for k in doc.content.keys()] + [
-        RV.visit(LR.visit(x)) for x in doc.arbitrary
+    return [RV.visit(LR.visit(x)) for x in doc.arbitrary] + [
+        doc.content[k] for k in doc.content
     ]
 
 
@@ -1414,19 +1421,23 @@ async def rich_render(name, store=None):
 
     console = Console(
         theme=Theme(
-            {"m.inline_code": "bold blue", "unimp": "red", "m.directive": "cyan"}
+            {
+                "m.inline_code": "bold blue",
+                "unimp": "red",
+                "m.directive": "cyan",
+                "param": "green",
+                "param_type": "yellow",
+            }
         )
     )
 
     for it in await _rich_render(key, gstore):
-        for i2 in it:
-            console.print(i2)
+        console.print(it)
 
 
 async def loc(document: Key, *, store: GraphStore, tree, known_refs, ref_map):
     """
     return data for rendering in the templates
-
     Parameters
     ----------
     document: Store

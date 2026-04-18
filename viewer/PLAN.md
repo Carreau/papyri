@@ -4,12 +4,21 @@ This subfolder hosts a **read-only web viewer** that renders pages directly
 from the local papyri IR on disk (`~/.papyri/data/<pkg>_<ver>/`) and the
 SQLite cross-link graph (`~/.papyri/ingest/papyri.db`).
 
-> Relation to top-level `PLAN.md`: that doc's Phase 3 punted rendering to a
-> *separate* repo. This subfolder is a deliberate revision of that decision:
-> keep the renderer in-tree but in its own folder so the Python IR and the
-> JS/TS renderer evolve together. The top-level `PLAN.md` should be updated
-> to reference this directory once the direction is confirmed. Until then,
-> treat this as a proposal.
+> Relation to top-level `PLAN.md`: that doc's Phase 3 originally punted
+> rendering to a *separate* repo. Decision: **keep the renderer in-tree
+> under `viewer/` for now.** Rationale: the IR is still in heavy
+> development (Phase 2 hasn't stabilized it yet), so having the renderer
+> and the IR producer in the same repo lets us iterate on both in a single
+> commit/PR instead of juggling two repos across breaking changes. Splitting
+> into a separate repo remains an option once the IR schema is documented
+> and stable. The top-level `PLAN.md` should be updated to point at this
+> directory.
+>
+> Practical consequence: **expect the IR to break us.** The `ir-reader`
+> module is the designated shock absorber — when the IR changes, the fix
+> lands there (plus whatever component consumes the new shape), not spread
+> across the viewer. Treat `src/lib/ir-reader.ts` as the only place allowed
+> to know the on-disk format.
 
 ## Goals
 
@@ -152,6 +161,11 @@ Data flow per request/page:
   v0, but the static export should make it trivial.
 - Should the viewer have its own CI workflow, or piggyback on the
   existing Python CI? Probably separate, filtered on `viewer/**`.
+- IR-drift policy: do we pin a "known-good" IR commit hash in
+  `viewer/package.json` (or similar) so the viewer can fail loudly when
+  the IR on disk was produced by an incompatible `papyri gen`, or do we
+  just accept best-effort rendering and let components no-op on unknown
+  nodes? Probably the latter while Phase 2 is in flux.
 
 ## Ground rules for this subfolder
 

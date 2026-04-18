@@ -5,14 +5,23 @@ documentation within IPython and Jupyter.
 
 ---
 
+> **Project status (2026): revival in progress.** The last upstream release was
+> `0.0.8` (March 2024). The core `gen` / `ingest` / `render --html` pipeline
+> still works on Python 3.11, but only with a `tree-sitter` pin — see
+> [Installation](#installation). Several commands (`rich`, `install`) are
+> currently broken or point at unmaintained infrastructure. The published
+> documentation bundles at `https://pydocs.github.io/pkg` are no longer
+> guaranteed to exist or be compatible with the current schema. See
+> [Known breakage](#known-breakage) before filing issues.
+
 | Information | Links |
 | :---------- | :-----|
-|   Project   | [![License](https://img.shields.io/badge/License-MIT-gray.svg?colorA=2D2A56&colorB=5936D9&style=flat.svg)](https://opensource.org/license/mit/) [![Rendered documentation](https://img.shields.io/badge/%F0%9F%93%96%20Rendered%20docs-gray.svg?colorA=2D2A56&colorB=5936D9&style=flat.svg)](https://papyri.vercel.app/)  |
-|     CI      | [![Python Package](https://github.com/jupyter/papyri/actions/workflows/python-package.yml/badge.svg)](https://github.com/jupyter/papyri/actions/workflows/python-package.yml) [![Linting](https://github.com/jupyter/papyri/actions/workflows/lint.yml/badge.svg)](https://github.com/jupyter/papyri/actions/workflows/lint.yml) |
+|   Project   | [![License](https://img.shields.io/badge/License-MIT-gray.svg?colorA=2D2A56&colorB=5936D9&style=flat.svg)](https://opensource.org/license/mit/) |
+|     CI      | [![Python Package](https://github.com/carreau/papyri/actions/workflows/python-package.yml/badge.svg)](https://github.com/carreau/papyri/actions/workflows/python-package.yml) [![Linting](https://github.com/carreau/papyri/actions/workflows/lint.yml/badge.svg)](https://github.com/carreau/papyri/actions/workflows/lint.yml) |
 
-Papyri allows:
-- bidirectional crosslinking across libraries, 
-- navigation, 
+Papyri aims to allow:
+- bidirectional crosslinking across libraries,
+- navigation,
 - proper reflow of user docstrings text,
 - proper reflow of inline images (when rendered to html),
 - proper math rendering (both in terminal and html),
@@ -82,66 +91,79 @@ papyri enabled (left) and disabled (right).
 ## Table of contents
 
 - [Installation](#installation)
+- [Known breakage](#known-breakage)
 - [Usage](#usage)
 - [Rendering](#rendering)
 - [Architecture](#architecture)
 
-## Installation (not fully functional):
+## Installation
 
-Some functionality is not yet available when installing from PyPI. For now you
-need a [Development installation](#development-installation) to access all
-features.
+Papyri is `pyproject.toml`-driven and requires Python 3.11. Newer Python
+versions are not yet tested; older ones are explicitly unsupported.
 
-You'll need Python 3.8 or newer, otherwise pip will tell you it can't find any matching distribution.
+### Development installation (recommended)
 
-Install from PyPI:
-
-```bash
-$ pip install papyri
-````
-
-Install given package documentation:
-
-```bash
-$ papyri install package_name [package_name [package_name [...]]]
-```
-
-Only numpy 1.20.0, scipy 1.5.0 and xarray 0.17.0 are currently installable and published.
-For other packages you will need to build locally which is a much more involved
-process.
-
-Run IPython terminal with Papyri as an extension:
+The project has not been re-cut on PyPI in over a year and is evolving faster
+than releases. Install from a clone:
 
 ```
-$ ipython --ext papyri.ipython
-```
-
-This will augment the `?` operator to show better documentation (when installed with `papyri install ...`
-
-*Papyri does not completely build its own docs yet, but you might be able to view a static rendering of it
-[here](https://pydocs.github.io/). It is not yet automatically built, so might be out of date.*
-
-### Development installation
-
-You may need to get a modified version of numpydoc depending on the stage of development. You will need [pip >
-21.3](https://pip.pypa.io/en/stable/news/#v21-3-1) if you want to make editable installs.
-
-```
-# clone this repo
-# cd this repo
+git clone https://github.com/carreau/papyri
+cd papyri
 pip install -e .
+# The tree_sitter_languages wheel we depend on is not compatible with
+# tree-sitter >= 0.22. Pip will happily resolve to a newer tree-sitter
+# and then crash at import time. Pin it:
+pip install 'tree-sitter<0.22'
 ```
 
-Some functionality requires ``tree_sitter_rst``. To build the TreeSitter rst parser:
+Verify with:
 
-```bash
-$ git submodule update --init
-$ papyri build-parser
+```
+papyri --help
 ```
 
-[Look at CI file](https://github.com/jupyter/papyri/blob/main/.github/workflows/python-package.yml) if those instructions are not up to date.
+The `git submodule update --init && papyri build-parser` step described in
+older instructions is no longer required for the default code path; the RST
+grammar is consumed via the `tree_sitter_languages` wheel. The `build-parser`
+subcommand is still available for development on the grammar itself.
 
-Note that papyri still uses a custom parser which will be removed in the future to rely mostly on TreeSitter.
+### Installation from PyPI
+
+`pip install papyri` will install `0.0.8` from March 2024. It installs, but we
+don't recommend it for now — the bundled CLI and dependency pins are out of
+sync with current upstream. Prefer the development install above.
+
+### Pre-built documentation bundles
+
+Historical bundles (numpy 1.20, scipy 1.5, xarray 0.17) were published at
+`https://pydocs.github.io/pkg`. That host is not maintained and the bundles
+predate several schema changes, so `papyri install <pkg>` is not expected to
+work end-to-end today. Generate bundles locally instead (see [Usage](#usage)).
+
+## Known breakage
+
+Things currently known *not* to work as documented:
+
+- `papyri install <pkg>` — depends on an unmaintained bundle host.
+- `papyri rich <name>` — fails with `StopIteration` in `render.py` when
+  looking up a qualified name, even after a successful `gen` + `ingest`.
+- `papyri textual <name>` — experimental; shares the rich lookup path.
+- `papyri serve` — Quart-based live server; untested in the current revival.
+- Unit tests: most pass, but `test_take2.py` has a circular-import issue
+  when collected individually, and `test_gen.py::test_numpy` is brittle
+  against modern numpy where canonical module paths for built-ins have
+  changed (e.g. `numpy:array`).
+
+Things that *do* work end-to-end on a fresh Python 3.11 install (with the
+`tree-sitter` pin above):
+
+- `papyri gen examples/papyri.toml --no-infer`
+- `papyri ingest ~/.papyri/data/papyri_<version>`
+- `papyri render --html` (output under `~/.papyri/html`)
+- `papyri serve-static`
+
+If you hit a `SqlOperationalError`, the DB schema has probably changed —
+`rm -rf ~/.papyri/ingest/` and re-ingest.
 
 ### Testing
 
@@ -154,8 +176,15 @@ $ pip install -r requirements-dev.txt
 Run tests using
 
 ```bash
-$ pytest
+$ python -m pytest -m "not postingest"
 ```
+
+(Using `python -m pytest` ensures the test runner uses the same interpreter as
+your editable install, avoiding `ModuleNotFoundError: tomli_w` if you have a
+separate `pytest` on `$PATH`.)
+
+The `postingest` tests require `papyri ingest` to have populated
+`~/.papyri/ingest/` first; see the CI workflow for the full sequence.
 
 ## Usage
 
@@ -445,3 +474,13 @@ See https://tree-sitter.github.io/tree-sitter/creating-parsers
 #### `SqlOperationalError`:
 
 - The DB schema likely have changed, try: `rm -rf ~/.papyri/ingest/`.
+
+#### `TypeError: __init__() takes exactly 1 argument (2 given)` on startup:
+
+- Your `tree-sitter` is too new for the `tree_sitter_languages` wheel.
+  Pin it: `pip install 'tree-sitter<0.22'`.
+
+#### `ModuleNotFoundError: No module named 'tomli_w'` when running `pytest`:
+
+- Your `pytest` entry point is from a different Python than the one you
+  installed papyri into. Run tests via `python -m pytest` instead.

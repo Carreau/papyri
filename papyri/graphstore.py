@@ -1,8 +1,12 @@
 # import json
-import cbor2
+import logging
 import sqlite3
 from pathlib import Path as _Path
 from typing import List, Set
+
+import cbor2
+
+log = logging.getLogger("papyri")
 
 # we try to expanduser as early as possible to prevent
 # jupyter_pytest monkeypatch  of setenv_HOME
@@ -128,13 +132,13 @@ class GraphStore:
         # for now we are going to try to do in-memory operation, just to
         # see how we can handle that with SQL, and move to on-disk later.
         p = GLOBAL_PATH
-        print("connecting to database ", p)
+        log.debug("connecting to database %s", p)
         if not p.exists():
-            print("Does not exists, creating: ", p)
+            log.info("database does not exist, creating: %s", p)
             self.conn = sqlite3.connect(p)
             self.conn.execute("PRAGMA foreign_keys = 1")
 
-            print("Creating documents table")
+            log.debug("Creating documents table")
             self.conn.cursor().execute("""
                 CREATE TABLE documents(
                 id INTEGER PRIMARY KEY,
@@ -153,7 +157,7 @@ class GraphStore:
                 identifier TEXT NOT NULL, unique(package, version, category, identifier))
                 """)
 
-            print("Creating links table")
+            log.debug("Creating links table")
             self.conn.cursor().execute("""
                 CREATE TABLE links(
                 id INTEGER PRIMARY KEY,
@@ -229,7 +233,7 @@ class GraphStore:
         path = self._key_to_path(key)
         path.unlink()
         #  this is likely incorrect if we want to deal with dangling links.
-        print("Removing link from table")
+        log.debug("Removing link from table")
         self.conn.execute(
             "delete from links where source=?",
             (str(key),),

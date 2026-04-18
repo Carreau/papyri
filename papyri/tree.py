@@ -860,7 +860,7 @@ class IngestVisitor(DirectiveVisiter):
         return [d]
 
     def replace_RefInfo(self, refinfo):
-        print(refinfo)
+        log.debug("RefInfo: %r", refinfo)
         return [refinfo]
 
     def replace_BlockDirective(self, block_directive: Directive):

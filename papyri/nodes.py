@@ -62,7 +62,6 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Union
 
 import cbor2
-from there import print
 
 from .common_ast import Node, REV_TAG_MAP, UnserializableNode, register
 from .miniserde import get_type_hints

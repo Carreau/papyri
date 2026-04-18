@@ -4,7 +4,6 @@ flit
 matplotlib
 pytest-trio
 coverage
-jinja2==3.1.3
 pipdeptree
 ruff
 mypy

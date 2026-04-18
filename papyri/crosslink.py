@@ -11,7 +11,6 @@ from typing import Dict, FrozenSet, List, Optional, Tuple, Any
 
 from rich.logging import RichHandler
 import cbor2
-from there import print as print_
 
 from .config import ingest_dir
 from .gen import GeneratedDoc, normalise_ref, _OrderedDictProxy
@@ -278,7 +277,7 @@ class Ingester:
         if tocfile.exists():
             toc = json.loads((path / "toc.json").read_text())
             if not toc.keys():
-                print_("No narrative.")
+                log.debug("No narrative.")
                 return
             titles = toc["titles"]
             tree = toc["tree"]
@@ -381,7 +380,7 @@ class Ingester:
                 rqa = normalise_ref(qa)
                 if rqa != qa:
                     # numpy weird thing
-                    print_(f"skip {qa=}, {rqa=}")
+                    log.debug("skip qa=%r, rqa=%r", qa, rqa)
                     continue
                 assert rqa == qa, f"{rqa} !+ {qa}"
             try:
@@ -483,7 +482,7 @@ class Ingester:
                     rev_aliases=rev_aliases,
                 )
                 if r.kind == "module":
-                    print_("unresolved ok...", r, key)
+                    log.debug("unresolved ok... %r %r", r, key)
                     # `exists` is derived from `reference.kind`; updating the
                     # reference to a resolved RefInfo is enough.
                     sa.name.reference = r

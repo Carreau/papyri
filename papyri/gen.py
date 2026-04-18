@@ -53,8 +53,9 @@ from pygments.formatters import HtmlFormatter
 from pygments.lexers import PythonLexer
 from rich.logging import RichHandler
 from rich.progress import BarColumn, Progress, TextColumn, track
-from there import print as print_
 from matplotlib import _pylab_helpers
+
+log = logging.getLogger("papyri")
 
 from .common_ast import Node, register
 from .errors import (
@@ -268,8 +269,8 @@ def parse_script(
                 if config.jedi_failure_mode in (None, "error"):
                     raise
                 elif config.jedi_failure_mode == "log":
-                    print_(
-                        "failed inference example will be empty ",
+                    log.warning(
+                        "failed inference example will be empty %r %r %r",
                         where,
                         line_n,
                         col_n,
@@ -316,8 +317,8 @@ def _get_implied_imports(obj):
         else:
             c_o = obj.__qualname__.split(".")
             if len(c_o) > 2:
-                print_(
-                    "get implied import qualname got more than 2 parts: ",
+                log.debug(
+                    "get implied import qualname got more than 2 parts: %s",
                     obj.__qualname__,
                 )
                 return {}
@@ -632,13 +633,13 @@ class DFSCollector:
         """
         for qa, item in self.obj.items():
             if (nqa := full_qual(item)) != qa:
-                print_("after import qa differs : {qa} -> {nqa}")
+                log.debug("after import qa differs: %s -> %s", qa, nqa)
                 assert isinstance(nqa, str)
                 if self.obj[nqa] == item:
-                    print_("present twice")
+                    log.debug("present twice")
                     del self.obj[nqa]
                 else:
-                    print_("differs: {item} != {other}")
+                    log.debug("differs: %r != %r", item, self.obj.get(nqa))
 
     def items(self) -> Dict[str, Any]:
         self.scan()
@@ -1461,7 +1462,7 @@ class Gen:
                 p2.advance(task)
 
                 if any([k in str(p) for k in self.config.narrative_exclude]):
-                    print_(f"Skipping {p} – excluded in config file")
+                    log.debug("Skipping %s – excluded in config file", p)
                     continue
 
                 assert p.is_file()
@@ -1504,7 +1505,7 @@ class Gen:
                     title = titles[0]
                 title_map[key] = title
                 if "generated" not in key and title_map[key] is None:
-                    print_(key, title)
+                    log.debug("%s %s", key, title)
 
                 blbs[key] = blob
         for k, b in blbs.items():
@@ -1906,7 +1907,7 @@ class Gen:
 
                 entries: List[Any]
                 if entries_p is None:
-                    print_("Issue in ", example)
+                    log.warning("Issue in %r", example)
                     entries = [("fail", "fail")]
                 else:
                     entries = list(entries_p)

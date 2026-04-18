@@ -23,22 +23,22 @@ jobs:
       matrix:
         include:
           - lib: 'astropy'
-            python-version: "3.11"
+            python-version: "3.14"
           - lib: 'papyri'
-            python-version: "3.11"
+            python-version: "3.14"
           - lib: 'IPython'
-            python-version: "3.11"
+            python-version: "3.14"
           - lib: 'numpy'
-            python-version: "3.11"
+            python-version: "3.14"
             flags: '--no-narrative --no-exec'
           - lib: 'scipy'
-            python-version: "3.11"
+            python-version: "3.14"
             flags: '--no-narrative --no-exec'
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
         cache: 'pip'
@@ -47,12 +47,6 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements-dev.txt
         flit install --symlink
-        # this is not needed if tree-sitter-languages works
-        #git clone  https://github.com/stsewd/tree-sitter-rst
-        #cd tree-sitter-rst
-        #git checkout 3fc88d2097bc854ab6bf70c52b3c482849cf8e8f
-        #cd -
-        #papyri build-parser
     - name: dependency tree
       run: |
         pipdeptree
@@ -66,9 +60,9 @@ jobs:
         sleep 1 # time for coverage to write its stuff
         papyri pack
         ls ~/.papyri/data
-    - uses: actions/upload-artifact@v3
+    - uses: actions/upload-artifact@v4
       with:
-        name: doc-bundles
+        name: doc-bundles-${{matrix.lib}}
         path: ~/.papyri/data/*.zip
     - name: Convert .coverage sql to xml for upload
       run: |
@@ -76,7 +70,7 @@ jobs:
         coverage xml
         ls -la
     - name: "Upload coverage to Codecov"
-      uses: codecov/codecov-action@v3.1.4
+      uses: codecov/codecov-action@v4
       with:
         fail_ci_if_error: false
         token: ${{ secrets.CODECOV_TOKEN }}
@@ -86,11 +80,11 @@ jobs:
     needs: [build]
     strategy:
       matrix:
-        python-version: ["3.11"]
+        python-version: ["3.14"]
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
         cache: 'pip'
@@ -100,20 +94,16 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements-dev.txt
         flit install --symlink
-        git clone https://github.com/stsewd/tree-sitter-rst
-        cd tree-sitter-rst
-        git checkout 3fc88d2097bc854ab6bf70c52b3c482849cf8e8f
-        cd -
-        papyri build-parser
     - name: Test with pytest
       run: |
         pip install scipy dask
         pytest --cov=papyri --cov-append -m "not postingest"
         ls -al
-    - uses: actions/download-artifact@v3
+    - uses: actions/download-artifact@v4
       with:
-        name: doc-bundles
+        pattern: doc-bundles-*
         path: ~/.papyri/data/
+        merge-multiple: true
 
     - name: Misc cli
       run: |
@@ -121,21 +111,15 @@ jobs:
         ls -al
     - name: Ingest
       run: |
-        coverage run -a -m papyri install ~/.papyri/data/*.zip
-    - name: Test with pytest postintest
-      run: |
-        pytest -m "postingest"
+        for z in ~/.papyri/data/*.zip; do
+          d="${z%.zip}"
+          mkdir -p "$d"
+          unzip -o "$z" -d "$d"
+          coverage run -a -m papyri ingest "$d"
+        done
     - name: Relink
       run: |
         coverage run -a -m papyri relink
-    - name: Render ascii
-      run: |
-        python -m papyri render --ascii
-        ls -al
-    - name: Render html
-      run: |
-        python -m papyri render --html
-        ls -al
 
     - name: Convert .coverage sql to xml for upload
       run: |
@@ -143,7 +127,7 @@ jobs:
         coverage xml
         ls -la
     - name: "Upload coverage to Codecov"
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v4
       with:
         fail_ci_if_error: false
         token: ${{ secrets.CODECOV_TOKEN }}

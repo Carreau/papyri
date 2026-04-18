@@ -104,16 +104,22 @@ sessions should not restore any of it.
 
 ### Phase 1 — scope cuts and baseline
 
-- [ ] Delete everything in "Scope cuts" above in a single PR.
-- [ ] Trim `papyri/__init__.py` of dead CLI commands and their imports.
-- [ ] Trim `pyproject.toml` and `requirements.txt` dependencies to match.
-- [ ] Pin `tree-sitter < 0.22` in `pyproject.toml`.
-- [ ] Bump `requires-python` to `>=3.14`; update CI to 3.14.
-- [ ] Update the linter workflow (`lint.yml`) to 3.14 and keep
+- [x] Delete everything in "Scope cuts" above in a single PR.
+- [x] Trim `papyri/__init__.py` of dead CLI commands and their imports.
+- [x] Trim `pyproject.toml` and `requirements.txt` dependencies to match.
+      Note: `rich` is retained because `papyri/gen.py`, `papyri/crosslink.py`,
+      `papyri/miscs.py`, and `papyri/utils.py` use `rich.progress` /
+      `rich.logging` in the core pipeline (not as a docstring renderer).
+      Stripping it is a bigger refactor and is not required for Phase 1.
+- [x] Pin `tree-sitter < 0.22` in `pyproject.toml`.
+- [x] Bump `requires-python` to `>=3.14`; update CI to 3.14.
+- [x] Update the linter workflow (`lint.yml`) to 3.14 and keep
       `black` + `flake8` + `mypy`.
-- [ ] Verify `papyri gen examples/papyri.toml --no-infer` and
+- [x] Verify `papyri gen examples/papyri.toml --no-infer` and
       `papyri ingest ~/.papyri/data/papyri_<ver>` still work end-to-end.
-- [ ] Update README to remove references to deleted commands and reflect
+      (Verified locally on 3.11 via `--ignore-requires-python`; CI on
+      3.14 is the source of truth.)
+- [x] Update README to remove references to deleted commands and reflect
       the new scope.
 
 ### Phase 2 — IR surface stabilization

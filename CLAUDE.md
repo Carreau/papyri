@@ -10,9 +10,11 @@ representation (IR)**, ingests many libraries' IR into a local cross-linked
 graph, and historically rendered that graph to HTML/terminal/TUI.
 
 **We are intentionally narrowing the scope** to "Python producer of IR +
-local graph store". All rendering is being removed from this repo and
-punted to a future Node/React project that reads the IR directly. Do not
-add new rendering code here and do not try to revive deleted renderers.
+local graph store", plus a TypeScript/Astro web viewer under `viewer/`
+that reads the IR directly. All Python-side rendering has been removed.
+Do not add Python rendering code and do not try to revive the deleted
+renderers — the replacement lives under `viewer/` and has its own
+`viewer/PLAN.md`.
 
 ## Ground rules for changes
 

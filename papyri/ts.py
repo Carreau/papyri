@@ -227,8 +227,8 @@ class TSVisitor:
             if isinstance(n, (FieldList, DefList, BulletList)):
                 if current is None:
                     current = n
-                elif type(current) == type(n):
-                    current.children.extend(n.children)
+                elif type(current) is type(n):
+                    current.children.extend(n.children)  # type: ignore[arg-type]
                 else:
                     acc.append(current)
                     current = None

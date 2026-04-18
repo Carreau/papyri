@@ -148,9 +148,18 @@ sessions should not restore any of it.
 - [x] Fix circular import between `papyri/take2.py` and `papyri/myst_ast.py`
       so tests collect cleanly in isolation. Done by merging `myst_ast.py`
       into `take2.py`; M-prefixed classes still exist pending a rename pass.
-- [ ] Resolve or xfail the two known test failures
-      (`test_take2.py::test_parse_blocks[numpy.linspace…]`,
-      `test_gen.py::test_numpy[numpy…]`).
+- [x] Resolve or xfail the known test failures. Currently xfailed
+      (`strict=False`, with reasons pointing back here):
+      - `test_nodes.py::test_parse_blocks[numpy.linspace…]` — numpy
+        docstring drifted, now emits 1 `UnprocessedDirective` instead of 2.
+      - `test_gen.py::test_numpy[numpy…]` — numpy 2.x moved the canonical
+        path for `numpy:array`.
+      - `test_gen.py::test_self_2` — `papyri/__init__.py` module docstring
+        was rewritten in Phase 1 and no longer has the definition list this
+        test indexes into; needs rewriting against the new docstring or
+        repointing at another module.
+      Follow-up: replace these xfails with real fixes (pin numpy in the
+      test matrix, rewrite the self-doc test).
 
 ### Phase 3 — Web viewer (in-tree under `viewer/`)
 

@@ -13,7 +13,6 @@ all_funcs = []
 
 
 def add(func):
-    global all_funcs
     all_funcs.append(func)
     return func
 

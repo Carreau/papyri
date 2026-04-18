@@ -70,7 +70,6 @@ from .miniserde import get_type_hints
 from . import signature  # noqa: F401 -- referenced in Root's forward-string annotation
 from .utils import dedent_but_first
 
-
 register(tuple)(4444)
 
 

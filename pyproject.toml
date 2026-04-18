@@ -39,3 +39,10 @@ Home = "https://github.com/carreau/papyri"
 [tool.mypy]
 python_version = '3.14'
 ignore_missing_imports = true
+
+[tool.black]
+# Pin below 3.14 so black doesn't auto-apply PEP 758 (unparenthesized
+# `except`) reformatting from `requires-python = ">=3.14"`. The package
+# still requires 3.14+; this just keeps the source parseable by older
+# Pythons during linting and tooling passes.
+target-version = ["py313"]

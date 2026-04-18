@@ -135,31 +135,26 @@ class GraphStore:
             self.conn.execute("PRAGMA foreign_keys = 1")
 
             print("Creating documents table")
-            self.conn.cursor().execute(
-                """
+            self.conn.cursor().execute("""
                 CREATE TABLE documents(
                 id INTEGER PRIMARY KEY,
                 package TEXT NOT NULL,
                 version TEXT NOT NULL,
                 category TEXT NOT NULL,
                 identifier TEXT NOT NULL, unique(package, version, category, identifier))
-                """
-            )
+                """)
 
-            self.conn.cursor().execute(
-                """
+            self.conn.cursor().execute("""
                 CREATE TABLE destinations(
                 id INTEGER PRIMARY KEY,
                 package TEXT NOT NULL,
                 version TEXT NOT NULL,
                 category TEXT NOT NULL,
                 identifier TEXT NOT NULL, unique(package, version, category, identifier))
-                """
-            )
+                """)
 
             print("Creating links table")
-            self.conn.cursor().execute(
-                """
+            self.conn.cursor().execute("""
                 CREATE TABLE links(
                 id INTEGER PRIMARY KEY,
                 source INTEGER NOT NULL,
@@ -167,8 +162,7 @@ class GraphStore:
                 metadata TEXT,
                 FOREIGN KEY (source) REFERENCES documents(id) ON DELETE CASCADE
                 FOREIGN KEY (dest) REFERENCES destinations(id) ON DELETE CASCADE)
-                """
-            )
+                """)
             for cid in [
                 "CREATE INDEX module on documents(package) ;",
                 "CREATE INDEX px on documents(identifier);",

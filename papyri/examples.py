@@ -1,4 +1,4 @@
-""""
+""" "
 
 Examples Modules Heading 1
 ==========================
@@ -332,7 +332,7 @@ def example_3():
 foo = object()
 
 
-def annotation_with_hex_addresses(x: foo = lambda x: x):  # type:ignore [valid-type]
+def annotation_with_hex_addresses(x: foo = lambda x: x):  # type: ignore [valid-type]
     """
     This function is a function for which the signature will have and hexadecimal addresse.
 

@@ -46,9 +46,7 @@ def admonition_helper(name, argument, options, content):
             )
         ]
     else:
-        return [
-            Admonition([AdmonitionTitle([Text(f"{name} {argument}")])], kind=name)
-        ]
+        return [Admonition([AdmonitionTitle([Text(f"{name} {argument}")])], kind=name)]
 
 
 def warning_handler(argument, options, content):

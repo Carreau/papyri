@@ -8,8 +8,7 @@ from papyri.ts import parse, Node, TSVisitor, parser
 
 # @pytest.mark.xfail(strict=True)
 def test_parse_space_in_directive_section():
-    data = dedent(
-        """
+    data = dedent("""
 
     .. directive ::
 
@@ -17,8 +16,7 @@ def test_parse_space_in_directive_section():
         should raise/warn in papyri.
         It may depends on the tree-sitter rst version.
 
-    """
-    )
+    """)
     pytest.raises(
         errors.SpaceAfterBlockDirectiveError,
         parse,
@@ -28,25 +26,21 @@ def test_parse_space_in_directive_section():
 
 
 def test_parse_directive_body():
-    data1 = dedent(
-        """
+    data1 = dedent("""
 
     .. directive:: Directive title
 
         This directive declares a title and content in a block separated from
         the definition by an empty new line.
 
-    """
-    )
-    data2 = dedent(
-        """
+    """)
+    data2 = dedent("""
 
     .. directive:: Directive title
         This directive declares a title and content not separated by an empty
         newline.
 
-    """
-    )
+    """)
 
     text1 = data1.strip("\n").encode()
     text2 = data2.strip("\n").encode()
@@ -89,16 +83,14 @@ def test_parse_directive_body():
 
 
 def test_parse_warning_directive():
-    data = dedent(
-        """
+    data = dedent("""
 
     .. warning:: Title
 
         The warning directive does not admit a title.
         Just testing now.
 
-    """
-    )
+    """)
     text = data.strip("\n").encode()
     tree = parser.parse(text)
     directive = Node(tree.root_node)
@@ -133,12 +125,10 @@ def test_parse_no_newline():
     not have new line in the output. This make it simpler to render on output
     that respect newlines
     """
-    data = dedent(
-        """
+    data = dedent("""
     we want to make sure that `this
     interpreted_text` not have a newline in it and that `this
-    reference`_ does not either."""
-    ).encode()
+    reference`_ does not either.""").encode()
 
     [section] = parse(data, "test_parse_space")
     text0, directive, text1, reference, text2 = section.children[0].children

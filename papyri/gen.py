@@ -150,14 +150,12 @@ class ErrorCollector:
 try:
     from . import ts
 except (ImportError, OSError):
-    sys.exit(
-        """
+    sys.exit("""
             Tree Sitter RST parser not available, you may need to:
 
             $ git clone https://github.com/stsewd/tree-sitter-rst
             $ papyri build-parser
-            """
-    )
+            """)
 SITE_PACKAGE = site.getsitepackages()
 
 

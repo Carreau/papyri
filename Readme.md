@@ -70,8 +70,8 @@ cd papyri
 pip install -e .
 ```
 
-The `tree_sitter_languages` wheel we depend on is not compatible with
-`tree-sitter >= 0.22`; `pyproject.toml` pins `tree-sitter<0.22` accordingly.
+RST parsing uses the PyPI `tree-sitter-rst` wheel on top of
+`tree-sitter >= 0.24`; both are pulled in as regular dependencies.
 
 Verify with:
 

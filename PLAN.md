@@ -95,12 +95,9 @@ sessions should not restore any of it.
 
 ## Dependency pins
 
-- `tree_sitter_languages 1.10.2` is broken against `tree-sitter >= 0.22`
-  because the `Language(ptr, name)` API changed. Either:
-  1. Pin `tree-sitter < 0.22` (quick fix; `tree_sitter_languages` is
-     unmaintained).
-  2. **Preferred:** migrate to `tree-sitter-rst` from PyPI (actively
-     maintained) and drop `tree_sitter_languages` entirely.
+- RST parsing uses `tree-sitter-rst` from PyPI on top of
+  `tree-sitter >= 0.24`. The unmaintained `tree_sitter_languages`
+  wrapper has been dropped; don't reintroduce it.
 - `numpy`, `scipy`, `astropy`, `IPython` in the CI matrix drift frequently;
   the current numpy test failure is a canonical-path change for
   `numpy:array`. Either xfail with a reason or pin each matrix entry to a
@@ -121,7 +118,8 @@ sessions should not restore any of it.
       `papyri/miscs.py`, and `papyri/utils.py` use `rich.progress` /
       `rich.logging` in the core pipeline (not as a docstring renderer).
       Stripping it is a bigger refactor and is not required for Phase 1.
-- [x] Pin `tree-sitter < 0.22` in `pyproject.toml`.
+- [x] ~~Pin `tree-sitter < 0.22` in `pyproject.toml`.~~ Superseded in
+      Phase 2: migrated to `tree-sitter-rst` on `tree-sitter >= 0.24`.
 - [x] Bump `requires-python` to `>=3.14`; update CI to 3.14.
 - [x] Update the linter workflow (`lint.yml`) to 3.14 and keep
       `black` + `flake8` + `mypy`.
@@ -143,8 +141,10 @@ sessions should not restore any of it.
 - [ ] Add a `papyri describe <qualname>` (or reuse `find`) as a
       maintainer-side debug command that prints an IR entry without a
       renderer.
-- [ ] Replace `tree_sitter_languages` with direct `tree-sitter-rst` +
-      `tree-sitter-python`.
+- [x] Replace `tree_sitter_languages` with direct `tree-sitter-rst`
+      from PyPI (on top of `tree-sitter >= 0.24`). Python grammar was
+      never used from `tree_sitter_languages`, so no
+      `tree-sitter-python` dependency was needed.
 - [x] Fix circular import between `papyri/take2.py` and `papyri/myst_ast.py`
       so tests collect cleanly in isolation. Done by merging `myst_ast.py`
       into `take2.py`; M-prefixed classes still exist pending a rename pass.

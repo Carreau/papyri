@@ -151,10 +151,10 @@ try:
     from . import ts
 except (ImportError, OSError):
     sys.exit("""
-            Tree Sitter RST parser not available, you may need to:
+            Tree Sitter RST parser not available; reinstall papyri to pull
+            the `tree-sitter` and `tree-sitter-rst` wheels from PyPI:
 
-            $ git clone https://github.com/stsewd/tree-sitter-rst
-            $ papyri build-parser
+            $ pip install -e .
             """)
 SITE_PACKAGE = site.getsitepackages()
 

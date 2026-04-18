@@ -215,12 +215,13 @@ def load_one_uningested(
     version: Optional[str],
 ) -> IngestedBlobs:
     """
-    Load the json from a DocBlob and make it an ingested blob.
+    Decode a CBOR-encoded DocBlob from the gen bundle and make it an ingested
+    blob.
     """
     assert isinstance(bytes_, bytes)
-    data = json.loads(bytes_)
 
-    old_data = DocBlob.from_dict(data)
+    old_data = encoder.decode(bytes_)
+    assert isinstance(old_data, DocBlob), type(old_data)
     assert hasattr(old_data, "arbitrary")
 
     blob = IngestedBlobs.new()
@@ -307,7 +308,8 @@ class Ingester:
             (path / "examples/").glob("*"),
             description=f"{path.name} Reading Examples ...   ",
         ):
-            s = Section.from_dict(json.loads(fe.read_bytes()))
+            s = encoder.decode(fe.read_bytes())
+            assert isinstance(s, Section), type(s)
             visitor = PostDVR(
                 f"TBD (examples, {path}), supposed to be QA",
                 known_refs,
@@ -373,7 +375,7 @@ class Ingester:
             (path / "module").glob("*"),
             description=f"{path.name} Reading api files ...  ",
         ):
-            assert f1.name.endswith(".json")
+            assert f1.name.endswith(".cbor")
             qa = f1.name[:-5]
             if check:
                 rqa = normalise_ref(qa)

@@ -56,7 +56,7 @@ from rich.progress import BarColumn, Progress, TextColumn, track
 from there import print as print_
 from matplotlib import _pylab_helpers
 
-from .common_ast import Node
+from .common_ast import Node, register
 from .errors import (
     IncorrectInternalDocsLen,
     NumpydocParseError,
@@ -79,6 +79,7 @@ from .take2 import (
     RefInfo,
     Section,
     SeeAlsoItem,
+    encoder,
     parse_rst_section,
 )
 from .toc import make_tree
@@ -776,6 +777,7 @@ class _OrderedDictProxy:
         return [self.mapping[k] for k in self.ordering]
 
 
+@register(4011)
 class DocBlob(Node):
     """
     An object containing information about the documentation of an arbitrary
@@ -1511,7 +1513,7 @@ class Gen:
 
                 blbs[key] = blob
         for k, b in blbs.items():
-            self.docs[k] = b.to_json()
+            self.docs[k] = encoder.encode(b)
 
         self._doctree = {"tree": make_tree(trees), "titles": title_map}
 
@@ -1534,7 +1536,7 @@ class Gen:
         """
         (where / "module").mkdir(exist_ok=True)
         for k, v in self.data.items():
-            (where / "module" / (k + ".json")).write_bytes(v.to_json())
+            (where / "module" / (k + ".cbor")).write_bytes(encoder.encode(v))
 
     def partial_write(self, where):
         self.write_api(where)
@@ -1991,7 +1993,7 @@ class Gen:
                 config=self.config,
             )
             for edoc, figs in examples_data:
-                self.examples.update({k: v.to_json() for k, v in edoc.items()})
+                self.examples.update({k: encoder.encode(v) for k, v in edoc.items()})
                 for name, data in figs:
                     self.put_raw(name, data)
 

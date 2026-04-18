@@ -102,7 +102,7 @@ def test_numpy(module, submodules, objects):
         gen.partial_write(td)
 
         for o in objects:
-            assert (td / "module" / f"{o}.json").exists()
+            assert (td / "module" / f"{o}.cbor").exists()
 
 
 @pytest.mark.parametrize(

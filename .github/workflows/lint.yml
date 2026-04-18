@@ -43,11 +43,11 @@ jobs:
         pipdeptree -r
     - name: Lint with ruff
       run: |
-        ruff check papyri
+        python -m ruff check papyri
     - name: Format check with ruff
       if: always()
       run: |
-        ruff format --check papyri
+        python -m ruff format --check papyri
     - name: Test with mypy
       if: always()
       run: |

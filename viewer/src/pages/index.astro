@@ -1,0 +1,44 @@
+---
+import { listBundles } from "../lib/ir-reader.ts";
+import { dataDir } from "../lib/paths.ts";
+import "../styles/global.css";
+
+const root = dataDir();
+const bundles = await listBundles(root);
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Papyri viewer</title>
+  </head>
+  <body>
+    <main>
+      <h1>Papyri viewer</h1>
+      <p class="lede">
+        Reading IR from <code>{root}</code>
+      </p>
+
+      {
+        bundles.length === 0 ? (
+          <div class="empty">
+            No bundles found. Generate one with
+            <code>papyri gen examples/papyri.toml --no-infer</code>, then point
+            <code>PAPYRI_DATA_DIR</code> at the directory that contains it.
+          </div>
+        ) : (
+          <ul class="bundles">
+            {bundles.map((b) => (
+              <li>
+                <span class="name">{b.meta?.module ?? b.dirName}</span>
+                <span class="version">{b.meta?.version ?? "?"}</span>
+                <span class="dir">{b.dirName}</span>
+              </li>
+            ))}
+          </ul>
+        )
+      }
+    </main>
+  </body>
+</html>

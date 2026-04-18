@@ -7,9 +7,19 @@ section as answers arrive.
 
 ## Target shape
 
-Papyri becomes a **Python IR producer + local graph store**, nothing more.
-Rendering is punted to a future separate Node/React project that reads the
-IR directly. The boundary is:
+Papyri is a **Python IR producer + local graph store**, plus an in-tree web
+viewer that reads the IR directly. The viewer lives in [`viewer/`](viewer/)
+and has its own [`viewer/PLAN.md`](viewer/PLAN.md) — consult that for
+viewer-specific scope, milestones, and tech choices.
+
+Rationale for keeping the viewer in-tree (revised from the original plan,
+which punted rendering to a separate repo): the IR is still in heavy
+development and Phase 2 hasn't stabilized it yet. Co-locating the IR
+producer and its first consumer lets us iterate on both in a single PR
+instead of juggling two repos across breaking changes. Splitting into a
+sibling repo remains an option once the IR schema is documented and stable.
+
+The boundary between the two halves:
 
 - `~/.papyri/data/<pkg>_<ver>/` — per-bundle IR (JSON + CBOR blobs,
   `papyri.json`, `toc.json`, `module/*.json`, `docs/`, `examples/`,
@@ -139,13 +149,20 @@ sessions should not restore any of it.
       (`test_take2.py::test_parse_blocks[numpy.linspace…]`,
       `test_gen.py::test_numpy[numpy…]`).
 
-### Phase 3 — Node/React renderer (separate project)
+### Phase 3 — Web viewer (in-tree under `viewer/`)
 
-- Not in this repo. Track it in a sibling repo that depends on the IR
-  format documented in Phase 2.
-- Minimum viable: list of pages, page detail, cross-references,
-  backreferences. Read IR directly from `~/.papyri/data/…` and the SQLite
-  graph.
+Tracked in [`viewer/PLAN.md`](viewer/PLAN.md). Summary:
+
+- Lives in `viewer/` as an Astro + React + TypeScript app (see
+  `viewer/PLAN.md` for the tech rationale).
+- Reads the IR directly from `~/.papyri/data/…` and the SQLite graph; no
+  new intermediate format.
+- Milestones: M0 scaffolding (bundle list) → M1 single-page render → M2
+  crosslinks + backrefs → M3 examples/math/highlighting → M4 static export
+  → M5 polish.
+- Originally planned as a separate sibling repo; now in-tree while the IR
+  is still in flux. Splitting out remains an option once the IR schema
+  stabilizes in Phase 2.
 
 ## Open questions
 
@@ -164,4 +181,6 @@ sessions should not restore any of it.
 - URWID `browse`.
 - JupyterLab extension (`papyri-lab`).
 - Remote bundle download (`pydocs.github.io/pkg`).
-- Any Python-side HTML, terminal, or TUI renderer.
+- Any Python-side HTML, terminal, or TUI renderer. The web viewer under
+  `viewer/` is TypeScript-only and reads the IR directly; do not add
+  Python rendering code to replace it.

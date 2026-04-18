@@ -202,7 +202,7 @@ def test_self_2():
     g = Gen(False, config=c)
     g.collect_package_metadata("papyri", ".", {})
     g.collect_api_docs(
-        "papyri", {"papyri", "papyri.take2:RefInfo", "papyri.take2:RefInfo.__eq__"}
+        "papyri", {"papyri", "papyri.nodes:RefInfo", "papyri.nodes:RefInfo.__eq__"}
     )
     try:
         import dask  # noqa
@@ -222,11 +222,11 @@ def test_self_2():
         )
 
     assert (
-        g.data["papyri.take2:RefInfo"]
+        g.data["papyri.nodes:RefInfo"]
         .to_dict()["item_file"]
-        .endswith("papyri/take2.py")
+        .endswith("papyri/nodes.py")
     )
-    assert g.data["papyri.take2:RefInfo.__eq__"].to_dict()["item_file"] is None
+    assert g.data["papyri.nodes:RefInfo.__eq__"].to_dict()["item_file"] is None
 
 
 @pytest.mark.xfail()
@@ -237,6 +237,6 @@ def test_self_3():
     c = Config(dry_run=True, dummy_progress=True)
     g = Gen(False, config=c)
     g.collect_package_metadata("papyri", ".", {})
-    g.collect_api_docs("papyri", {"papyri", "papyri.take2:RefInfo"})
+    g.collect_api_docs("papyri", {"papyri", "papyri.nodes:RefInfo"})
 
-    assert g.data["papyri.take2:RefInfo"].to_dict()["item_file"] == ("papyri/take2.py")
+    assert g.data["papyri.nodes:RefInfo"].to_dict()["item_file"] == ("papyri/nodes.py")

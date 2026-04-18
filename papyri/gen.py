@@ -66,7 +66,7 @@ from .errors import (
 from .miscs import BlockExecutor, DummyP
 from .signature import Signature as ObjectSignature
 from .signature import SignatureNode
-from .take2 import (
+from .nodes import (
     Code,
     Fig,
     GenToken,
@@ -96,7 +96,7 @@ from .utils import (
 )
 from .vref import NumpyDocString
 
-from .take2 import MText
+from .nodes import MText
 
 
 class ErrorCollector:

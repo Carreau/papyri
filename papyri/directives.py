@@ -3,7 +3,7 @@ Various directive handlers.
 """
 
 from .ts import parse
-from .take2 import MMath, MAdmonition, MAdmonitionTitle, MText, Section
+from .nodes import MMath, MAdmonition, MAdmonitionTitle, MText, Section
 import logging
 
 log = logging.getLogger("papyri")

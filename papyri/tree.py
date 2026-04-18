@@ -10,14 +10,14 @@ from collections import Counter, defaultdict
 from functools import lru_cache
 from typing import Any, Dict, FrozenSet, List, Set, Tuple, Callable
 
-from .take2 import (
+from .nodes import (
     Directive,
     Link,
     RefInfo,
     SubstitutionDef,
 )
 from .common_ast import Node
-from .take2 import (
+from .nodes import (
     MMystDirective,
     MLink,
     MText,
@@ -264,7 +264,7 @@ class TreeVisitor:
         self.find = find
 
     def generic_visit(self, node):
-        from .take2 import Options, MThematicBreak
+        from .nodes import Options, MThematicBreak
 
         name = node.__class__.__name__
         if method := getattr(self, "visit_" + name, None):

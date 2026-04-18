@@ -17,7 +17,7 @@ from .config import ingest_dir
 from .gen import DocBlob, normalise_ref, _OrderedDictProxy
 from .graphstore import GraphStore, Key
 from .signature import SignatureNode
-from .take2 import (
+from .nodes import (
     Param,
     RefInfo,
     Fig,

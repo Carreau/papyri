@@ -4,7 +4,7 @@ from textwrap import dedent, indent
 from typing import List, Any, Dict
 
 
-from .take2 import (
+from .nodes import (
     MText,
     MCode,
     MParagraph,

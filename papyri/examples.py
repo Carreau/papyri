@@ -342,7 +342,7 @@ def annotation_with_hex_addresses(x: foo = lambda x: x):  # type:ignore [valid-t
 
 
 def _mydirective_handler(args: str, options: Dict[str, str], value: str):
-    from .take2 import MParagraph, MText
+    from .nodes import MParagraph, MText
     from .ts import parse
 
     parsed_arguments = parse(args.encode(), qa="custom directive")

@@ -2,7 +2,7 @@ import pytest
 
 from papyri.ts import parse
 
-from ..take2 import (
+from ..nodes import (
     UnprocessedDirective,
     dedent_but_first,
     get_object,

@@ -249,9 +249,9 @@ def drop():
 
 
 def complete_nodename():
-    from . import take2, myst_ast, common_ast
+    from . import nodes, common_ast
 
-    return dir(take2) + dir(common_ast) + dir(myst_ast)
+    return dir(nodes) + dir(common_ast)
 
 
 @app.command()
@@ -273,9 +273,9 @@ def find(
     """
     from papyri.graphstore import GraphStore
     from papyri.config import ingest_dir
-    from . import take2
+    from . import nodes
     from .tree import TreeVisitor
-    from .take2 import encoder
+    from .nodes import encoder
     from . import common_ast
     from .crosslink import IngestedBlobs
 
@@ -284,7 +284,7 @@ def find(
     items = list(store.glob((None, None, None, None)))
 
     node_type = getattr(
-        take2,
+        nodes,
         node_name,
         getattr(common_ast, node_name, None),
     )

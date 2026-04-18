@@ -1,156 +1,46 @@
 """
-Papyri – in progress
+Papyri – Python IR producer + local graph store.
 
-Here are a couple of documents, or docstrings that are of interest to see how
-papyri works, generally because they crashed papyri at some point during the
-development, and/or do not work yet.::
+Papyri parses Python library docstrings into an intermediate representation
+(IR) and ingests many libraries' IR into a local cross-linked SQLite graph.
 
-You likely want to see the readme.md file for now which is kept up do date more often.
+Rendering (HTML / terminal / TUI) has been removed from this repo; a future
+separate project is expected to consume the IR directly. See ``PLAN.md``.
 
 
-Installation
-------------
+Installation (dev)
+------------------
 
 .. code::
 
-    pip install papyri
-
-
-dev install
------------
-
-You may need to get a modified version of numpydoc depending on the stage of
-development::
-
-    git clone https://github.com/jupyter/papyri
+    git clone https://github.com/carreau/papyri
     cd papyri
     pip install -e .
-
-Build the TreeSitter rst parser:
-
-Some functionality require ``tree_sitter_rst``, see run ``papyri build-parser``,
-and CI config file on how to build the tree-sitter shared object locally::
-
-    git clone https://github.com/stsewd/tree-sitter-rst
-    papyri build-parser
 
 
 Usage
 -----
 
-There are mostly 3 stages to run papyri, so far you need to do the 3 steps/roles
-on your local machine, but it will not be necessary once papyri is production
-ready. The three stages are:
+Two stages:
 
-- As a library maintainer, generate and publish papyri IRD file.
-- As a system operator, install IRD files on your system
-- As a user, view the documentation in your IDE, webbrowser... with your preferences.
+- As a library maintainer, generate papyri IR files::
 
+    $ papyri gen <config file>
 
-To generate IRD files::
+  Example TOML configs live under ``examples/``. Output lands in
+  ``~/.papyri/data/<library>_<version>/``.
 
-  $ papyri gen <config file>
+- As a system operator, ingest IR into the local cross-linked graph::
 
-You can look in the ``examples`` folder to see some of these config files.
-Those will put IRD files in ``~/.papyri/data`` there is no upload mechanism yet.
-
-To install those files::
-
-  $ papyri ingest ~/.papyri/data/library_version/
-
-
-And finally to view the docs, either follow your IED documentation or use some of the
-built-in renderer::
-
-
-  $ papyri render
-
-  $ papyri browse ....
-
-  $ papyri serve
-
-
-Of Interest
------------
-
-Here are a couple of function that are of interest to explore what papyri can do and render.
-
-`dask.delayed`
-    one of the parameter of the docstring has multiple paragraphs.
-
-`IPython.core.display.Video.__init__`
-    Block Verbatim in params ?
-
-`IPython.core.interactiveshell.InteractiveShell.complete`
-    contain a `DefListItem`
-
-`matplotlib.transforms.Bbox`
-    parsing of example is completely incorrect.
-
-`matplotlib.axes._axes.Axes.text`
-    misparse example as well.
-
-`IPython.core.completer.Completion`
-    item list
-
-`matplotlib.figure.Figure.add_subplot`
-    custom double dot example
-
-`matplotlib.colors`
-    unnumbered list with indent.
-
-`matplotlib.colors`
-    contain a reference via ``.. _palettable: value`` and autolink ``paletable_``.
-
-`scipy.signal.ltisys.bode`
-    contains multiple figure
-
-`scipy.signal.barthann`
-    multiple figures
-
-`numpy.where`
-    The Parameter section have a pair of parameter separated with the coma in
-    the name field; and those parameter should be properly detected as local
-    references in the rest of the docstrings.
-
-`numpy.polynomial.laguerre.lagfit`
-    should have plenty of math items
-
-
-`numpy.polyfit`
-    The see also section links to `scipy.interpolate.UnivariateSpline` which
-    will not resolve (yet) as the fully qualified name is
-    `scipy.interpolate.fitpack2.UnivariateSpline`; this should be fixed at some
-    points via aliases; in the intro one link as a ``name <value>`` syntax which
-    is also not yet recognized.
-
-`scipy.signal.zpk2sos`:
-    multi blocks in enumerated list
-
-`scipy.signal.filter_design.zpk2sos`:
-    blockquote insted of enumerate list (to fix upstream)
-
-`scipy.optimize._lsq.trf`:
-    has lineblocks, which I belive is wrong.
-
-`scipy.signal.exponential`:
-    multiple figures
-
-`numpy.einsum`:
-    one of the longest numpy docstring/document, or at least one of the longest to render, with
-    `scipy.signal.windows.dpss`, `scipy.optimize._minimize.minimize` and
-    `scipy.optimize._basinhopping.basinhopping`
+    $ papyri ingest ~/.papyri/data/<library>_<version>/
 
 
 Changes in behavior
 -------------------
 
 Papyri parsing might be a bit different from docutils/sphinx parsing. As
-docutils try to keep backward compatibility for historical reason, we may be a
-bit stricter on some of the syntax you use to. This allows us to catch more
-errors. Feel free to report differences in parsing, here we document the one we
-do on purpose.
-
+docutils tries to keep backward compatibility for historical reasons, we may
+be a bit stricter on some syntax. This allows us to catch more errors.
 
 Directive must not have spaces before double colon::
 
@@ -160,12 +50,9 @@ Directive must not have spaces before double colon::
     .. directive:: is the proper way to write block directive.
             it will be properly interpreted.
 
-
 """
 
-import io
 import sys
-import zipfile
 from pathlib import Path
 from typing import List, Optional, Annotated
 
@@ -187,36 +74,18 @@ logo = r"""
 app = typer.Typer(
     help="""
 
-Generate Rich documentation for IPython, Jupyter, and publish online.
+Generate Papyri IR for Python libraries and ingest it into a local
+cross-linked graph.
 
-Generating Docs:
-
-    To generate documentation IR for publishing.
+Generating IR:
 
     $ papyri gen examples/numpy.toml
 
-    Will generate in ~/.papayri/data/ the folder `numpy_$numpyversion`.
+    Will generate in ~/.papyri/data/ the folder `numpy_$numpyversion`.
 
-Ingesting Docs:
+Ingesting IR:
 
-    To crosslink a given set of IR with current existing documentation IRs
-
-    $ papyri ingest numpy_$numpyversion [....]
-
-Generating standalone HTML for all the known docs
-
-    $ papyri render
-
-To start a server that generate html on the fly
-
-    $ papyri serve
-
-View given function docs in text with ANSI coloring, using ``rich``
-
-    $ papyri rich numpy:einsum
-
-This supports the `--width=<int>` and `--color|--no-color` flags.
-
+    $ papyri ingest ~/.papyri/data/numpy_$numpyversion
 
 """,
     pretty_exceptions_enable=False,
@@ -226,10 +95,8 @@ This supports the `--width=<int>` and `--color|--no-color` flags.
 
 def _intro():
     """
-    Prints the logo and current version to stdout.
-
+    Print the logo and current version to stdout.
     """
-    # TODO: should we print to stderr ?
     print(logo)
     print(__version__)
 
@@ -247,14 +114,14 @@ def ingest(
     Parameters
     ----------
     paths : List of Path
-        list of paths (directories) to ingest. Maybe later we want to support zipped bundled but it's the not the case
-        yet.
+        list of paths (directories) to ingest.
     relink : bool
-        after ingesting all the path, should we rescan the whole library to find new crosslinks ?
+        after ingesting all the paths, rescan the whole library to find new
+        crosslinks.
     check : bool
-        <Multiline Description Here>
+        run extra consistency checks while ingesting.
     dummy_progress : bool
-        <Multiline Description Here>
+        disable the rich progress bar.
     """
     _intro()
     from . import crosslink as cr
@@ -262,141 +129,6 @@ def ingest(
     for p in paths:
         cr.main(Path(p), check, dummy_progress=dummy_progress)
     if relink:
-        cr.relink(dummy_progress=dummy_progress)
-
-
-ROOT = "https://pydocs.github.io/pkg"
-
-
-@app.command()
-def install(
-    names: List[str],
-    check: bool = False,
-    dummy_progress: bool = typer.Option(False, help="Disable rich progress bar"),
-    relink: bool = False,
-):
-    """
-    WIP. Download and install a remote DocBundle
-    """
-
-    from io import BytesIO
-    from tempfile import TemporaryDirectory
-
-    import httpx
-    import rich
-    import trio
-
-    from . import crosslink as cr
-
-    _intro()
-
-    async def get(name, version, results, progress):
-        """
-        Utility to download a single DocBundle and
-        put it into result.
-
-        """
-
-        buf = BytesIO()
-
-        client = httpx.AsyncClient()
-
-        async with client.stream("GET", f"{ROOT}/{name}-{version}.zip") as response:
-            total = int(response.headers["Content-Length"])
-
-            download_task = progress.add_task(f"Download {name} {version}", total=total)
-            async for chunk in response.aiter_bytes():
-                buf.write(chunk)
-                progress.update(download_task, completed=response.num_bytes_downloaded)
-
-            if response.status_code != 200:
-                results[(name, version)] = None
-            else:
-                buf.seek(0)
-                results[(name, version)] = buf.read()
-
-    to_download_names = []
-    rs = {}
-    for name in names:
-        p = Path(name)
-        if p.exists() and p.is_file():
-            print(p, "appear to be a file", p.name)
-            name, version = p.name[:-4].rsplit("_")
-            print(name, version)
-            rs[(name, version)] = p.read_bytes()
-        else:
-            to_download_names.append(name)
-
-    async def trio_main():
-        """
-        Main trio routine to download DocBundles concurently.
-
-        """
-        results = {}
-        client = httpx.AsyncClient()
-        index = (await client.get(f"{ROOT}/index.json")).json()
-        assert len(set(to_download_names)) == len(to_download_names)
-
-        requested = {}
-        for name in to_download_names:
-            if "==" in name:
-                name, version = name.split("==")
-            else:
-                try:
-                    mod = __import__(name)
-                    version = mod.__version__
-                    print(
-                        f"Autodetecting version for {name}:{version}, use {name}==<version> if incorrect."
-                    )
-                except Exception:
-                    print(
-                        f"Could not detect version for {name} use {name}==<version> if incorrect."
-                    )
-                    continue
-            requested[name] = version
-
-        to_download = {}
-        for k, v in requested.items():
-            if k not in index["packages"]:
-                print(f"No documentation found for {k!r}")
-                continue
-            if v not in index["packages"][k]:
-                print(
-                    f"Could not find {k}=={v}, available versions are {index['packages'][k]}"
-                )
-            to_download[k] = v
-
-        with rich.progress.Progress(
-            "{task.description}",
-            "[progress.percentage]{task.percentage:>3.0f}%",
-            rich.progress.BarColumn(bar_width=None),
-            rich.progress.DownloadColumn(),
-            rich.progress.TransferSpeedColumn(),
-        ) as progress:
-            async with trio.open_nursery() as nursery:
-                for name, version in to_download.items():
-                    nursery.start_soon(get, name, version, results, progress)
-        return results
-
-    datas = trio.run(trio_main)
-    datas.update(rs)
-    for (name, version), data in datas.items():
-        if data is not None:
-            # print("Downloaded", name, version, len(data) // 1024, "kb")
-            zf = zipfile.ZipFile(io.BytesIO(data), "r")
-            with TemporaryDirectory() as d:
-                print("extract in", d)
-                import os
-
-                zf.extractall(os.path.join(d, f"{name}_{version}"))
-                cr.main(
-                    next(iter([x for x in Path(d).iterdir() if x.is_dir()])),
-                    check,
-                    dummy_progress=dummy_progress,
-                )
-        else:
-            print(f"Could not find docs for {name}=={version}")
-    if datas and relink:
         cr.relink(dummy_progress=dummy_progress)
 
 
@@ -448,14 +180,14 @@ def gen(
     only: List[str] = typer.Option(None, "--only"),
 ):
     """
-    Generate documentation for a given package.
+    Generate documentation IR for a given package.
 
-    First item should be the root package to import, if subpackages need to be
-    analyzed  but are not accessible from the root pass them as extra arguments.
+    First item should be the root package to import; if subpackages need to be
+    analyzed but are not accessible from the root pass them as extra arguments.
 
-    This take a single file, and build the documentation for a single package,
-    and building for multiple packages may have side effects. For example
-    import seaborn change matplotlib defaults.
+    This takes a single file and builds the IR for a single package. Building
+    for multiple packages may have side effects (for example importing seaborn
+    changes matplotlib defaults).
     """
     _intro()
     from papyri.gen import gen_main
@@ -506,23 +238,6 @@ def bootstrap(file: str):
 
 
 @app.command()
-def render(
-    ascii: bool = False,
-    html: bool = True,
-    dry_run: bool = False,
-    sidebar: bool = True,
-    graph: bool = True,
-    minify: bool = False,
-):
-    _intro()
-    import trio
-
-    from .render import main as m2
-
-    trio.run(m2, ascii, html, dry_run, sidebar, graph, minify)
-
-
-@app.command()
 def drop():
     """
     Drop the full local database.
@@ -531,92 +246,6 @@ def drop():
     from . import crosslink as cr
 
     cr.drop()
-
-
-@app.command()
-def rich(name: str, *, width: Optional[int] = None, color: bool = True):
-    import trio
-
-    from .render import rich_render
-
-    trio.run(rich_render, name, width, color)
-
-
-@app.command()
-def serve(sidebar: bool = True, port: int = 1234):
-    _intro()
-    from .render import serve as s2
-
-    s2(sidebar=sidebar, port=port)
-
-
-@app.command()
-def serve_static():
-    import http.server
-    import socketserver
-
-    PORT = 8000
-    from papyri.config import html_dir
-
-    class Handler(http.server.SimpleHTTPRequestHandler):
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, directory=str(html_dir), **kwargs)
-
-    with socketserver.TCPServer(("", PORT), Handler) as httpd:
-        print(f"serving at http://localhost:{PORT}")
-        httpd.serve_forever()
-
-
-@app.command()
-def browse(qualname: str):
-    """
-    browse documentation using URWID (deprecated)
-    """
-    from papyri.browser import main as browse
-
-    browse(qualname)
-
-
-@app.command()
-def textual(qualname: str):
-    """
-    browse documentation using textual (in-progress)
-    """
-    from papyri.textual import main as textual
-
-    textual(qualname)
-
-
-@app.command()
-def build_parser():
-    """
-    Build the rst parser from the submodule. (development)
-
-    This is a warkaround from the fact that the parser published wheels do not
-    work on all platofrms
-
-    """
-    # this is used just for dev of tree-sitter
-    return
-    from tree_sitter import Language
-
-    pth = Path(__file__).parent / "rst.so"
-    if pth.exists():
-        print("parser exists, erasing to rebuild")
-        pth.unlink()
-
-    spth = str(pth)
-
-    Language.build_library(
-        # Store the library in the `build` directory
-        spth,
-        # Include one or more languages
-        [
-            "tree-sitter-rst",
-        ],
-    )
-
-    Language(spth, "rst")
 
 
 def complete_nodename():
@@ -638,13 +267,12 @@ def find(
     """
     Find all documents with a given type of AST node.
 
-    Mostly used to debug rendering. One ca find all document with say equations:
+    Mostly used to debug IR. One can find all documents with, say, equations:
 
     $ papyri find MMath
-
-
     """
-    from papyri.render import GraphStore, ingest_dir
+    from papyri.graphstore import GraphStore
+    from papyri.config import ingest_dir
     from . import take2
     from .tree import TreeVisitor
     from .take2 import encoder
@@ -678,45 +306,6 @@ def find(
             if res:
                 print(it)
                 print(res[node_type])
-
-
-@app.command()
-def open(qualname: str):
-    _intro()
-    import webbrowser
-
-    from .config import html_dir
-
-    path = html_dir / (qualname + ".html")
-    if not path.exists():
-        import sys
-
-        sys.exit("No doc for " + qualname + f" ({path})")
-    print("opening", str(path))
-    webbrowser.get().open("file://" + str(path), new=1)
-
-
-def load_ipython_extension(ipython):
-    import IPython
-
-    if IPython.version_info < (8, 21):
-        # bug in IPython < 8, 21 where returning more mimetypes than just text and html override the
-        # full mimebundle.
-        print("papyri extension only works with IPython >= 8.21")
-        return
-
-    def hook(obj, oinfo):
-        from papyri.utils import full_qual
-
-        # TODO:
-        # for now just return the fully qualified name of the object,
-        # so that the frontend can later use a KernelSpy to display the right
-        # page.
-        # this is not completely sufficient, we might need to get the module version.
-        # but we can extend that later.
-        return {"qualname": full_qual(obj)}
-
-    ipython.inspector.mime_hooks["x-vendor/papyri"] = hook
 
 
 if __name__ == "__main__":

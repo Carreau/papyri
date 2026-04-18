@@ -74,7 +74,6 @@ class IngestedBlobs(Node):
         "see_also",
         "signature",
         "references",
-        "logo",
         "qa",
         "arbitrary",
     )

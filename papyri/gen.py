@@ -872,6 +872,8 @@ class DocBlob(Node):
             "item_type",
             "signature",
             "aliases",
+            "see_also",
+            "references",
             "arbitrary",
         ]
 

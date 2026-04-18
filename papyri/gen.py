@@ -83,7 +83,7 @@ from .nodes import (
     parse_rst_section,
 )
 from .toc import make_tree
-from .tree import DVR
+from .tree import GenVisitor
 from .utils import (
     Cannonical,
     FullQual,
@@ -725,7 +725,7 @@ class DFSCollector:
 
 class _OrderedDictProxy:
     """
-    a dict like class proxy for DocBlob to keep the order of sections in DocBlob.
+    a dict like class proxy for GeneratedDoc to keep the order of sections in GeneratedDoc.
 
     We Can't use an ordered Dict because of serialisation/deserialisation that
     would/might loose order
@@ -773,12 +773,12 @@ class _OrderedDictProxy:
 
 
 @register(4011)
-class DocBlob(Node):
+class GeneratedDoc(Node):
     """
     An object containing information about the documentation of an arbitrary
     object.
 
-    Instead of DocBlob being a NumpyDocString, I'm thinking of them having a
+    Instead of GeneratedDoc being a NumpyDocString, I'm thinking of them having a
     NumpyDocString. This helps with arbitrary documents (module, examples files)
     that cannot be parsed by Numpydoc, as well as links to external references,
     like images generated.
@@ -857,7 +857,7 @@ class DocBlob(Node):
     arbitrary: List[Section]
 
     def __repr__(self):
-        return "<DocBlob ...>"
+        return "<GeneratedDoc ...>"
 
     def slots(self):
         return [
@@ -1208,7 +1208,7 @@ class Gen:
 
     docs: Dict[str, bytes]
     examples: Dict[str, bytes]
-    data: Dict[str, DocBlob]
+    data: Dict[str, GeneratedDoc]
     bdata: Dict[str, bytes]
 
     def __init__(self, dummy_progress: bool, config: Config):
@@ -1473,10 +1473,10 @@ class Gen:
                     data = ts.parse(p.read_bytes(), p)
                 except Exception as e:
                     raise type(e)(f"{p=}")
-                blob = DocBlob.new()
+                blob = GeneratedDoc.new()
                 key = ":".join(parts)[:-4]
                 try:
-                    dv = DVR(
+                    dv = GenVisitor(
                         key,
                         set(),
                         local_refs=set(),
@@ -1568,9 +1568,9 @@ class Gen:
         """
         self.bdata[path] = data
 
-    def _transform_1(self, blob: DocBlob, ndoc) -> DocBlob:
+    def _transform_1(self, blob: GeneratedDoc, ndoc) -> GeneratedDoc:
         """
-        Populates DocBlob content field from numpydoc parsed docstring.
+        Populates GeneratedDoc content field from numpydoc parsed docstring.
 
         """
         for k, v in ndoc._parsed_data.items():
@@ -1579,10 +1579,10 @@ class Gen:
             assert isinstance(v, (str, list, dict)), type(v)
         return blob
 
-    def _transform_2(self, blob: DocBlob, target_item, qa: str) -> DocBlob:
+    def _transform_2(self, blob: GeneratedDoc, target_item, qa: str) -> GeneratedDoc:
         """
         Try to find relative path WRT site package and populate item_file field
-        for DocBlob.
+        for GeneratedDoc.
         """
         # will not work for dev install. Maybe an option to set the root location ?
         item_file: Optional[str] = find_file(target_item)
@@ -1629,7 +1629,7 @@ class Gen:
     def _transform_3(self, blob, target_item):
         """
         Try to find source line number for target object and populate item_line
-        field for DocBlob.
+        field for GeneratedDoc.
         """
         item_line = None
         try:
@@ -1663,7 +1663,7 @@ class Gen:
         config: Config,
         aliases: List[str],
         api_object: APIObjectInfo,
-    ) -> Tuple[DocBlob, List]:
+    ) -> Tuple[GeneratedDoc, List]:
         """
         Get documentation information for one python object
 
@@ -1686,7 +1686,7 @@ class Gen:
         -------
         Tuple of two items,
         blob:
-            DocBlob with info for current object.
+            GeneratedDoc with info for current object.
         figs:
             dict mapping figure names to figure data.
 
@@ -1695,7 +1695,7 @@ class Gen:
         collect_api_docs
         """
         assert isinstance(aliases, list)
-        blob: DocBlob = DocBlob.new()
+        blob: GeneratedDoc = GeneratedDoc.new()
 
         blob = self._transform_1(blob, ndoc)
         blob = self._transform_2(blob, target_item, qa)
@@ -1934,7 +1934,7 @@ class Gen:
                     None,
                 )
                 s = processed_example_data(s)
-                dv = DVR(
+                dv = GenVisitor(
                     example.name,
                     frozenset(),
                     local_refs=frozenset(),
@@ -2268,7 +2268,7 @@ class Gen:
                 assert isinstance(lr1, str)
             # lr: FrozenSet[str] = frozenset(flat(_local_refs))
             lr: FrozenSet[str] = frozenset(_local_refs)
-            dv = DVR(
+            dv = GenVisitor(
                 qa,
                 known_refs,
                 local_refs=lr,
@@ -2298,7 +2298,7 @@ class Gen:
                 if r.kind == "module":
                     sa.name.reference = r
                 else:
-                    imp = DVR._import_solver(sa.name.value)
+                    imp = GenVisitor._import_solver(sa.name.value)
                     if imp:
                         self.log.debug(
                             "TODO: see also resolve for %s in %s, %s",

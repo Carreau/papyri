@@ -832,7 +832,7 @@ def _obj_from_path(parts):
     return target
 
 
-class DVR(DirectiveVisiter):
+class GenVisitor(DirectiveVisiter):
     def visit_Section(self, node):
         if node.target:
             # print("Section has target:", node.target)
@@ -849,7 +849,7 @@ class DVR(DirectiveVisiter):
         return [fig]
 
 
-class PostDVR(DirectiveVisiter):
+class IngestVisitor(DirectiveVisiter):
     def replace_GenCode(self, code):
         assert False
 

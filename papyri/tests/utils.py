@@ -1,6 +1,6 @@
 from pathlib import Path
 import json
-from papyri.tree import DVR
+from papyri.tree import GenVisitor
 from papyri.ts import parse
 import sys
 
@@ -21,7 +21,7 @@ def _serialize(data) -> bytes:
 def _process(sample: Path):
     bytes_ = sample.read_bytes()
     data = parse(bytes_, sample)
-    dv = DVR(
+    dv = GenVisitor(
         str(sample),
         frozenset(),
         local_refs=set(),

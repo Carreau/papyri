@@ -14,7 +14,7 @@ import cbor2
 from there import print as print_
 
 from .config import ingest_dir
-from .gen import DocBlob, normalise_ref, _OrderedDictProxy
+from .gen import GeneratedDoc, normalise_ref, _OrderedDictProxy
 from .graphstore import GraphStore, Key
 from .signature import SignatureNode
 from .nodes import (
@@ -27,7 +27,7 @@ from .nodes import (
     TocTree,
 )
 from .common_ast import Node, register
-from .tree import PostDVR, resolve_, TreeVisitor
+from .tree import IngestVisitor, resolve_, TreeVisitor
 from .utils import progress, dummy_progress, FullQual, Cannonical
 
 warnings.simplefilter("ignore", UserWarning)
@@ -62,7 +62,7 @@ def find_all_refs(
 
 @register(4010)
 @dataclass
-class IngestedBlobs(Node):
+class IngestedDoc(Node):
     __slots__ = (
         "_content",
         "_ordered_sections",
@@ -179,7 +179,7 @@ class IngestedBlobs(Node):
 
         local_refs = frozenset(flat(_local_refs))
 
-        visitor = PostDVR(
+        visitor = IngestVisitor(
             self.qa, known_refs, local_refs, aliases, version=version, config={}
         )
         for section in ["Extended Summary", "Summary", "Notes"] + sections_:
@@ -213,18 +213,18 @@ def load_one_uningested(
     aliases: Dict[str, str],
     *,
     version: Optional[str],
-) -> IngestedBlobs:
+) -> IngestedDoc:
     """
-    Decode a CBOR-encoded DocBlob from the gen bundle and make it an ingested
+    Decode a CBOR-encoded GeneratedDoc from the gen bundle and make it an ingested
     blob.
     """
     assert isinstance(bytes_, bytes)
 
     old_data = encoder.decode(bytes_)
-    assert isinstance(old_data, DocBlob), type(old_data)
+    assert isinstance(old_data, GeneratedDoc), type(old_data)
     assert hasattr(old_data, "arbitrary")
 
-    blob = IngestedBlobs.new()
+    blob = IngestedDoc.new()
     blob.qa = qa
 
     for k in old_data.slots():
@@ -310,7 +310,7 @@ class Ingester:
         ):
             s = encoder.decode(fe.read_bytes())
             assert isinstance(s, Section), type(s)
-            visitor = PostDVR(
+            visitor = IngestVisitor(
                 f"TBD (examples, {path}), supposed to be QA",
                 known_refs,
                 set(),
@@ -467,7 +467,7 @@ class Ingester:
                 raise ValueError(str(key)) from e
             try:
                 doc_blob = encoder.decode(data)
-                assert isinstance(doc_blob, IngestedBlobs)
+                assert isinstance(doc_blob, IngestedDoc)
             except Exception as e:
                 raise type(e)(key)
             assert doc_blob.content is not None, data
@@ -504,7 +504,7 @@ class Ingester:
         ):
             s = encoder.decode(gstore.get(key))
             assert isinstance(s, Section), (s, key)
-            dvr = PostDVR(
+            dvr = IngestVisitor(
                 f"TBD, supposed to be QA relink {key}",
                 known_refs,
                 set(),

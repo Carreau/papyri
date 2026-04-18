@@ -277,7 +277,7 @@ def find(
     from .tree import TreeVisitor
     from .nodes import encoder
     from . import common_ast
-    from .crosslink import IngestedBlobs
+    from .crosslink import IngestedDoc
 
     store = GraphStore(ingest_dir, {})
 
@@ -298,7 +298,7 @@ def find(
             continue
         data = store.get(it)
         obj = encoder.decode(data)
-        if not isinstance(obj, IngestedBlobs):
+        if not isinstance(obj, IngestedDoc):
             print("SKIP", it)
             continue
         for a in obj.arbitrary + list(obj.content.values()):

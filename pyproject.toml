@@ -11,7 +11,6 @@ license = {file = "LICENSE"}
 dynamic = ["version","description"]
 requires-python=">=3.14"
 dependencies = [
-    "black",
     "cbor2",
     "ipython",
     "jedi",
@@ -40,9 +39,34 @@ Home = "https://github.com/carreau/papyri"
 python_version = '3.14'
 ignore_missing_imports = true
 
-[tool.black]
-# Pin below 3.14 so black doesn't auto-apply PEP 758 (unparenthesized
-# `except`) reformatting from `requires-python = ">=3.14"`. The package
-# still requires 3.14+; this just keeps the source parseable by older
-# Pythons during linting and tooling passes.
-target-version = ["py313"]
+[tool.ruff]
+# Pin below 3.14 so ruff's formatter doesn't auto-apply PEP 758
+# (unparenthesized `except`) reformatting from `requires-python = ">=3.14"`.
+# The package still requires 3.14+; this just keeps the source parseable by
+# older Pythons during linting and tooling passes.
+target-version = "py313"
+line-length = 88
+extend-exclude = ["node_modules", "jupyter_server_test_config.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+ignore = [
+    "E201",   # Whitespace after '('
+    "E202",   # Whitespace before ')'
+    "E203",   # Whitespace before ':'
+    "E231",   # Missing whitespace after ','
+    "E241",   # Multiple spaces after ','
+    "E261",   # At least two spaces before inline comment
+    "E262",   # Inline comment should start with '# '
+    "E265",   # Block comment should start with '# '
+    "E266",   # Too many leading '#' for block comment
+    "E303",   # Too many blank lines
+    "E401",   # Multiple imports on one line
+    "E402",   # Module level import not at top of file
+    "E501",   # Line too long (handled by formatter)
+    "E721",   # Do not compare types, use isinstance()
+    "E731",   # Do not assign a lambda expression
+    "E741",   # Ambiguous variable name
+    "F811",   # Redefinition of unused name
+]
+mccabe.max-complexity = 50

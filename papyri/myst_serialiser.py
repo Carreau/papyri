@@ -43,9 +43,9 @@ def serialize(instance, annotation):
                     return None
                 else:
                     return serialize(instance, inner_annotation[0])
-            assert (
-                type(instance) in inner_annotation
-            ), f"{type(instance)} not in {inner_annotation}, {instance} or type {type(instance)}"
+            assert type(instance) in inner_annotation, (
+                f"{type(instance)} not in {inner_annotation}, {instance} or type {type(instance)}"
+            )
             ma = [x for x in inner_annotation if type(instance) is x]
             # assert len(ma) == 1
             ann_ = ma[0]

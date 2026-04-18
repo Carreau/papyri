@@ -26,7 +26,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v3
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
         cache: 'pip'
@@ -41,13 +41,13 @@ jobs:
     - name: dependency tree (reversed)
       run: |
         pipdeptree -r
-    - name: Lint with black
+    - name: Lint with ruff
       run: |
-        black --check papyri
-    - name: Lint with flake8
+        python -m ruff check papyri
+    - name: Format check with ruff
       if: always()
       run: |
-        flake8 papyri
+        python -m ruff format --check papyri
     - name: Test with mypy
       if: always()
       run: |

@@ -338,9 +338,9 @@ class TreeReplacer:
             name = node.__class__.__name__
             if vmethod := getattr(self, "visit_" + name, None):
                 res = vmethod(node)
-                assert (
-                    res is None
-                ), f"did you meant to implement replace_{name} instead of visit_{name} ?"
+                assert res is None, (
+                    f"did you meant to implement replace_{name} instead of visit_{name} ?"
+                )
             if method := getattr(self, "replace_" + name, None):
                 self._replacements.update([name])
                 new_nodes = self._call_method(method, node)

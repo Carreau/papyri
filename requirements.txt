@@ -1,4 +1,3 @@
-black
 cbor2
 flit
 ipython

@@ -1809,9 +1809,9 @@ class Gen:
                 self.log.exception(f"Skipping section {section!r} in {qa!r} (Error)")
                 raise
         assert isinstance(blob.content["Summary"], Section)
-        assert isinstance(
-            blob.content.get("Summary", Section([], None)), Section
-        ), blob.content["Summary"]
+        assert isinstance(blob.content.get("Summary", Section([], None)), Section), (
+            blob.content["Summary"]
+        )
 
         sections_ = [
             "Parameters",

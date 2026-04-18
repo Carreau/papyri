@@ -124,7 +124,7 @@ sessions should not restore any of it.
 - [x] Pin `tree-sitter < 0.22` in `pyproject.toml`.
 - [x] Bump `requires-python` to `>=3.14`; update CI to 3.14.
 - [x] Update the linter workflow (`lint.yml`) to 3.14 and keep
-      `black` + `flake8` + `mypy`.
+      `black` + `flake8` + `mypy`. (Later migrated to `ruff` + `mypy`.)
 - [x] Verify `papyri gen examples/papyri.toml --no-infer` and
       `papyri ingest ~/.papyri/data/papyri_<ver>` still work end-to-end.
       (Verified locally on 3.11 via `--ignore-requires-python`; CI on

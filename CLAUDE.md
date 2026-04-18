@@ -59,8 +59,8 @@ renderers — the replacement lives under `viewer/` and has its own
 
 - Keep imports lazy inside CLI command functions (the existing pattern).
   `papyri --help` should stay fast.
-- `black` + `flake8` (config in `.flake8`) + `mypy` are wired in
-  `.github/workflows/lint.yml`. Don't break them.
+- `ruff` (lint + format, config in `pyproject.toml` under `[tool.ruff]`) +
+  `mypy` are wired in `.github/workflows/lint.yml`. Don't break them.
 - No new runtime dependencies without a note in the PR body explaining
   why. Phase 1 is about removing deps, not adding them.
 

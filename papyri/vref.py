@@ -34,9 +34,9 @@ class NumpyDocString(nds.NumpyDocString):
             value = [d.rstrip() for d in value]
 
         super().__setitem__(key, value)
-        assert (
-            key not in self.ordered_sections
-        ), f"assert {key!r} not in {self.ordered_sections}, {super().__getitem__(key)}, {value}"
+        assert key not in self.ordered_sections, (
+            f"assert {key!r} not in {self.ordered_sections}, {super().__getitem__(key)}, {value}"
+        )
         self.ordered_sections.append(key)
 
     def _guess_header(self, header):

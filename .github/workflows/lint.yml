@@ -41,13 +41,13 @@ jobs:
     - name: dependency tree (reversed)
       run: |
         pipdeptree -r
-    - name: Lint with black
+    - name: Lint with ruff
       run: |
-        black --check papyri
-    - name: Lint with flake8
+        ruff check papyri
+    - name: Format check with ruff
       if: always()
       run: |
-        flake8 papyri
+        ruff format --check papyri
     - name: Test with mypy
       if: always()
       run: |

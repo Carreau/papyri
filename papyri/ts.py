@@ -264,7 +264,7 @@ class TSVisitor:
         acc = []
         # TODO: FIX
         if node.type == "ERROR":
-            print(f"ERROR node: {self.as_text(node)!r}, skipping")
+            log.warning("ERROR node: %r, skipping", self.as_text(node))
             return []
         for c in node.children:
             # c=<ts.Node directive>
@@ -496,7 +496,7 @@ class TSVisitor:
     def visit_line_block(self, node):
         # TODO
         # e.g: numpy/doc/source/user/c-info.how-to-extend.rst
-        print("Skipping node", self.as_text(node))
+        log.warning("Skipping line_block node: %s", self.as_text(node))
         return []
 
     def visit_substitution_reference(self, node):
@@ -565,12 +565,12 @@ class TSVisitor:
 
     def visit_attribution(self, node):
         # TODO:
-        print("attribution not implemented")
+        log.warning("attribution not implemented")
         return [Unimplemented("inline_target", self.as_text(node))]
 
     def visit_inline_target(self, node):
         # TODO:
-        print("inline_target not implemented")
+        log.warning("inline_target not implemented")
         return [Unimplemented("inline_target", self.as_text(node))]
 
     def visit_directive(self, node):

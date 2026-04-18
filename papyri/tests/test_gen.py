@@ -246,7 +246,15 @@ def test_self_2():
     assert g.data["papyri.nodes:RefInfo.__eq__"].to_dict()["item_file"] is None
 
 
-@pytest.mark.xfail()
+@pytest.mark.xfail(
+    strict=False,
+    reason=(
+        "item_file equality fails on CI — the resolved path differs from the "
+        "literal 'papyri/nodes.py' (e.g. site-packages install path). Needs "
+        "rewriting to compare paths robustly, or pointing at a fixture. "
+        "Tracked in PLAN.md Phase 2 follow-up."
+    ),
+)
 def test_self_3():
     # same as previous, but == fails on CI, to fix.
     from papyri.gen import Gen, Config

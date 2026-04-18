@@ -1,3 +1,0 @@
-[submodule "tree-sitter-rst"]
-	path = tree-sitter-rst
-	url = https://github.com/stsewd/tree-sitter-rst.git

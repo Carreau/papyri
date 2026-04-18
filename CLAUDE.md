@@ -32,7 +32,6 @@ renderers — the replacement lives under `viewer/` and has its own
 5. **Verify locally before committing.** At minimum:
    ```
    pip install -e .
-   pip install 'tree-sitter<0.22'   # until we migrate off tree_sitter_languages
    papyri gen examples/papyri.toml --no-infer
    papyri ingest ~/.papyri/data/papyri_<version>
    python -m pytest -m "not postingest"
@@ -45,9 +44,9 @@ renderers — the replacement lives under `viewer/` and has its own
 
 ## Known environmental gotchas
 
-- `tree_sitter_languages 1.10.2` crashes on import against
-  `tree-sitter >= 0.22` (`TypeError: __init__() takes exactly 1 argument
-  (2 given)` at `papyri/ts.py:47`). Pin or migrate; don't paper over.
+- RST parsing uses the PyPI `tree-sitter-rst` wheel on top of
+  `tree-sitter >= 0.24`. The unmaintained `tree_sitter_languages`
+  package is no longer used; don't add it back.
 - `test_take2.py` has a `take2` ↔ `myst_ast` circular import that only
   manifests when collected in isolation (`pytest papyri/tests/test_take2.py`).
   The full-module collection path hides it.

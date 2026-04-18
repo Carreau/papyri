@@ -38,9 +38,10 @@ from .errors import (
 )
 
 
-from tree_sitter_languages import get_parser
+import tree_sitter_rst
+from tree_sitter import Language, Parser
 
-parser = get_parser("rst")
+parser = Parser(Language(tree_sitter_rst.language()))
 allowed_adorn = "=-`:.'\"~^_*+#<>"
 
 log = logging.getLogger("papyri")
@@ -126,10 +127,6 @@ class Node:
     @property
     def type(self):
         return self.node.type
-
-    @property
-    def bytes(self):
-        return self.node._bytes
 
     def __init__(self, node, *, _with_whitespace=True):
         self.node = node

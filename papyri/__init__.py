@@ -276,7 +276,7 @@ def find(
     from . import take2
     from .tree import TreeVisitor
     from .take2 import encoder
-    from . import myst_ast, common_ast
+    from . import common_ast
     from .crosslink import IngestedBlobs
 
     store = GraphStore(ingest_dir, {})
@@ -286,7 +286,7 @@ def find(
     node_type = getattr(
         take2,
         node_name,
-        getattr(common_ast, node_name, getattr(myst_ast, node_name, None)),
+        getattr(common_ast, node_name, None),
     )
 
     if node_type is None:

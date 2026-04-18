@@ -126,15 +126,18 @@ sessions should not restore any of it.
 
 - [ ] Document the IR format in `docs/IR.md`: on-disk layout, JSON schema
       per file type, CBOR-encoded fields, `graphstore` SQLite schema.
-- [ ] Decide whether to move everything to a single encoding (all JSON, or
-      all CBOR) vs documenting the hybrid.
+- [x] Decide whether to move everything to a single encoding (all JSON, or
+      all CBOR) vs documenting the hybrid. Done: CBOR everywhere for IR
+      (gen bundle + ingest store); `papyri.json` / `toc.json` remain JSON
+      because they're small configuration metadata, not IR.
 - [ ] Add a `papyri describe <qualname>` (or reuse `find`) as a
       maintainer-side debug command that prints an IR entry without a
       renderer.
 - [ ] Replace `tree_sitter_languages` with direct `tree-sitter-rst` +
       `tree-sitter-python`.
-- [ ] Fix circular import between `papyri/take2.py` and `papyri/myst_ast.py`
-      so tests collect cleanly in isolation.
+- [x] Fix circular import between `papyri/take2.py` and `papyri/myst_ast.py`
+      so tests collect cleanly in isolation. Done by merging `myst_ast.py`
+      into `take2.py`; M-prefixed classes still exist pending a rename pass.
 - [ ] Resolve or xfail the two known test failures
       (`test_take2.py::test_parse_blocks[numpy.linspace…]`,
       `test_gen.py::test_numpy[numpy…]`).

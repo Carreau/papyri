@@ -59,7 +59,7 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
-from typing import Any, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 import cbor2
 from there import print
@@ -67,6 +67,7 @@ from there import print
 from .common_ast import Node, REV_TAG_MAP, UnserializableNode, register
 from .miniserde import get_type_hints
 
+from . import signature  # noqa: F401 -- referenced in MRoot's forward-string annotation
 from .utils import dedent_but_first
 
 
@@ -187,21 +188,199 @@ class Unimplemented(Node):
         return f"<Unimplemented {self.placeholder!r} {self.value!r}>"
 
 
-from .myst_ast import (
-    MText,
-    MList,
-    MParagraph,
-    MMystDirective,
-    UnprocessedDirective,
-    MCode,
-    MLink,
-    MAdmonition,
-    MMath,
-    MComment,
-    MBlockquote,
-    MTarget,
-    MThematicBreak,
-)
+# ---- MyST-flavored AST nodes (formerly papyri/myst_ast.py) ------------------
+#
+# Merged in to eliminate the circular import between take2 and myst_ast
+# (PLAN.md Phase 2). The "M" prefix remains for historical reasons and will
+# be dropped in the rename pass that follows.
+
+
+@register(4046)
+class MText(Node):
+    type = "text"
+    value: str
+
+    def __init__(self, value):
+        assert isinstance(value, str)
+        self.value = value
+        super().__init__()
+
+
+@register(4047)
+class MEmphasis(Node):
+    type = "emphasis"
+    children: List["PhrasingContent"]
+
+
+@register(4048)
+class MStrong(Node):
+    type = "strong"
+    children: List["PhrasingContent"]
+
+
+@register(4049)
+class MLink(Node):
+    type = "link"
+    children: List["StaticPhrasingContent"]
+    url: str
+    title: str
+
+
+@register(4050)
+class MCode(Node):
+    type = "code"
+    value: str
+
+
+@register(4051)
+class MInlineCode(Node):
+    type = "inlineCode"
+    value: str
+
+    def __init__(self, value):
+        super().__init__(value)
+        assert "\n" not in value
+
+
+@register(4045)
+class MParagraph(Node):
+    type = "paragraph"
+    children: List[Union["PhrasingContent", "MUnimpl"]]
+
+
+@register(4053)
+class MList(Node):
+    type = "list"
+    ordered: bool
+    start: int
+    spread: bool
+    children: List["ListContent"]
+
+
+@register(4054)
+class MListItem(Node):
+    type = "listItem"
+    spread: bool
+    children: List[
+        Union[
+            "FlowContent",
+            "PhrasingContent",
+            "DefList",
+            "UnprocessedDirective",
+        ]
+    ]
+
+
+@register(4052)
+class MMystDirective(Node):
+    type = "mystDirective"
+    name: str
+    args: Optional[str]
+    options: Dict[str, str]
+    value: Optional[str]
+    children: List[Union["FlowContent", "PhrasingContent", None]] = []
+
+    @classmethod
+    def from_unprocessed(cls, up):
+        return cls(up.name, up.args, up.options, up.value, up.children)
+
+
+class UnprocessedDirective(UnserializableNode):
+    """
+    Placeholder for yet unprocessed directives, after they are parsed by
+    tree-sitter but before they are dispatched through the role resolution.
+    """
+
+    name: str
+    args: Optional[str]
+    options: Dict[str, str]
+    value: Optional[str]
+    children: List[Union["FlowContent", "PhrasingContent", None]]
+    raw: str
+
+
+@register(4055)
+class MAdmonitionTitle(Node):
+    type = "admonitionTitle"
+    children: List[Union["PhrasingContent", None]] = []
+
+
+@register(4056)
+class MAdmonition(Node):
+    type = "admonition"
+    children: List[
+        Union[
+            "FlowContent",
+            "MAdmonitionTitle",
+            "Unimplemented",
+            "DefList",
+        ]
+    ] = []
+    kind: str = "note"
+
+
+@register(4060)
+class MComment(Node):
+    type = "mystComment"
+    value: str
+
+
+@register(4058)
+class MMath(Node):
+    type = "math"
+    value: str
+
+
+@register(4057)
+class MInlineMath(Node):
+    type = "inlineMath"
+    value: str
+
+
+@register(4059)
+class MBlockquote(Node):
+    type = "blockquote"
+    children: List["FlowContent"] = []
+
+
+@register(4061)
+class MTarget(Node):
+    type = "mystTarget"
+    label: str
+
+
+@register(4062)
+class MImage(Node):
+    type = "image"
+    url: str
+    alt: str
+
+
+@register(4019)
+class MThematicBreak(Node):
+    type = "thematicBreak"
+
+
+@register(4020)
+class MHeading(Node):
+    type = "heading"
+    depth: int
+    children: List["PhrasingContent"]
+
+
+@register(4001)
+class MRoot(Node):
+    type = "root"
+    children: List[
+        Union[
+            "FlowContent",
+            "Parameters",
+            "Unimplemented",
+            "SubstitutionDef",
+            "signature.SignatureNode",
+            MImage,
+        ]
+    ]
 
 
 @register(4017)
@@ -609,6 +788,46 @@ def parse_rst_section(text, qa):
         [section] = items
         return section.children
     raise ValueError("Multiple sections present")
+
+
+# ---- Union type aliases (formerly in myst_ast.py) ---------------------------
+
+StaticPhrasingContent = Union[
+    MText,
+    MInlineCode,
+    MInlineMath,
+    Directive,
+    Link,
+    SubstitutionRef,
+    Unimplemented,
+]
+
+PhrasingContent = Union[
+    StaticPhrasingContent,
+    MEmphasis,
+    MStrong,
+    MLink,
+]
+
+FlowContent = Union[
+    MCode,
+    MParagraph,
+    "UnprocessedDirective",
+    MHeading,
+    MThematicBreak,
+    MBlockquote,
+    MList,
+    MTarget,
+    MMystDirective,
+    MAdmonition,
+    MMath,
+    "DefList",
+    "DefListItem",
+    "FieldList",
+    MComment,
+]
+
+ListContent = Union[MListItem,]
 
 
 class Encoder:

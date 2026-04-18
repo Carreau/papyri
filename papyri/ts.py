@@ -4,7 +4,7 @@ from textwrap import dedent, indent
 from typing import List, Any, Dict
 
 
-from .myst_ast import (
+from .take2 import (
     MText,
     MCode,
     MParagraph,
@@ -16,10 +16,6 @@ from .myst_ast import (
     UnprocessedDirective,
     MComment,
     MBlockquote,
-)
-
-
-from .take2 import (
     DefList,
     DefListItem,
     Directive,

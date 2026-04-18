@@ -17,7 +17,7 @@ from .take2 import (
     SubstitutionDef,
 )
 from .common_ast import Node
-from .myst_ast import (
+from .take2 import (
     MMystDirective,
     MLink,
     MText,
@@ -264,8 +264,7 @@ class TreeVisitor:
         self.find = find
 
     def generic_visit(self, node):
-        from .take2 import Options
-        from .myst_ast import MThematicBreak
+        from .take2 import Options, MThematicBreak
 
         name = node.__class__.__name__
         if method := getattr(self, "visit_" + name, None):

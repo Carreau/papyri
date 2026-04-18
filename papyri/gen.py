@@ -96,9 +96,7 @@ from .utils import (
 )
 from .vref import NumpyDocString
 
-# delayed import
-if True:
-    from .myst_ast import MText
+from .take2 import MText
 
 
 class ErrorCollector:

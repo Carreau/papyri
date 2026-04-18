@@ -2,9 +2,8 @@
 Various directive handlers.
 """
 
-from .myst_ast import MMath, MAdmonition, MAdmonitionTitle, MText
 from .ts import parse
-from .take2 import Section
+from .take2 import MMath, MAdmonition, MAdmonitionTitle, MText, Section
 import logging
 
 log = logging.getLogger("papyri")

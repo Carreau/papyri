@@ -42,7 +42,6 @@ execute_exclude_patterns = [
 ]
 
 submodules = [
-    'array_api',
     'compat',
     'core',
     'ctypeslib',

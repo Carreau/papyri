@@ -609,7 +609,6 @@ class DirectiveVisiter(TreeReplacer):
                     title,
                     reference=RefInfo(module="", version="", kind="?", path=url),
                     kind="exists",
-                    exists=True,
                     anchor=None,
                 )
                 RESOLVER.add_reference(link, url)
@@ -621,7 +620,6 @@ class DirectiveVisiter(TreeReplacer):
                     line,
                     reference=RefInfo(module="", version="", kind="?", path=line),
                     kind="exists",
-                    exists=True,
                     anchor=None,
                 )
                 RESOLVER.add_reference(link, line)
@@ -760,7 +758,7 @@ class DirectiveVisiter(TreeReplacer):
             if r.kind != "local":
                 assert None not in r, r
                 self._targets.add(r)
-            return [Link(text, r, exists, exists != "missing")]
+            return [Link(text, r, exists)]
         if (directive.domain, directive.role) in [
             (None, None),
             (None, "mod"),
@@ -795,7 +793,7 @@ class DirectiveVisiter(TreeReplacer):
                     path=target_qa,
                 )
                 # print("Solve ri", ri, directive.value, self.qa)
-                return [Link(text, ri, "module", True)]
+                return [Link(text, ri, "module")]
             # print("Not all identifier", directive, "in", self.qa)
         else:
             pass

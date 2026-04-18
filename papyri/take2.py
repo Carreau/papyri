@@ -116,41 +116,41 @@ class Directive(Node):
 @register(4002)
 class Link(Node):
     """
-    Links are usually the end goal of a directive,
-    they are a way to link to another document.
-    They contain a text; which will be what the user will see,
-    as well as a reference to the document pointed to.
-    They should also have an attribute to know whether the link is a
-     - Local item (same document)
-     - Internal item (same module)
-     - External item (another module)
-     - Web : a url to another page non papyri aware.
-     - Exist: bool wether the thing they point to exists.
+    A cross-reference produced by the gen step and resolved by ingest.
 
-     - Anchor: reference to a particular anchor in the target document.
+    `reference.kind` carries the resolution state:
 
+      - "to-resolve" — placeholder emitted by gen when a best-effort
+        resolution wasn't possible; ingest's relink pass is expected to
+        replace the reference.
+      - "missing" — ingest attempted resolution and couldn't find a
+        target; render-time should present as plain text.
+      - anything else ("module", "local", "api", ...) — resolved.
 
-    - I'm wondering if those should be descendant of directive not to lose information and be able to reconsruct the
-    directive from it.
-    - A Link might get several token for multiline; I'm not sure about that either, and wether the inner text should be
-      a block or not.
-
-    - In general link won't end up in the final Json that is rendered as they will need to be resolved at runtime ?
+    `exists` is a derived property over `reference.kind`; don't store it.
     """
 
     value: str
     reference: RefInfo
-    # kind likely should be deprecated, or renamed
-    # either keep exists/true/false, but that can be a property as to wether reference is None ?
+    # `kind` is a classification hint carried alongside the reference (e.g. the
+    # directive role at the call site). It's not a redundant copy of
+    # `reference.kind`; see tree.py's toctree handler for an example where the
+    # two diverge.
     kind: str
-    exists: bool
     anchor: Optional[str] = None
 
+    @property
+    def exists(self) -> bool:
+        return self.reference is not None and self.reference.kind not in (
+            "to-resolve",
+            "missing",
+        )
+
     def __repr__(self):
-        return f"<Link: {self.value=} {self.reference=} {self.kind=} {self.exists=}>"
+        return f"<Link: {self.value=} {self.reference=} {self.kind=}>"
 
     def __hash__(self):
-        return hash((self.value, self.reference, self.kind, self.exists, self.anchor))
+        return hash((self.value, self.reference, self.kind, self.anchor))
 
 
 class Leaf(Node):

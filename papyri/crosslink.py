@@ -484,7 +484,8 @@ class Ingester:
                 )
                 if r.kind == "module":
                     print_("unresolved ok...", r, key)
-                    sa.name.exists = True
+                    # `exists` is derived from `reference.kind`; updating the
+                    # reference to a resolved RefInfo is enough.
                     sa.name.reference = r
 
             # end todo

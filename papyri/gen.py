@@ -1053,7 +1053,9 @@ def _normalize_see_also(see_also: Section, qa: str):
                 refinfo = RefInfo.from_untrusted(
                     "current-module", "current-version", "to-resolve", name
                 )
-                link = Link(name, refinfo, "module", True)
+                # `exists` is derived from `refinfo.kind`; the "to-resolve" kind
+                # flags this as a placeholder for the ingest relink pass.
+                link = Link(name, refinfo, "module")
                 sai = SeeAlsoItem(link, desc, type_)
                 new_see_also.append(sai)
                 del desc

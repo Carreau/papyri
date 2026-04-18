@@ -308,5 +308,95 @@ def find(
                 print(res[node_type])
 
 
+@app.command()
+def describe(
+    qualname: Annotated[
+        str,
+        typer.Argument(
+            help=(
+                "Qualified name to describe, e.g. 'numpy.linspace'. "
+                "Optional prefixes select a kind or package: "
+                "'module:numpy.linspace', 'docs:intro', 'numpy/1.26.0/module/numpy.linspace'."
+            ),
+        ),
+    ],
+    kind: Annotated[
+        Optional[str],
+        typer.Option(
+            help="Restrict to a specific kind: module, docs, examples, meta, assets.",
+        ),
+    ] = None,
+    package: Annotated[
+        Optional[str],
+        typer.Option(help="Restrict to a specific package name."),
+    ] = None,
+    version: Annotated[
+        Optional[str],
+        typer.Option(help="Restrict to a specific package version."),
+    ] = None,
+):
+    """
+    Print the IR entry for a given qualified name, without rendering.
+
+    Looks up an ingested document in ~/.papyri/ingest/ and prints its
+    decoded structure, backrefs, and forward refs. Intended as a
+    maintainer-side debug tool for inspecting the IR.
+    """
+    from papyri.graphstore import GraphStore
+    from papyri.config import ingest_dir
+    from .nodes import encoder
+
+    path_part = qualname
+    if ":" in path_part and "/" not in path_part:
+        prefix, path_part = path_part.split(":", 1)
+        if kind is None:
+            kind = prefix
+    if "/" in path_part:
+        parts = path_part.split("/")
+        if len(parts) == 4:
+            package, version, kind, path_part = parts
+        else:
+            sys.exit(
+                f"unrecognised qualname format: {qualname!r} "
+                "(expected package/version/kind/identifier)"
+            )
+
+    store = GraphStore(ingest_dir, {})
+    matches = [
+        k for k in store.glob((package, version, kind, path_part)) if k.kind != "assets"
+    ]
+
+    if not matches:
+        sys.exit(
+            f"no IR entry found for {qualname!r} "
+            f"(package={package!r}, version={version!r}, kind={kind!r}). "
+            "Have you run `papyri ingest` yet?"
+        )
+
+    for it in sorted(matches):
+        print(f"=== {it.module} {it.version} {it.kind} {it.path} ===")
+        try:
+            data, backrefs, forward_refs = store.get_all(it)
+        except Exception as e:
+            print(f"  <error reading: {e}>")
+            continue
+
+        try:
+            obj = encoder.decode(data)
+        except Exception as e:
+            print(f"  <error decoding: {e}>")
+            continue
+
+        print(obj)
+        if backrefs:
+            print("-- backrefs --")
+            for b in sorted(backrefs):
+                print(f"  {b.module} {b.version} {b.kind} {b.path}")
+        if forward_refs:
+            print("-- forward refs --")
+            for f in sorted(forward_refs):
+                print(f"  {f.module} {f.version} {f.kind} {f.path}")
+
+
 if __name__ == "__main__":
     app()

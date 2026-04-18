@@ -132,15 +132,18 @@ sessions should not restore any of it.
 
 ### Phase 2 — IR surface stabilization
 
-- [ ] Document the IR format in `docs/IR.md`: on-disk layout, JSON schema
+- [x] Document the IR format in `docs/IR.md`: on-disk layout, JSON schema
       per file type, CBOR-encoded fields, `graphstore` SQLite schema.
+      Followup: JSON-Schema fragments per node + an `IR-CHANGELOG.md`.
 - [x] Decide whether to move everything to a single encoding (all JSON, or
       all CBOR) vs documenting the hybrid. Done: CBOR everywhere for IR
       (gen bundle + ingest store); `papyri.json` / `toc.json` remain JSON
       because they're small configuration metadata, not IR.
-- [ ] Add a `papyri describe <qualname>` (or reuse `find`) as a
+- [x] Add a `papyri describe <qualname>` (or reuse `find`) as a
       maintainer-side debug command that prints an IR entry without a
-      renderer.
+      renderer. Implemented in `papyri/__init__.py`; accepts shorthand
+      (`numpy.linspace`), kind-prefixed, and full `pkg/ver/kind/id`
+      forms, plus `--kind` / `--package` / `--version` filters.
 - [x] Replace `tree_sitter_languages` with direct `tree-sitter-rst`
       from PyPI (on top of `tree-sitter >= 0.24`). Python grammar was
       never used from `tree_sitter_languages`, so no

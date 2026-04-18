@@ -81,6 +81,22 @@ class Node(Base):
         )
 
 
+class UnserializableNode(Node):
+    """
+    Base for Node subclasses that are purely in-memory intermediates and must
+    never cross the gen->disk boundary. Encoding one is a bug: the gen-time
+    visitor was supposed to replace it before serialization.
+    """
+
+    _dont_serialise = True
+
+    def cbor(self, encoder):
+        assert False, f"{type(self).__name__} must be rewritten before serialization"
+
+    def to_json(self) -> bytes:
+        assert False, f"{type(self).__name__} must be rewritten before serialization"
+
+
 TAG_MAP: Dict[Any, int] = {}
 REV_TAG_MAP: Dict[int, Any] = {}
 

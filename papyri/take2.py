@@ -64,7 +64,7 @@ from typing import Any, List, Optional, Union
 import cbor2
 from there import print
 
-from .common_ast import Node, REV_TAG_MAP, register
+from .common_ast import Node, REV_TAG_MAP, UnserializableNode, register
 from .miniserde import get_type_hints
 
 from .utils import dedent_but_first
@@ -395,13 +395,13 @@ class Param(Node):
         )
 
 
-class GenToken(Node):
+class GenToken(UnserializableNode):
     value: str
     qa: Optional[str]
     pygmentclass: str
 
 
-class Code(Node):
+class Code(UnserializableNode):
     entries: List[GenToken]
     out: str
     ce_status: str

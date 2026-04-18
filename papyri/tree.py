@@ -10,23 +10,23 @@ from collections import Counter, defaultdict
 from functools import lru_cache
 from typing import Any, Dict, FrozenSet, List, Set, Tuple, Callable
 
-from .take2 import (
-    Directive,
-    Link,
+from .nodes import (
+    InlineRole,
+    XRef,
     RefInfo,
     SubstitutionDef,
 )
 from .common_ast import Node
-from .myst_ast import (
-    MMystDirective,
-    MLink,
-    MText,
-    MList,
-    MListItem,
-    MInlineMath,
-    MInlineCode,
-    MCode,
-    MParagraph,
+from .nodes import (
+    Directive,
+    Link,
+    Text,
+    BulletList,
+    ListItem,
+    InlineMath,
+    InlineCode,
+    Code,
+    Paragraph,
     UnprocessedDirective,
 )
 from .utils import full_qual, FullQual, Cannonical, obj_from_qualname
@@ -105,7 +105,7 @@ def endswith(end, refs):
 
 class DelayedResolver:
     _targets: Dict[str, RefInfo]
-    _references: Dict[str, List[Link]]
+    _references: Dict[str, List[XRef]]
 
     def __init__(self):
         self._targets = dict()
@@ -117,7 +117,7 @@ class DelayedResolver:
         self._targets[target] = target_ref
         self._resolve(target)
 
-    def add_reference(self, link: Link, target: str) -> None:
+    def add_reference(self, link: XRef, target: str) -> None:
         self._references.setdefault(target, []).append(link)
         self._resolve(target)
 
@@ -264,8 +264,7 @@ class TreeVisitor:
         self.find = find
 
     def generic_visit(self, node):
-        from .take2 import Options
-        from .myst_ast import MThematicBreak
+        from .nodes import Options, ThematicBreak
 
         name = node.__class__.__name__
         if method := getattr(self, "visit_" + name, None):
@@ -301,7 +300,7 @@ class TreeVisitor:
             if type(node) not in self.skipped:
                 self.skipped.add(type(node))
             return {}
-        elif isinstance(node, (RefInfo, Options, MThematicBreak, SubstitutionDef)):
+        elif isinstance(node, (RefInfo, Options, ThematicBreak, SubstitutionDef)):
             return {}
         else:
             raise ValueError(f"{node.__class__} has no children, no values {node}")
@@ -348,23 +347,21 @@ class TreeReplacer:
             elif name in [
                 "Code",
                 "Comment",
-                "Directive",
                 "Example",
                 "Fig",
-                "Link",
-                "MCode",
-                "MComment",
-                "MInlineCode",
-                "MInlineMath",
-                "MImage",
-                "MMath",
-                "MText",
-                "MThematicBreak",
+                "GenCode",
+                "Image",
+                "InlineCode",
+                "InlineMath",
+                "InlineRole",
                 "Math",
                 "Options",
                 "SeeAlsoItem",
                 "SubstitutionRef",
+                "Text",
+                "ThematicBreak",
                 "Unimplemented",
+                "XRef",
             ]:
                 return [node]
             else:
@@ -426,7 +423,7 @@ def block_directive_handler(domain, role):
 
 def _x_any_unimplemented_to_verbatim(domain, role, value):
     # print("To implement", domain, role)
-    return [MInlineCode(value)]
+    return [InlineCode(value)]
 
 
 for role in ("type", "expr", "member", "macro", "enumerator", "func", "data"):
@@ -468,8 +465,8 @@ for role in (
 @directive_handler("py", "ghpull")
 def py_ghpull_handler(value):
     return [
-        MLink(
-            children=[MText(f"#{value}")],
+        Link(
+            children=[Text(f"#{value}")],
             url=f"https://github.com/ipython/ipython/pull/{value}",
             title="",
         )
@@ -480,8 +477,8 @@ def py_ghpull_handler(value):
 @directive_handler("py", "ghissue")
 def py_ghissue_handler(value):
     return [
-        MLink(
-            children=[MText(f"#{value}")],
+        Link(
+            children=[Text(f"#{value}")],
             url=f"https://github.com/ipython/ipython/issue/{value}",
             title="",
         )
@@ -490,7 +487,7 @@ def py_ghissue_handler(value):
 
 @directive_handler("py", "math")
 def py_math_handler(value):
-    m = MInlineMath(value)
+    m = InlineMath(value)
     return [m]
 
 
@@ -499,8 +496,8 @@ def py_pep_hander(value):
     number = int(value)
     target = f"https://peps.python.org/pep-{number:04d}/"
     return [
-        MLink(
-            children=[MText(f"Pep {number}")],
+        Link(
+            children=[Text(f"Pep {number}")],
             url=target,
             title="",
         )
@@ -568,17 +565,17 @@ class DirectiveVisiter(TreeReplacer):
         self.version = version
         self._tocs: Any = []
 
-    def replace_Code(self, code):
+    def replace_GenCode(self, code):
         """Here we'll return MySt Code."""
         code_ = "".join([entry.value for entry in code.entries])
-        return [MCode(code_)]
+        return [Code(code_)]
 
     def _block_verbatim_helper(self, name: str, argument: str, options: dict, content):
         data = f".. {name}:: {argument}\n"
         for k, v in options.items():
             data = data + f"    :{k}:{v}\n"
         data = data + indent(content, "    ")
-        return [MCode(data)]
+        return [Code(data)]
 
     def _autosummary_handler(self, argument, options: dict, content):
         # assert False
@@ -586,8 +583,8 @@ class DirectiveVisiter(TreeReplacer):
 
     def _code_handler(
         self, argument: str, options: Dict[str, str], content: str
-    ) -> List[MCode]:
-        return [MCode(content)]
+    ) -> List[Code]:
+        return [Code(content)]
 
     def _toctree_handler(self, argument, options, content):
         assert not argument
@@ -605,11 +602,10 @@ class DirectiveVisiter(TreeReplacer):
                 title = title.strip()
                 assert "<" not in url
                 toc.append([title, url])
-                link = Link(
+                link = XRef(
                     title,
                     reference=RefInfo(module="", version="", kind="?", path=url),
                     kind="exists",
-                    exists=True,
                     anchor=None,
                 )
                 RESOLVER.add_reference(link, url)
@@ -617,11 +613,10 @@ class DirectiveVisiter(TreeReplacer):
             else:
                 assert "<" not in line
                 toc.append([None, line])
-                link = Link(
+                link = XRef(
                     line,
                     reference=RefInfo(module="", version="", kind="?", path=line),
                     kind="exists",
-                    exists=True,
                     anchor=None,
                 )
                 RESOLVER.add_reference(link, line)
@@ -631,8 +626,8 @@ class DirectiveVisiter(TreeReplacer):
 
         acc = []
         for line in lls:
-            acc.append(MListItem(False, [MParagraph([line])]))
-        return [MList(ordered=False, start=1, spread=False, children=acc)]
+            acc.append(ListItem(False, [Paragraph([line])]))
+        return [BulletList(ordered=False, start=1, spread=False, children=acc)]
 
     def replace_UnprocessedDirective(self, directive: UnprocessedDirective):
         meth = getattr(self, "_" + directive.name + "_handler", None)
@@ -657,9 +652,9 @@ class DirectiveVisiter(TreeReplacer):
             _MISSING_DIRECTIVES.append(directive.name)
             log.debug("TODO: %s", directive.name)
 
-        return [MMystDirective.from_unprocessed(directive)]
+        return [Directive.from_unprocessed(directive)]
 
-    def replace_MMystDirective(self, myst_directive: MMystDirective):
+    def replace_MMystDirective(self, myst_directive: Directive):
         meth = getattr(self, "_" + myst_directive.name + "_handler", None)
         if meth:
             assert False, "shod have gone vian unprocessed"
@@ -691,7 +686,7 @@ class DirectiveVisiter(TreeReplacer):
             if target_qa is not None:
                 return target_qa
 
-    def replace_Directive(self, directive: Directive):
+    def replace_InlineRole(self, directive: InlineRole):
         domain, role = directive.domain, directive.role
         if domain is None:
             domain = "py"
@@ -741,8 +736,8 @@ class DirectiveVisiter(TreeReplacer):
         if to_resolve.startswith(("https://", "http://", "mailto://")):
             to_resolve = to_resolve.replace(" ", "")
             return [
-                MLink(
-                    children=[MText(text)],
+                Link(
+                    children=[Text(text)],
                     url=to_resolve,
                     title="",
                 )
@@ -760,7 +755,7 @@ class DirectiveVisiter(TreeReplacer):
             if r.kind != "local":
                 assert None not in r, r
                 self._targets.add(r)
-            return [Link(text, r, exists, exists != "missing")]
+            return [XRef(text, r, exists)]
         if (directive.domain, directive.role) in [
             (None, None),
             (None, "mod"),
@@ -795,7 +790,7 @@ class DirectiveVisiter(TreeReplacer):
                     path=target_qa,
                 )
                 # print("Solve ri", ri, directive.value, self.qa)
-                return [Link(text, ri, "module", True)]
+                return [XRef(text, ri, "module")]
             # print("Not all identifier", directive, "in", self.qa)
         else:
             pass
@@ -837,7 +832,7 @@ def _obj_from_path(parts):
     return target
 
 
-class DVR(DirectiveVisiter):
+class GenVisitor(DirectiveVisiter):
     def visit_Section(self, node):
         if node.target:
             # print("Section has target:", node.target)
@@ -854,11 +849,11 @@ class DVR(DirectiveVisiter):
         return [fig]
 
 
-class PostDVR(DirectiveVisiter):
-    def replace_Code(self, code):
+class IngestVisitor(DirectiveVisiter):
+    def replace_GenCode(self, code):
         assert False
 
-    def replace_Directive(self, d):
+    def replace_InlineRole(self, d):
         if (d.domain, d.role) not in _MISSING_INLINE_DIRECTIVES:
             _MISSING_INLINE_DIRECTIVES.append((d.domain, d.role))
             log.info("TODO: %r %r %r", d.domain, d.role, d.value)
@@ -868,10 +863,10 @@ class PostDVR(DirectiveVisiter):
         print(refinfo)
         return [refinfo]
 
-    def replace_BlockDirective(self, block_directive: MMystDirective):
+    def replace_BlockDirective(self, block_directive: Directive):
         assert False, "should be unreachable"
 
-    def replace_MMystDirective(self, myst_directive: MMystDirective):
+    def replace_MMystDirective(self, myst_directive: Directive):
         if myst_directive.name not in _MISSING_DIRECTIVES:
             _MISSING_DIRECTIVES.append(myst_directive.name)
             log.info("TODO: %r", myst_directive.name)

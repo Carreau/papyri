@@ -59,14 +59,15 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
-from typing import Any, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 import cbor2
 from there import print
 
-from .common_ast import Node, REV_TAG_MAP, register
+from .common_ast import Node, REV_TAG_MAP, UnserializableNode, register
 from .miniserde import get_type_hints
 
+from . import signature  # noqa: F401 -- referenced in Root's forward-string annotation
 from .utils import dedent_but_first
 
 
@@ -74,13 +75,13 @@ register(tuple)(4444)
 
 
 @register(4003)
-class Directive(Node):
+class InlineRole(Node):
     value: str
     domain: Optional[str]
     role: Optional[str]
 
     def __init__(self, value, domain, role):
-        assert "\n" not in value, f"Directive should not contain newline {value}"
+        assert "\n" not in value, f"InlineRole should not contain newline {value}"
         super().__init__(value, domain, role)
 
     def __hash__(self):
@@ -107,50 +108,50 @@ class Directive(Node):
         return prefix
 
     def __repr__(self):
-        return f"<Directive {self.prefix}`{self.value}` `{self.to_dict()}`>"
+        return f"<InlineRole {self.prefix}`{self.value}` `{self.to_dict()}`>"
 
     def __str__(self):
         assert False
 
 
 @register(4002)
-class Link(Node):
+class XRef(Node):
     """
-    Links are usually the end goal of a directive,
-    they are a way to link to another document.
-    They contain a text; which will be what the user will see,
-    as well as a reference to the document pointed to.
-    They should also have an attribute to know whether the link is a
-     - Local item (same document)
-     - Internal item (same module)
-     - External item (another module)
-     - Web : a url to another page non papyri aware.
-     - Exist: bool wether the thing they point to exists.
+    A cross-reference produced by the gen step and resolved by ingest.
 
-     - Anchor: reference to a particular anchor in the target document.
+    `reference.kind` carries the resolution state:
 
+      - "to-resolve" — placeholder emitted by gen when a best-effort
+        resolution wasn't possible; ingest's relink pass is expected to
+        replace the reference.
+      - "missing" — ingest attempted resolution and couldn't find a
+        target; render-time should present as plain text.
+      - anything else ("module", "local", "api", ...) — resolved.
 
-    - I'm wondering if those should be descendant of directive not to lose information and be able to reconsruct the
-    directive from it.
-    - A Link might get several token for multiline; I'm not sure about that either, and wether the inner text should be
-      a block or not.
-
-    - In general link won't end up in the final Json that is rendered as they will need to be resolved at runtime ?
+    `exists` is a derived property over `reference.kind`; don't store it.
     """
 
     value: str
     reference: RefInfo
-    # kind likely should be deprecated, or renamed
-    # either keep exists/true/false, but that can be a property as to wether reference is None ?
+    # `kind` is a classification hint carried alongside the reference (e.g. the
+    # directive role at the call site). It's not a redundant copy of
+    # `reference.kind`; see tree.py's toctree handler for an example where the
+    # two diverge.
     kind: str
-    exists: bool
     anchor: Optional[str] = None
 
+    @property
+    def exists(self) -> bool:
+        return self.reference is not None and self.reference.kind not in (
+            "to-resolve",
+            "missing",
+        )
+
     def __repr__(self):
-        return f"<Link: {self.value=} {self.reference=} {self.kind=} {self.exists=}>"
+        return f"<XRef: {self.value=} {self.reference=} {self.kind=}>"
 
     def __hash__(self):
-        return hash((self.value, self.reference, self.kind, self.exists, self.anchor))
+        return hash((self.value, self.reference, self.kind, self.anchor))
 
 
 class Leaf(Node):
@@ -160,7 +161,7 @@ class Leaf(Node):
 @register(4027)
 class SubstitutionDef(Node):
     value: str
-    children: List[Union[MMystDirective, UnprocessedDirective]]
+    children: List[Union[Directive, UnprocessedDirective]]
 
     def __init__(self, value, children):
         self.value = value
@@ -187,29 +188,207 @@ class Unimplemented(Node):
         return f"<Unimplemented {self.placeholder!r} {self.value!r}>"
 
 
-from .myst_ast import (
-    MText,
-    MList,
-    MParagraph,
-    MMystDirective,
-    UnprocessedDirective,
-    MCode,
-    MLink,
-    MAdmonition,
-    MMath,
-    MComment,
-    MBlockquote,
-    MTarget,
-    MThematicBreak,
-)
+# ---- MyST-flavored AST nodes (formerly papyri/myst_ast.py) ------------------
+#
+# Merged in to eliminate the circular import between take2 and myst_ast
+# (PLAN.md Phase 2). The "M" prefix remains for historical reasons and will
+# be dropped in the rename pass that follows.
+
+
+@register(4046)
+class Text(Node):
+    type = "text"
+    value: str
+
+    def __init__(self, value):
+        assert isinstance(value, str)
+        self.value = value
+        super().__init__()
+
+
+@register(4047)
+class Emphasis(Node):
+    type = "emphasis"
+    children: List["PhrasingContent"]
+
+
+@register(4048)
+class Strong(Node):
+    type = "strong"
+    children: List["PhrasingContent"]
+
+
+@register(4049)
+class Link(Node):
+    type = "link"
+    children: List["StaticPhrasingContent"]
+    url: str
+    title: str
+
+
+@register(4050)
+class Code(Node):
+    type = "code"
+    value: str
+
+
+@register(4051)
+class InlineCode(Node):
+    type = "inlineCode"
+    value: str
+
+    def __init__(self, value):
+        super().__init__(value)
+        assert "\n" not in value
+
+
+@register(4045)
+class Paragraph(Node):
+    type = "paragraph"
+    children: List[Union["PhrasingContent", "UnimplementedInline"]]
+
+
+@register(4053)
+class BulletList(Node):
+    type = "list"
+    ordered: bool
+    start: int
+    spread: bool
+    children: List["ListContent"]
+
+
+@register(4054)
+class ListItem(Node):
+    type = "listItem"
+    spread: bool
+    children: List[
+        Union[
+            "FlowContent",
+            "PhrasingContent",
+            "DefList",
+            "UnprocessedDirective",
+        ]
+    ]
+
+
+@register(4052)
+class Directive(Node):
+    type = "mystDirective"
+    name: str
+    args: Optional[str]
+    options: Dict[str, str]
+    value: Optional[str]
+    children: List[Union["FlowContent", "PhrasingContent", None]] = []
+
+    @classmethod
+    def from_unprocessed(cls, up):
+        return cls(up.name, up.args, up.options, up.value, up.children)
+
+
+class UnprocessedDirective(UnserializableNode):
+    """
+    Placeholder for yet unprocessed directives, after they are parsed by
+    tree-sitter but before they are dispatched through the role resolution.
+    """
+
+    name: str
+    args: Optional[str]
+    options: Dict[str, str]
+    value: Optional[str]
+    children: List[Union["FlowContent", "PhrasingContent", None]]
+    raw: str
+
+
+@register(4055)
+class AdmonitionTitle(Node):
+    type = "admonitionTitle"
+    children: List[Union["PhrasingContent", None]] = []
+
+
+@register(4056)
+class Admonition(Node):
+    type = "admonition"
+    children: List[
+        Union[
+            "FlowContent",
+            "AdmonitionTitle",
+            "Unimplemented",
+            "DefList",
+        ]
+    ] = []
+    kind: str = "note"
+
+
+@register(4060)
+class Comment(Node):
+    type = "mystComment"
+    value: str
+
+
+@register(4058)
+class Math(Node):
+    type = "math"
+    value: str
+
+
+@register(4057)
+class InlineMath(Node):
+    type = "inlineMath"
+    value: str
+
+
+@register(4059)
+class Blockquote(Node):
+    type = "blockquote"
+    children: List["FlowContent"] = []
+
+
+@register(4061)
+class Target(Node):
+    type = "mystTarget"
+    label: str
+
+
+@register(4062)
+class Image(Node):
+    type = "image"
+    url: str
+    alt: str
+
+
+@register(4019)
+class ThematicBreak(Node):
+    type = "thematicBreak"
+
+
+@register(4020)
+class Heading(Node):
+    type = "heading"
+    depth: int
+    children: List["PhrasingContent"]
+
+
+@register(4001)
+class Root(Node):
+    type = "root"
+    children: List[
+        Union[
+            "FlowContent",
+            "Parameters",
+            "Unimplemented",
+            "SubstitutionDef",
+            "signature.SignatureNode",
+            Image,
+        ]
+    ]
 
 
 @register(4017)
-class MUnimpl(Node):
-    children: List[Union[MText]]
+class UnimplementedInline(Node):
+    children: List[Union[Text]]
 
     def __repr__(self):
-        return f"<MUnimpl {self.children}>"
+        return f"<UnimplementedInline {self.children}>"
 
 
 class IntermediateNode(Node):
@@ -294,24 +473,24 @@ class Section(Node):
             DefList,
             FieldList,
             Fig,
-            MAdmonition,
-            MBlockquote,
-            MCode,
-            MComment,
-            MList,
-            MMath,
-            MMystDirective,
+            Admonition,
+            Blockquote,
+            Code,
+            Comment,
+            BulletList,
+            Math,
+            Directive,
             UnprocessedDirective,
-            MParagraph,
-            MTarget,
-            MText,
-            MThematicBreak,
+            Paragraph,
+            Target,
+            Text,
+            ThematicBreak,
             Options,
             Parameters,
             SubstitutionDef,
             SubstitutionRef,
             Unimplemented,
-            MUnimpl,
+            UnimplementedInline,
         ]
     ]
     # might need to be more complicated like verbatim.
@@ -366,14 +545,14 @@ class Param(Node):
             Fig,
             DefListItem,
             DefList,
-            MMystDirective,
+            Directive,
             UnprocessedDirective,
-            MMath,
-            MAdmonition,
-            MBlockquote,
-            MList,
-            MParagraph,
-            MCode,
+            Math,
+            Admonition,
+            Blockquote,
+            BulletList,
+            Paragraph,
+            Code,
             SubstitutionDef,
         ]
     ]
@@ -395,13 +574,21 @@ class Param(Node):
         )
 
 
-class GenToken(Node):
+class GenToken(UnserializableNode):
     value: str
     qa: Optional[str]
     pygmentclass: str
 
 
-class Code(Node):
+class GenCode(UnserializableNode):
+    """
+    Gen-time bundle of syntax-highlighted code tokens and execution output.
+
+    Emitted while scraping docstring examples, rewritten to Code by the
+    gen visitor before anything reaches disk. Present in the IR only as
+    an in-memory intermediate; serialization is asserted-unreachable.
+    """
+
     entries: List[GenToken]
     out: str
     ce_status: str
@@ -426,27 +613,27 @@ def compress_word(stream) -> List[Any]:
     wds = ""
     assert isinstance(stream, list), stream
     for item in stream:
-        if isinstance(item, MText):
+        if isinstance(item, Text):
             wds += item.value
         else:
             if type(item).__name__ == "Whitespace":
-                acc.append(MText(item.value))
+                acc.append(Text(item.value))
                 wds = ""
             else:
                 if wds:
-                    acc.append(MText(wds))
+                    acc.append(Text(wds))
                     wds = ""
                 acc.append(item)
     if wds:
-        acc.append(MText(wds))
+        acc.append(Text(wds))
     return acc
 
 
 inline_nodes = tuple(
     [
-        Directive,
+        InlineRole,
+        XRef,
         Link,
-        MLink,
         SubstitutionRef,
     ]
 )
@@ -475,22 +662,22 @@ class FieldList(Node):
 class FieldListItem(Node):
     name: List[
         Union[
-            MText,
-            MCode,
+            Text,
+            Code,
         ]
     ]
     body: List[
         Union[
-            MMystDirective,
-            MText,
-            MParagraph,
-            MCode,
+            Directive,
+            Text,
+            Paragraph,
+            Code,
         ]
     ]
 
     def validate(self):
         for p in self.body:
-            assert isinstance(p, MParagraph), p
+            assert isinstance(p, Paragraph), p
         if self.name:
             assert len(self.name) == 1, (self.name, [type(n) for n in self.name])
         return super().validate()
@@ -514,25 +701,25 @@ class DefList(Node):
 @register(4037)
 class DefListItem(Node):
     dt: Union[
-        MParagraph,
-        MText,
-        MLink,
-        MUnimpl,
+        Paragraph,
+        Text,
+        Link,
+        UnimplementedInline,
     ]  # TODO: this is technically incorrect and should
     # be a single term, (word, directive or link is my guess).
     dd: List[
         Union[
-            MParagraph,
-            MCode,
-            MList,
-            MBlockquote,
+            Paragraph,
+            Code,
+            BulletList,
+            Blockquote,
             DefList,
-            MMystDirective,
+            Directive,
             UnprocessedDirective,
             Unimplemented,
-            MUnimpl,
-            MAdmonition,
-            MMath,
+            UnimplementedInline,
+            Admonition,
+            Math,
             FieldList,
             Optional[TocTree],  # remove this, that should not be the case ?
         ]
@@ -550,10 +737,10 @@ class DefListItem(Node):
 
 @register(4028)
 class SeeAlsoItem(Node):
-    name: Link
+    name: XRef
 
     # TODO: Chck why we hav a Union Here, and if we have only Paragraphs, remove the union.
-    descriptions: List[Union[MParagraph]]
+    descriptions: List[Union[Paragraph]]
     # there are a few case when the lhs is `:func:something`... in scipy.
     type: Optional[str]
 
@@ -609,6 +796,46 @@ def parse_rst_section(text, qa):
         [section] = items
         return section.children
     raise ValueError("Multiple sections present")
+
+
+# ---- Union type aliases (formerly in myst_ast.py) ---------------------------
+
+StaticPhrasingContent = Union[
+    Text,
+    InlineCode,
+    InlineMath,
+    InlineRole,
+    XRef,
+    SubstitutionRef,
+    Unimplemented,
+]
+
+PhrasingContent = Union[
+    StaticPhrasingContent,
+    Emphasis,
+    Strong,
+    Link,
+]
+
+FlowContent = Union[
+    Code,
+    Paragraph,
+    "UnprocessedDirective",
+    Heading,
+    ThematicBreak,
+    Blockquote,
+    BulletList,
+    Target,
+    Directive,
+    Admonition,
+    Math,
+    "DefList",
+    "DefListItem",
+    "FieldList",
+    Comment,
+]
+
+ListContent = Union[ListItem,]
 
 
 class Encoder:

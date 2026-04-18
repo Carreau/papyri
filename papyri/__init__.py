@@ -249,9 +249,9 @@ def drop():
 
 
 def complete_nodename():
-    from . import take2, myst_ast, common_ast
+    from . import nodes, common_ast
 
-    return dir(take2) + dir(common_ast) + dir(myst_ast)
+    return dir(nodes) + dir(common_ast)
 
 
 @app.command()
@@ -269,24 +269,24 @@ def find(
 
     Mostly used to debug IR. One can find all documents with, say, equations:
 
-    $ papyri find MMath
+    $ papyri find Math
     """
     from papyri.graphstore import GraphStore
     from papyri.config import ingest_dir
-    from . import take2
+    from . import nodes
     from .tree import TreeVisitor
-    from .take2 import encoder
-    from . import myst_ast, common_ast
-    from .crosslink import IngestedBlobs
+    from .nodes import encoder
+    from . import common_ast
+    from .crosslink import IngestedDoc
 
     store = GraphStore(ingest_dir, {})
 
     items = list(store.glob((None, None, None, None)))
 
     node_type = getattr(
-        take2,
+        nodes,
         node_name,
-        getattr(common_ast, node_name, getattr(myst_ast, node_name, None)),
+        getattr(common_ast, node_name, None),
     )
 
     if node_type is None:
@@ -298,7 +298,7 @@ def find(
             continue
         data = store.get(it)
         obj = encoder.decode(data)
-        if not isinstance(obj, IngestedBlobs):
+        if not isinstance(obj, IngestedDoc):
             print("SKIP", it)
             continue
         for a in obj.arbitrary + list(obj.content.values()):

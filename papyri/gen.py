@@ -56,7 +56,7 @@ from rich.progress import BarColumn, Progress, TextColumn, track
 from there import print as print_
 from matplotlib import _pylab_helpers
 
-from .common_ast import Node
+from .common_ast import Node, register
 from .errors import (
     IncorrectInternalDocsLen,
     NumpydocParseError,
@@ -66,11 +66,11 @@ from .errors import (
 from .miscs import BlockExecutor, DummyP
 from .signature import Signature as ObjectSignature
 from .signature import SignatureNode
-from .take2 import (
-    Code,
+from .nodes import (
     Fig,
+    GenCode,
     GenToken,
-    Link,
+    XRef,
     NumpydocExample,
     NumpydocSeeAlso,
     NumpydocSignature,
@@ -79,10 +79,11 @@ from .take2 import (
     RefInfo,
     Section,
     SeeAlsoItem,
+    encoder,
     parse_rst_section,
 )
 from .toc import make_tree
-from .tree import DVR
+from .tree import GenVisitor
 from .utils import (
     Cannonical,
     FullQual,
@@ -95,9 +96,7 @@ from .utils import (
 )
 from .vref import NumpyDocString
 
-# delayed import
-if True:
-    from .myst_ast import MText
+from .nodes import Text
 
 
 class ErrorCollector:
@@ -355,14 +354,11 @@ def _add_classes(entries):
 def processed_example_data(example_section_data) -> Section:
     """this should be no-op on already ingested"""
     new_example_section_data = Section([], None)
+    # Historical note: this used to strip nodes of an old `take2.Text` class
+    # distinct from MText (now Text). That class no longer exists, so the
+    # filter has become a passthrough.
     for in_out in example_section_data:
-        type_ = in_out.__class__.__name__
-        # color examples with pygments classes
-        if type_ == "Text":
-            assert False
-
-        if type_ != "Text":
-            new_example_section_data.append(in_out)
+        new_example_section_data.append(in_out)
     return new_example_section_data
 
 
@@ -729,7 +725,7 @@ class DFSCollector:
 
 class _OrderedDictProxy:
     """
-    a dict like class proxy for DocBlob to keep the order of sections in DocBlob.
+    a dict like class proxy for GeneratedDoc to keep the order of sections in GeneratedDoc.
 
     We Can't use an ordered Dict because of serialisation/deserialisation that
     would/might loose order
@@ -776,12 +772,13 @@ class _OrderedDictProxy:
         return [self.mapping[k] for k in self.ordering]
 
 
-class DocBlob(Node):
+@register(4011)
+class GeneratedDoc(Node):
     """
     An object containing information about the documentation of an arbitrary
     object.
 
-    Instead of DocBlob being a NumpyDocString, I'm thinking of them having a
+    Instead of GeneratedDoc being a NumpyDocString, I'm thinking of them having a
     NumpyDocString. This helps with arbitrary documents (module, examples files)
     that cannot be parsed by Numpydoc, as well as links to external references,
     like images generated.
@@ -860,7 +857,7 @@ class DocBlob(Node):
     arbitrary: List[Section]
 
     def __repr__(self):
-        return "<DocBlob ...>"
+        return "<GeneratedDoc ...>"
 
     def slots(self):
         return [
@@ -872,6 +869,8 @@ class DocBlob(Node):
             "item_type",
             "signature",
             "aliases",
+            "see_also",
+            "references",
             "arbitrary",
         ]
 
@@ -1049,7 +1048,9 @@ def _normalize_see_also(see_also: Section, qa: str):
                 refinfo = RefInfo.from_untrusted(
                     "current-module", "current-version", "to-resolve", name
                 )
-                link = Link(name, refinfo, "module", True)
+                # `exists` is derived from `refinfo.kind`; the "to-resolve" kind
+                # flags this as a placeholder for the ingest relink pass.
+                link = XRef(name, refinfo, "module")
                 sai = SeeAlsoItem(link, desc, type_)
                 new_see_also.append(sai)
                 del desc
@@ -1111,7 +1112,7 @@ class PapyriDocTestRunner(doctest.DocTestRunner):
         tok_entries = self._get_tok_entries(example)
 
         self._example_section_data.append(
-            Code(tok_entries, got, ExecutionStatus.success)
+            GenCode(tok_entries, got, ExecutionStatus.success)
         )
 
         wait_for_show = self.config.wait_for_plt_show
@@ -1140,13 +1141,13 @@ class PapyriDocTestRunner(doctest.DocTestRunner):
         out(f"Unexpected exception after running example in `{self.qa}`", exc_info)
         tok_entries = self._get_tok_entries(example)
         self._example_section_data.append(
-            Code(tok_entries, exc_info, ExecutionStatus.unexpected_exception)
+            GenCode(tok_entries, exc_info, ExecutionStatus.unexpected_exception)
         )
 
     def report_failure(self, out, test, example, got):
         tok_entries = self._get_tok_entries(example)
         self._example_section_data.append(
-            Code(tok_entries, got, ExecutionStatus.failure)
+            GenCode(tok_entries, got, ExecutionStatus.failure)
         )
 
     def get_example_section_data(self) -> Section:
@@ -1163,15 +1164,15 @@ class PapyriDocTestRunner(doctest.DocTestRunner):
         This is not perfect as doctest tests that the output is the same, thus when we have a multiline block
         If any of the intermediate items produce an output, the result will be failure.
         """
-        acc: List[Union[MText, Code]] = []
-        current_code: Optional[Code] = None
+        acc: List[Union[Text, GenCode]] = []
+        current_code: Optional[GenCode] = None
 
         for item in example_section_data:
-            if not isinstance(item, Code):
+            if not isinstance(item, GenCode):
                 if current_code is not None:
                     acc.append(current_code)
-                    acc.append(MText(str(current_code.out)))
-                    acc.append(MText(str(current_code.ce_status)))
+                    acc.append(Text(str(current_code.out)))
+                    acc.append(Text(str(current_code.ce_status)))
                     current_code = None
                 acc.append(item)
             else:
@@ -1181,13 +1182,13 @@ class PapyriDocTestRunner(doctest.DocTestRunner):
                     continue
 
                 if current_code.ce_status == item.ce_status:
-                    current_code = Code(
+                    current_code = GenCode(
                         current_code.entries + item.entries, item.out, item.ce_status
                     )
                 else:
                     acc.append(current_code)
-                    acc.append(MText(str(current_code.out)))
-                    acc.append(MText(str(current_code.ce_status)))
+                    acc.append(Text(str(current_code.out)))
+                    acc.append(Text(str(current_code.ce_status)))
                     assert item is not None
                     current_code = item
 
@@ -1207,7 +1208,7 @@ class Gen:
 
     docs: Dict[str, bytes]
     examples: Dict[str, bytes]
-    data: Dict[str, DocBlob]
+    data: Dict[str, GeneratedDoc]
     bdata: Dict[str, bytes]
 
     def __init__(self, dummy_progress: bool, config: Config):
@@ -1400,9 +1401,9 @@ class Gen:
                         doctest_runner.get_example_section_data()
                     )
                 else:
-                    example_section_data.append(MText(block.source))
+                    example_section_data.append(Text(block.source))
             elif block:
-                example_section_data.append(MText(block))
+                example_section_data.append(Text(block))
 
         example_section_data = doctest_runner._compact(example_section_data)
 
@@ -1472,10 +1473,10 @@ class Gen:
                     data = ts.parse(p.read_bytes(), p)
                 except Exception as e:
                     raise type(e)(f"{p=}")
-                blob = DocBlob.new()
+                blob = GeneratedDoc.new()
                 key = ":".join(parts)[:-4]
                 try:
-                    dv = DVR(
+                    dv = GenVisitor(
                         key,
                         set(),
                         local_refs=set(),
@@ -1509,7 +1510,7 @@ class Gen:
 
                 blbs[key] = blob
         for k, b in blbs.items():
-            self.docs[k] = b.to_json()
+            self.docs[k] = encoder.encode(b)
 
         self._doctree = {"tree": make_tree(trees), "titles": title_map}
 
@@ -1532,7 +1533,7 @@ class Gen:
         """
         (where / "module").mkdir(exist_ok=True)
         for k, v in self.data.items():
-            (where / "module" / (k + ".json")).write_bytes(v.to_json())
+            (where / "module" / (k + ".cbor")).write_bytes(encoder.encode(v))
 
     def partial_write(self, where):
         self.write_api(where)
@@ -1567,9 +1568,9 @@ class Gen:
         """
         self.bdata[path] = data
 
-    def _transform_1(self, blob: DocBlob, ndoc) -> DocBlob:
+    def _transform_1(self, blob: GeneratedDoc, ndoc) -> GeneratedDoc:
         """
-        Populates DocBlob content field from numpydoc parsed docstring.
+        Populates GeneratedDoc content field from numpydoc parsed docstring.
 
         """
         for k, v in ndoc._parsed_data.items():
@@ -1578,10 +1579,10 @@ class Gen:
             assert isinstance(v, (str, list, dict)), type(v)
         return blob
 
-    def _transform_2(self, blob: DocBlob, target_item, qa: str) -> DocBlob:
+    def _transform_2(self, blob: GeneratedDoc, target_item, qa: str) -> GeneratedDoc:
         """
         Try to find relative path WRT site package and populate item_file field
-        for DocBlob.
+        for GeneratedDoc.
         """
         # will not work for dev install. Maybe an option to set the root location ?
         item_file: Optional[str] = find_file(target_item)
@@ -1628,7 +1629,7 @@ class Gen:
     def _transform_3(self, blob, target_item):
         """
         Try to find source line number for target object and populate item_line
-        field for DocBlob.
+        field for GeneratedDoc.
         """
         item_line = None
         try:
@@ -1662,7 +1663,7 @@ class Gen:
         config: Config,
         aliases: List[str],
         api_object: APIObjectInfo,
-    ) -> Tuple[DocBlob, List]:
+    ) -> Tuple[GeneratedDoc, List]:
         """
         Get documentation information for one python object
 
@@ -1685,7 +1686,7 @@ class Gen:
         -------
         Tuple of two items,
         blob:
-            DocBlob with info for current object.
+            GeneratedDoc with info for current object.
         figs:
             dict mapping figure names to figure data.
 
@@ -1694,7 +1695,7 @@ class Gen:
         collect_api_docs
         """
         assert isinstance(aliases, list)
-        blob: DocBlob = DocBlob.new()
+        blob: GeneratedDoc = GeneratedDoc.new()
 
         blob = self._transform_1(blob, ndoc)
         blob = self._transform_2(blob, target_item, qa)
@@ -1921,7 +1922,7 @@ class Gen:
                 l: List[Any] = []  # get typechecker to shut up.
                 s = Section(
                     l
-                    + [Code(tok_entries, "", ce_status)]  # ignore: type
+                    + [GenCode(tok_entries, "", ce_status)]  # ignore: type
                     + [
                         Fig(
                             RefInfo.from_untrusted(
@@ -1933,7 +1934,7 @@ class Gen:
                     None,
                 )
                 s = processed_example_data(s)
-                dv = DVR(
+                dv = GenVisitor(
                     example.name,
                     frozenset(),
                     local_refs=frozenset(),
@@ -1989,7 +1990,7 @@ class Gen:
                 config=self.config,
             )
             for edoc, figs in examples_data:
-                self.examples.update({k: v.to_json() for k, v in edoc.items()})
+                self.examples.update({k: encoder.encode(v) for k, v in edoc.items()})
                 for name, data in figs:
                     self.put_raw(name, data)
 
@@ -2267,7 +2268,7 @@ class Gen:
                 assert isinstance(lr1, str)
             # lr: FrozenSet[str] = frozenset(flat(_local_refs))
             lr: FrozenSet[str] = frozenset(_local_refs)
-            dv = DVR(
+            dv = GenVisitor(
                 qa,
                 known_refs,
                 local_refs=lr,
@@ -2297,7 +2298,7 @@ class Gen:
                 if r.kind == "module":
                     sa.name.reference = r
                 else:
-                    imp = DVR._import_solver(sa.name.value)
+                    imp = GenVisitor._import_solver(sa.name.value)
                     if imp:
                         self.log.debug(
                             "TODO: see also resolve for %s in %s, %s",

@@ -2,8 +2,8 @@ import pytest
 
 from papyri.ts import parse
 
-from ..myst_ast import UnprocessedDirective
-from ..take2 import (
+from ..nodes import (
+    UnprocessedDirective,
     dedent_but_first,
     get_object,
 )

@@ -23,7 +23,7 @@ class Base:
 class Node(Base):
     def __init__(self, *args, **kwargs):
         tt = get_type_hints(type(self))
-        if type(self).__name__ == "MMystDirective":
+        if type(self).__name__ == "Directive":
             tt = {k: v for k, v in tt.items() if k != "type"}
         for attr, val in zip(tt, args):
             setattr(self, attr, val)
@@ -116,7 +116,7 @@ def _invalidate(obj, depth=0):
 
     annotations = get_type_hints(type(obj))
     for k, v in annotations.items():
-        # FIX: AttributeError: 'MText' object has no attribute 'position'
+        # FIX: AttributeError: 'Text' object has no attribute 'position'
         item = getattr(obj, k)
         res = not_type_check(item, v)
         if res:

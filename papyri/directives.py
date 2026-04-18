@@ -3,7 +3,7 @@ Various directive handlers.
 """
 
 from .ts import parse
-from .nodes import MMath, MAdmonition, MAdmonitionTitle, MText, Section
+from .nodes import Math, Admonition, AdmonitionTitle, Text, Section
 import logging
 
 log = logging.getLogger("papyri")
@@ -22,7 +22,7 @@ def block_math_handler(argument, options, content):
     elif argument and not content:
         # TODO: do we want to allow that ?
         content = argument
-    return [MMath(content)]
+    return [Math(content)]
 
 
 #  A number of directives that so far are just small wrappers around admonitions.
@@ -40,14 +40,14 @@ def admonition_helper(name, argument, options, content):
         assert isinstance(inner[0], Section)
 
         return [
-            MAdmonition(
-                [MAdmonitionTitle([MText(f"{name} {argument}")])] + inner[0].children,
+            Admonition(
+                [AdmonitionTitle([Text(f"{name} {argument}")])] + inner[0].children,
                 kind=name,
             )
         ]
     else:
         return [
-            MAdmonition([MAdmonitionTitle([MText(f"{name} {argument}")])], kind=name)
+            Admonition([AdmonitionTitle([Text(f"{name} {argument}")])], kind=name)
         ]
 
 

@@ -5,27 +5,27 @@ from typing import List, Any, Dict
 
 
 from .nodes import (
-    MText,
-    MCode,
-    MParagraph,
-    MEmphasis,
-    MInlineCode,
-    MStrong,
-    MList,
-    MListItem,
+    Text,
+    Code,
+    Paragraph,
+    Emphasis,
+    InlineCode,
+    Strong,
+    BulletList,
+    ListItem,
     UnprocessedDirective,
-    MComment,
-    MBlockquote,
+    Comment,
+    Blockquote,
     DefList,
     DefListItem,
-    Directive,
+    InlineRole,
     FieldList,
     FieldListItem,
     Options,
     Section,
     SubstitutionDef,
     SubstitutionRef,
-    MThematicBreak,
+    ThematicBreak,
     Unimplemented,
     compress_word,
     inline_nodes,
@@ -224,7 +224,7 @@ class TSVisitor:
         acc = []
         current = None
         for n in nodes:
-            if isinstance(n, (FieldList, DefList, MList)):
+            if isinstance(n, (FieldList, DefList, BulletList)):
                 if current is None:
                     current = n
                 elif type(current) == type(n):
@@ -274,7 +274,7 @@ class TSVisitor:
             kind = c.type
             if kind == "::":
                 if acc and isinstance(acc[-1], inline_nodes):
-                    acc.append(MText(":"))
+                    acc.append(Text(":"))
                 # else:
                 #    assert False
                 continue
@@ -300,7 +300,7 @@ class TSVisitor:
         return []
 
     def visit_transition(self, node):
-        return [MThematicBreak()]
+        return [ThematicBreak()]
 
     def visit_reference(self, node):
         """
@@ -323,7 +323,7 @@ class TSVisitor:
                 self.as_text(node)[1:].replace("\n", " ").rsplit("`", maxsplit=1)
             )
             assert trailing in ("_", "__")
-        return [Directive(_text, None, None)]
+        return [InlineRole(_text, None, None)]
 
     def visit_interpreted_text(self, node):
         if len(node.children) == 2:
@@ -368,7 +368,7 @@ class TSVisitor:
             log.warning("replacing ` by ' to not crash serialiser")
             inner_value = inner_value.replace("`", "'")
 
-        t = Directive(
+        t = InlineRole(
             inner_value,
             domain=domain,
             role=role_value,
@@ -381,7 +381,7 @@ class TSVisitor:
     def visit_text(self, node):
         text = self.as_text(node)
         assert not text.startswith(":func:"), breakpoint()
-        t = MText(text)
+        t = Text(text)
         return [t]
 
     def visit_whitespace(self, node):
@@ -394,20 +394,20 @@ class TSVisitor:
         """
         content = self.as_text(node)
         # assert set(content) in ({" "}, {"\n"}), repr(content)
-        t = MText(" " * len(content))
+        t = Text(" " * len(content))
         return [t]
 
     def visit_literal(self, node):
         text = self.as_text(node)[2:-2]
         assert "\n\n" not in text
-        t = MInlineCode(text.replace("\n", " "))
+        t = InlineCode(text.replace("\n", " "))
         return [t]
 
     def visit_literal_block(self, node):
         datas = self.as_text(node)
         first_offset = node.start_point[1]
         datas = " " * first_offset + datas
-        b = MCode(dedent(datas))
+        b = Code(dedent(datas))
         return [b]
 
     def visit_bullet_list(self, node):
@@ -419,8 +419,8 @@ class TSVisitor:
             # assert len(body.children) == 1
             # parg = body.children[0]
             # assert parg.type == "paragraph", parg.type
-            myst_acc.append(MListItem(False, self.visit(body)))
-        return [MList(ordered=False, start=1, spread=False, children=myst_acc)]
+            myst_acc.append(ListItem(False, self.visit(body)))
+        return [BulletList(ordered=False, start=1, spread=False, children=myst_acc)]
 
     def visit_section(self, node):
         if node.children[0].type == "adornment":
@@ -477,7 +477,7 @@ class TSVisitor:
         return [Section([], title, level=level)]
 
     def visit_block_quote(self, node):
-        return [MBlockquote(self.visit(node))]
+        return [Blockquote(self.visit(node))]
 
     def visit_paragraph(self, node):
         sub = self.visit(node.with_whitespace())
@@ -485,15 +485,15 @@ class TSVisitor:
         acc2 = []
 
         for item in sub:
-            if isinstance(item, MCode):
+            if isinstance(item, Code):
                 acc2.append(item)
                 continue
             acc.append(item)
-        if acc[-1] == MText(" "):
+        if acc[-1] == Text(" "):
             acc.pop()
         assert len(acc2) < 2
         # p = Paragraph(compress_word(acc))
-        p = MParagraph(compress_word(acc))
+        p = Paragraph(compress_word(acc))
         return [p, *acc2]
 
     def visit_line_block(self, node):
@@ -506,7 +506,7 @@ class TSVisitor:
         # TODO
         return [SubstitutionRef(self.as_text(node))]
 
-    def visit_doctest_block(self, node) -> List[MCode]:
+    def visit_doctest_block(self, node) -> List[Code]:
         # TODO
         return self.visit_literal_block(node)
 
@@ -548,8 +548,8 @@ class TSVisitor:
         for list_item in node.children:
             assert list_item.type == "list_item"
             _bullet, body = list_item.children
-            myst_acc.append(MListItem(False, self.visit(body)))
-        return [MList(ordered=True, start=1, spread=False, children=myst_acc)]
+            myst_acc.append(ListItem(False, self.visit(body)))
+        return [BulletList(ordered=True, start=1, spread=False, children=myst_acc)]
 
     def visit_target(self, node):
         # TODO:
@@ -728,7 +728,7 @@ class TSVisitor:
 
     def visit_emphasis(self, node):
         # TODO
-        return [MEmphasis([MText(self.as_text(node)[1:-1])])]
+        return [Emphasis([Text(self.as_text(node)[1:-1])])]
 
     def visit_substitution_definition(self, node):
         assert len(node.children) == 3
@@ -745,11 +745,11 @@ class TSVisitor:
 
     def visit_comment(self, node):
         # TODO
-        return [MComment(self.as_text(node))]
+        return [Comment(self.as_text(node))]
         # raise VisitCommentNotImplementedError()
 
     def visit_strong(self, node):
-        return [MStrong([MText(self.as_text(node)[2:-2])])]
+        return [Strong([Text(self.as_text(node)[2:-2])])]
 
     def visit_footnote(self, node):
         # TODO
@@ -790,7 +790,7 @@ class TSVisitor:
                 # TODO missing type
                 acc.append(
                     DefListItem(
-                        dt=MParagraph(compress_word(self.visit(term))),
+                        dt=Paragraph(compress_word(self.visit(term))),
                         dd=self.visit_paragraph(term),
                     )
                 )

@@ -67,10 +67,10 @@ from .miscs import BlockExecutor, DummyP
 from .signature import Signature as ObjectSignature
 from .signature import SignatureNode
 from .nodes import (
-    Code,
     Fig,
+    GenCode,
     GenToken,
-    Link,
+    XRef,
     NumpydocExample,
     NumpydocSeeAlso,
     NumpydocSignature,
@@ -96,7 +96,7 @@ from .utils import (
 )
 from .vref import NumpyDocString
 
-from .nodes import MText
+from .nodes import Text
 
 
 class ErrorCollector:
@@ -354,14 +354,11 @@ def _add_classes(entries):
 def processed_example_data(example_section_data) -> Section:
     """this should be no-op on already ingested"""
     new_example_section_data = Section([], None)
+    # Historical note: this used to strip nodes of an old `take2.Text` class
+    # distinct from MText (now Text). That class no longer exists, so the
+    # filter has become a passthrough.
     for in_out in example_section_data:
-        type_ = in_out.__class__.__name__
-        # color examples with pygments classes
-        if type_ == "Text":
-            assert False
-
-        if type_ != "Text":
-            new_example_section_data.append(in_out)
+        new_example_section_data.append(in_out)
     return new_example_section_data
 
 
@@ -1053,7 +1050,7 @@ def _normalize_see_also(see_also: Section, qa: str):
                 )
                 # `exists` is derived from `refinfo.kind`; the "to-resolve" kind
                 # flags this as a placeholder for the ingest relink pass.
-                link = Link(name, refinfo, "module")
+                link = XRef(name, refinfo, "module")
                 sai = SeeAlsoItem(link, desc, type_)
                 new_see_also.append(sai)
                 del desc
@@ -1115,7 +1112,7 @@ class PapyriDocTestRunner(doctest.DocTestRunner):
         tok_entries = self._get_tok_entries(example)
 
         self._example_section_data.append(
-            Code(tok_entries, got, ExecutionStatus.success)
+            GenCode(tok_entries, got, ExecutionStatus.success)
         )
 
         wait_for_show = self.config.wait_for_plt_show
@@ -1144,13 +1141,13 @@ class PapyriDocTestRunner(doctest.DocTestRunner):
         out(f"Unexpected exception after running example in `{self.qa}`", exc_info)
         tok_entries = self._get_tok_entries(example)
         self._example_section_data.append(
-            Code(tok_entries, exc_info, ExecutionStatus.unexpected_exception)
+            GenCode(tok_entries, exc_info, ExecutionStatus.unexpected_exception)
         )
 
     def report_failure(self, out, test, example, got):
         tok_entries = self._get_tok_entries(example)
         self._example_section_data.append(
-            Code(tok_entries, got, ExecutionStatus.failure)
+            GenCode(tok_entries, got, ExecutionStatus.failure)
         )
 
     def get_example_section_data(self) -> Section:
@@ -1167,15 +1164,15 @@ class PapyriDocTestRunner(doctest.DocTestRunner):
         This is not perfect as doctest tests that the output is the same, thus when we have a multiline block
         If any of the intermediate items produce an output, the result will be failure.
         """
-        acc: List[Union[MText, Code]] = []
-        current_code: Optional[Code] = None
+        acc: List[Union[Text, GenCode]] = []
+        current_code: Optional[GenCode] = None
 
         for item in example_section_data:
-            if not isinstance(item, Code):
+            if not isinstance(item, GenCode):
                 if current_code is not None:
                     acc.append(current_code)
-                    acc.append(MText(str(current_code.out)))
-                    acc.append(MText(str(current_code.ce_status)))
+                    acc.append(Text(str(current_code.out)))
+                    acc.append(Text(str(current_code.ce_status)))
                     current_code = None
                 acc.append(item)
             else:
@@ -1185,13 +1182,13 @@ class PapyriDocTestRunner(doctest.DocTestRunner):
                     continue
 
                 if current_code.ce_status == item.ce_status:
-                    current_code = Code(
+                    current_code = GenCode(
                         current_code.entries + item.entries, item.out, item.ce_status
                     )
                 else:
                     acc.append(current_code)
-                    acc.append(MText(str(current_code.out)))
-                    acc.append(MText(str(current_code.ce_status)))
+                    acc.append(Text(str(current_code.out)))
+                    acc.append(Text(str(current_code.ce_status)))
                     assert item is not None
                     current_code = item
 
@@ -1404,9 +1401,9 @@ class Gen:
                         doctest_runner.get_example_section_data()
                     )
                 else:
-                    example_section_data.append(MText(block.source))
+                    example_section_data.append(Text(block.source))
             elif block:
-                example_section_data.append(MText(block))
+                example_section_data.append(Text(block))
 
         example_section_data = doctest_runner._compact(example_section_data)
 
@@ -1925,7 +1922,7 @@ class Gen:
                 l: List[Any] = []  # get typechecker to shut up.
                 s = Section(
                     l
-                    + [Code(tok_entries, "", ce_status)]  # ignore: type
+                    + [GenCode(tok_entries, "", ce_status)]  # ignore: type
                     + [
                         Fig(
                             RefInfo.from_untrusted(

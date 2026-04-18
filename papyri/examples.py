@@ -168,7 +168,7 @@ for a custom directive handler::
     :option: field
 
     Beyond this is the core of the directive, it will be stored as a raw string
-    in the value of MMystDirective without the leading indentation. It is the
+    in the value of Directive without the leading indentation. It is the
     responsibility of the directive handler to parse the directive and return
     corresponding ast nodes for further processing.
 
@@ -342,7 +342,7 @@ def annotation_with_hex_addresses(x: foo = lambda x: x):  # type:ignore [valid-t
 
 
 def _mydirective_handler(args: str, options: Dict[str, str], value: str):
-    from .nodes import MParagraph, MText
+    from .nodes import Paragraph, Text
     from .ts import parse
 
     parsed_arguments = parse(args.encode(), qa="custom directive")
@@ -353,9 +353,9 @@ def _mydirective_handler(args: str, options: Dict[str, str], value: str):
 
     return [
         *acc,
-        MParagraph(
+        Paragraph(
             [
-                MText(
+                Text(
                     f".. custom_directive:\n    This is custom directive handler that received: \n"
                     f"    {args=}, \n"
                     f"    {options=}, \n"

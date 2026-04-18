@@ -205,18 +205,16 @@ def deserialize(type_, annotation, data):
                         )
                 real_type = [t for t in inner_annotation if t.__name__ == data["type"]]
                 if len(real_type) == 0:
-                    myst_type = f"M{data['type'][0].upper()}{data['type'][1:]}"
-                    if data["type"] == "mystComment":
-                        myst_type = "MComment"
-                    elif data["type"] == "mystTarget":
-                        myst_type = "MTarget"
-                    elif data["type"] == "Transition":
-                        myst_type = "thematicBreak"
+                    # MyST-flavored classes carry a `type` attribute matching
+                    # the spec string (e.g. "text", "mystComment"). The class
+                    # names themselves are capitalized without a prefix since
+                    # the Phase 2 rename. Match on either.
+                    candidate = f"{data['type'][0].upper()}{data['type'][1:]}"
                     real_type = [
                         t
                         for t in inner_annotation
-                        if (t.__name__ == myst_type)
-                        or (getattr(t, "type", None) == myst_type)
+                        if (t.__name__ == candidate)
+                        or (getattr(t, "type", None) == data["type"])
                     ]
                 # assert len(real_type) == 1, real_type
                 try:
@@ -224,7 +222,7 @@ def deserialize(type_, annotation, data):
                     real_type = real_type[0]
                 except (IndexError, AssertionError) as e:
                     e.add_note(
-                        f"""Index error as filters annotations are wrong myst_type={myst_type}, {data['type']=},
+                        f"""Index error as filters annotations are wrong {data['type']=},
                         accepted:{inner_annotation}
                         `t.type`?={[getattr(t,"type", None) for t in inner_annotation]}"""
                     )

@@ -269,7 +269,7 @@ def find(
 
     Mostly used to debug IR. One can find all documents with, say, equations:
 
-    $ papyri find MMath
+    $ papyri find Math
     """
     from papyri.graphstore import GraphStore
     from papyri.config import ingest_dir

@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from .common_ast import Node, register
+from .node_base import Node, register
 from .errors import TextSignatureParsingFailed
 
 
@@ -20,7 +20,7 @@ NoneType = type(None)
 
 @register(4030)
 @dataclass
-class ParameterNode(Node):
+class SigParam(Node):
     name: str
     # we likely want to make sure annotation is a structured object in the long run
     annotation: str | NoneType | Empty
@@ -46,7 +46,7 @@ class ParameterNode(Node):
 @register(4029)
 class SignatureNode(Node):
     kind: str  # maybe enum, is it a function, async generator, generator, etc.
-    parameters: list[ParameterNode]  # of pairs, we don't use dict because of ordering
+    parameters: list[SigParam]  # of pairs, we don't use dict because of ordering
     return_annotation: Empty | str
     target_name: str
     type = "signature"
@@ -127,7 +127,7 @@ class Signature:
                     inspect.formatannotation(param.annotation)
                 )
             parameters.append(
-                ParameterNode(
+                SigParam(
                     name=param.name,
                     annotation=annotation,
                     kind=param.kind.name,

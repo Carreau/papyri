@@ -52,7 +52,7 @@ renderers — the replacement lives under `viewer/` and has its own
   The full-module collection path hides it.
 - The IR uses **CBOR** (`cbor2`) in some places and JSON in others. Do not
   assume "the IR is JSON". See `graphstore.py`, `crosslink.py`,
-  `common_ast.py`, `take2.py`.
+  `node_base.py`, `take2.py`.
 
 ## Code conventions
 

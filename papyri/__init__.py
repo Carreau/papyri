@@ -250,9 +250,9 @@ def drop():
 
 
 def complete_nodename():
-    from . import common_ast, nodes
+    from . import node_base, nodes
 
-    return dir(nodes) + dir(common_ast)
+    return dir(nodes) + dir(node_base)
 
 
 @app.command()
@@ -275,7 +275,7 @@ def find(
     from papyri.config import ingest_dir
     from papyri.graphstore import GraphStore
 
-    from . import common_ast, nodes
+    from . import node_base, nodes
     from .crosslink import IngestedDoc
     from .nodes import encoder
     from .tree import TreeVisitor
@@ -287,7 +287,7 @@ def find(
     node_type = getattr(
         nodes,
         node_name,
-        getattr(common_ast, node_name, None),
+        getattr(node_base, node_name, None),
     )
 
     if node_type is None:

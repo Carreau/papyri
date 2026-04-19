@@ -28,7 +28,7 @@ The boundary between the two halves:
   `papyri/graphstore.py`).
 
 **Note:** the on-disk format is not pure JSON. `graphstore.py`,
-`crosslink.py`, `common_ast.py`, and `take2.py` encode parts of the IR using
+`crosslink.py`, `node_base.py`, and `take2.py` encode parts of the IR using
 CBOR via the `cbor2` package. Any future JS consumer needs a CBOR library
 (e.g. `cbor-x`) in addition to JSON parsing. Documenting and, if feasible,
 converging on a single encoding is part of Phase 2.
@@ -115,7 +115,7 @@ sessions should not restore any of it.
 - [x] Trim `papyri/__init__.py` of dead CLI commands and their imports.
 - [x] Trim `pyproject.toml` and `requirements.txt` dependencies to match.
       Note: `rich` is retained because `papyri/gen.py`, `papyri/crosslink.py`,
-      `papyri/miscs.py`, and `papyri/utils.py` use `rich.progress` /
+      `papyri/misc.py`, and `papyri/utils.py` use `rich.progress` /
       `rich.logging` in the core pipeline (not as a docstring renderer).
       Stripping it is a bigger refactor and is not required for Phase 1.
 - [x] ~~Pin `tree-sitter < 0.22` in `pyproject.toml`.~~ Superseded in
@@ -214,7 +214,7 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md). Summary:
   search.json`; a cross-bundle index would enable "find `linspace`
   across numpy and scipy".
 - Cross-package ingest correctness: `papyri/crosslink.py` still has
-  TODOs around version resolution for `Fig`/`RefInfo` across packages.
+  TODOs around version resolution for `Figure`/`RefInfo` across packages.
   See `TODO-review.md`.
 
 ## Out of scope (do not revive)

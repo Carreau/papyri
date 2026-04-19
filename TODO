@@ -46,7 +46,7 @@
   line as a signature instead of a title.
 
 - Typos fixed on `claude/test-papyri-codebases-rFFwR`:
-    - papyri/vref.py:52  "Cound" -> "Could" (raised by
+    - papyri/numpydoc_compat.py:52  "Cound" -> "Could" (raised by
       numpy.polynomial._polybase:ABCPolyBase).
     - papyri/ts.py:366   "charter" -> "character" (backtick warning,
       e.g. numpy.random._mt19937:MT19937._legacy_seeding).
@@ -64,7 +64,7 @@
 
 - numpy.polynomial._polybase:ABCPolyBase uses a `Class Attributes`
   section name that numpydoc (and therefore papyri's
-  `vref.NumpyDocString._guess_header`) does not recognise. Either
+  `numpydoc_compat.NumpyDocString._guess_header`) does not recognise. Either
   add `Class Attributes` to papyri's alias table or rename the
   section in numpy to one of the canonical numpydoc section names.
 

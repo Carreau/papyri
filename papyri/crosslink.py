@@ -11,14 +11,14 @@ from typing import Any
 import cbor2
 from rich.logging import RichHandler
 
-from .common_ast import Node, register
+from .node_base import Node, register
 from .config import ingest_dir
 from .gen import GeneratedDoc, _OrderedDictProxy, normalise_ref
 from .graphstore import GraphStore, Key
 from .nodes import (
-    Fig,
+    DocParam,
+    Figure,
     Paragraph,
-    Param,
     RefInfo,
     Section,
     SeeAlsoItem,
@@ -117,7 +117,7 @@ class IngestedDoc(Node):
         self.__isfrozen = True
 
     def all_forward_refs(self) -> list[Key]:
-        visitor = TreeVisitor({RefInfo, Fig})
+        visitor = TreeVisitor({RefInfo, Figure})
         res: dict[Any, list[Any]] = {}
         for sec in (
             list(self.content.values())
@@ -128,7 +128,7 @@ class IngestedDoc(Node):
             for k, v in visitor.generic_visit(sec).items():
                 res.setdefault(k, []).extend(v)
 
-        assets_II = {Key(*f.value) for f in res.get(Fig, [])}
+        assets_II = {Key(*f.value) for f in res.get(Figure, [])}
         ssr = set([Key(*r) for r in res.get(RefInfo, []) if r.kind != "local"]).union(
             assets_II
         )
@@ -170,7 +170,7 @@ class IngestedDoc(Node):
             _local_refs = _local_refs + [
                 [u.strip() for u in x[0].split(",")]
                 for x in self.content.get(s, [])
-                if isinstance(x, Param)
+                if isinstance(x, DocParam)
             ]
 
         def flat(l):
@@ -470,7 +470,7 @@ class Ingester:
             # we might update other modules with backrefs
             assert hasattr(doc_blob, "arbitrary")
 
-            # TODO: Fig references carry a RefInfo whose version may be
+            # TODO: Figure references carry a RefInfo whose version may be
             # unknown at walk time; a proper fix populates the version
             # during serialisation so cross-package figure links resolve.
             forward_refs = doc_blob.all_forward_refs()

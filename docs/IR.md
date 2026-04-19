@@ -8,7 +8,7 @@ It is aimed at papyri maintainers and at authors of IR consumers (the
 in-tree `viewer/`, or any future out-of-tree consumer). See `PLAN.md` for
 project-wide scope; the code of record for everything below is
 `papyri/gen.py`, `papyri/crosslink.py`, `papyri/graphstore.py`,
-`papyri/common_ast.py`, and `papyri/nodes.py`.
+`papyri/node_base.py`, and `papyri/nodes.py`.
 
 ## Two stores, two stages
 
@@ -111,7 +111,7 @@ Key fields of `GeneratedDoc`:
 - `item_type: Optional[str]` — one of `"module"`, `"class"`,
   `"function"`, `"method"`, etc.
 - `aliases: List[str]` — list of alias qualnames that point to this item.
-- `see_also: List[SeeAlsoItem]` — see-also entries; each is an `XRef` +
+- `see_also: List[SeeAlsoItem]` — see-also entries; each is an `CrossRef` +
   description paragraphs + optional `:func:`-style type.
 - `signature: Optional[SignatureNode]` — structured callable signature
   (see `papyri/signature.py`).
@@ -147,7 +147,7 @@ convention stays stable in the meantime.
 
 ### `assets/`
 
-Raw bytes. Images, logos, etc. Referenced from IR via the `Fig` node,
+Raw bytes. Images, logos, etc. Referenced from IR via the `Figure` node,
 which carries a `RefInfo(module, version, "assets", filename)`.
 
 ## Ingest store layout
@@ -196,7 +196,7 @@ Any other keys present in the bundle's `papyri.json` (e.g. `pypi`,
 
 An `IngestedDoc` (`papyri/crosslink.py`, `@register(4010)`) is a
 `GeneratedDoc` that has been walked by the cross-link visitor so that
-every `XRef` / `SeeAlsoItem` / `Fig` has a resolved `RefInfo` pointing
+every `CrossRef` / `SeeAlsoItem` / `Figure` has a resolved `RefInfo` pointing
 at a known destination (or explicitly marked as unresolved). Structure
 is nearly identical to `GeneratedDoc` — same section map, signature,
 arbitrary sections — plus a `qa: str` field holding the fully qualified
@@ -275,13 +275,13 @@ Two closely related tuples appear throughout the code:
 
 They carry the same four fields. `RefInfo` is what ends up CBOR-encoded
 inside documents; `Key` is the lookup handle the store uses. The
-`Fig.value` field, for example, is a `RefInfo`, and ingest materializes
+`Figure.value` field, for example, is a `RefInfo`, and ingest materializes
 it into a `Key` for the `links` table.
 
 ## Node type registry (CBOR tags)
 
 Every serializable IR node has a unique CBOR tag declared by
-`@register(<int>)` in `papyri/common_ast.py`. The global tag map is
+`@register(<int>)` in `papyri/node_base.py`. The global tag map is
 `TAG_MAP` / `REV_TAG_MAP`; `Encoder` (`papyri/nodes.py`) wraps
 `cbor2.dumps` / `cbor2.loads` so each tagged blob is decoded back into
 the right Python class.
@@ -293,7 +293,7 @@ for the authoritative list):
 | ---- | ------------------ | ------------ |
 | 4000 | `RefInfo`          | `nodes.py`   |
 | 4001 | `Root`             | `nodes.py`   |
-| 4002 | `XRef`             | `nodes.py`   |
+| 4002 | `CrossRef`             | `nodes.py`   |
 | 4003 | `InlineRole`       | `nodes.py`   |
 | 4010 | `IngestedDoc`      | `crosslink.py` |
 | 4011 | `GeneratedDoc`     | `gen.py`     |
@@ -301,18 +301,18 @@ for the authoritative list):
 | 4013 | `NumpydocSeeAlso`  | `nodes.py`   |
 | 4014 | `NumpydocSignature`| `nodes.py`   |
 | 4015 | `Section`          | `nodes.py`   |
-| 4016 | `Param`            | `nodes.py`   |
+| 4016 | `DocParam`         | `nodes.py`   |
 | 4017 | `UnimplementedInline` | `nodes.py` |
 | 4018 | `Unimplemented`    | `nodes.py`   |
 | 4019 | `ThematicBreak`    | `nodes.py`   |
 | 4020 | `Heading`          | `nodes.py`   |
 | 4021 | `TocTree`          | `nodes.py`   |
-| 4024 | `Fig`              | `nodes.py`   |
+| 4024 | `Figure`              | `nodes.py`   |
 | 4026 | `Parameters`       | `nodes.py`   |
 | 4027 | `SubstitutionDef`  | `nodes.py`   |
 | 4028 | `SeeAlsoItem`      | `nodes.py`   |
 | 4029 | `SignatureNode`    | `signature.py` |
-| 4030 | `ParameterNode`    | `signature.py` |
+| 4030 | `SigParam`         | `signature.py` |
 | 4031 | `Empty`            | `signature.py` |
 | 4033 | `DefList`          | `nodes.py`   |
 | 4034 | `Options`          | `nodes.py`   |
@@ -348,7 +348,7 @@ preserved. Non-Python consumers can treat it as an array.
 `UnprocessedDirective`, `GenCode`, and `GenToken` inherit from
 `UnserializableNode` — they are gen-time intermediates; reaching the
 CBOR encoder with any of them is a bug. See
-`common_ast.UnserializableNode` for the invariant.
+`node_base.UnserializableNode` for the invariant.
 
 ## Debug / inspection
 

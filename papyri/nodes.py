@@ -64,8 +64,8 @@ from typing import Any, TypeAlias
 import cbor2
 
 from . import signature  # noqa: F401 -- referenced in Root's forward-string annotation
-from .common_ast import REV_TAG_MAP, Node, UnserializableNode, register
-from .miniserde import get_type_hints
+from .node_base import REV_TAG_MAP, Node, UnserializableNode, register
+from .serde import get_type_hints
 from .utils import dedent_but_first
 
 register(tuple)(4444)
@@ -112,7 +112,7 @@ class InlineRole(Node):
 
 
 @register(4002)
-class XRef(Node):
+class CrossRef(Node):
     """
     A cross-reference produced by the gen step and resolved by ingest.
 
@@ -145,7 +145,7 @@ class XRef(Node):
         )
 
     def __repr__(self):
-        return f"<XRef: {self.value=} {self.reference=} {self.kind=}>"
+        return f"<CrossRef: {self.value=} {self.reference=} {self.kind=}>"
 
     def __hash__(self):
         return hash((self.value, self.reference, self.kind, self.anchor))
@@ -383,7 +383,7 @@ class IntermediateNode(Node):
 
 
 @register(4024)
-class Fig(Node):
+class Figure(Node):
     value: RefInfo
 
 
@@ -453,7 +453,7 @@ class Section(Node):
     children: list[
         DefList
         | FieldList
-        | Fig
+        | Figure
         | Admonition
         | Blockquote
         | Code
@@ -508,7 +508,7 @@ class Section(Node):
 
 @register(4026)
 class Parameters(Node):
-    children: list[Param]
+    children: list[DocParam]
 
     def validate(self):
         assert len(self.children) > 0
@@ -516,11 +516,11 @@ class Parameters(Node):
 
 
 @register(4016)
-class Param(Node):
-    param: str
-    type_: str
+class DocParam(Node):
+    name: str
+    annotation: str
     desc: list[
-        Fig
+        Figure
         | DefListItem
         | DefList
         | Directive
@@ -543,11 +543,11 @@ class Param(Node):
         self.desc = values
 
     def __getitem__(self, index):
-        return [self.param, self.type_, self.desc][index]
+        return [self.name, self.annotation, self.desc][index]
 
     def __repr__(self):
         return (
-            f"<{self.__class__.__name__}: {self.param=}, {self.type_=}, {self.desc=}>"
+            f"<{self.__class__.__name__}: {self.name=}, {self.annotation=}, {self.desc=}>"
         )
 
 
@@ -608,7 +608,7 @@ def compress_word(stream) -> list[Any]:
 inline_nodes = tuple(
     [
         InlineRole,
-        XRef,
+        CrossRef,
         Link,
         SubstitutionRef,
     ]
@@ -696,7 +696,7 @@ class DefListItem(Node):
 
 @register(4028)
 class SeeAlsoItem(Node):
-    name: XRef
+    name: CrossRef
 
     # TODO: check why we have a Union here, and if we have only Paragraphs, remove the union.
     descriptions: list[Paragraph]
@@ -754,7 +754,7 @@ def parse_rst_section(text, qa):
 # ---- Union type aliases -----------------------------------------------------
 
 StaticPhrasingContent: TypeAlias = (
-    Text | InlineCode | InlineMath | InlineRole | XRef | SubstitutionRef | Unimplemented
+    Text | InlineCode | InlineMath | InlineRole | CrossRef | SubstitutionRef | Unimplemented
 )
 
 PhrasingContent: TypeAlias = StaticPhrasingContent | Emphasis | Strong | Link

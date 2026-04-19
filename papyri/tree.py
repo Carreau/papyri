@@ -11,7 +11,7 @@ from functools import lru_cache
 from textwrap import indent
 from typing import Any
 
-from .common_ast import Node
+from .node_base import Node
 from .directives import (
     block_math_handler,
     deprecated_handler,
@@ -34,7 +34,7 @@ from .nodes import (
     SubstitutionDef,
     Text,
     UnprocessedDirective,
-    XRef,
+    CrossRef,
 )
 from .utils import Cannonical, FullQual, full_qual, obj_from_qualname
 
@@ -103,7 +103,7 @@ def endswith(end, refs):
 
 class DelayedResolver:
     _targets: dict[str, RefInfo]
-    _references: dict[str, list[XRef]]
+    _references: dict[str, list[CrossRef]]
 
     def __init__(self):
         self._targets = dict()
@@ -115,7 +115,7 @@ class DelayedResolver:
         self._targets[target] = target_ref
         self._resolve(target)
 
-    def add_reference(self, link: XRef, target: str) -> None:
+    def add_reference(self, link: CrossRef, target: str) -> None:
         self._references.setdefault(target, []).append(link)
         self._resolve(target)
 
@@ -341,7 +341,7 @@ class TreeReplacer:
                 "Code",
                 "Comment",
                 "Example",
-                "Fig",
+                "Figure",
                 "GenCode",
                 "Image",
                 "InlineCode",
@@ -354,7 +354,7 @@ class TreeReplacer:
                 "Text",
                 "ThematicBreak",
                 "Unimplemented",
-                "XRef",
+                "CrossRef",
             ]:
                 return [node]
             else:
@@ -588,7 +588,7 @@ class DirectiveVisiter(TreeReplacer):
                 title = title.strip()
                 assert "<" not in url
                 toc.append([title, url])
-                link = XRef(
+                link = CrossRef(
                     title,
                     reference=RefInfo(module="", version="", kind="?", path=url),
                     kind="exists",
@@ -599,7 +599,7 @@ class DirectiveVisiter(TreeReplacer):
             else:
                 assert "<" not in line
                 toc.append([None, line])
-                link = XRef(
+                link = CrossRef(
                     line,
                     reference=RefInfo(module="", version="", kind="?", path=line),
                     kind="exists",
@@ -731,7 +731,7 @@ class DirectiveVisiter(TreeReplacer):
             if r.kind != "local":
                 assert None not in r, r
                 self._targets.add(r)
-            return [XRef(text, r, exists)]
+            return [CrossRef(text, r, exists)]
         if (directive.domain, directive.role) in [
             (None, None),
             (None, "mod"),
@@ -767,7 +767,7 @@ class DirectiveVisiter(TreeReplacer):
                     kind="api",
                     path=target_qa,
                 )
-                return [XRef(text, ri, "module")]
+                return [CrossRef(text, ri, "module")]
         else:
             pass
         return [directive]

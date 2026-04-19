@@ -18,6 +18,7 @@ CREATE TABLE nodes(
     version    TEXT NOT NULL,
     category   TEXT NOT NULL,
     identifier TEXT NOT NULL,
+    has_blob   INTEGER NOT NULL DEFAULT 0,
     UNIQUE(package, version, category, identifier)
 );
 CREATE TABLE links(
@@ -267,16 +268,26 @@ class GraphStore:
     def get(self, key: Key) -> bytes:
         return self._get(key)
 
-    def _maybe_insert_node(self, key) -> int:
-        """Insert node if not present, return its id. Must be called within a transaction."""
+    def _maybe_insert_node(self, key, *, has_blob: bool = False) -> int:
+        """Insert node if not present, return its id. Must be called within a transaction.
+
+        Pass has_blob=True when the caller is also writing a blob file for this key.
+        Placeholder nodes (link destinations not yet ingested) are inserted with
+        has_blob=False so that glob() skips them.
+        """
         self.conn.execute(
             "INSERT OR IGNORE INTO nodes(package, version, category, identifier) VALUES (?, ?, ?, ?)",
             list(key),
         )
-        return self.conn.execute(
+        node_id = self.conn.execute(
             "SELECT id FROM nodes WHERE package=? AND version=? AND category=? AND identifier=?",
             list(key),
         ).fetchone()["id"]
+        if has_blob:
+            self.conn.execute(
+                "UPDATE nodes SET has_blob=1 WHERE id=?", (node_id,)
+            )
+        return node_id
 
     def _meta_path(self, module: str, version: str):
         assert isinstance(module, str)
@@ -317,7 +328,7 @@ class GraphStore:
         added_refs = new_refs - old_refs
 
         with self.conn:
-            source_id = self._maybe_insert_node(key)
+            source_id = self._maybe_insert_node(key, has_blob=True)
 
             add_params = [
                 (source_id, self._maybe_insert_node(ref)) for ref in added_refs
@@ -351,7 +362,8 @@ class GraphStore:
             if val is not None:
                 clauses.append(f"{col}=?")
                 params.append(val)
-        where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+        clauses.append("has_blob=1")
+        where = "WHERE " + " AND ".join(clauses)
         rows = self.conn.execute(
             f"SELECT package, version, category, identifier FROM nodes {where}",
             params,

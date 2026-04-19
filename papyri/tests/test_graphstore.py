@@ -88,6 +88,17 @@ def test_glob_specific(store):
     assert key in results
 
 
+def test_glob_excludes_placeholder_nodes(store):
+    k1 = Key("pkg", "1.0", "module", "pkg.foo")
+    k2 = Key("other", "2.0", "module", "other.bar")
+    # k1 references k2, but k2 is never put() — it becomes a placeholder node
+    store.put(k1, b"foo", [k2])
+
+    results = store.glob((None, None, None, None))
+    assert k1 in results
+    assert k2 not in results
+
+
 def test_put_updates_links_on_second_call(store):
     k1 = Key("pkg", "1.0", "module", "pkg.foo")
     k2 = Key("pkg", "1.0", "module", "pkg.bar")

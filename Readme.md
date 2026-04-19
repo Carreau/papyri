@@ -33,12 +33,13 @@ HTML* happen in the same step. This means:
 
 Papyri separates these two concerns:
 
-1. **IR generation** (`papyri gen`) — run by the library maintainer, in the
-   project's own environment. Produces a self-contained *DocBundle* capturing
-   the documented API in a structured, renderer-agnostic format.
-2. **Rendering** — a separate process that reads the DocBundle and produces
-   HTML (or any other format). Updating the renderer never requires touching
-   the original source.
+1. **IR generation** (`papyri gen`) — run **per project**, by the library
+   maintainer, in the project's own CI or build environment. Produces a
+   self-contained *DocBundle* capturing the documented API in a structured,
+   renderer-agnostic format.
+2. **Rendering** — a separate, stateless process that reads DocBundles and
+   produces HTML. Updating the renderer never requires touching the original
+   source or re-running the project's build environment.
 
 ### 2. Documentation is fragmented across domains
 
@@ -52,14 +53,16 @@ This makes it hard to:
 
 Papyri's model (inspired by conda-forge) is:
 
-- Each library maintainer builds and publishes a DocBundle.
-- A single rendering service ingests many bundles and serves them from one
-  place, with real bidirectional cross-links between packages.
+- Each library maintainer runs `papyri gen` in their project's CI and uploads
+  the resulting DocBundle to a central service.
+- The central service runs `papyri ingest` to wire bundles together, then
+  serves them all from one place with real bidirectional cross-links between
+  packages.
 
-The `viewer/` directory in this repo is a **local reference implementation**
-of such a rendering service, primarily used for development and debugging.
-The hosted, multi-maintainer version of this service is the long-term goal;
-the architecture is intentionally shaped to support it.
+The `viewer/` directory in this repo is being built with this centralized
+model in mind. It currently works locally for development and debugging, and
+its design is intended to evolve into — or directly inform — the hosted
+service.
 
 ---
 
@@ -117,13 +120,17 @@ workflow for the full sequence.
 
 ## Usage
 
-Papyri has two stages:
+Papyri has two stages that run in different contexts:
 
-- **IR generation** — run by the library maintainer.
-- **IR ingestion** — builds the cross-linked local graph from one or more bundles.
+- **IR generation** (`papyri gen`) — run **per project**, by the library
+  maintainer, in the project's own environment (typically CI). Produces a
+  DocBundle and uploads it.
+- **IR ingestion** (`papyri ingest`) — run by the **central service** (or
+  locally for development) to wire multiple bundles together into a
+  cross-linked graph.
 
-Rendering is handled by the `viewer/` web app (local) or a future hosted
-service; it is not part of the Python package.
+Rendering is handled by the `viewer/` web app, which reads the ingested graph.
+It is not part of the Python package itself.
 
 ### IR Generation (`papyri gen`)
 
@@ -196,17 +203,17 @@ Takes a DocBundle and merges it into the local SQLite graph
 (`~/.papyri/ingest/papyri.db`), updating forward references and
 backreferences across all ingested bundles.
 
-### Local viewer (`viewer/`)
+### Viewer (`viewer/`)
 
-An Astro + React + TypeScript app that reads the IR directly from
-`~/.papyri/data/` and the SQLite graph. It is the current reference
-implementation of the rendering side and is the primary way to browse
-generated docs during development.
+An Astro + React + TypeScript app that reads the IR from `~/.papyri/data/`
+and the SQLite graph. It is the primary way to browse generated docs locally
+during development, and is being built with the centralized service in mind:
+the same viewer code, or a close derivative, is the intended rendering
+frontend for the hosted service.
 
-It is **not** the production central service — that is future work. The
-boundary between the Python side (gen + ingest) and the rendering side is the
-on-disk IR, intentionally kept stable so that any renderer (local or hosted)
-can consume it.
+The boundary between the Python side (gen + ingest) and the rendering side is
+the on-disk IR, kept stable so any renderer — local or hosted — can consume
+it without changes to the Python package.
 
 ### Qualified names
 

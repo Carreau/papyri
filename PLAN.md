@@ -20,12 +20,13 @@ rendering service ingests many and serves them from one place.
 
 ## Target shape
 
-- **Python package** (`papyri/`): IR producer (`gen`) + cross-link graph
-  store (`ingest`). This is the core.
-- **Local viewer** (`viewer/`): TypeScript/Astro reference renderer used for
-  local development and debugging. It is *not* the production central
-  service — that is the long-term goal. The IR boundary is intentionally
-  kept stable so a future hosted service can consume it without changes here.
+- **`papyri gen`**: run per project, by each library maintainer in their own
+  CI or build environment. Produces a self-contained DocBundle and uploads it.
+- **`papyri ingest`**: run by the central service (or locally for dev) to
+  wire multiple bundles into a cross-linked graph.
+- **`viewer/`**: TypeScript/Astro renderer. Works locally for development
+  and is being built with the centralized service in mind — it is the intended
+  rendering frontend for the hosted service, not just a local debug tool.
 
 The viewer lives in-tree while the IR is still in flux; co-locating producer
 and consumer lets us iterate across breaking changes in one PR. Splitting into

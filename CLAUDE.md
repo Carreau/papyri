@@ -31,11 +31,14 @@ intentionally shaped to support a future hosted service.
 
 ## Repo purpose, short version
 
-- **Python package** (`papyri/`): IR producer (`gen`) + cross-link graph
-  store (`ingest`). This is the core of the project.
-- **Local viewer** (`viewer/`): TypeScript/Astro reference renderer. Reads
-  the IR directly from `~/.papyri/`. Used for local dev; the hosted service
-  is future work.
+- **`papyri gen`**: run per project, by each library maintainer in their own
+  CI or build environment. Produces a self-contained DocBundle.
+- **`papyri ingest`**: run by the central service (or locally for dev) to
+  wire multiple bundles into a cross-linked graph.
+- **`viewer/`**: TypeScript/Astro renderer. Works locally for development
+  today, and is being designed with the centralized service in mind — it is
+  the intended rendering frontend, not just a debug tool. When building the
+  viewer, think about what the hosted service will need.
 - All Python-side rendering has been removed. Do not add it back.
 
 ## Audience
@@ -71,10 +74,11 @@ service *could* be built later without a breaking change to the IR.
    ~/.papyri/ingest/` and re-ingest.
 6. **Do not commit anything under `~/.papyri/`.** That's user data, not
    repo content.
-7. **Don't design for the hosted service yet.** Keep the IR boundary stable
-   and documented, but don't add server-side infrastructure, auth, upload
-   endpoints, or multi-tenant features. Those belong in a future service that
-   consumes the IR, not in this repo.
+7. **Viewer design should anticipate the hosted service.** When working on
+   `viewer/`, consider what a centralized multi-bundle service will need (URL
+   structure, bundle switching, cross-package search). Don't add server
+   infrastructure, auth, or upload endpoints yet — but don't make design
+   choices that would require a rewrite when those land.
 
 ## Known environmental gotchas
 

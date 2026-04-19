@@ -1,23 +1,35 @@
-# Papyri revival plan
+# Papyri plan
 
-This document captures the agreed scope and ordered work for bringing papyri
-back to a maintainable state. Future sessions (human or agent) should treat
-this as the source of truth; check items off and update the "Open questions"
-section as answers arrive.
+This document captures the agreed scope and ordered work. Future sessions
+(human or agent) should treat this as the source of truth; check items off
+and update the "Open questions" section as answers arrive.
+
+## Why this project exists
+
+Two specific problems in the Python documentation ecosystem:
+
+**Problem 1 — Sphinx couples building and rendering.**
+Updating an HTML template (e.g. for accessibility) requires a full rebuild
+from source. Papyri separates IR *generation* (run once by the maintainer)
+from *rendering* (stateless, redoable against the saved IR).
+
+**Problem 2 — Documentation is fragmented across domains.**
+Every library lives on its own subdomain with no real cross-linking.
+Papyri's model (conda-forge style): maintainers publish DocBundles; a single
+rendering service ingests many and serves them from one place.
 
 ## Target shape
 
-Papyri is a **Python IR producer + local graph store**, plus an in-tree web
-viewer that reads the IR directly. The viewer lives in [`viewer/`](viewer/)
-and has its own [`viewer/PLAN.md`](viewer/PLAN.md) — consult that for
-viewer-specific scope, milestones, and tech choices.
+- **Python package** (`papyri/`): IR producer (`gen`) + cross-link graph
+  store (`ingest`). This is the core.
+- **Local viewer** (`viewer/`): TypeScript/Astro reference renderer used for
+  local development and debugging. It is *not* the production central
+  service — that is the long-term goal. The IR boundary is intentionally
+  kept stable so a future hosted service can consume it without changes here.
 
-Rationale for keeping the viewer in-tree (revised from the original plan,
-which punted rendering to a separate repo): the IR is still in heavy
-development and Phase 2 hasn't stabilized it yet. Co-locating the IR
-producer and its first consumer lets us iterate on both in a single PR
-instead of juggling two repos across breaking changes. Splitting into a
-sibling repo remains an option once the IR schema is documented and stable.
+The viewer lives in-tree while the IR is still in flux; co-locating producer
+and consumer lets us iterate across breaking changes in one PR. Splitting into
+a sibling repo remains an option once the IR schema stabilises.
 
 The boundary between the two halves:
 

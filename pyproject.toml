@@ -12,6 +12,7 @@ dynamic = ["version","description"]
 requires-python=">=3.14"
 dependencies = [
     "cbor2",
+    "intersphinx_registry",
     "ipython",
     "jedi",
     "matplotlib",

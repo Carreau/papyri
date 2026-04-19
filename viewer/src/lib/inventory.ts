@@ -1,26 +1,24 @@
-// Outbound-link support via Sphinx intersphinx inventories.
+// Outbound-link resolution via Sphinx intersphinx inventories.
 //
-// Phase A of the intersphinx interop plan (see top-level PLAN.md follow-ups):
-// when a papyri cross-reference cannot be resolved against the local graph
-// store, fall back to an external Sphinx project's `objects.inv`. The
-// registry mapping (project name -> docs base URL) is vendored at
-// `src/data/intersphinx-registry.json` and mirrors a small slice of the
-// `intersphinx_registry` PyPI package.
+// Flow:
+//   1. `papyri intersphinx fetch` (Python side) downloads `objects.inv` files
+//      and writes `registry.json` into the cache dir (default
+//      `~/.papyri/inventories/`).
+//   2. Papyri's relink pass tags unresolved cross-references whose owning
+//      project is in the intersphinx registry as `kind="intersphinx"` with
+//      `module=<project-key>`.
+//   3. The viewer's `resolveXref` sees `kind === "intersphinx"` and calls
+//      `lookupIntersphinx` here to produce an external URL.
 //
-// Inventory files themselves are NOT vendored. They're downloaded by
-// `scripts/fetch-inventories.mjs` into a cache dir (defaults to
-// `~/.papyri/inventories/`, overridable via `PAPYRI_INVENTORY_DIR`). If the
-// cache is missing or partial we degrade silently — unresolved refs still
-// render as plain text, same as before this module existed.
+// No registry is vendored in the viewer: the Python side owns the source of
+// truth (via the `intersphinx_registry` pypi package) and writes a manifest
+// the viewer consumes. If the manifest is missing, every lookup returns null
+// and refs tagged `intersphinx` render as plain text.
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { inflateSync } from "node:zlib";
-import registryData from "../data/intersphinx-registry.json" with { type: "json" };
 
-// Sphinx inventory v2 entry. See
-// https://www.sphinx-doc.org/en/master/usage/extensions/intersphinx.html
-// for the file format. Fields match the whitespace-separated columns.
 export interface InventoryEntry {
   name: string;
   domain: string;
@@ -35,33 +33,21 @@ export interface ResolvedInventoryEntry extends InventoryEntry {
   url: string;
 }
 
-interface RegistryEntry {
+interface ManifestEntry {
   url: string;
-}
-interface RegistryFile {
-  projects: Record<string, RegistryEntry>;
+  inventory_url?: string;
 }
 
-const REGISTRY = (registryData as RegistryFile).projects;
+interface LoadedInventory {
+  baseUrl: string;
+  byName: Map<string, InventoryEntry>;
+}
 
 export function inventoryCacheDir(): string {
   return (
     process.env.PAPYRI_INVENTORY_DIR ??
     join(homedir(), ".papyri", "inventories")
   );
-}
-
-/** Return the URL where `<project>`'s `objects.inv` is expected to live. */
-export function inventoryUrlFor(project: string): string | null {
-  const entry = REGISTRY[project];
-  if (!entry) return null;
-  // Registry URLs are conventionally base dirs ending in `/`; guard just in case.
-  const base = entry.url.endsWith("/") ? entry.url : entry.url + "/";
-  return base + "objects.inv";
-}
-
-export function registryProjects(): string[] {
-  return Object.keys(REGISTRY);
 }
 
 /**
@@ -76,7 +62,6 @@ export function parseInventory(buffer: Uint8Array): {
 } {
   const header: string[] = [];
   let offset = 0;
-  // Pull the 4 header lines out of the uncompressed prefix.
   while (header.length < 4 && offset < buffer.length) {
     const nl = buffer.indexOf(0x0a, offset);
     if (nl < 0) break;
@@ -91,17 +76,10 @@ export function parseInventory(buffer: Uint8Array): {
   }
   const project = (header[1]!.match(/^# Project:\s*(.*)$/)?.[1] ?? "").trim();
   const version = (header[2]!.match(/^# Version:\s*(.*)$/)?.[1] ?? "").trim();
-  // header[3] is the zlib-marker line; don't validate strictly.
 
   const body = inflateSync(buffer.subarray(offset)).toString("utf8");
   const entries: InventoryEntry[] = [];
-  // Entry grammar (from Sphinx' InventoryFile):
-  //   <name> <domain>:<role> <priority> <uri> <display_name>
-  // `name` and `display_name` may contain spaces. In practice Sphinx' writer
-  // never emits a space-containing name, but display_name regularly does
-  // (it's the human-readable title). The standard-library parser uses
-  //   re.match(r'(?x)(.+?)\s+(\S+)\s+(-?\d+)\s+(\S+)\s+(.*)', line)
-  // which is non-greedy on `name`, greedy on `display_name`. Mirror that.
+  // Mirror Sphinx' line regex: non-greedy `name`, greedy `display_name`.
   const re = /^(.+?)\s+(\S+)\s+(-?\d+)\s+(\S+)\s+(.*)$/;
   for (const raw of body.split("\n")) {
     const line = raw.replace(/\r$/, "");
@@ -115,10 +93,7 @@ export function parseInventory(buffer: Uint8Array): {
     if (colon < 0) continue;
     const domain = typ.slice(0, colon);
     const role = typ.slice(colon + 1);
-    // `$` suffix in uri expands to the entry name (Sphinx convention).
-    const expandedUri = uri.endsWith("$")
-      ? uri.slice(0, -1) + name
-      : uri;
+    const expandedUri = uri.endsWith("$") ? uri.slice(0, -1) + name : uri;
     const displayName = disp === "-" ? name : disp;
     entries.push({
       name,
@@ -133,19 +108,25 @@ export function parseInventory(buffer: Uint8Array): {
 }
 
 // ---------------------------------------------------------------------------
-// Loaded-inventory registry. Populated lazily on first lookup.
+// Cache: loaded lazily on first lookup, keyed by project name (which matches
+// both the manifest key and the `<project>.inv` filename).
 // ---------------------------------------------------------------------------
-
-interface LoadedInventory {
-  baseUrl: string;
-  byName: Map<string, InventoryEntry>;
-}
 
 let _cache: Map<string, LoadedInventory> | null = null;
 
 /** Reset the in-memory cache. Test-only. */
 export function _resetInventoryCache(): void {
   _cache = null;
+}
+
+function readManifest(dir: string): Record<string, ManifestEntry> {
+  const path = join(dir, "registry.json");
+  if (!existsSync(path)) return {};
+  try {
+    return JSON.parse(readFileSync(path, "utf8")) as Record<string, ManifestEntry>;
+  } catch {
+    return {};
+  }
 }
 
 function loadAll(): Map<string, LoadedInventory> {
@@ -156,6 +137,7 @@ function loadAll(): Map<string, LoadedInventory> {
     _cache = out;
     return out;
   }
+  const manifest = readManifest(dir);
   let files: string[];
   try {
     files = readdirSync(dir);
@@ -166,19 +148,15 @@ function loadAll(): Map<string, LoadedInventory> {
   for (const fname of files) {
     if (!fname.endsWith(".inv")) continue;
     const project = fname.slice(0, -".inv".length);
-    const registryEntry = REGISTRY[project];
-    if (!registryEntry) continue;
-    const baseUrl = registryEntry.url.endsWith("/")
-      ? registryEntry.url
-      : registryEntry.url + "/";
+    const entry = manifest[project];
+    if (!entry) continue; // inventory on disk without a manifest entry: skip.
+    const baseUrl = entry.url.endsWith("/") ? entry.url : entry.url + "/";
     try {
       const buf = readFileSync(join(dir, fname));
       const parsed = parseInventory(buf);
       const byName = new Map<string, InventoryEntry>();
       for (const e of parsed.entries) {
-        // Prefer higher-priority entries when names collide (lower number =
-        // higher priority in Sphinx' scheme; 1 beats -1). Reject priority=-1
-        // unless no other entry exists: -1 marks "hidden, fallback only".
+        // Priority-aware dedup: priority < 0 means "fallback only".
         const prev = byName.get(e.name);
         if (!prev) {
           byName.set(e.name, e);
@@ -202,18 +180,11 @@ function loadAll(): Map<string, LoadedInventory> {
 }
 
 /**
- * Look up a qualified name in the external inventories.
- *
- * `project` is the Python module name (e.g. "numpy"), matched against the
- * registry. `name` is the fully qualified symbol (e.g. "numpy.linspace").
- * Returns the resolved URL + display label, or null if the project has no
- * loaded inventory or the name isn't present.
- *
- * Papyri paths sometimes contain a colon separator (e.g.
- * "numpy.fft:fft_helper"); Sphinx inventories use dots. We try the raw name
- * first, then the colon-normalised form.
+ * Resolve a qualified name against a registered project's inventory. Papyri
+ * paths sometimes use a colon separator (e.g. "numpy.fft:fft_helper"); Sphinx
+ * inventories use dots. Try the raw name first, then colon-normalised.
  */
-export function lookupExternal(
+export function lookupIntersphinx(
   project: string | null | undefined,
   name: string,
 ): ResolvedInventoryEntry | null {
@@ -231,30 +202,7 @@ export function lookupExternal(
   return null;
 }
 
-/**
- * Best-effort outbound resolver. Given whatever a missing RefInfo carries,
- * try to produce a link into an external Sphinx-hosted documentation site.
- *
- * `module` comes straight from `RefInfo.module`. When it's null (papyri's
- * "unresolved" sentinel sets module=null), we derive a candidate from the
- * first dotted component of `path`: "numpy.linspace" -> "numpy".
- */
-export function resolveExternal(
-  module: string | null | undefined,
-  path: string,
-): { url: string; label: string } | null {
-  if (!path) return null;
-  const tried = new Set<string>();
-  const projects: string[] = [];
-  if (module) projects.push(module);
-  // Fall back: first dotted component of the path.
-  const firstDot = path.split(/[.:]/, 1)[0];
-  if (firstDot && firstDot !== module) projects.push(firstDot);
-  for (const project of projects) {
-    if (tried.has(project)) continue;
-    tried.add(project);
-    const hit = lookupExternal(project, path);
-    if (hit) return { url: hit.url, label: hit.displayName };
-  }
-  return null;
+/** List projects currently loaded into the lookup cache. Test aid. */
+export function loadedProjects(): string[] {
+  return [...loadAll().keys()].sort();
 }

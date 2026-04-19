@@ -2289,6 +2289,9 @@ class Gen:
                 if r.kind == "module":
                     sa.name.reference = r
                 else:
+                    # Leave unresolved refs as "to-resolve" for the ingest
+                    # relink pass to re-attempt with the full graph, and
+                    # possibly tag as "intersphinx" (see papyri.intersphinx).
                     imp = GenVisitor._import_solver(sa.name.value)
                     if imp:
                         self.log.debug(

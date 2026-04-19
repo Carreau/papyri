@@ -173,22 +173,26 @@ Data flow per request/page:
 
 ### Intersphinx outbound links
 
-- `src/lib/inventory.ts` parses Sphinx `objects.inv` v2 files and resolves
-  otherwise-unresolved `XRef` nodes to external documentation sites. The
-  registry of known projects is vendored at
-  `src/data/intersphinx-registry.json` (a trimmed mirror of the
-  `intersphinx_registry` PyPI package, keyed by Python module name).
-- Inventory files themselves are not vendored. Run `pnpm fetch-inventories`
-  to populate the cache (defaults to `~/.papyri/inventories/`, overridable
-  via `PAPYRI_INVENTORY_DIR`). A missing/empty cache is a no-op: unresolved
-  refs keep rendering as plain text.
-- The fallback is wired into `resolveXref` in `src/pages/[pkg]/[ver]/[...slug].astro`
-  after the local graph resolver fails. External links render with
-  `class="xref external"` and a trailing arrow glyph; the component lives in
-  `src/components/IrNode.astro`.
-- This is Phase A of the intersphinx interop plan. Phase B (producing an
-  `objects.inv` for papyri-rendered content so Sphinx sites can link **into**
-  papyri) is tracked separately on the Python side.
+- Categorisation is Python-side: the ingest `relink` pass tags a RefInfo as
+  `kind="intersphinx"` (with `module=<project-key>`) when local resolution
+  fails *and* the owning project is in the `intersphinx_registry` PyPI
+  package. See `papyri/intersphinx.py` + the relink hook in
+  `papyri/crosslink.py`.
+- Resolution is viewer-side: `src/lib/inventory.ts` reads the manifest
+  `<cache>/registry.json` plus one `<project>.inv` per project from the
+  local cache (default `~/.papyri/inventories/`, overridable via
+  `PAPYRI_INVENTORY_DIR`). Parser follows Sphinx inventory v2.
+- The cache is populated by the `papyri intersphinx fetch` CLI command,
+  which writes the inventories and the manifest together. There is no
+  Node-side fetch script; the Python package owns the registry so we have
+  one source of truth.
+- `resolveXref` in `src/pages/[pkg]/[ver]/[...slug].astro` only tries
+  intersphinx when `ref.kind === "intersphinx"` (not a generic "something
+  unresolved" fallback). `kind="missing"` stays plain text. External links
+  render with `class="xref external"` and a trailing arrow glyph; the
+  component lives in `src/components/IrNode.astro`.
+- Phase B (producing an `objects.inv` for papyri-rendered content so Sphinx
+  sites can link **into** papyri) is tracked separately on the Python side.
 
 ### M5 notes
 

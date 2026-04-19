@@ -405,5 +405,94 @@ def describe(
                 print(f"  {f.module} {f.version} {f.kind} {f.path}")
 
 
+intersphinx_app = typer.Typer(
+    help="Manage intersphinx inventories used for outbound links.",
+    no_args_is_help=True,
+)
+app.add_typer(intersphinx_app, name="intersphinx")
+
+
+@intersphinx_app.command("fetch")
+def intersphinx_fetch(
+    projects: Annotated[
+        Optional[List[str]],
+        typer.Argument(
+            help=(
+                "Project keys to fetch (e.g. numpy scipy python). "
+                "Defaults to every project in the intersphinx registry."
+            ),
+        ),
+    ] = None,
+    out_dir: Annotated[
+        Optional[Path],
+        typer.Option(
+            "--out-dir",
+            help="Override the cache directory (default: ~/.papyri/inventories/).",
+        ),
+    ] = None,
+):
+    """
+    Download Sphinx `objects.inv` files into the local inventory cache.
+
+    The viewer reads the cache at build time and uses it to deep-link
+    intersphinx-tagged cross-references (RefInfo.kind="intersphinx") into
+    their upstream Sphinx-hosted documentation sites. Also writes a
+    `registry.json` manifest alongside the inventories so the viewer can
+    resolve a project key to its docs base URL without re-reading the
+    Python-side registry.
+    """
+    import json
+    import urllib.request
+    from . import intersphinx as isr
+
+    registry = isr.load_registry()
+    if not registry:
+        raise typer.Exit(
+            "intersphinx_registry isn't installed or produced an empty "
+            "mapping; install papyri with its full dependencies."
+        )
+
+    if projects:
+        unknown = [p for p in projects if p not in registry]
+        if unknown:
+            raise typer.Exit(
+                f"unknown project(s): {', '.join(unknown)}. "
+                f"Use one of: {', '.join(sorted(registry))[:200]}..."
+            )
+        keys = list(projects)
+    else:
+        keys = sorted(registry)
+
+    dest = out_dir or (Path.home() / ".papyri" / "inventories")
+    dest.mkdir(parents=True, exist_ok=True)
+
+    manifest: dict = {}
+    ok = 0
+    fail = 0
+    for project in keys:
+        inv_url = isr.inventory_url(project)
+        base = isr.base_url(project)
+        if not inv_url or not base:
+            print(f"  {project}: skipped (no url in registry)")
+            fail += 1
+            continue
+        try:
+            with urllib.request.urlopen(inv_url, timeout=30) as resp:
+                buf = resp.read()
+        except Exception as e:
+            print(f"  {project}: fetch failed: {e}")
+            fail += 1
+            continue
+        (dest / f"{project}.inv").write_bytes(buf)
+        manifest[project] = {"url": base, "inventory_url": inv_url}
+        print(f"  {project}: {len(buf)} bytes")
+        ok += 1
+
+    (dest / "registry.json").write_text(json.dumps(manifest, indent=2, sort_keys=True))
+    print(f"\n{ok} ok, {fail} failed. Cache: {dest}")
+    if fail:
+        raise typer.Exit(code=1)
+
+
 if __name__ == "__main__":
     app()

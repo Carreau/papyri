@@ -467,7 +467,11 @@ class Ingester:
             assert doc_blob.content is not None, data
 
             for sa in doc_blob.see_also:
-                if sa.name.exists:
+                # Re-check refs that are already tagged "intersphinx": if the
+                # target has since been ingested, prefer the local resolution
+                # over the outbound link.
+                ref = sa.name.reference
+                if sa.name.exists and (ref is None or ref.kind != "intersphinx"):
                     continue
                 r = resolve_(
                     key.path,
@@ -481,6 +485,15 @@ class Ingester:
                     # `exists` is derived from `reference.kind`; updating the
                     # reference to a resolved RefInfo is enough.
                     sa.name.reference = r
+                elif r.kind == "missing":
+                    # Didn't resolve locally; if the owning project is in the
+                    # intersphinx registry, tag the reference so the viewer
+                    # deep-links into that project's Sphinx docs.
+                    from .intersphinx import maybe_intersphinx
+
+                    tagged = maybe_intersphinx(r)
+                    if tagged.kind == "intersphinx":
+                        sa.name.reference = tagged
 
             # end todo
 

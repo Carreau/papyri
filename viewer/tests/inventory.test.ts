@@ -4,9 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { deflateSync } from "node:zlib";
 
-// Build a minimal but valid Sphinx v2 inventory payload. The header is four
-// plaintext lines followed by the zlib-compressed entry stream. Each entry
-// follows `<name> <domain>:<role> <priority> <uri> <display_name>`.
+// Build a minimal but valid Sphinx v2 inventory payload. Header is four
+// plaintext lines followed by the zlib-compressed entry stream.
 function buildInventory(
   project: string,
   version: string,
@@ -21,8 +20,7 @@ function buildInventory(
   return Buffer.concat([Buffer.from(header, "utf8"), deflateSync(body)]);
 }
 
-// `inventory.ts` caches loaded files in a module-level map; re-import fresh
-// per test via resetModules.
+// `inventory.ts` caches the loaded map; re-import fresh per test.
 const freshInv = async () => {
   vi.resetModules();
   return await import("../src/lib/inventory.ts");
@@ -45,7 +43,7 @@ describe("parseInventory", () => {
       role: "function",
       priority: 1,
       uri: "reference/generated/numpy.linspace.html",
-      displayName: "numpy.linspace", // "-" expands to name
+      displayName: "numpy.linspace",
     });
   });
 
@@ -95,9 +93,28 @@ describe("parseInventory", () => {
   });
 });
 
-describe("inventory lookup + resolveExternal", () => {
+describe("lookupIntersphinx (cache-driven)", () => {
   let dir: string;
   const origDir = process.env.PAPYRI_INVENTORY_DIR;
+
+  async function seedCache(
+    project: string,
+    baseUrl: string,
+    entries: Array<[string, string, number, string, string]>,
+  ) {
+    await writeFile(join(dir, `${project}.inv`), buildInventory(project, "1", entries));
+    // Update manifest (replace the whole thing for simplicity in tests).
+    const manifestPath = join(dir, "registry.json");
+    let manifest: Record<string, { url: string }> = {};
+    try {
+      const fs = await import("node:fs/promises");
+      manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
+    } catch {
+      // fine: first seed
+    }
+    manifest[project] = { url: baseUrl };
+    await writeFile(manifestPath, JSON.stringify(manifest));
+  }
 
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), "papyri-viewer-inv-"));
@@ -109,75 +126,64 @@ describe("inventory lookup + resolveExternal", () => {
     await rm(dir, { recursive: true, force: true });
   });
 
-  it("returns null when no inventory is cached for the project", async () => {
-    const { lookupExternal, resolveExternal } = await freshInv();
-    expect(lookupExternal("numpy", "numpy.linspace")).toBeNull();
-    expect(resolveExternal("numpy", "numpy.linspace")).toBeNull();
+  it("returns null when the cache is empty", async () => {
+    const { lookupIntersphinx } = await freshInv();
+    expect(lookupIntersphinx("numpy", "numpy.linspace")).toBeNull();
   });
 
-  it("ignores .inv files for projects not in the registry", async () => {
+  it("ignores .inv files that aren't in registry.json", async () => {
+    // Inventory on disk, no manifest entry for it.
     await writeFile(
-      join(dir, "totally-unknown.inv"),
-      buildInventory("x", "1", [["x.y", "py:function", 1, "y.html", "-"]]),
+      join(dir, "mystery.inv"),
+      buildInventory("mystery", "1", [["x.y", "py:function", 1, "y.html", "-"]]),
     );
-    const { lookupExternal } = await freshInv();
-    expect(lookupExternal("totally-unknown", "x.y")).toBeNull();
+    await writeFile(join(dir, "registry.json"), "{}");
+    const { lookupIntersphinx } = await freshInv();
+    expect(lookupIntersphinx("mystery", "x.y")).toBeNull();
   });
 
   it("resolves a registered project to a full URL", async () => {
-    await writeFile(
-      join(dir, "numpy.inv"),
-      buildInventory("numpy", "2.0.0", [
-        ["numpy.linspace", "py:function", 1, "reference/generated/numpy.linspace.html", "-"],
-      ]),
-    );
-    const { lookupExternal } = await freshInv();
-    const hit = lookupExternal("numpy", "numpy.linspace");
-    expect(hit).not.toBeNull();
+    await seedCache("numpy", "https://numpy.org/doc/stable/", [
+      ["numpy.linspace", "py:function", 1, "reference/generated/numpy.linspace.html", "-"],
+    ]);
+    const { lookupIntersphinx } = await freshInv();
+    const hit = lookupIntersphinx("numpy", "numpy.linspace");
     expect(hit?.url).toBe(
       "https://numpy.org/doc/stable/reference/generated/numpy.linspace.html",
     );
     expect(hit?.displayName).toBe("numpy.linspace");
   });
 
-  it("matches colon-form paths against dotted inventory names", async () => {
+  it("appends a missing trailing slash on manifest URLs", async () => {
+    await seedCache("x", "https://example.test/docs", [
+      ["x.y", "py:function", 1, "y.html", "-"],
+    ]);
+    // Manually rewrite manifest to strip the trailing slash on the URL.
     await writeFile(
-      join(dir, "numpy.inv"),
-      buildInventory("numpy", "2.0.0", [
-        ["numpy.fft.fft", "py:function", 1, "generated/numpy.fft.fft.html", "-"],
-      ]),
+      join(dir, "registry.json"),
+      JSON.stringify({ x: { url: "https://example.test/docs" } }),
     );
-    const { lookupExternal } = await freshInv();
-    // RefInfo.path can carry a colon; normalize to dots on fallback.
-    expect(lookupExternal("numpy", "numpy.fft:fft")).not.toBeNull();
+    const { lookupIntersphinx } = await freshInv();
+    expect(lookupIntersphinx("x", "x.y")?.url).toBe(
+      "https://example.test/docs/y.html",
+    );
   });
 
-  it("resolveExternal falls back to the first dotted component of path", async () => {
-    await writeFile(
-      join(dir, "scipy.inv"),
-      buildInventory("scipy", "1.0.0", [
-        ["scipy.signal.butter", "py:function", 1, "reference/generated/scipy.signal.butter.html", "-"],
-      ]),
-    );
-    const { resolveExternal } = await freshInv();
-    // module=null (as papyri emits for "missing"), so resolveExternal has to
-    // infer "scipy" from the leading component of the path.
-    const hit = resolveExternal(null, "scipy.signal.butter");
-    expect(hit).not.toBeNull();
-    expect(hit?.url).toContain("scipy.signal.butter.html");
+  it("matches colon-form paths against dotted inventory names", async () => {
+    await seedCache("numpy", "https://numpy.org/doc/stable/", [
+      ["numpy.fft.fft", "py:function", 1, "generated/numpy.fft.fft.html", "-"],
+    ]);
+    const { lookupIntersphinx } = await freshInv();
+    // RefInfo.path can carry a colon; normalize to dots on fallback.
+    expect(lookupIntersphinx("numpy", "numpy.fft:fft")).not.toBeNull();
   });
 
   it("prefers higher-priority entries when names collide", async () => {
-    // Priority -1 is "hidden fallback only"; priority 1 wins.
-    await writeFile(
-      join(dir, "numpy.inv"),
-      buildInventory("numpy", "2.0.0", [
-        ["numpy.fft", "py:module", -1, "hidden.html", "-"],
-        ["numpy.fft", "py:module", 1, "visible.html", "-"],
-      ]),
-    );
-    const { lookupExternal } = await freshInv();
-    const hit = lookupExternal("numpy", "numpy.fft");
-    expect(hit?.uri).toBe("visible.html");
+    await seedCache("numpy", "https://numpy.org/doc/stable/", [
+      ["numpy.fft", "py:module", -1, "hidden.html", "-"],
+      ["numpy.fft", "py:module", 1, "visible.html", "-"],
+    ]);
+    const { lookupIntersphinx } = await freshInv();
+    expect(lookupIntersphinx("numpy", "numpy.fft")?.uri).toBe("visible.html");
   });
 });

@@ -284,9 +284,7 @@ class GraphStore:
             list(key),
         ).fetchone()["id"]
         if has_blob:
-            self.conn.execute(
-                "UPDATE nodes SET has_blob=1 WHERE id=?", (node_id,)
-            )
+            self.conn.execute("UPDATE nodes SET has_blob=1 WHERE id=?", (node_id,))
         return node_id
 
     def _meta_path(self, module: str, version: str):

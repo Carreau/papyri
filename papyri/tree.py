@@ -125,7 +125,6 @@ class DelayedResolver:
         if (target in self._targets) and (target in self._references):
             for link in self._references[target]:
                 link.reference = self._targets[target]
-                # print("Updating link to point to", self._targets[target], link)
             self._references[target] = []
 
 
@@ -151,8 +150,8 @@ def resolve_(
     Parameters
     ----------
     qa : str
-        fully qualified path of the current object (.valueTODO: this will be weird for
-        non object, like example).
+        fully qualified path of the current object (.value).
+        TODO: this will be weird for non object, like example.
     known_refs : list of RefInfo
         All the known objects we can refer to in current universe.
     local_refs : list of str
@@ -167,14 +166,12 @@ def resolve_(
     """
 
     # RefInfo(module, version, kind, path)
-    # print('resolve', qa)
     hk = hash(known_refs)
     hash(local_refs)
     assert rev_aliases is not None
     ref = Cannonical(ref)
     if ref in rev_aliases:
         new_ref = rev_aliases[ref]
-        # print(f'now looking for {new_ref} instead of {ref}')
         assert new_ref not in rev_aliases, "would loop...."
         # TODOlikely can drop rev_aliases here
         res = resolve_(qa, known_refs, local_refs, new_ref, rev_aliases)
@@ -232,10 +229,8 @@ def resolve_(
                 else:
                     if len(subset) > 1:
                         # ambiguous ref
-                        # print("subset:", ref)
                         pass
 
-                # print(f"did not resolve {qa} + {ref}")
                 return RefInfo(None, None, "missing", ref)
 
         parts = qa.split(".")
@@ -372,17 +367,11 @@ class TreeReplacer:
                     assert c is not None, f"{node=} has a None child"
                     assert isinstance(c, Node), c
                     replacement = self.generic_visit(c)
-                    # if node.__class__.__name__ == "Param":
-                    #    print(
-                    #        "Param has children",
-                    #        [x.__class__.__name__ for x in replacement],
-                    #    )
                     assert isinstance(replacement, list)
 
                     new_children.extend(replacement)
                 if node.children != new_children:  # type: ignore
                     self._cr += 1
-                    # print("Replaced !", node.children, new_children)
                 node.children = new_children  # type: ignore
                 new_nodes = [node]
             assert isinstance(new_nodes, list)
@@ -422,7 +411,6 @@ def block_directive_handler(domain, role):
 
 
 def _x_any_unimplemented_to_verbatim(domain, role, value):
-    # print("To implement", domain, role)
     return [InlineCode(value)]
 
 
@@ -789,19 +777,9 @@ class DirectiveVisiter(TreeReplacer):
                     kind="api",
                     path=target_qa,
                 )
-                # print("Solve ri", ri, directive.value, self.qa)
                 return [XRef(text, ri, "module")]
-            # print("Not all identifier", directive, "in", self.qa)
         else:
             pass
-            # print(
-            #    "could not match",
-            #    directive,
-            #    (directive.role, directive.domain),
-            #    "in ",
-            #    self.qa,
-            # )
-        # print("Unchanged:", directive.domain, directive.role, directive.value, self.qa)
         return [directive]
 
 
@@ -835,7 +813,6 @@ def _obj_from_path(parts):
 class GenVisitor(DirectiveVisiter):
     def visit_Section(self, node):
         if node.target:
-            # print("Section has target:", node.target)
             # TODO: This is wrong, we should likely change this to the current module that get visited.
             # it likely only affects narative
             RESOLVER.add_target(

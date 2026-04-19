@@ -559,10 +559,6 @@ class TSVisitor:
                 return [Unimplemented("untarget", self.as_text(name))]
         return [Unimplemented("target", self.as_text(node))]
 
-    # def visit_arguments(self, node):
-    #    assert False
-    #    return []
-
     def visit_attribution(self, node):
         # TODO:
         log.warning("attribution not implemented")

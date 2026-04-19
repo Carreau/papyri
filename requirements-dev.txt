@@ -2,7 +2,6 @@ pytest
 pytest-cov
 flit
 matplotlib
-pytest-trio
 coverage
 pipdeptree
 ruff

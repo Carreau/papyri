@@ -801,7 +801,6 @@ class GeneratedDoc(Node):
 
     @classmethod
     def _deserialise(cls, **kwargs):
-        # print_("will deserialise", cls)
         try:
             instance = cls(**kwargs)
         except Exception as e:
@@ -1409,7 +1408,6 @@ class Gen:
         # TODO fix this if plt.close not called and still a lingering figure.
         fig_managers = _pylab_helpers.Gcf.get_all_fig_managers()
         if len(fig_managers) != 0:
-            # print_(f"Unclosed figures in {qa}!!")
             plt.close("all")
 
         return processed_example_data(example_section_data), doctest_runner.figs
@@ -2052,7 +2050,6 @@ class Gen:
             api_object = APIObjectInfo(
                 "other", item_docstring, None, target_item.__name__, qa
             )
-            # print_("Other", target_item)
             # assert False, type(target_item)
 
         if item_docstring is None and not isinstance(target_item, ModuleType):

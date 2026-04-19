@@ -23,7 +23,6 @@ class Path:
     def read_json(self):
         with open(self.path, "rb") as f:
             return cbor2.load(f)
-            # return json.loads(self.path.read_text())
 
     def write_json(self, data):
         with open(self.path, "wb") as f:

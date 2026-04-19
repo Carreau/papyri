@@ -46,7 +46,6 @@ def find_all_refs(
     assert isinstance(graph_store, GraphStore)
     o_family = sorted(list(graph_store.glob((None, None, "module", None))))
 
-    # TODO
     # here we can't compute just the dictionary and use frozenset(....values())
     # as we may have multiple version of lisbraries; this is something that will
     # need to be fixed in the long run
@@ -429,7 +428,6 @@ class Ingester:
             # as we don't know the version number.
             # fix it at serialisation time.
             forward_refs = doc_blob.all_forward_refs()
-            # print_(len(forward_refs))
 
             try:
                 key = Key(mod_root, version, "module", qa)

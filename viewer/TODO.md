@@ -120,13 +120,18 @@ routes themselves can land first rendering flat lists.
 
 ## 6. Cross-cutting
 
-- [ ] Update `viewer/PLAN.md`: note M6 (layout redo + nav) with notes on
-      decisions; mark the "Dev server / hot-reloads when a new bundle is
-      ingested" claim if we break it.
-- [ ] Vitest coverage: pure helpers in `nav.ts`; snapshot test on the
-      card grid with a fixture ingest bundle.
+- [x] Update `viewer/PLAN.md`: note M6 (layout redo + nav) with notes on
+      decisions; flagged the "dev server hot-reloads when a new bundle
+      is ingested" claim as untested.
+- [x] Vitest coverage: pure helpers in `nav.ts` (`tests/nav.test.ts`
+      covers `isTutorial`, `listFilesRecursive`, `listDocs`/`listExamples`,
+      `loadBundleNav` docs-vs-tutorials split + URL encoding). Snapshot
+      test on the card grid deferred — the grid already renders at
+      build time through `pnpm build` against the local ingest, so a
+      snapshot over a fixture wouldn't catch much more.
 - [ ] Playwright smoke: landing card click → bundle index → qualname
-      page → narrative doc → example → asset.
+      page → narrative doc → example → asset. Deferred; needs a
+      Playwright devDep + fixture ingest. Track as a follow-up PR.
 
 ## Out of scope for this pass
 

@@ -132,7 +132,8 @@ Data flow per request/page:
 
 ## Config
 
-- `PAPYRI_DATA_DIR` — defaults to `~/.papyri/data`.
+- `PAPYRI_INGEST_DIR` — defaults to `~/.papyri/ingest`. The viewer reads
+  bundles, assets, and metadata from here; the gen dir is not an input.
 - `PAPYRI_INGEST_DB` — defaults to `~/.papyri/ingest/papyri.db`.
 - `--mode dev | build` via Astro.
 
@@ -147,6 +148,10 @@ Data flow per request/page:
 5. [x] **M4 — static export** (`astro build`) verified against a real
    ingested set (numpy, scipy).
 6. [x] **M5 — polish**: search, error pages, dark mode.
+7. [x] **M6 — layout redo + nav + cards + assets.** Two-column bundle
+   layout with a sidebar, card-based landing, narrative doc / example
+   routes, Fig rendering, and a static asset endpoint. Tracked phase
+   by phase in `viewer/TODO.md`.
 
 ### M3 notes
 
@@ -170,6 +175,65 @@ Data flow per request/page:
 - **`example_section_data` is rendered.** It was silently dropped before
   M3. Treated as a `Section`, rendered between regular sections and
   aliases/backrefs.
+
+### M6 notes
+
+- **Two-column shell.** `src/layouts/BundleLayout.astro` wraps every
+  `/[pkg]/[ver]/**` page in a `grid-template-columns: 18rem 1fr` shell.
+  Landing + 404 stay on `BaseLayout` (header + slot). Sidebar is sticky
+  on desktop and collapses behind a checkbox toggle below 900px, zero
+  JS. The `main { max-width: 960px }` catch-all was replaced by
+  per-layout containers (`.base-main`, `.bundle-main`) so wide code
+  blocks and the sidebar can coexist without a media-query war.
+- **`src/lib/nav.ts` is the per-bundle view-model.** One call
+  (`loadBundleNav`) hydrates logo data URI, summary, TocTree, docs,
+  tutorials, examples, and qualnames. Memoised per `bundlePath` via a
+  module-level `Map<string, Promise<BundleNav>>`, so the many pages
+  generated per bundle pay the CBOR round-trip once. `ir-reader.ts`
+  stays the on-disk shim; `nav.ts` is the only import the layouts /
+  pages touch for bundle metadata.
+- **TocTree walk.** `meta/toc.cbor` (tag 4021) decodes to a typed node
+  (thanks to the extension registry in `ir-reader.ts`). `readToc`
+  accepts both "list of TocTrees" and "single-root TocTree" shapes and
+  unwraps single-root trees whose children exist so the sidebar isn't
+  double-wrapped. Hrefs are resolved inline via `refToHref` (kept local
+  to `nav.ts` to avoid cross-module coupling with `linkForRef`).
+- **Tutorials convention.** Doc entries prefixed `tutorial_` or under
+  `docs/tutorials/` are split into their own sidebar section. Matches
+  the filename convention documented in `docs/IR.md` (see TODO §0).
+- **Landing cards.** `BundleCard.astro` renders logo / pkg / version /
+  summary / counts as a single `<a>`. `BundleGridSearch.tsx` is a tiny
+  React island that reads `data-pkg` / `data-summary` on the
+  server-rendered cards and toggles `hidden` on non-matches — simpler
+  than duplicating card markup in React, and keeps the logo data URIs
+  off the client bundle.
+- **Logos inlined as data URIs.** `loadBundleNav` base64-encodes the
+  logo (from `meta/logo.<ext>`, falling back to `assets/<name>` for
+  older ingests that predate `Ingester._ingest_logo`). A static route
+  variant is an option but the data-URI path keeps the sidebar and
+  card renderers synchronous and the total payload small enough
+  (logos are tens of KB, not MB).
+- **Asset endpoint.** `src/pages/assets/[pkg]/[ver]/[...asset].ts` is
+  an Astro static endpoint that materialises each bundle's `assets/`
+  dir into `dist/assets/<pkg>/<ver>/<file>` with a small MIME map.
+  `linkForRef({kind: "assets"})` and the Fig IrNode branch now
+  resolve cleanly. Asset filenames contain colons (qualnames are baked
+  into fig names); Astro's output-path writer rejects those as URL
+  scheme prefixes, so the endpoint + `linkForRef` + IrNode all apply
+  the same `: -> $` slug rule as qualnames (single source of truth is
+  the comment in both places).
+- **Dev server hot-reload.** The earlier M5 text claimed "dev server
+  hot-reloads when a new bundle is ingested." That was never tested
+  rigorously; Astro's watcher covers `src/**` but not `~/.papyri/**`.
+  Realistically the workflow is "ingest → restart dev". Worth wiring
+  up an explicit watch via Astro's content collections as a follow-up,
+  but out of scope for M6.
+- **nav.ts unit coverage.** `tests/nav.test.ts` covers `isTutorial`,
+  `listFilesRecursive`, `listDocs` / `listExamples`, and the
+  `loadBundleNav` split of docs vs tutorials + URL encoding. A
+  Playwright smoke walkthrough (landing → bundle → qualname → doc →
+  example → asset) is still open; deferred rather than bundled in
+  this PR to keep the diff focused.
 
 ### M5 notes
 

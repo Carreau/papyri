@@ -1,10 +1,18 @@
 ---
-// Header strip that sits above the page's own crumb bar. Keeps the theme
-// toggle in a single place so every page gets it consistently. Pages that
-// want a tighter layout can skip this and manage the toggle themselves.
+// Top strip shared by every page. Wordmark on the left links back to the
+// bundle index. Right side is reserved for utilities (theme toggle today;
+// global search later).
 import ThemeToggle from "./ThemeToggle.tsx";
 ---
 
-<div class="site-header">
-  <ThemeToggle client:load />
-</div>
+<header class="site-header">
+  <a class="site-wordmark" href="/">
+    <span class="site-wordmark-mark" aria-hidden="true">&para;</span>
+    <span class="site-wordmark-text">papyri</span>
+  </a>
+  <div class="site-header-spacer"></div>
+  <div class="site-header-tools">
+    <slot name="tools" />
+    <ThemeToggle client:load />
+  </div>
+</header>

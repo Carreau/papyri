@@ -1,60 +1,12 @@
-import { readdir, readFile, stat } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { Decoder, Tag, addExtension } from "cbor-x";
-import { dataDir } from "./paths.ts";
-
-// ---------------------------------------------------------------------------
-// Bundle discovery (unchanged from M0 — plus ingest-store counterpart).
-// ---------------------------------------------------------------------------
-
-export interface BundleMeta {
-  module?: string;
-  version?: string;
-  logo?: string;
-  tag?: string;
-  [key: string]: unknown;
-}
-
-export interface Bundle {
-  /** Directory name on disk, e.g. "numpy_1.26.4". */
-  dirName: string;
-  /** Absolute path to the bundle directory. */
-  path: string;
-  /** Parsed papyri.json if present and readable, else null. */
-  meta: BundleMeta | null;
-}
-
-export async function listBundles(root: string = dataDir()): Promise<Bundle[]> {
-  let entries;
-  try {
-    entries = await readdir(root, { withFileTypes: true });
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
-    throw err;
-  }
-
-  const dirs = entries.filter((e) => e.isDirectory()).map((e) => e.name).sort();
-  const bundles: Bundle[] = [];
-  for (const name of dirs) {
-    const path = join(root, name);
-    const metaPath = join(path, "papyri.json");
-    let meta: BundleMeta | null = null;
-    try {
-      await stat(metaPath);
-      const raw = await readFile(metaPath, "utf8");
-      meta = JSON.parse(raw) as BundleMeta;
-    } catch {
-      meta = null;
-    }
-    bundles.push({ dirName: name, path, meta });
-  }
-  return bundles;
-}
 
 // ---------------------------------------------------------------------------
 // Ingest store. Structure: ~/.papyri/ingest/<pkg>/<ver>/{module,docs,...}.
-// M1 only walks `module/` and decodes IngestedDoc (tag 4010).
+// The viewer only consumes the ingest store; the gen dir (~/.papyri/data/)
+// is a `papyri` CLI concern. See `viewer/PLAN.md`.
 // ---------------------------------------------------------------------------
 
 export function ingestDir(): string {
@@ -384,6 +336,18 @@ export async function loadModule(
   throw new Error(`unexpected decode result for ${qualname}: ${typeof obj}`);
 }
 
+/**
+ * Generic CBOR loader that applies the IR tag extensions. Returns the decoded
+ * value as-is; callers cast to the shape they expect (IngestedDoc, Section,
+ * TocTree, or a plain-object meta dict).
+ */
+export async function loadCbor<T = unknown>(path: string): Promise<T> {
+  ensureExtensions();
+  const raw = await readFile(path);
+  const dec = new Decoder({ mapsAsObjects: true });
+  return dec.decode(raw) as T;
+}
+
 // ---------------------------------------------------------------------------
 // URL slug encoding. Qualnames contain ':' (e.g. "papyri.gen:Config.__init__"),
 // which is illegal on some filesystems and awkward in URLs. We encode to/from
@@ -424,8 +388,10 @@ export function linkForRef(ref: LinkRef): string | null {
     case "examples":
       return `/${ref.pkg}/${ref.ver}/examples/${encodeURIComponent(ref.path)}/`;
     case "assets":
-      // M3 will serve these; use a stable static path for now.
-      return `/assets/${ref.pkg}/${ref.ver}/${ref.path}`;
+      // Colons are legal on disk but break Astro's URL-based path writer.
+      // Same slug rule as qualnames: `:` -> `$`. Kept in sync with the
+      // asset endpoint's `slugifyAssetPath`.
+      return `/assets/${ref.pkg}/${ref.ver}/${ref.path.replace(/:/g, "$")}`;
     default:
       return null;
   }

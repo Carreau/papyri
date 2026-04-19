@@ -220,11 +220,29 @@ const codeHtml =
     <img src={(node as any).url} alt={(node as any).alt ?? ""} />
   ) : type === "Fig" ? (
     // Fig.value is a RefInfo(module, version, kind="assets", path=filename).
-    // We don't currently serve assets from the viewer, so just show a
-    // placeholder with the asset path for now. Tracked as M3 follow-up.
-    <figure class="fig">
-      <code class="role">asset: {(node as any).value?.path ?? "?"}</code>
-    </figure>
+    // The §5 asset endpoint (src/pages/assets/[pkg]/[ver]/[...asset].ts)
+    // serves the bytes, so we can point an <img> straight at the resolved
+    // URL. Colon slugification matches `linkForRef({kind: "assets"})` and
+    // `slugifyAssetPath` in the endpoint.
+    (() => {
+      const ref = (node as any).value as
+        | { module?: string; version?: string; path?: string }
+        | undefined;
+      if (ref && ref.module && ref.version && ref.path) {
+        const safe = String(ref.path).replace(/:/g, "$");
+        const src = `/assets/${ref.module}/${ref.version}/${safe}`;
+        return (
+          <figure class="fig">
+            <img src={src} alt={String(ref.path)} loading="lazy" />
+          </figure>
+        );
+      }
+      return (
+        <figure class="fig">
+          <code class="role">unresolved fig</code>
+        </figure>
+      );
+    })()
   ) : type === "Target" ? (
     <span id={(node as any).label} class="target" />
   ) : type === "Comment" ? (

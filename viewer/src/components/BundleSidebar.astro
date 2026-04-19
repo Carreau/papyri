@@ -1,0 +1,152 @@
+---
+// Sidebar for bundle pages. Identity block at the top, then Docs / Tutorials
+// / Examples / API sections. Docs/Tutorials/Examples are driven by the
+// view-model in `nav.ts`; API is the per-bundle search island + the compact
+// qualname list.
+import BundleSearch from "./BundleSearch.tsx";
+import { qualnameToSlug } from "../lib/ir-reader.ts";
+import type { BundleNav, NavEntry, TocItem } from "../lib/nav.ts";
+
+interface Props {
+  nav: BundleNav;
+  activeQualname?: string;
+  activeDocPath?: string;
+  activeExamplePath?: string;
+}
+
+const { nav, activeQualname, activeDocPath, activeExamplePath } = Astro.props;
+const bundleHref = `/${nav.pkg}/${nav.version}/`;
+const summary = typeof nav.meta.summary === "string" ? nav.meta.summary : null;
+
+// The toc comes from meta/toc.cbor. When it's empty we still show the flat
+// `docs` list below so the section isn't an awkward empty stub.
+const hasToc = nav.toc.length > 0;
+
+function labelForEntry(e: NavEntry): string {
+  return e.name;
+}
+
+function isDocActive(path: string): boolean {
+  return activeDocPath === path;
+}
+
+function isExampleActive(path: string): boolean {
+  return activeExamplePath === path;
+}
+
+function isTocActive(item: TocItem): boolean {
+  // Match the active doc path against the toc ref's href. Cheap check that
+  // avoids re-parsing URLs.
+  if (!item.href || !activeDocPath) return false;
+  const encoded = activeDocPath.split("/").map(encodeURIComponent).join("/");
+  return item.href.endsWith(`/docs/${encoded}/`);
+}
+---
+
+<aside class="bundle-sidebar" aria-label="Bundle navigation">
+  <a class="bundle-identity" href={bundleHref}>
+    {
+      nav.logoDataUrl ? (
+        <img class="bundle-logo" src={nav.logoDataUrl} alt={`${nav.pkg} logo`} />
+      ) : (
+        <span class="bundle-logo bundle-logo-empty" aria-hidden="true">
+          {nav.pkg.slice(0, 2).toUpperCase()}
+        </span>
+      )
+    }
+    <span class="bundle-identity-text">
+      <span class="bundle-identity-pkg">{nav.pkg}</span>
+      <span class="bundle-identity-version">{nav.version}</span>
+    </span>
+  </a>
+
+  {summary ? <p class="bundle-summary">{summary}</p> : null}
+
+  {
+    hasToc || nav.docs.length > 0 ? (
+      <nav class="sidebar-section">
+        <h3 class="sidebar-heading">Docs</h3>
+        {hasToc ? (
+          <ul class="sidebar-toc">
+            {nav.toc.map((item) => (
+              <li class={isTocActive(item) ? "is-active" : undefined}>
+                {item.href ? (
+                  <a href={item.href}>{item.title}</a>
+                ) : (
+                  <span>{item.title}</span>
+                )}
+                {item.children.length > 0 ? (
+                  <ul class="sidebar-toc">
+                    {item.children.map((child) => (
+                      <li class={isTocActive(child) ? "is-active" : undefined}>
+                        {child.href ? (
+                          <a href={child.href}>{child.title}</a>
+                        ) : (
+                          <span>{child.title}</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <ul class="sidebar-flat">
+            {nav.docs.map((e) => (
+              <li class={isDocActive(e.name) ? "is-active" : undefined}>
+                <a href={e.href}>{labelForEntry(e)}</a>
+              </li>
+            ))}
+          </ul>
+        )}
+      </nav>
+    ) : null
+  }
+
+  {
+    nav.tutorials.length > 0 ? (
+      <nav class="sidebar-section">
+        <h3 class="sidebar-heading">Tutorials</h3>
+        <ul class="sidebar-flat">
+          {nav.tutorials.map((e) => (
+            <li class={isDocActive(e.name) ? "is-active" : undefined}>
+              <a href={e.href}>{labelForEntry(e)}</a>
+            </li>
+          ))}
+        </ul>
+      </nav>
+    ) : null
+  }
+
+  {
+    nav.examples.length > 0 ? (
+      <nav class="sidebar-section">
+        <h3 class="sidebar-heading">Examples</h3>
+        <ul class="sidebar-flat">
+          {nav.examples.map((e) => (
+            <li class={isExampleActive(e.name) ? "is-active" : undefined}>
+              <a href={e.href}>{labelForEntry(e)}</a>
+            </li>
+          ))}
+        </ul>
+      </nav>
+    ) : null
+  }
+
+  <nav class="sidebar-section sidebar-api">
+    <h3 class="sidebar-heading">API</h3>
+    <BundleSearch client:load pkg={nav.pkg} ver={nav.version} />
+    <ul class="sidebar-qualnames">
+      {
+        nav.qualnames.map((qa) => (
+          <li class={qa === activeQualname ? "is-active" : undefined}>
+            <a href={`/${nav.pkg}/${nav.version}/${qualnameToSlug(qa)}/`}>
+              {qa}
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+  </nav>
+</aside>

@@ -4,28 +4,18 @@
 // the built output as the not-found body. No React island — keep this page
 // as close to a static HTML document as possible so it renders even if
 // something's badly broken elsewhere in the site.
-import Head from "../components/Head.astro";
-import SiteHeader from "../components/SiteHeader.astro";
-import "../styles/global.css";
+import BaseLayout from "../layouts/BaseLayout.astro";
 ---
 
-<html lang="en">
-  <head>
-    <Head title="Not found — Papyri viewer" />
-  </head>
-  <body>
-    <SiteHeader />
-    <main>
-      <p class="crumb"><a href="/">&larr; bundles</a></p>
-      <h1>Page not found</h1>
-      <p class="lede">
-        This URL doesn't match any ingested bundle or qualname. It may have
-        moved between papyri versions, or the bundle hasn't been ingested on
-        this site.
-      </p>
-      <p>
-        Head back to <a href="/">the bundle index</a> and browse from there.
-      </p>
-    </main>
-  </body>
-</html>
+<BaseLayout title="Not found — Papyri viewer">
+  <p class="crumb"><a href="/">&larr; bundles</a></p>
+  <h1>Page not found</h1>
+  <p class="lede">
+    This URL doesn&apos;t match any ingested bundle or qualname. It may have
+    moved between papyri versions, or the bundle hasn&apos;t been ingested on
+    this site.
+  </p>
+  <p>
+    Head back to <a href="/">the bundle index</a> and browse from there.
+  </p>
+</BaseLayout>

@@ -2,12 +2,8 @@
 import {
   listIngestedBundles,
   listModules,
-  qualnameToSlug,
 } from "../../../lib/ir-reader.ts";
-import Head from "../../../components/Head.astro";
-import SiteHeader from "../../../components/SiteHeader.astro";
-import BundleSearch from "../../../components/BundleSearch.tsx";
-import "../../../styles/global.css";
+import BundleLayout from "../../../layouts/BundleLayout.astro";
 
 export async function getStaticPaths() {
   const bundles = await listIngestedBundles();
@@ -22,30 +18,15 @@ const { bundlePath } = Astro.props as { bundlePath: string };
 const qualnames = await listModules(bundlePath);
 ---
 
-<html lang="en">
-  <head>
-    <Head title={`${pkg} ${ver} — Papyri viewer`} />
-  </head>
-  <body>
-    <SiteHeader />
-    <main>
-      <p class="crumb"><a href="/">&larr; bundles</a></p>
-      <h1>
-        {pkg} <span class="version">{ver}</span>
-      </h1>
-      <p class="lede">{qualnames.length} qualnames</p>
-
-      <BundleSearch client:load pkg={pkg!} ver={ver!} />
-
-      <ul class="qualnames">
-        {
-          qualnames.map((qa) => (
-            <li>
-              <a href={`/${pkg}/${ver}/${qualnameToSlug(qa)}/`}>{qa}</a>
-            </li>
-          ))
-        }
-      </ul>
-    </main>
-  </body>
-</html>
+<BundleLayout
+  pkg={pkg!}
+  ver={ver!}
+  bundlePath={bundlePath}
+  title={`${pkg} ${ver} — Papyri viewer`}
+>
+  <p class="crumb"><a href="/">&larr; bundles</a></p>
+  <h1>
+    {pkg} <span class="version">{ver}</span>
+  </h1>
+  <p class="lede">{qualnames.length} qualnames</p>
+</BundleLayout>

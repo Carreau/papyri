@@ -1,0 +1,62 @@
+---
+// Two-column shell for every page under /[pkg]/[ver]/**. Loads the bundle
+// view-model once per page (memoised in `nav.ts`) and hands it to the
+// sidebar so callers don't repeat the frontmatter.
+import Head from "../components/Head.astro";
+import SiteHeader from "../components/SiteHeader.astro";
+import BundleSidebar from "../components/BundleSidebar.astro";
+import { loadBundleNav } from "../lib/nav.ts";
+import "../styles/global.css";
+
+interface Props {
+  pkg: string;
+  ver: string;
+  bundlePath: string;
+  title: string;
+  activeQualname?: string;
+  activeDocPath?: string;
+  activeExamplePath?: string;
+}
+
+const {
+  pkg,
+  ver,
+  bundlePath,
+  title,
+  activeQualname,
+  activeDocPath,
+  activeExamplePath,
+} = Astro.props;
+const nav = await loadBundleNav(pkg, ver, bundlePath);
+---
+
+<html lang="en">
+  <head>
+    <Head title={title} />
+  </head>
+  <body>
+    <SiteHeader />
+    <div class="bundle-layout">
+      <input
+        type="checkbox"
+        id="sidebar-toggle"
+        class="sidebar-toggle-cb"
+        aria-hidden="true"
+      />
+      <label for="sidebar-toggle" class="sidebar-toggle-label">
+        <span class="sidebar-toggle-open" aria-hidden="true">&#9776;</span>
+        <span class="sidebar-toggle-close" aria-hidden="true">&times;</span>
+        <span class="sidebar-toggle-text">Navigation</span>
+      </label>
+      <BundleSidebar
+        nav={nav}
+        activeQualname={activeQualname}
+        activeDocPath={activeDocPath}
+        activeExamplePath={activeExamplePath}
+      />
+      <main class="bundle-main">
+        <slot />
+      </main>
+    </div>
+  </body>
+</html>

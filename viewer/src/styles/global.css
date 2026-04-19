@@ -45,33 +45,114 @@ html, body {
   line-height: 1.5;
 }
 
-main {
+/* .base-main — used by BaseLayout (landing, 404). Reproduces the old "main"
+   centred container. */
+.base-main {
   max-width: 960px;
   margin: 0 auto;
   padding: 2rem 1.25rem 4rem;
 }
 
+/* ---------------------------------------------------------------------------
+   Two-column bundle layout. Sidebar on the left, main content on the right.
+   On narrow viewports the columns stack and the sidebar is collapsed behind a
+   checkbox toggle (zero JS). The toggle checkbox must be placed *before*
+   .bundle-sidebar in the DOM so the CSS sibling selector works.
+--------------------------------------------------------------------------- */
+.bundle-layout {
+  display: grid;
+  grid-template-columns: 18rem 1fr;
+  grid-template-areas: "sidebar main";
+  max-width: 72rem;
+  margin: 0 auto;
+  min-height: 0;
+}
+
+/* The toggle checkbox is SR-only on desktop and completely hidden when the
+   sidebar is always visible (≥900px). */
+.sidebar-toggle-cb {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.sidebar-toggle-label {
+  display: none; /* hidden on desktop */
+}
+
+/* The toggle label reveals itself on mobile */
+@media (max-width: 899px) {
+  .bundle-layout {
+    /* Stack everything vertically; DOM order: checkbox (abs), label, sidebar, main */
+    display: block;
+  }
+
+  /* Default mobile: sidebar hidden; override desktop sticky positioning */
+  .bundle-sidebar {
+    display: none;
+    position: static;
+    max-height: none;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sidebar-toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: var(--fg-muted);
+    border-bottom: 1px solid var(--border);
+    user-select: none;
+    background: var(--surface);
+  }
+  .sidebar-toggle-label:hover { color: var(--accent); }
+
+  /* When checked: show the sidebar */
+  .sidebar-toggle-cb:checked ~ .bundle-sidebar {
+    display: block;
+  }
+
+}
+
+/* Icon swap (always active; label is hidden on desktop so irrelevant there) */
+.sidebar-toggle-label .sidebar-toggle-open { display: inline; }
+.sidebar-toggle-label .sidebar-toggle-close { display: none; }
+.sidebar-toggle-cb:checked ~ .sidebar-toggle-label .sidebar-toggle-open { display: none; }
+.sidebar-toggle-cb:checked ~ .sidebar-toggle-label .sidebar-toggle-close { display: inline; }
+
+/* .sidebar-toggle-label is display:none by default; the mobile media query
+   overrides it to display:flex. No desktop-specific block needed. */
+
+/* .bundle-sidebar — sticky column on desktop, plain on mobile */
+.bundle-sidebar {
+  grid-area: sidebar;
+  position: sticky;
+  top: 0;
+  align-self: start;
+  max-height: 100vh;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  padding: 1.25rem 1rem;
+  background: var(--surface);
+}
+
+/* .bundle-main — right column, no max-width (the grid contains it) */
+.bundle-main {
+  grid-area: main;
+  min-width: 0; /* prevent blowout from long code blocks */
+  padding: 2rem 1.5rem 4rem;
+}
+
 h1 { font-size: 1.6rem; margin: 0 0 0.25rem; }
 p.lede { color: var(--fg-muted); margin: 0 0 2rem; }
-
-ul.bundles {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  border-top: 1px solid var(--border);
-}
-
-ul.bundles li {
-  border-bottom: 1px solid var(--border);
-  padding: 0.75rem 0.25rem;
-  display: flex;
-  align-items: baseline;
-  gap: 0.75rem;
-}
-
-ul.bundles .name { font-weight: 600; }
-ul.bundles .version { font-family: var(--mono); color: var(--fg-muted); }
-ul.bundles .dir { margin-left: auto; font-family: var(--mono); font-size: 0.85rem; color: var(--fg-muted); }
 
 .empty {
   padding: 2rem;
@@ -81,9 +162,6 @@ ul.bundles .dir { margin-left: auto; font-family: var(--mono); font-size: 0.85re
 }
 
 code { font-family: var(--mono); background: var(--surface-alt); padding: 0.1em 0.3em; border-radius: 3px; }
-
-ul.bundles .name a { color: inherit; text-decoration: none; border-bottom: 1px dotted var(--accent); }
-ul.bundles .name a:hover { border-bottom-style: solid; }
 
 p.crumb { font-size: 0.85rem; color: var(--fg-muted); margin: 0 0 1rem; }
 p.crumb a { color: var(--accent); text-decoration: none; }
@@ -258,6 +336,20 @@ aside.directive .directive-args {
 .substitution { font-style: italic; color: var(--fg-muted); }
 .unimplemented { color: var(--fg-muted); font-style: italic; }
 
+/* Figures rendered from IR Fig nodes. Cap image width to the column so
+   large plots don't force horizontal scroll on the main content. */
+figure.fig {
+  margin: 1rem 0;
+  text-align: center;
+}
+figure.fig img {
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+}
+
 details.fallback pre {
   overflow-x: auto;
   max-height: 20rem;
@@ -268,15 +360,51 @@ details.fallback pre {
   font-size: 0.75rem;
 }
 
-/* Site header strip — holds the dark-mode toggle. Lives above main so the
-   toggle stays in a consistent spot across every page. */
+/* ---------------------------------------------------------------------------
+   Site header. Capped at the content max-width; wordmark on the left, tools
+   on the right. Background + border only span the capped strip, which keeps
+   the header visually aligned with .base-main / .bundle-layout on wide
+   viewports.
+--------------------------------------------------------------------------- */
 .site-header {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 0.75rem 1.25rem 0;
   display: flex;
-  justify-content: flex-end;
   align-items: center;
+  padding: 0 1.25rem;
+  height: 3rem;
+  max-width: 72rem;
+  margin: 0 auto;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+/* Wordmark: paragraph mark + "papyri" text */
+.site-wordmark {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  text-decoration: none;
+  color: var(--fg);
+  font-weight: 600;
+  font-size: 1rem;
+}
+.site-wordmark:hover { color: var(--accent); }
+
+.site-wordmark-mark {
+  font-size: 1.3rem;
+  color: var(--accent);
+  line-height: 1;
+}
+.site-wordmark-text {
+  font-family: var(--sans);
+  letter-spacing: -0.01em;
+}
+
+.site-header-spacer { flex: 1; }
+
+.site-header-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .theme-toggle {
@@ -351,4 +479,326 @@ details.fallback pre {
 .bundle-search-empty {
   color: var(--fg-muted);
   font-style: italic;
+}
+
+/* ---------------------------------------------------------------------------
+   Sidebar components. These live inside .bundle-sidebar.
+--------------------------------------------------------------------------- */
+
+/* Bundle identity block: logo + pkg name + version, whole block is a link. */
+.bundle-identity {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  text-decoration: none;
+  color: var(--fg);
+  margin-bottom: 0.75rem;
+  border-radius: 6px;
+  padding: 0.35rem 0.25rem;
+  transition: background 0.1s;
+}
+.bundle-identity:hover {
+  background: var(--surface-alt);
+  text-decoration: none;
+}
+
+/* Logo image */
+.bundle-logo {
+  width: 2.25rem;
+  height: 2.25rem;
+  object-fit: contain;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+/* Fallback monogram when no logo is available */
+.bundle-logo-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-alt);
+  color: var(--fg-muted);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.bundle-identity-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.bundle-identity-pkg {
+  font-weight: 600;
+  font-size: 0.95rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bundle-identity-version {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+}
+
+/* Short blurb below the identity block */
+.bundle-summary {
+  font-size: 0.8rem;
+  color: var(--fg-muted);
+  margin: 0 0 1rem;
+  line-height: 1.4;
+}
+
+/* Sidebar section container */
+.sidebar-section {
+  margin: 0.75rem 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+.sidebar-section:first-of-type {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
+}
+
+/* Section label: small, uppercase, letter-spaced */
+.sidebar-heading {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-muted);
+  margin: 0 0 0.4rem;
+}
+
+/* Placeholder text for sections not yet wired */
+.sidebar-stub {
+  font-size: 0.8rem;
+  color: var(--fg-muted);
+  font-style: italic;
+  margin: 0;
+}
+
+/* API section: search island + compact qualname list */
+.sidebar-api {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Tighten the bundle-search padding inside the narrower sidebar */
+.sidebar-api .bundle-search {
+  margin-bottom: 0.75rem;
+}
+.sidebar-api .bundle-search-input {
+  padding: 0.35rem 0.5rem;
+  font-size: 0.8rem;
+}
+
+/* Flat link list — docs, tutorials, examples rendered without hierarchy. */
+.sidebar-flat {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: 0.8rem;
+}
+.sidebar-flat li {
+  padding: 0.15rem 0.25rem;
+  border-radius: 3px;
+}
+.sidebar-flat li.is-active {
+  border-left: 2px solid var(--accent);
+  padding-left: 0.35rem;
+  font-weight: 600;
+  background: var(--surface-alt);
+}
+.sidebar-flat a {
+  color: var(--accent);
+  text-decoration: none;
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sidebar-flat a:hover { text-decoration: underline; }
+
+/* Nested toc. Two levels are enough for papyri's current trees; deeper
+   nesting inherits padding from the parent <ul>. */
+.sidebar-toc {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: 0.8rem;
+}
+.sidebar-toc li { padding: 0.15rem 0.25rem; border-radius: 3px; }
+.sidebar-toc li.is-active {
+  border-left: 2px solid var(--accent);
+  padding-left: 0.35rem;
+  font-weight: 600;
+  background: var(--surface-alt);
+}
+.sidebar-toc a {
+  color: var(--accent);
+  text-decoration: none;
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sidebar-toc a:hover { text-decoration: underline; }
+.sidebar-toc ul.sidebar-toc { margin-left: 0.75rem; }
+
+/* Dense qualname list */
+.sidebar-qualnames {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  overflow-y: auto;
+  max-height: 40vh;
+}
+.sidebar-qualnames li {
+  padding: 0.1rem 0.25rem;
+  border-radius: 3px;
+}
+.sidebar-qualnames li.is-active {
+  border-left: 2px solid var(--accent);
+  padding-left: 0.35rem;
+  font-weight: 600;
+  background: var(--surface-alt);
+}
+.sidebar-qualnames a {
+  color: var(--accent);
+  text-decoration: none;
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sidebar-qualnames a:hover { text-decoration: underline; }
+
+/* ---------------------------------------------------------------------------
+   Bundle cards — landing page grid (§3).
+--------------------------------------------------------------------------- */
+/* Filter input above the card grid */
+.bundle-grid-search {
+  margin-bottom: 0.75rem;
+}
+.bundle-grid-search .bundle-search-input {
+  max-width: 24rem;
+}
+
+.bundle-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.bundle-card {
+  display: flex;
+  flex-direction: column;
+  text-decoration: none;
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  gap: 0.6rem;
+  transition: box-shadow 0.15s, transform 0.1s, border-color 0.15s;
+}
+.bundle-card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  text-decoration: none;
+}
+
+.bundle-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.bundle-card-logo {
+  width: 2.5rem;
+  height: 2.5rem;
+  object-fit: contain;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.bundle-card-logo-empty {
+  width: 2.5rem;
+  height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-alt);
+  color: var(--fg-muted);
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  font-weight: 700;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.bundle-card-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.bundle-card-pkg {
+  font-weight: 700;
+  font-size: 1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bundle-card-version {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+}
+
+.bundle-card-summary {
+  font-size: 0.82rem;
+  color: var(--fg-muted);
+  line-height: 1.4;
+  flex: 1;
+  /* Clamp to 3 lines */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.bundle-card-counts {
+  display: flex;
+  gap: 0.75rem;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  border-top: 1px solid var(--border);
+  padding-top: 0.5rem;
+  margin-top: auto;
+}
+.bundle-card-count {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+}
+.bundle-card-count-num {
+  font-weight: 700;
+  color: var(--fg);
+  font-size: 0.85rem;
+}
+.bundle-card-count-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }

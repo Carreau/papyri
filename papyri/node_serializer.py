@@ -1,7 +1,7 @@
 """
 Internally-tagged Node -> dict serializer.
 
-Unlike ``miniserde`` (which tags unions externally, i.e. wraps each value
+Unlike ``serde`` (which tags unions externally, i.e. wraps each value
 in ``{"type": ..., "data": ...}``), this serializer folds the tag into the
 value itself: every serialized Node dict carries a ``"type"`` key alongside
 its regular fields. The tag is either the class's ``type`` class-attribute

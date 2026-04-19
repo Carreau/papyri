@@ -50,31 +50,32 @@ from rich.progress import BarColumn, Progress, TextColumn, track
 
 log = logging.getLogger("papyri")
 
-from .common_ast import Node, register
 from .errors import (
     IncorrectInternalDocsLen,
     NumpydocParseError,
     TextSignatureParsingFailed,
     UnseenError,
 )
-from .miscs import BlockExecutor, DummyP
+from .misc import BlockExecutor, DummyP
+from .node_base import Node, register
 from .nodes import (
-    Fig,
+    CrossRef,
+    DocParam,
+    Figure,
     GenCode,
     GenToken,
     NumpydocExample,
     NumpydocSeeAlso,
     NumpydocSignature,
-    Param,
     Parameters,
     RefInfo,
     Section,
     SeeAlsoItem,
     Text,
-    XRef,
     encoder,
     parse_rst_section,
 )
+from .numpydoc_compat import NumpyDocString
 from .signature import Signature as ObjectSignature
 from .signature import SignatureNode
 from .toc import make_tree
@@ -89,7 +90,6 @@ from .utils import (
     pos_to_nl,
     progress,
 )
-from .vref import NumpyDocString
 
 
 class ErrorCollector:
@@ -882,7 +882,7 @@ def _numpy_data_to_section(data: list[tuple[str, str, list[str]]], title: str, q
             items = parse_rst_section("\n".join(desc), qa)
             for l in items:
                 assert not isinstance(l, Section)
-        acc.append(Param(param, type_, desc=items).validate())
+        acc.append(DocParam(param, type_, desc=items).validate())
     if acc:
         return Section([Parameters(acc)], title).validate()
     else:
@@ -1043,7 +1043,7 @@ def _normalize_see_also(see_also: Section, qa: str):
                 )
                 # `exists` is derived from `refinfo.kind`; the "to-resolve" kind
                 # flags this as a placeholder for the ingest relink pass.
-                link = XRef(name, refinfo, "module")
+                link = CrossRef(name, refinfo, "module")
                 sai = SeeAlsoItem(link, desc, type_)
                 new_see_also.append(sai)
                 del desc
@@ -1122,7 +1122,7 @@ class PapyriDocTestRunner(doctest.DocTestRunner):
 
         for figname, _ in figs:
             self._example_section_data.append(
-                Fig(
+                Figure(
                     RefInfo.from_untrusted(
                         self.gen.root, self.gen.version, "assets", figname
                     )
@@ -1825,7 +1825,7 @@ class Gen:
                         raise type(e)(f"from {qa}") from e
                     for l in items:
                         assert not isinstance(l, Section)
-                new_content.append(Param(param, type_, desc=items).validate())
+                new_content.append(DocParam(param, type_, desc=items).validate())
             if new_content:
                 blob.content[s] = Section([Parameters(new_content)], None)
             else:
@@ -1908,7 +1908,7 @@ class Gen:
                     l
                     + [GenCode(tok_entries, "", ce_status)]  # ignore: type
                     + [
-                        Fig(
+                        Figure(
                             RefInfo.from_untrusted(
                                 self.root, self.version, "assets", name
                             )

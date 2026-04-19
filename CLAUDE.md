@@ -90,7 +90,7 @@ service *could* be built later without a breaking change to the IR.
   The full-module collection path hides it.
 - The IR uses **CBOR** (`cbor2`) in some places and JSON in others. Do not
   assume "the IR is JSON". See `graphstore.py`, `crosslink.py`,
-  `common_ast.py`, `take2.py`.
+  `node_base.py`, `take2.py`.
 
 ## Code conventions
 

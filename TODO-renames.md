@@ -158,30 +158,26 @@ names: `ExamplesSection` / `SeeAlsoSection` / `SignatureSection`.
 
 ### 5b. Three "parameter" classes
 
-- [ ] `papyri/nodes.py:537` `Param` → `DocParam` (docstring param
-      entry, holds `param`/`type_`/`desc`). Also see 5c for the
-      `param` field name.
-- [ ] `papyri/nodes.py:528` `Parameters` → keep (container name fits).
-- [ ] `papyri/signature.py:26` `ParameterNode` → `SigParam` (or
-      `SignatureParam` if spelling-out wins).
+- [x] `papyri/nodes.py` `Param` → `DocParam` (docstring param entry).
+- [x] `papyri/nodes.py` `Parameters` — kept as the container name.
+- [x] `papyri/signature.py` `ParameterNode` → `SigParam`.
 
 ### 5c. Field rename inside renamed `DocParam`
 
-- [ ] `Param.param` (self-named attribute) → `Param.name`. Mechanical
-      replacement. Touches validators, `__repr__`, viewer (`Param`
-      rendering at `viewer/src/components/IrNode.astro:122`).
-- [ ] `Param.type_` (trailing-underscore dodge) → `Param.annotation`.
+- [x] `DocParam.param` → `DocParam.name`. Updated `__getitem__` and
+      `__repr__`; viewer `IrNode.astro` dispatch updated too.
+- [x] `DocParam.type_` → `DocParam.annotation`. Same rename across
+      the two gen.py constructor sites and the viewer.
 
 ### 5d. Small or abbreviated names
 
-- [ ] `Fig` (nodes.py:401) → `Figure`. Matches `Image`, `Math`,
-      `Heading`. ~30 call sites.
-- [ ] `XRef` (nodes.py:116) → `CrossRef` (spelled out). Or `Ref`, but
-      `RefInfo` is the 4-tuple ref; keeping `CrossRef` makes the
-      distinction visible.
+- [x] `Fig` → `Figure`. Done; viewer `FIELD_ORDER[4024]` + `IrNode`
+      dispatch follow.
+- [x] `XRef` → `CrossRef`. Done; viewer `FIELD_ORDER[4002]` + dispatch
+      follow; `XRefShape` / `XRefResolution` helpers renamed to
+      `CrossRefShape` / `CrossRefResolution` for consistency.
 - [ ] `ThematicBreak` (nodes.py:358) → `Rule` (HTML-familiar) or
-      leave. MyST origin; dropping it fits item 1 but isn't a
-      hard-requirement rename.
+      leave. Not obviously a win; keeping for now.
 
 ### 5e. In-memory intermediates (`Gen*`)
 
@@ -250,13 +246,16 @@ Not renaming: `gen`, `ingest`, `relink`, `describe`.
 
 ## 9. Module filenames
 
-- [ ] `papyri/miniserde.py` → `papyri/serde.py` (drop "mini").
-- [ ] `papyri/common_ast.py` → `papyri/node_base.py` (only defines
-      `Base` and `Node`). Or fold into `papyri/nodes.py`.
-- [ ] `papyri/miscs.py` → `papyri/misc.py` (singular). Or dissolve
-      into proper homes.
-- [ ] `papyri/vref.py` — audit what it does, rename to match.
-- [ ] `papyri/myst_serialiser.py` → `papyri/node_serializer.py`
+- [x] `papyri/miniserde.py` → `papyri/serde.py` (dropped "mini").
+- [x] `papyri/common_ast.py` → `papyri/node_base.py`. Kept separate
+      from `nodes.py` (folding was an option but `Base`/`Node` are
+      usefully its own import surface for the ~5 sites that only
+      need the base class).
+- [x] `papyri/miscs.py` → `papyri/misc.py` (singular).
+- [x] `papyri/vref.py` → `papyri/numpydoc_compat.py`. It's the
+      NumpyDocString subclass with a more-lenient section alias
+      table; new name says what it is.
+- [x] `papyri/myst_serialiser.py` → `papyri/node_serializer.py`
       (covered in item 1b).
 
 ## 10. Viewer-side follow-ups
@@ -268,7 +267,7 @@ nothing falls through.
       any references to `RefInfo`/`Key` fields (item 3), `Param`
       shape (item 5c), `arbitrary` (item 7).
 - [ ] `viewer/src/components/IrNode.astro` — dispatches on class
-      name; update every rename in item 5 (`Fig`, `XRef`,
+      name; update every rename in item 5 (`Figure`, `CrossRef`,
       `AdmonitionTitle`, etc.).
 - [ ] `viewer/src/pages/[pkg]/[ver]/[...slug].astro` — route param
       and glob patterns reference `module/`.

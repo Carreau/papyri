@@ -262,10 +262,15 @@ class TSVisitor:
 
     def visit(self, node):
         acc = []
-        # TODO: FIX
+        # Tree-sitter produces ERROR nodes when it can't reconcile a run of
+        # tokens with any grammar rule. Dropping the whole node loses
+        # content; instead, surface the raw text as a Text node so the
+        # reader sees something. Logged at DEBUG because docstrings in the
+        # wild routinely trigger this and the warning was noise.
         if node.type == "ERROR":
-            log.warning("ERROR node: %r, skipping", self.as_text(node))
-            return []
+            text = self.as_text(node)
+            log.debug("ERROR node, rendering as text: %r", text)
+            return [Text(text)] if text else []
         for c in node.children:
             # c=<ts.Node directive>
             kind = c.type

@@ -363,7 +363,7 @@ class TSVisitor:
             log.info(
                 "Improper backtick found in interpreted text. "
                 "This is usually due to a missing/stray backtick, or "
-                "missing escape (`\\`) on trailing charter : %r in (%s)",
+                "missing escape (`\\`) on trailing character : %r in (%s)",
                 inner_value,
                 self._qa,
             )

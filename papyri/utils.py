@@ -1,15 +1,14 @@
 from __future__ import annotations
 
-import time
-import typing
 import importlib
+import time
 from datetime import timedelta
 from textwrap import dedent
-from typing import Tuple, NewType
+from types import ModuleType
+from typing import NewType
 
 from rich.progress import BarColumn, Progress, ProgressColumn, Task, TextColumn
 from rich.text import Text
-from types import ModuleType
 
 
 class FullQual(str):
@@ -29,7 +28,7 @@ class FullQual(str):
 Cannonical = NewType("Cannonical", str)
 
 
-def full_qual(obj) -> typing.Optional[FullQual]:
+def full_qual(obj) -> FullQual | None:
     """
     Compute the fully qualified name of an object.
 
@@ -110,7 +109,7 @@ class TimeElapsedColumn(ProgressColumn):
         self.avg = None
         super().__init__(*args, **kwargs)
 
-    def render(self, task: "Task"):
+    def render(self, task: Task):
         # task.completed
         # task.total
         elapsed = task.elapsed
@@ -214,7 +213,7 @@ def dedent_but_first(text):
     return dedent(a) + "\n" + dedent("\n".join(b))
 
 
-def pos_to_nl(script: str, pos: int) -> Tuple[int, int]:
+def pos_to_nl(script: str, pos: int) -> tuple[int, int]:
     """
     Convert pigments position to Jedi col/line
     """

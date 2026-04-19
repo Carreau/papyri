@@ -3,11 +3,12 @@ This file is meant to test the serialisation / deserialization
 of function signature to JSON.
 """
 
-from papyri.signature import Signature as SignatureObject, SignatureNode
 import json
-from typing import Union, Optional
 
 import pytest
+
+from papyri.signature import Signature as SignatureObject
+from papyri.signature import SignatureNode
 
 all_funcs = []
 
@@ -367,7 +368,7 @@ async def coroutine_function_5(
 
 
 @add
-def function_with_annotation5(a: int, b: Union[int, float]) -> Optional[bool]:
+def function_with_annotation5(a: int, b: int | float) -> bool | None:
     """
     {
       "kind": "function",

@@ -3,7 +3,7 @@ from textwrap import dedent
 import pytest
 
 from papyri import errors
-from papyri.ts import parse, Node, TSVisitor, parser
+from papyri.ts import Node, TSVisitor, parse, parser
 
 
 # @pytest.mark.xfail(strict=True)
@@ -110,7 +110,7 @@ def test_parse_warning_directive():
 
 def test_parse_space():
     [section] = parse(
-        "Element-wise maximum of two arrays, propagating any NaNs.".encode(),
+        b"Element-wise maximum of two arrays, propagating any NaNs.",
         "test_parse_space",
     )
     assert (
@@ -139,9 +139,7 @@ def test_parse_no_newline():
 
 
 def test_parse_reference():
-    [section] = parse(
-        "This is a `reference <to this>`_".encode(), "test_parse_reference"
-    )
+    [section] = parse(b"This is a `reference <to this>`_", "test_parse_reference")
     [paragraph] = section.children
     [text, reference] = paragraph.children
     assert reference.value == "reference <to this>"

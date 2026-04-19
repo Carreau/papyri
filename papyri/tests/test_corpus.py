@@ -1,6 +1,6 @@
 import pytest
 
-from .utils import _expected_path, SAMPLES, _serialize, _process
+from .utils import SAMPLES, _expected_path, _process, _serialize
 
 PAIRS = [(s, _expected_path(s)) for s in SAMPLES]
 

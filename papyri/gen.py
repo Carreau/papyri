@@ -10,10 +10,11 @@ likely be separated into a separate module at some point.
 
 from __future__ import annotations
 
-import doctest
 import dataclasses
 import datetime
+import doctest
 import inspect
+import io
 import json
 import logging
 import os
@@ -24,6 +25,7 @@ import tempfile
 import tomllib
 import warnings
 from collections import defaultdict
+from collections.abc import MutableMapping, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 from hashlib import sha256
@@ -32,28 +34,19 @@ from pathlib import Path
 from types import FunctionType, ModuleType
 from typing import (
     Any,
-    Dict,
-    FrozenSet,
-    List,
-    MutableMapping,
-    Optional,
-    Sequence,
-    Tuple,
-    Union,
 )
-import io
 
 import jedi
 import tomli_w
 from IPython.core.oinspect import find_file
 from IPython.utils.path import compress_user
+from matplotlib import _pylab_helpers
 from packaging.version import parse
 from pygments import lex
 from pygments.formatters import HtmlFormatter
 from pygments.lexers import PythonLexer
 from rich.logging import RichHandler
 from rich.progress import BarColumn, Progress, TextColumn, track
-from matplotlib import _pylab_helpers
 
 log = logging.getLogger("papyri")
 
@@ -65,13 +58,10 @@ from .errors import (
     UnseenError,
 )
 from .miscs import BlockExecutor, DummyP
-from .signature import Signature as ObjectSignature
-from .signature import SignatureNode
 from .nodes import (
     Fig,
     GenCode,
     GenToken,
-    XRef,
     NumpydocExample,
     NumpydocSeeAlso,
     NumpydocSignature,
@@ -80,9 +70,13 @@ from .nodes import (
     RefInfo,
     Section,
     SeeAlsoItem,
+    Text,
+    XRef,
     encoder,
     parse_rst_section,
 )
+from .signature import Signature as ObjectSignature
+from .signature import SignatureNode
 from .toc import make_tree
 from .tree import GenVisitor
 from .utils import (
@@ -91,20 +85,18 @@ from .utils import (
     TimeElapsedColumn,
     dedent_but_first,
     full_qual,
+    obj_from_qualname,
     pos_to_nl,
     progress,
-    obj_from_qualname,
 )
 from .vref import NumpyDocString
 
-from .nodes import Text
-
 
 class ErrorCollector:
-    _expected_unseen: Dict[str, Any]
+    _expected_unseen: dict[str, Any]
     errored: bool
-    _unexpected_errors: Dict[str, Any]
-    _expected_errors: Dict[str, Any]
+    _unexpected_errors: dict[str, Any]
+    _expected_errors: dict[str, Any]
 
     def __init__(self, config: Config, log):
         self.config: Config = config
@@ -160,7 +152,7 @@ except (ImportError, OSError):
 SITE_PACKAGE = site.getsitepackages()
 
 
-def paragraph(lines: List[str], qa) -> Any:
+def paragraph(lines: list[str], qa) -> Any:
     """
     Leftover rst parsing,
 
@@ -200,8 +192,8 @@ def _jedi_set_cache(text, value):
 
 
 def parse_script(
-    script: str, ns: Dict, prev, config, *, where=None
-) -> Optional[List[Tuple[str, Optional[str]]]]:
+    script: str, ns: dict, prev, config, *, where=None
+) -> list[tuple[str, str | None]] | None:
     """
     Parse a script into tokens and use Jedi to infer the fully qualified names
     of each token.
@@ -244,7 +236,7 @@ def parse_script(
     jeds.append(jedi.Script(full_text))
     P = PythonLexer()
 
-    acc: List[Tuple[str, Optional[str]]] = []
+    acc: list[tuple[str, str | None]] = []
 
     for index, _type, text in P.get_tokens_unprocessed(script):
         line_n, col_n = pos_to_nl(script, index)
@@ -347,7 +339,7 @@ def _add_classes(entries):
     assert set(len(x) for x in entries) == {2}
     text = "".join([x for x, y in entries])
     classes = get_classes(text)
-    return [ii + (cc,) for ii, cc in zip(entries, classes)]
+    return [ii + (cc,) for ii, cc in zip(entries, classes, strict=True)]
 
 
 def processed_example_data(example_section_data) -> Section:
@@ -403,30 +395,30 @@ class Config:
     dummy_progress: bool = False
     # Do not actually touch disk
     dry_run: bool = False
-    exec_failure: Optional[str] = None  # should move to enum
-    jedi_failure_mode: Optional[str] = None  # move to enum ?
-    logo: Optional[str] = None  # should change to path likely
+    exec_failure: str | None = None  # should move to enum
+    jedi_failure_mode: str | None = None  # move to enum ?
+    logo: str | None = None  # should change to path likely
     execute_exclude_patterns: Sequence[str] = ()
     infer: bool = True
     exclude: Sequence[str] = ()  # list of dotted object name to exclude from collection
-    examples_folder: Optional[str] = None  # < to path ?
+    examples_folder: str | None = None  # < to path ?
     submodules: Sequence[str] = ()
-    source: Optional[str] = None
-    homepage: Optional[str] = None
-    docs: Optional[str] = None
-    docs_path: Optional[str] = None
-    wait_for_plt_show: Optional[bool] = True
+    source: str | None = None
+    homepage: str | None = None
+    docs: str | None = None
+    docs_path: str | None = None
+    wait_for_plt_show: bool | None = True
     examples_exclude: Sequence[str] = ()
     narrative_exclude: Sequence[str] = ()
     exclude_jedi: Sequence[str] = ()
-    implied_imports: Dict[str, str] = dataclasses.field(default_factory=dict)
+    implied_imports: dict[str, str] = dataclasses.field(default_factory=dict)
     # mapping from expected name of error instances, to which fully-qualified names are raising those errors.
     # the build will fail if the given item does not raise this error.
-    expected_errors: Dict[str, List[str]] = dataclasses.field(default_factory=dict)
+    expected_errors: dict[str, list[str]] = dataclasses.field(default_factory=dict)
     early_error: bool = True
     fail_unseen_error: bool = False
     execute_doctests: bool = True
-    directives: Dict[str, str] = dataclasses.field(default_factory=lambda: {})
+    directives: dict[str, str] = dataclasses.field(default_factory=lambda: {})
 
     def replace(self, **kwargs):
         return dataclasses.replace(self, **kwargs)
@@ -434,7 +426,7 @@ class Config:
 
 def load_configuration(
     path: str,
-) -> Tuple[str, MutableMapping[str, Any], Dict[str, Any]]:
+) -> tuple[str, MutableMapping[str, Any], dict[str, Any]]:
     """
     Given a path, load a configuration from a File.
 
@@ -455,8 +447,8 @@ def load_configuration(
 
 
 def gen_main(
-    infer: Optional[bool],
-    exec_: Optional[bool],
+    infer: bool | None,
+    exec_: bool | None,
     target_file: str,
     debug,
     *,
@@ -468,7 +460,7 @@ def gen_main(
     narrative,
     fail_early: bool,
     fail_unseen_error: bool,
-    limit_to: List[str],
+    limit_to: list[str],
 ) -> None:
     """
     Main entry point to generate DocBundle files.
@@ -584,7 +576,7 @@ class DFSCollector:
 
     """
 
-    def __init__(self, root: ModuleType, others: List[ModuleType]):
+    def __init__(self, root: ModuleType, others: list[ModuleType]):
         """
         Parameters
         ----------
@@ -602,8 +594,8 @@ class DFSCollector:
         assert isinstance(root, ModuleType), root
         self.root = root.__name__
         assert "." not in self.root
-        self.obj: Dict[str, Any] = dict()
-        self.aliases: Dict[str, List[str]] = defaultdict(lambda: [])
+        self.obj: dict[str, Any] = dict()
+        self.aliases: dict[str, list[str]] = defaultdict(lambda: [])
         self._open_list = [(root, [root.__name__])]
         for o in others:
             self._open_list.append((o, o.__name__.split(".")))
@@ -641,7 +633,7 @@ class DFSCollector:
                 else:
                     log.debug("differs: %r != %r", item, self.obj.get(nqa))
 
-    def items(self) -> Dict[str, Any]:
+    def items(self) -> dict[str, Any]:
         self.scan()
         self.prune()
         return self.obj
@@ -713,7 +705,7 @@ class DFSCollector:
     def visit_FunctionType(self, fun, stack):
         pass
 
-    def compute_aliases(self) -> Tuple[Dict[FullQual, Cannonical], List[Any]]:
+    def compute_aliases(self) -> tuple[dict[FullQual, Cannonical], list[Any]]:
         aliases = {}
         not_found = []
         for k, v in self.aliases.items():
@@ -845,17 +837,17 @@ class GeneratedDoc(Node):
         "Examples",
     ]  # List of sections in order
 
-    _content: Dict[str, Section]
+    _content: dict[str, Section]
     example_section_data: Section
-    _ordered_sections: Optional[List[str]]
-    item_file: Optional[str]
-    item_line: Optional[int]
-    item_type: Optional[str]
-    aliases: List[str]
-    see_also: List[SeeAlsoItem]  # see also data
-    signature: Optional[SignatureNode]
-    references: Optional[List[str]]
-    arbitrary: List[Section]
+    _ordered_sections: list[str] | None
+    item_file: str | None
+    item_line: int | None
+    item_type: str | None
+    aliases: list[str]
+    see_also: list[SeeAlsoItem]  # see also data
+    signature: SignatureNode | None
+    references: list[str] | None
+    arbitrary: list[Section]
 
     def __repr__(self):
         return "<GeneratedDoc ...>"
@@ -880,7 +872,7 @@ class GeneratedDoc(Node):
         return cls({}, None, [], None, None, None, [], [], None, None, [])
 
 
-def _numpy_data_to_section(data: List[Tuple[str, str, List[str]]], title: str, qa):
+def _numpy_data_to_section(data: list[tuple[str, str, list[str]]], title: str, qa):
     assert isinstance(data, list), repr(data)
     acc = []
     for param, type_, desc in data:
@@ -928,7 +920,7 @@ class APIObjectInfo:
 
     kind: str
     docstring: str
-    signature: Optional[ObjectSignature]
+    signature: ObjectSignature | None
     name: str
 
     def __repr__(self):
@@ -938,7 +930,7 @@ class APIObjectInfo:
         self,
         kind: str,
         docstring: str,
-        signature: Optional[ObjectSignature],
+        signature: ObjectSignature | None,
         name: str,
         qa: str,
     ):
@@ -946,7 +938,7 @@ class APIObjectInfo:
         self.kind = kind
         self.name = name
         self.docstring = docstring
-        self.parsed: List[Any] = []
+        self.parsed: list[Any] = []
         self.signature = signature
         self._qa = qa
 
@@ -986,7 +978,7 @@ class APIObjectInfo:
                     xx = NumpydocSeeAlso(_normalize_see_also(see_also, qa="??"))
                     self.parsed.append(xx)
                 else:
-                    assert False
+                    raise AssertionError
         elif docstring and kind == "module":
             self.parsed = ts.parse(docstring.encode(), qa)
         self.validate()
@@ -1025,7 +1017,7 @@ def _normalize_see_also(see_also: Section, qa: str):
         return []
     assert see_also is not None
     new_see_also = []
-    name_and_types: List[Tuple[str, str]]
+    name_and_types: list[tuple[str, str]]
     name: str
     type_or_description: str
 
@@ -1165,8 +1157,8 @@ class PapyriDocTestRunner(doctest.DocTestRunner):
         This is not perfect as doctest tests that the output is the same, thus when we have a multiline block
         If any of the intermediate items produce an output, the result will be failure.
         """
-        acc: List[Union[Text, GenCode]] = []
-        current_code: Optional[GenCode] = None
+        acc: list[Text | GenCode] = []
+        current_code: GenCode | None = None
 
         for item in example_section_data:
             if not isinstance(item, GenCode):
@@ -1207,10 +1199,10 @@ class Gen:
 
     """
 
-    docs: Dict[str, bytes]
-    examples: Dict[str, bytes]
-    data: Dict[str, GeneratedDoc]
-    bdata: Dict[str, bytes]
+    docs: dict[str, bytes]
+    examples: dict[str, bytes]
+    data: dict[str, GeneratedDoc]
+    bdata: dict[str, bytes]
 
     def __init__(self, dummy_progress: bool, config: Config):
         if dummy_progress:
@@ -1268,14 +1260,14 @@ class Gen:
 
         self.data = {}
         self.bdata = {}
-        self._meta: Dict[str, Dict[FullQual, Cannonical]] = {}
+        self._meta: dict[str, dict[FullQual, Cannonical]] = {}
         self.examples = {}
         self.docs = {}
-        self._doctree: Dict[str, str] = {}
+        self._doctree: dict[str, str] = {}
 
     def get_example_data(
         self, example_section, *, obj: Any, qa: str, config: Config, log: logging.Logger
-    ) -> Tuple[Section, List[Any]]:
+    ) -> tuple[Section, list[Any]]:
         """Extract example section data from a NumpyDocString
 
         One of the section in numpydoc is "examples" that usually consist of number
@@ -1464,7 +1456,7 @@ class Gen:
                 try:
                     data = ts.parse(p.read_bytes(), p)
                 except Exception as e:
-                    raise type(e)(f"{p=}")
+                    raise type(e)(f"{p=}") from e
                 blob = GeneratedDoc.new()
                 key = ":".join(parts)[:-4]
                 try:
@@ -1567,7 +1559,7 @@ class Gen:
         """
         for k, v in ndoc._parsed_data.items():
             blob.content[k] = v
-        for k, v in blob.content.items():
+        for _k, v in blob.content.items():
             assert isinstance(v, (str, list, dict)), type(v)
         return blob
 
@@ -1577,7 +1569,7 @@ class Gen:
         for GeneratedDoc.
         """
         # will not work for dev install. Maybe an option to set the root location ?
-        item_file: Optional[str] = find_file(target_item)
+        item_file: str | None = find_file(target_item)
         if item_file is not None and item_file.endswith("<string>"):
             # dynamically generated object (like dataclass __eq__ method
             item_file = None
@@ -1653,9 +1645,9 @@ class Gen:
         *,
         qa: str,
         config: Config,
-        aliases: List[str],
+        aliases: list[str],
         api_object: APIObjectInfo,
-    ) -> Tuple[GeneratedDoc, List]:
+    ) -> tuple[GeneratedDoc, list]:
         """
         Get documentation information for one python object
 
@@ -1830,7 +1822,7 @@ class Gen:
                     try:
                         items = parse_rst_section("\n".join(desc), qa)
                     except Exception as e:
-                        raise type(e)(f"from {qa}")
+                        raise type(e)(f"from {qa}") from e
                     for l in items:
                         assert not isinstance(l, Section)
                 new_content.append(Param(param, type_, desc=items).validate())
@@ -1890,7 +1882,7 @@ class Gen:
                             if config.exec_failure == "fallback":
                                 self.log.exception("%s failed %s", example, type(e))
                             else:
-                                raise type(e)(f"Within {example}")
+                                raise type(e)(f"Within {example}") from e
                 entries_p = parse_script(
                     script,
                     ns={},
@@ -1898,7 +1890,7 @@ class Gen:
                     config=config,
                 )
 
-                entries: List[Any]
+                entries: list[Any]
                 if entries_p is None:
                     log.warning("Issue in %r", example)
                     entries = [("fail", "fail")]
@@ -1911,7 +1903,7 @@ class Gen:
                 assert set(len(x) for x in entries) == {3}
 
                 tok_entries = [GenToken(*x) for x in entries]
-                l: List[Any] = []  # get typechecker to shut up.
+                l: list[Any] = []  # get typechecker to shut up.
                 s = Section(
                     l
                     + [GenCode(tok_entries, "", ce_status)]  # ignore: type
@@ -1988,7 +1980,7 @@ class Gen:
 
     def extract_docstring(
         self, *, qa: str, target_item: Any
-    ) -> Tuple[Optional[str], List[Section], APIObjectInfo]:
+    ) -> tuple[str | None, list[Section], APIObjectInfo]:
         """
         Extract docstring from an object.
 
@@ -2025,7 +2017,7 @@ class Gen:
         elif isinstance(
             target_item, (FunctionType, builtin_function_or_method)
         ) or callable(target_item):
-            sig: Optional[ObjectSignature]
+            sig: ObjectSignature | None
             try:
                 sig = ObjectSignature(target_item)
             except (ValueError, TypeError):
@@ -2059,7 +2051,7 @@ class Gen:
             raise type(e)(f"from {qa}") from e
             sections = []
         except Exception as e:
-            raise type(e)(f"from {qa}")
+            raise type(e)(f"from {qa}") from e
 
         assert api_object is not None
         return item_docstring, sections, api_object
@@ -2089,7 +2081,7 @@ class Gen:
         self._meta.update({"logo": logo, "module": root, "version": self.version})
         self._meta.update(meta)
 
-    def collect_api_docs(self, root: str, limit_to: List[str]) -> None:
+    def collect_api_docs(self, root: str, limit_to: list[str]) -> None:
         """
         Crawl one module and stores resulting DocBundle in json files.
 
@@ -2110,7 +2102,7 @@ class Gen:
         """
 
         collector: DFSCollector = self._get_collector()
-        collected: Dict[str, Any] = collector.items()
+        collected: dict[str, Any] = collector.items()
 
         # collect all items we want to document.
         excluded = sorted(self.config.exclude)
@@ -2144,9 +2136,9 @@ class Gen:
             for k, v in collected.items():
                 self.log.info(f"    {k}:{v}")
 
-        aliases: Dict[FullQual, Cannonical]
+        aliases: dict[FullQual, Cannonical]
         aliases, not_found = collector.compute_aliases()
-        rev_aliases: Dict[Cannonical, FullQual] = {v: k for k, v in aliases.items()}
+        rev_aliases: dict[Cannonical, FullQual] = {v: k for k, v in aliases.items()}
 
         known_refs = frozenset(
             {
@@ -2160,7 +2152,7 @@ class Gen:
         # just nice display of progression.
         # taskp = p2.add_task(description="parsing", total=len(collected))
 
-        failure_collection: Dict[str, List[str]] = defaultdict(lambda: [])
+        failure_collection: dict[str, list[str]] = defaultdict(lambda: [])
         api_object: APIObjectInfo
         for qa, target_item in collected.items():
             self.log.debug("treating %r", qa)
@@ -2230,7 +2222,7 @@ class Gen:
             del api_object
             if c.errored:
                 continue
-            _local_refs: List[str] = []
+            _local_refs: list[str] = []
 
             sections_ = [
                 "Parameters",
@@ -2258,7 +2250,7 @@ class Gen:
             for lr1 in _local_refs:
                 assert isinstance(lr1, str)
             # lr: FrozenSet[str] = frozenset(flat(_local_refs))
-            lr: FrozenSet[str] = frozenset(_local_refs)
+            lr: frozenset[str] = frozenset(_local_refs)
             dv = GenVisitor(
                 qa,
                 known_refs,
@@ -2344,7 +2336,7 @@ def is_private(path):
     return any(p.startswith("_") and not p.startswith("__") for p in path.split("."))
 
 
-def find_cannonical(qa: str, aliases: List[str]):
+def find_cannonical(qa: str, aliases: list[str]):
     """
     Given the fully qualified name and a lit of aliases, try to find the canonical one.
 

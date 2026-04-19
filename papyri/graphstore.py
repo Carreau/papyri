@@ -2,7 +2,6 @@
 import logging
 import sqlite3
 from pathlib import Path as _Path
-from typing import List, Set
 
 import cbor2
 
@@ -247,7 +246,7 @@ class GraphStore:
         # we should match on more.
         return path.read_bytes()
 
-    def _get_backrefs(self, key: Key) -> Set[Key]:
+    def _get_backrefs(self, key: Key) -> set[Key]:
         cur = self.conn.cursor()
         backrows = list(
             cur.execute(
@@ -264,7 +263,7 @@ class GraphStore:
         sql_backrefs = {Key(*s[1:]) for s in backrows}
         return sql_backrefs
 
-    def get_forwardrefs(self, key: Key) -> Set[Key]:
+    def get_forwardrefs(self, key: Key) -> set[Key]:
         cur = self.conn.cursor()
         forward_rows = list(
             cur.execute(
@@ -287,7 +286,7 @@ class GraphStore:
         c = self.get_forwardrefs(key)
         return (a, b, c)
 
-    def get_backref(self, key: Key) -> Set[Key]:
+    def get_backref(self, key: Key) -> set[Key]:
         return self._get_backrefs(key)
 
     def get(self, key: Key) -> bytes:
@@ -408,7 +407,7 @@ class GraphStore:
             c3.executemany("insert or ignore into links values (NULL, ?,?,?)", params)
             c3.executemany("delete from links where source=? and dest=? ", to_del)
 
-    def glob(self, pattern) -> List[Key]:
+    def glob(self, pattern) -> list[Key]:
         acc = ""
         for p in pattern:
             if p is None:
@@ -423,5 +422,5 @@ class GraphStore:
                 if not p.name.endswith(".br")
             ]  # !!
         except Exception as e:
-            raise type(e)("Acc:" + acc, pattern)
+            raise type(e)("Acc:" + acc, pattern) from e
         return res

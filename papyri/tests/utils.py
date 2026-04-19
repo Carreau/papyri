@@ -1,8 +1,9 @@
-from pathlib import Path
 import json
+import sys
+from pathlib import Path
+
 from papyri.tree import GenVisitor
 from papyri.ts import parse
-import sys
 
 HERE = Path(__file__).parent
 CORP = HERE / "corpus"

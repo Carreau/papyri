@@ -59,14 +59,13 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, TypeAlias
 
 import cbor2
 
-from .common_ast import Node, REV_TAG_MAP, UnserializableNode, register
-from .miniserde import get_type_hints
-
 from . import signature  # noqa: F401 -- referenced in Root's forward-string annotation
+from .common_ast import REV_TAG_MAP, Node, UnserializableNode, register
+from .miniserde import get_type_hints
 from .utils import dedent_but_first
 
 register(tuple)(4444)
@@ -75,8 +74,8 @@ register(tuple)(4444)
 @register(4003)
 class InlineRole(Node):
     value: str
-    domain: Optional[str]
-    role: Optional[str]
+    domain: str | None
+    role: str | None
 
     def __init__(self, value, domain, role):
         assert "\n" not in value, f"InlineRole should not contain newline {value}"
@@ -109,7 +108,7 @@ class InlineRole(Node):
         return f"<InlineRole {self.prefix}`{self.value}` `{self.to_dict()}`>"
 
     def __str__(self):
-        assert False
+        raise NotImplementedError
 
 
 @register(4002)
@@ -136,7 +135,7 @@ class XRef(Node):
     # `reference.kind`; see tree.py's toctree handler for an example where the
     # two diverge.
     kind: str
-    anchor: Optional[str] = None
+    anchor: str | None = None
 
     @property
     def exists(self) -> bool:
@@ -159,7 +158,7 @@ class Leaf(Node):
 @register(4027)
 class SubstitutionDef(Node):
     value: str
-    children: List[Union[Directive, UnprocessedDirective]]
+    children: list[Directive | UnprocessedDirective]
 
     def __init__(self, value, children):
         self.value = value
@@ -209,19 +208,19 @@ class Text(Node):
 @register(4047)
 class Emphasis(Node):
     type = "emphasis"
-    children: List["PhrasingContent"]
+    children: list[PhrasingContent]
 
 
 @register(4048)
 class Strong(Node):
     type = "strong"
-    children: List["PhrasingContent"]
+    children: list[PhrasingContent]
 
 
 @register(4049)
 class Link(Node):
     type = "link"
-    children: List["StaticPhrasingContent"]
+    children: list[StaticPhrasingContent]
     url: str
     title: str
 
@@ -245,7 +244,7 @@ class InlineCode(Node):
 @register(4045)
 class Paragraph(Node):
     type = "paragraph"
-    children: List[Union["PhrasingContent", "UnimplementedInline"]]
+    children: list[PhrasingContent | UnimplementedInline]
 
 
 @register(4053)
@@ -254,31 +253,24 @@ class BulletList(Node):
     ordered: bool
     start: int
     spread: bool
-    children: List["ListContent"]
+    children: list[ListContent]
 
 
 @register(4054)
 class ListItem(Node):
     type = "listItem"
     spread: bool
-    children: List[
-        Union[
-            "FlowContent",
-            "PhrasingContent",
-            "DefList",
-            "UnprocessedDirective",
-        ]
-    ]
+    children: list[FlowContent | PhrasingContent | DefList | UnprocessedDirective]
 
 
 @register(4052)
 class Directive(Node):
     type = "directive"
     name: str
-    args: Optional[str]
-    options: Dict[str, str]
-    value: Optional[str]
-    children: List[Union["FlowContent", "PhrasingContent", None]] = []
+    args: str | None
+    options: dict[str, str]
+    value: str | None
+    children: list[FlowContent | PhrasingContent | None] = []
 
     @classmethod
     def from_unprocessed(cls, up):
@@ -292,30 +284,23 @@ class UnprocessedDirective(UnserializableNode):
     """
 
     name: str
-    args: Optional[str]
-    options: Dict[str, str]
-    value: Optional[str]
-    children: List[Union["FlowContent", "PhrasingContent", None]]
+    args: str | None
+    options: dict[str, str]
+    value: str | None
+    children: list[FlowContent | PhrasingContent | None]
     raw: str
 
 
 @register(4055)
 class AdmonitionTitle(Node):
     type = "admonitionTitle"
-    children: List[Union["PhrasingContent", None]] = []
+    children: list[PhrasingContent | None] = []
 
 
 @register(4056)
 class Admonition(Node):
     type = "admonition"
-    children: List[
-        Union[
-            "FlowContent",
-            "AdmonitionTitle",
-            "Unimplemented",
-            "DefList",
-        ]
-    ] = []
+    children: list[FlowContent | AdmonitionTitle | Unimplemented | DefList] = []
     kind: str = "note"
 
 
@@ -340,7 +325,7 @@ class InlineMath(Node):
 @register(4059)
 class Blockquote(Node):
     type = "blockquote"
-    children: List["FlowContent"] = []
+    children: list[FlowContent] = []
 
 
 @register(4061)
@@ -365,27 +350,25 @@ class ThematicBreak(Node):
 class Heading(Node):
     type = "heading"
     depth: int
-    children: List["PhrasingContent"]
+    children: list[PhrasingContent]
 
 
 @register(4001)
 class Root(Node):
     type = "root"
-    children: List[
-        Union[
-            "FlowContent",
-            "Parameters",
-            "Unimplemented",
-            "SubstitutionDef",
-            "signature.SignatureNode",
-            Image,
-        ]
+    children: list[
+        FlowContent
+        | Parameters
+        | Unimplemented
+        | SubstitutionDef
+        | signature.SignatureNode
+        | Image
     ]
 
 
 @register(4017)
 class UnimplementedInline(Node):
-    children: List[Union[Text]]
+    children: list[Text]
 
     def __repr__(self):
         return f"<UnimplementedInline {self.children}>"
@@ -428,8 +411,8 @@ class RefInfo(Node):
 
     """
 
-    module: Optional[str]
-    version: Optional[str]
+    module: str | None
+    version: str | None
     kind: str
     path: str
 
@@ -449,13 +432,13 @@ class RefInfo(Node):
 
 @register(4012)
 class NumpydocExample(Node):
-    value: List[str]
+    value: list[str]
     title = "Examples"
 
 
 @register(4013)
 class NumpydocSeeAlso(Node):
-    value: List[SeeAlsoItem]
+    value: list[SeeAlsoItem]
     title = "See Also"
 
 
@@ -467,36 +450,33 @@ class NumpydocSignature(Node):
 
 @register(4015)
 class Section(Node):
-    children: List[
-        Union[
-            # Code,
-            DefList,
-            FieldList,
-            Fig,
-            Admonition,
-            Blockquote,
-            Code,
-            Comment,
-            BulletList,
-            Math,
-            Directive,
-            UnprocessedDirective,
-            Paragraph,
-            Target,
-            Text,
-            ThematicBreak,
-            Options,
-            Parameters,
-            SubstitutionDef,
-            SubstitutionRef,
-            Unimplemented,
-            UnimplementedInline,
-        ]
+    children: list[
+        DefList
+        | FieldList
+        | Fig
+        | Admonition
+        | Blockquote
+        | Code
+        | Comment
+        | BulletList
+        | Math
+        | Directive
+        | UnprocessedDirective
+        | Paragraph
+        | Target
+        | Text
+        | ThematicBreak
+        | Options
+        | Parameters
+        | SubstitutionDef
+        | SubstitutionRef
+        | Unimplemented
+        | UnimplementedInline
     ]
     # might need to be more complicated like verbatim.
-    title: Optional[str]
+    title: str | None
     level: int = 0
-    target: Optional[str] = None
+    target: str | None = None
 
     def __eq__(self, other):
         return super().__eq__(other)
@@ -528,7 +508,7 @@ class Section(Node):
 
 @register(4026)
 class Parameters(Node):
-    children: List[Param]
+    children: list[Param]
 
     def validate(self):
         assert len(self.children) > 0
@@ -539,22 +519,19 @@ class Parameters(Node):
 class Param(Node):
     param: str
     type_: str
-    desc: List[
-        Union[
-            # Code,
-            Fig,
-            DefListItem,
-            DefList,
-            Directive,
-            UnprocessedDirective,
-            Math,
-            Admonition,
-            Blockquote,
-            BulletList,
-            Paragraph,
-            Code,
-            SubstitutionDef,
-        ]
+    desc: list[
+        Fig
+        | DefListItem
+        | DefList
+        | Directive
+        | UnprocessedDirective
+        | Math
+        | Admonition
+        | Blockquote
+        | BulletList
+        | Paragraph
+        | Code
+        | SubstitutionDef
     ]
 
     @property
@@ -576,7 +553,7 @@ class Param(Node):
 
 class GenToken(UnserializableNode):
     value: str
-    qa: Optional[str]
+    qa: str | None
     pygmentclass: str
 
 
@@ -589,7 +566,7 @@ class GenCode(UnserializableNode):
     an in-memory intermediate; serialization is asserted-unreachable.
     """
 
-    entries: List[GenToken]
+    entries: list[GenToken]
     out: str
     ce_status: str
 
@@ -607,7 +584,7 @@ class GenCode(UnserializableNode):
         return f"<{self.__class__.__name__}: {self.entries=} {self.out=} {self.ce_status=}>"
 
 
-def compress_word(stream) -> List[Any]:
+def compress_word(stream) -> list[Any]:
     acc = []
     wds = ""
     assert isinstance(stream, list), stream
@@ -640,7 +617,7 @@ inline_nodes = tuple(
 
 @register(4021)
 class TocTree(Node):
-    children: List[TocTree]
+    children: list[TocTree]
     title: str
     ref: RefInfo
     open: bool = False
@@ -649,30 +626,18 @@ class TocTree(Node):
 
 @register(4034)
 class Options(Node):
-    values: List[str]
+    values: list[str]
 
 
 @register(4035)
 class FieldList(Node):
-    children: List[FieldListItem]
+    children: list[FieldListItem]
 
 
 @register(4036)
 class FieldListItem(Node):
-    name: List[
-        Union[
-            Text,
-            Code,
-        ]
-    ]
-    body: List[
-        Union[
-            Directive,
-            Text,
-            Paragraph,
-            Code,
-        ]
-    ]
+    name: list[Text | Code]
+    body: list[Directive | Text | Paragraph | Code]
 
     def validate(self):
         for p in self.body:
@@ -694,34 +659,29 @@ class FieldListItem(Node):
 
 @register(4033)
 class DefList(Node):
-    children: List[DefListItem]
+    children: list[DefListItem]
 
 
 @register(4037)
 class DefListItem(Node):
-    dt: Union[
-        Paragraph,
-        Text,
-        Link,
-        UnimplementedInline,
-    ]  # TODO: this is technically incorrect and should
+    dt: (
+        Paragraph | Text | Link | UnimplementedInline
+    )  # TODO: this is technically incorrect and should
     # be a single term, (word, directive or link is my guess).
-    dd: List[
-        Union[
-            Paragraph,
-            Code,
-            BulletList,
-            Blockquote,
-            DefList,
-            Directive,
-            UnprocessedDirective,
-            Unimplemented,
-            UnimplementedInline,
-            Admonition,
-            Math,
-            FieldList,
-            Optional[TocTree],  # remove this, that should not be the case ?
-        ]
+    dd: list[
+        Paragraph
+        | Code
+        | BulletList
+        | Blockquote
+        | DefList
+        | Directive
+        | UnprocessedDirective
+        | Unimplemented
+        | UnimplementedInline
+        | Admonition
+        | Math
+        | FieldList
+        | (TocTree | None)
     ]
 
     @property
@@ -739,9 +699,9 @@ class SeeAlsoItem(Node):
     name: XRef
 
     # TODO: check why we have a Union here, and if we have only Paragraphs, remove the union.
-    descriptions: List[Union[Paragraph]]
+    descriptions: list[Paragraph]
     # there are a few case when the lhs is `:func:something`... in scipy.
-    type: Optional[str]
+    type: str | None
 
     @property
     def children(self):
@@ -793,42 +753,31 @@ def parse_rst_section(text, qa):
 
 # ---- Union type aliases -----------------------------------------------------
 
-StaticPhrasingContent = Union[
-    Text,
-    InlineCode,
-    InlineMath,
-    InlineRole,
-    XRef,
-    SubstitutionRef,
-    Unimplemented,
-]
+StaticPhrasingContent: TypeAlias = (
+    Text | InlineCode | InlineMath | InlineRole | XRef | SubstitutionRef | Unimplemented
+)
 
-PhrasingContent = Union[
-    StaticPhrasingContent,
-    Emphasis,
-    Strong,
-    Link,
-]
+PhrasingContent: TypeAlias = StaticPhrasingContent | Emphasis | Strong | Link
 
-FlowContent = Union[
-    Code,
-    Paragraph,
-    "UnprocessedDirective",
-    Heading,
-    ThematicBreak,
-    Blockquote,
-    BulletList,
-    Target,
-    Directive,
-    Admonition,
-    Math,
-    "DefList",
-    "DefListItem",
-    "FieldList",
-    Comment,
-]
+FlowContent: TypeAlias = (
+    Code
+    | Paragraph
+    | UnprocessedDirective
+    | Heading
+    | ThematicBreak
+    | Blockquote
+    | BulletList
+    | Target
+    | Directive
+    | Admonition
+    | Math
+    | DefList
+    | DefListItem
+    | FieldList
+    | Comment
+)
 
-ListContent = Union[ListItem,]
+ListContent: TypeAlias = ListItem
 
 
 class Encoder:
@@ -845,7 +794,7 @@ class Encoder:
         type_ = self._type_from_tag(tag)
 
         tt = get_type_hints(type_)
-        kwds = {k: t for k, t in zip(tt, tag.value)}
+        kwds = {k: t for k, t in zip(tt, tag.value, strict=False)}
         return type_(**kwds)
 
     def decode(self, bytes):

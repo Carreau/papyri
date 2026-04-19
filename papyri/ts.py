@@ -1,45 +1,42 @@
-import logging
 import itertools
+import logging
 from textwrap import dedent, indent
-from typing import List, Any, Dict
+from typing import Any
 
-
-from .nodes import (
-    Text,
-    Code,
-    Paragraph,
-    Emphasis,
-    InlineCode,
-    Strong,
-    BulletList,
-    ListItem,
-    UnprocessedDirective,
-    Comment,
-    Blockquote,
-    DefList,
-    DefListItem,
-    InlineRole,
-    FieldList,
-    FieldListItem,
-    Options,
-    Section,
-    SubstitutionDef,
-    SubstitutionRef,
-    ThematicBreak,
-    Unimplemented,
-    compress_word,
-    inline_nodes,
-)
+import tree_sitter_rst
+from tree_sitter import Language, Parser
 
 from . import errors
 from .errors import (
     VisitCitationReferenceNotImplementedError,
     # VisitSubstitutionDefinitionNotImplementedError,
 )
-
-
-import tree_sitter_rst
-from tree_sitter import Language, Parser
+from .nodes import (
+    Blockquote,
+    BulletList,
+    Code,
+    Comment,
+    DefList,
+    DefListItem,
+    Emphasis,
+    FieldList,
+    FieldListItem,
+    InlineCode,
+    InlineRole,
+    ListItem,
+    Options,
+    Paragraph,
+    Section,
+    Strong,
+    SubstitutionDef,
+    SubstitutionRef,
+    Text,
+    ThematicBreak,
+    Unimplemented,
+    UnprocessedDirective,
+    compress_word,
+    inline_nodes,
+)
 
 parser = Parser(Language(tree_sitter_rst.language()))
 allowed_adorn = "=-`:.'\"~^_*+#<>"
@@ -178,8 +175,8 @@ class TSVisitor:
 
     _bytes: bytes
     _qa: str
-    _section_levels: Dict[str, int]
-    _targets: List[str]
+    _section_levels: dict[str, int]
+    _targets: list[str]
 
     def __init__(self, buf: bytes, qa: str, /):
         """
@@ -211,7 +208,7 @@ class TSVisitor:
         res = [x for x in items if not isinstance(x, Whitespace)]
         return res
 
-    def _compressor(self, nodes) -> List[Any]:
+    def _compressor(self, nodes) -> list[Any]:
         """
         This is currently a workaround of a tree-sitter limitations.
         List cannot have blank lines between them, so we end up with
@@ -350,7 +347,7 @@ class TSVisitor:
             role = None
             role_value = None
         else:
-            assert False
+            raise AssertionError
         if role_value:
             assert ":" not in role_value
         text_value = self.as_text(text)
@@ -508,15 +505,15 @@ class TSVisitor:
         # TODO
         return [SubstitutionRef(self.as_text(node))]
 
-    def visit_doctest_block(self, node) -> List[Code]:
+    def visit_doctest_block(self, node) -> list[Code]:
         # TODO
         return self.visit_literal_block(node)
 
     def visit_field(self, node):
         return []
 
-    def visit_field_list(self, node) -> List[FieldList]:
-        acc: List[str] = []
+    def visit_field_list(self, node) -> list[FieldList]:
+        acc: list[str] = []
 
         lens = {len(f.children) for f in node.children}
         if lens == {3}:  # need test here don't know why it was here.
@@ -531,7 +528,7 @@ class TSVisitor:
             return []
             # TODO: why do we have unreachable here
             return [Options(acc)]
-        acc2: List[FieldListItem] = []
+        acc2: list[FieldListItem] = []
         if lens == {4}:
             for list_item in node.children:
                 assert list_item.type == "field"
@@ -623,7 +620,7 @@ class TSVisitor:
             elif tuple(kinds) == ("..", "type", "::", "body"):
                 _1, _role, _2, body = node.children
             else:
-                assert False
+                raise AssertionError
             assert body.type == "body"
             assert _role.type == "type"
             body_children = body.children
@@ -695,7 +692,7 @@ class TSVisitor:
                         _c1, name, _c2 = field.children
                         options.append((self.as_text(name), ""))
                     else:
-                        assert False
+                        raise AssertionError
             else:
                 options = []
 
@@ -795,12 +792,11 @@ class TSVisitor:
             else:
                 # TODO
                 return []
-                assert False, list_item.children
 
         return [DefList(acc)]
 
 
-def nest_sections(items) -> List[Section]:
+def nest_sections(items) -> list[Section]:
     if not items:
         return []
     acc = []
@@ -814,7 +810,7 @@ def nest_sections(items) -> List[Section]:
     return acc
 
 
-def parse(text: bytes, qa=None) -> List[Section]:
+def parse(text: bytes, qa=None) -> list[Section]:
     """
     Parse text using Tree sitter RST, and return a list of serialised section I guess ?
     """

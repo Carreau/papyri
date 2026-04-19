@@ -64,11 +64,24 @@ either 2 Authors or 2 Reviewers.
 
 """
 
+import types
 from functools import lru_cache
 from typing import Union
 from typing import get_type_hints as gth
 
 base_types = {int, str, bool, type(None)}
+
+
+def _is_union(annotation) -> bool:
+    """Return True for both typing.Union[...] and X | Y (types.UnionType)."""
+    return (
+        isinstance(annotation, types.UnionType)
+        or getattr(annotation, "__origin__", None) is Union
+    )
+
+
+def _union_args(annotation) -> tuple:
+    return annotation.__args__
 
 
 @lru_cache(150)
@@ -100,11 +113,10 @@ def serialize(instance, annotation):
             # assert key_annotation == str, key_annotation
             return {k: serialize(v, value_annotation) for k, v in instance.items()}
 
-        elif getattr(annotation, "__origin__", None) is Union:
-            inner_annotation = annotation.__args__
+        elif _is_union(annotation):
+            inner_annotation = _union_args(annotation)
             if len(inner_annotation) == 2 and inner_annotation[1] == type(None):
-                # assert inner_annotation[0] is not None
-                # here we are optional; we _likely_ can avoid doing the union trick and store just the type, or null
+                # here we are optional; store just the type, or null
                 if instance is None:
                     return None
                 else:
@@ -130,11 +142,13 @@ def serialize(instance, annotation):
                     data[k] = serialize(getattr(instance, k), v)
                 except Exception as e:
                     exception_already_desribed = True
-                    raise type(e)(f"Error serializing field {k!r} of {instance!r}")
+                    raise type(e)(
+                        f"Error serializing field {k!r} of {instance!r}"
+                    ) from e
             return data
 
         else:
-            assert False, (
+            raise AssertionError(
                 f"Error serializing {instance!r}\n, of type {type(instance)!r} "
                 f"expected  {annotation}, got {type(instance)}"
             )
@@ -169,70 +183,56 @@ def deserialize(type_, annotation, data):
         orig = getattr(annotation, "__origin__", None)
         if data is None:
             return None
-        if orig:
-            if orig is tuple:
-                # assert isinstance(data, list)
-                inner_annotation = annotation.__args__
-                # assert len(inner_annotation) == 1, inner_annotation
-                return tuple(
-                    deserialize(inner_annotation[0], inner_annotation[0], x)
-                    for x in data
-                )
-            elif orig is list:
-                # assert isinstance(data, list)
-                inner_annotation = annotation.__args__
-                # assert len(inner_annotation) == 1, inner_annotation
-                return [
-                    deserialize(inner_annotation[0], inner_annotation[0], x)
-                    for x in data
-                ]
-            elif orig is dict:
-                # assert isinstance(data, dict)
-                _, value_annotation = annotation.__args__
-                return {
-                    k: deserialize(value_annotation, value_annotation, x)
-                    for k, x in data.items()
-                }
-            elif orig is Union:
-                inner_annotation = annotation.__args__
-                if len(inner_annotation) == 2 and inner_annotation[1] == type(None):
-                    # assert inner_annotation[0] is not None
-                    if data is None:
-                        return None
-                    else:
-                        return deserialize(
-                            inner_annotation[0], inner_annotation[0], data
-                        )
-                real_type = [t for t in inner_annotation if t.__name__ == data["type"]]
-                if len(real_type) == 0:
-                    # Some node classes carry a `type` attribute holding a
-                    # lowercase/camelCase string (e.g. "text", "inlineCode")
-                    # while the class name is CapitalCase. Match on either.
-                    candidate = f"{data['type'][0].upper()}{data['type'][1:]}"
-                    real_type = [
-                        t
-                        for t in inner_annotation
-                        if (t.__name__ == candidate)
-                        or (getattr(t, "type", None) == data["type"])
-                    ]
-                # assert len(real_type) == 1, real_type
-                try:
-                    assert len(real_type) == 1, real_type
-                    real_type = real_type[0]
-                except (IndexError, AssertionError) as e:
-                    e.add_note(
-                        f"""Index error as filters annotations are wrong {data['type']=},
-                        accepted:{inner_annotation}
-                        `t.type`?={[getattr(t, "type", None) for t in inner_annotation]}"""
-                    )
-                    raise
-                if data.get("data", _sentinel) is not _sentinel:
-                    data_ = data["data"]
+        if _is_union(annotation):
+            inner_annotation = _union_args(annotation)
+            if len(inner_annotation) == 2 and inner_annotation[1] == type(None):
+                if data is None:
+                    return None
                 else:
-                    data_ = {k: v for k, v in data.items() if k != "type"}
-                return deserialize(real_type, real_type, data_)
+                    return deserialize(inner_annotation[0], inner_annotation[0], data)
+            real_type = [t for t in inner_annotation if t.__name__ == data["type"]]
+            if len(real_type) == 0:
+                # Some node classes carry a `type` attribute holding a
+                # lowercase/camelCase string (e.g. "text", "inlineCode")
+                # while the class name is CapitalCase. Match on either.
+                candidate = f"{data['type'][0].upper()}{data['type'][1:]}"
+                real_type = [
+                    t
+                    for t in inner_annotation
+                    if (t.__name__ == candidate)
+                    or (getattr(t, "type", None) == data["type"])
+                ]
+            try:
+                assert len(real_type) == 1, real_type
+                real_type = real_type[0]
+            except (IndexError, AssertionError) as e:
+                e.add_note(
+                    f"""Index error as filters annotations are wrong {data['type']=},
+                    accepted:{inner_annotation}
+                    `t.type`?={[getattr(t, "type", None) for t in inner_annotation]}"""
+                )
+                raise
+            if data.get("data", _sentinel) is not _sentinel:
+                data_ = data["data"]
             else:
-                assert False
+                data_ = {k: v for k, v in data.items() if k != "type"}
+            return deserialize(real_type, real_type, data_)
+        if orig is tuple:
+            inner_annotation = annotation.__args__
+            return tuple(
+                deserialize(inner_annotation[0], inner_annotation[0], x) for x in data
+            )
+        elif orig is list:
+            inner_annotation = annotation.__args__
+            return [
+                deserialize(inner_annotation[0], inner_annotation[0], x) for x in data
+            ]
+        elif orig is dict:
+            _, value_annotation = annotation.__args__
+            return {
+                k: deserialize(value_annotation, value_annotation, x)
+                for k, x in data.items()
+            }
         elif (type(annotation) is type) and annotation.__module__ not in (
             "builtins",
             "typing",
@@ -253,7 +253,7 @@ def deserialize(type_, annotation, data):
                 return annotation(**loc)
 
         else:
-            assert False, f"{annotation!r}, {data}"
+            raise AssertionError(f"{annotation!r}, {data}")
     except Exception as e:
         e.add_note(f"Deserializing {type_}, {annotation}")
         raise

@@ -1,14 +1,11 @@
 import inspect
-import re
-
-from dataclasses import dataclass
-from typing import List, Any, Dict, Union
-from .common_ast import Node
-from .errors import TextSignatureParsingFailed
-
-from .common_ast import register
-
 import json
+import re
+from dataclasses import dataclass
+from typing import Any
+
+from .common_ast import Node, register
+from .errors import TextSignatureParsingFailed
 
 
 @register(4031)
@@ -26,9 +23,9 @@ NoneType = type(None)
 class ParameterNode(Node):
     name: str
     # we likely want to make sure annotation is a structured object in the long run
-    annotation: Union[str, NoneType, Empty]
+    annotation: str | NoneType | Empty
     kind: str
-    default: Union[str, NoneType, Empty]
+    default: str | NoneType | Empty
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -49,8 +46,8 @@ class ParameterNode(Node):
 @register(4029)
 class SignatureNode(Node):
     kind: str  # maybe enum, is it a function, async generator, generator, etc.
-    parameters: List[ParameterNode]  # of pairs, we don't use dict because of ordering
-    return_annotation: Union[Empty, str]
+    parameters: list[ParameterNode]  # of pairs, we don't use dict because of ordering
+    return_annotation: Empty | str
     target_name: str
     type = "signature"
 
@@ -74,7 +71,7 @@ class Signature:
         Of course this is slightly incorrect as all the isgerator and CO are going to wrong
 
         """
-        glob: Dict[str, Any] = {}
+        glob: dict[str, Any] = {}
         oname = sig.split("(")[0]
         toexec = f"def {sig}:pass"
         try:
@@ -119,7 +116,7 @@ class Signature:
 
         parameters = []
         for param in self.parameters.values():
-            annotation: Union[Empty, str]
+            annotation: Empty | str
             if param.annotation is inspect._empty:
                 annotation = _empty
             elif isinstance(param.annotation, str):
@@ -177,7 +174,7 @@ class Signature:
         return self.target_item.__annotations__
 
     @property
-    def return_annotation(self) -> Union[Empty, str]:
+    def return_annotation(self) -> Empty | str:
         return_annotation = self._sig.return_annotation
         return (
             _empty

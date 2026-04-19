@@ -2,9 +2,10 @@
 Various directive handlers.
 """
 
-from .ts import parse
-from .nodes import Math, Admonition, AdmonitionTitle, Text, Section
 import logging
+
+from .nodes import Admonition, AdmonitionTitle, Math, Section, Text
+from .ts import parse
 
 log = logging.getLogger("papyri")
 

@@ -12,7 +12,8 @@
     "astro": "astro",
     "check": "astro check",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "fetch-inventories": "node scripts/fetch-inventories.mjs"
   },
   "dependencies": {
     "@astrojs/react": "^4.2.0",

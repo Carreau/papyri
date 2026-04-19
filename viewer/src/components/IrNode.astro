@@ -16,6 +16,8 @@ import { highlight } from "../lib/highlight.ts";
 export interface XRefResolution {
   url: string;
   label: string;
+  /** True when the URL points to an external docs site (intersphinx). */
+  external?: boolean;
 }
 
 type Resolver = (node: unknown) => XRefResolution | null;
@@ -135,7 +137,17 @@ const codeHtml =
     </Fragment>
   ) : type === "XRef" ? (
     xrefResolved ? (
-      <a class="xref" href={xrefResolved.url}>{xrefResolved.label}</a>
+      xrefResolved.external ? (
+        <a
+          class="xref external"
+          href={xrefResolved.url}
+          rel="external noopener"
+        >
+          {xrefResolved.label}
+        </a>
+      ) : (
+        <a class="xref" href={xrefResolved.url}>{xrefResolved.label}</a>
+      )
     ) : (
       <span class="xref unresolved">{(node as any).value}</span>
     )

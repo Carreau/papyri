@@ -1,0 +1,20 @@
+{
+  "_readme": "Minimal subset of the intersphinx_registry PyPI package, keyed by Python module name. Each entry is the documentation base URL; the Sphinx inventory is expected at `<url>objects.inv`. Used by viewer/src/lib/inventory.ts to emit outbound links for unresolved cross-references. To refresh from upstream, run `pnpm --dir viewer fetch-inventories`.",
+  "_source": "https://pypi.org/project/intersphinx-registry/",
+  "projects": {
+    "python": { "url": "https://docs.python.org/3/" },
+    "numpy": { "url": "https://numpy.org/doc/stable/" },
+    "scipy": { "url": "https://docs.scipy.org/doc/scipy/" },
+    "pandas": { "url": "https://pandas.pydata.org/docs/" },
+    "matplotlib": { "url": "https://matplotlib.org/stable/" },
+    "astropy": { "url": "https://docs.astropy.org/en/stable/" },
+    "IPython": { "url": "https://ipython.readthedocs.io/en/stable/" },
+    "dask": { "url": "https://docs.dask.org/en/stable/" },
+    "distributed": { "url": "https://distributed.dask.org/en/stable/" },
+    "networkx": { "url": "https://networkx.org/documentation/stable/" },
+    "skimage": { "url": "https://scikit-image.org/docs/stable/" },
+    "xarray": { "url": "https://docs.xarray.dev/en/stable/" },
+    "sklearn": { "url": "https://scikit-learn.org/stable/" },
+    "sympy": { "url": "https://docs.sympy.org/latest/" }
+  }
+}

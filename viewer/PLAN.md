@@ -171,6 +171,25 @@ Data flow per request/page:
   M3. Treated as a `Section`, rendered between regular sections and
   aliases/backrefs.
 
+### Intersphinx outbound links
+
+- `src/lib/inventory.ts` parses Sphinx `objects.inv` v2 files and resolves
+  otherwise-unresolved `XRef` nodes to external documentation sites. The
+  registry of known projects is vendored at
+  `src/data/intersphinx-registry.json` (a trimmed mirror of the
+  `intersphinx_registry` PyPI package, keyed by Python module name).
+- Inventory files themselves are not vendored. Run `pnpm fetch-inventories`
+  to populate the cache (defaults to `~/.papyri/inventories/`, overridable
+  via `PAPYRI_INVENTORY_DIR`). A missing/empty cache is a no-op: unresolved
+  refs keep rendering as plain text.
+- The fallback is wired into `resolveXref` in `src/pages/[pkg]/[ver]/[...slug].astro`
+  after the local graph resolver fails. External links render with
+  `class="xref external"` and a trailing arrow glyph; the component lives in
+  `src/components/IrNode.astro`.
+- This is Phase A of the intersphinx interop plan. Phase B (producing an
+  `objects.inv` for papyri-rendered content so Sphinx sites can link **into**
+  papyri) is tracked separately on the Python side.
+
 ### M5 notes
 
 - **Dark mode.** Light is the default; writing `data-theme="dark"` on

@@ -173,6 +173,12 @@ a.xref {
   border-bottom: 1px dotted var(--accent);
 }
 a.xref:hover { border-bottom-style: solid; }
+a.xref.external::after {
+  content: "\2197";
+  margin-left: 0.1em;
+  font-size: 0.85em;
+  opacity: 0.7;
+}
 .xref.unresolved {
   color: var(--fg-muted);
   border-bottom: 1px dotted var(--fg-muted);

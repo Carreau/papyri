@@ -11,6 +11,7 @@ import {
   type ParameterNodeT,
 } from "../../../lib/ir-reader.ts";
 import { getBackrefs, resolveRef } from "../../../lib/graph.ts";
+import { resolveExternal } from "../../../lib/inventory.ts";
 import IrNode from "../../../components/IrNode.astro";
 import Head from "../../../components/Head.astro";
 import SiteHeader from "../../../components/SiteHeader.astro";
@@ -155,24 +156,45 @@ interface XRefShape {
   kind?: string;
 }
 
-function resolveXref(raw: unknown): { url: string; label: string } | null {
+function resolveXref(
+  raw: unknown,
+): { url: string; label: string; external?: boolean } | null {
   const n = raw as XRefShape | null;
   if (!n) return null;
   const label = n.value ?? "";
   const ref = n.reference;
-  if (!ref || !ref.module || !ref.path || !ref.kind) return null;
-  // Skip papyri's sentinel "unresolved" placeholder.
-  if (ref.module === "current-module" || ref.kind === "to-resolve") return null;
-  const resolved = resolveRef({
-    pkg: ref.module,
-    ver: ref.version ?? "?",
-    kind: ref.kind,
-    path: ref.path,
-  });
-  if (!resolved) return null;
-  const url = linkForRef(resolved);
-  if (!url) return null;
-  return { url, label };
+  if (!ref) return null;
+  // "to-resolve" and "missing" refs skip the local graph and go straight
+  // to intersphinx fallback below. Same for module==="current-module",
+  // which is papyri's within-module placeholder that only the Python side
+  // can expand.
+  const skipLocal =
+    !ref.module ||
+    !ref.path ||
+    !ref.kind ||
+    ref.module === "current-module" ||
+    ref.kind === "to-resolve" ||
+    ref.kind === "missing";
+  if (!skipLocal) {
+    const resolved = resolveRef({
+      pkg: ref.module!,
+      ver: ref.version ?? "?",
+      kind: ref.kind!,
+      path: ref.path!,
+    });
+    if (resolved) {
+      const url = linkForRef(resolved);
+      if (url) return { url, label };
+    }
+  }
+  // Outbound intersphinx fallback. Uses a RefInfo's `path` as the qualified
+  // name to look up and `module` as the project hint (derived from the path
+  // if module is null).
+  if (ref.path) {
+    const external = resolveExternal(ref.module ?? null, ref.path);
+    if (external) return { url: external.url, label, external: true };
+  }
+  return null;
 }
 
 // Backrefs for this document.

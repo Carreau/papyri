@@ -554,7 +554,7 @@ class DirectiveVisiter(TreeReplacer):
         self._tocs: Any = []
 
     def replace_GenCode(self, code):
-        """Here we'll return MySt Code."""
+        """Flatten a GenCode intermediate into a plain Code node."""
         code_ = "".join([entry.value for entry in code.entries])
         return [Code(code_)]
 
@@ -641,16 +641,6 @@ class DirectiveVisiter(TreeReplacer):
             log.debug("TODO: %s", directive.name)
 
         return [Directive.from_unprocessed(directive)]
-
-    def replace_MMystDirective(self, myst_directive: Directive):
-        meth = getattr(self, "_" + myst_directive.name + "_handler", None)
-        if meth:
-            assert False, "shod have gone vian unprocessed"
-        if myst_directive.name not in _MISSING_DIRECTIVES:
-            _MISSING_DIRECTIVES.append(myst_directive.name)
-            log.debug("TODO: %s", myst_directive.name)
-
-        return [myst_directive]
 
     def _resolve(self, loc, text):
         """
@@ -842,10 +832,3 @@ class IngestVisitor(DirectiveVisiter):
 
     def replace_BlockDirective(self, block_directive: Directive):
         assert False, "should be unreachable"
-
-    def replace_MMystDirective(self, myst_directive: Directive):
-        if myst_directive.name not in _MISSING_DIRECTIVES:
-            _MISSING_DIRECTIVES.append(myst_directive.name)
-            log.info("TODO: %r", myst_directive.name)
-
-        return [myst_directive]

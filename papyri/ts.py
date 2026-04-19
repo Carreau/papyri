@@ -183,7 +183,7 @@ class TSVisitor:
 
     def __init__(self, buf: bytes, qa: str, /):
         """
-        A tree-visitor for TreeSitter nodes to convert into Papyri/Myst nodes.
+        A tree-visitor for TreeSitter nodes to convert into Papyri nodes.
 
         Parameters
         ----------
@@ -413,7 +413,7 @@ class TSVisitor:
         return [b]
 
     def visit_bullet_list(self, node):
-        myst_acc = []
+        items = []
         for list_item in node.children:
             assert list_item.type == "list_item"
             assert len(list_item.children) == 2, list_item.children
@@ -421,8 +421,8 @@ class TSVisitor:
             # assert len(body.children) == 1
             # parg = body.children[0]
             # assert parg.type == "paragraph", parg.type
-            myst_acc.append(ListItem(False, self.visit(body)))
-        return [BulletList(ordered=False, start=1, spread=False, children=myst_acc)]
+            items.append(ListItem(False, self.visit(body)))
+        return [BulletList(ordered=False, start=1, spread=False, children=items)]
 
     def visit_section(self, node):
         if node.children[0].type == "adornment":
@@ -546,12 +546,12 @@ class TSVisitor:
         raise ValueError("mixed len...")
 
     def visit_enumerated_list(self, node):
-        myst_acc = []
+        items = []
         for list_item in node.children:
             assert list_item.type == "list_item"
             _bullet, body = list_item.children
-            myst_acc.append(ListItem(False, self.visit(body)))
-        return [BulletList(ordered=True, start=1, spread=False, children=myst_acc)]
+            items.append(ListItem(False, self.visit(body)))
+        return [BulletList(ordered=True, start=1, spread=False, children=items)]
 
     def visit_target(self, node):
         # TODO:

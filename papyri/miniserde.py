@@ -205,10 +205,9 @@ def deserialize(type_, annotation, data):
                         )
                 real_type = [t for t in inner_annotation if t.__name__ == data["type"]]
                 if len(real_type) == 0:
-                    # MyST-flavored classes carry a `type` attribute matching
-                    # the spec string (e.g. "text", "mystComment"). The class
-                    # names themselves are capitalized without a prefix since
-                    # the Phase 2 rename. Match on either.
+                    # Some node classes carry a `type` attribute holding a
+                    # lowercase/camelCase string (e.g. "text", "inlineCode")
+                    # while the class name is CapitalCase. Match on either.
                     candidate = f"{data['type'][0].upper()}{data['type'][1:]}"
                     real_type = [
                         t

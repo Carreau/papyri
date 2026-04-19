@@ -7,7 +7,7 @@ from typing import Dict, Any
 import cbor2
 
 from .miniserde import get_type_hints, deserialize
-from .myst_serialiser import serialize as myst_serialize
+from .node_serializer import serialize as _serialize
 
 
 class Base:
@@ -65,7 +65,7 @@ class Node(Base):
         return cls.from_dict(json.loads(data))
 
     def to_dict(self):
-        return myst_serialize(self, type(self))
+        return _serialize(self, type(self))
 
     @classmethod
     def from_dict(cls, data):

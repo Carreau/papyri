@@ -186,11 +186,13 @@ class Unimplemented(Node):
         return f"<Unimplemented {self.placeholder!r} {self.value!r}>"
 
 
-# ---- MyST-flavored AST nodes (formerly papyri/myst_ast.py) ------------------
+# ---- Document AST nodes -----------------------------------------------------
 #
-# Merged in to eliminate the circular import between take2 and myst_ast
-# (PLAN.md Phase 2). The "M" prefix remains for historical reasons and will
-# be dropped in the rename pass that follows.
+# Previously split into two modules; merged here to eliminate a circular
+# import (PLAN.md Phase 2). The node vocabulary is loosely mdast-inspired
+# for the inline/flow layer and RST/Sphinx-inspired for directives,
+# admonitions, and field lists. The IR is papyri-specific: no external
+# conformance target.
 
 
 @register(4046)
@@ -271,7 +273,7 @@ class ListItem(Node):
 
 @register(4052)
 class Directive(Node):
-    type = "mystDirective"
+    type = "directive"
     name: str
     args: Optional[str]
     options: Dict[str, str]
@@ -319,7 +321,7 @@ class Admonition(Node):
 
 @register(4060)
 class Comment(Node):
-    type = "mystComment"
+    type = "comment"
     value: str
 
 
@@ -343,7 +345,7 @@ class Blockquote(Node):
 
 @register(4061)
 class Target(Node):
-    type = "mystTarget"
+    type = "target"
     label: str
 
 
@@ -789,7 +791,7 @@ def parse_rst_section(text, qa):
     raise ValueError("Multiple sections present")
 
 
-# ---- Union type aliases (formerly in myst_ast.py) ---------------------------
+# ---- Union type aliases -----------------------------------------------------
 
 StaticPhrasingContent = Union[
     Text,

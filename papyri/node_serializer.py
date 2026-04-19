@@ -1,13 +1,13 @@
 """
-Unlike the current serializer (miniserde), that we use
-where enums/classes are externally tagged,
+Internally-tagged Node -> dict serializer.
 
-Myst Json spec (https://spec.myst.tools/spec/overview) is internally tagged.
+Unlike ``miniserde`` (which tags unions externally, i.e. wraps each value
+in ``{"type": ..., "data": ...}``), this serializer folds the tag into the
+value itself: every serialized Node dict carries a ``"type"`` key alongside
+its regular fields. The tag is either the class's ``type`` class-attribute
+(if set, e.g. ``"inlineCode"``) or the class name.
 
-Nodes also always carry a tag for the type, even if the container/parent can
-only store one type.
-
-This is a prototype of serializer that respect this layout.
+Used by ``Node.to_dict`` / ``Node.to_json``.
 """
 
 from typing import Union

@@ -26,5 +26,3 @@ curl -L -o 'papyri/static/extensions/MathZoom.js' https://cdnjs.cloudflare.com/a
 curl -L -o 'papyri/static/jax/input/TeX/config.js' https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/jax/input/TeX/config.js
 curl -L -o 'papyri/static/jax/output/HTML-CSS/config.js' https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/jax/output/HTML-CSS/config.js
 curl -L -o 'papyri/static/extensions/tex2jax.js' https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/extensions/tex2jax.js
-
-curl -o papyri/static/myst.js https://unpkg.com/mystjs@0.0.15/dist/myst.min.js

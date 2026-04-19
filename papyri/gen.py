@@ -1419,28 +1419,20 @@ class Gen:
         """
         Erase a doc bundle folder.
         """
-        for _, path in progress(
-            (where / "module").glob("*.json"),
-            description="cleaning previous bundle 1/3",
-        ):
-            path.unlink()
-        for _, path in progress(
-            (where / "assets").glob("*"), description="cleaning previous bundle 2/3"
-        ):
-            path.unlink()
-        for _, path in progress(
-            (where / "docs").glob("*"), description="cleaning previous bundle 3/3"
-        ):
-            path.unlink()
+        subdirs = ("module", "assets", "docs", "examples")
+        for i, sub in enumerate(subdirs, start=1):
+            for _, path in progress(
+                (where / sub).glob("*"),
+                description=f"cleaning previous bundle {i}/{len(subdirs)}",
+            ):
+                path.unlink()
 
-        if (where / "module").exists():
-            (where / "module").rmdir()
-        if (where / "assets").exists():
-            (where / "assets").rmdir()
-        if (where / "papyri.json").exists():
-            (where / "papyri.json").unlink()
-        if (where / "docs").exists():
-            (where / "docs").rmdir()
+        for sub in subdirs:
+            if (where / sub).exists():
+                (where / sub).rmdir()
+        for f in ("papyri.json", "toc.json"):
+            if (where / f).exists():
+                (where / f).unlink()
 
     def collect_narrative_docs(self):
         """

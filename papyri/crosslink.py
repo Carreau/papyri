@@ -18,10 +18,12 @@ from .graphstore import GraphStore, Key
 from .signature import SignatureNode
 from .nodes import (
     Param,
+    Paragraph,
     RefInfo,
     Fig,
     Section,
     SeeAlsoItem,
+    Text,
     encoder,
     TocTree,
 )
@@ -238,11 +240,54 @@ def load_one_uningested(
     return blob
 
 
+def _flatten_text(node: Any, out: List[str]) -> None:
+    if isinstance(node, Text):
+        out.append(node.value)
+        return
+    children = getattr(node, "children", None)
+    if children is None:
+        return
+    for child in children:
+        _flatten_text(child, out)
+
+
+def _first_paragraph_text(section: Section) -> Optional[str]:
+    """Return the plain-text content of the first Paragraph in ``section``.
+
+    Used to pull a bundle-level blurb out of the top-level module docstring's
+    Summary section without dragging the viewer through the full IR tree.
+    """
+    for child in section.children:
+        if isinstance(child, Paragraph):
+            parts: List[str] = []
+            _flatten_text(child, parts)
+            text = "".join(parts).strip()
+            if text:
+                return text
+    return None
+
+
 class Ingester:
     def __init__(self, dp):
         self.ingest_dir = ingest_dir
         self.gstore = GraphStore(self.ingest_dir)
         self.progress = dummy_progress if dp else progress
+
+    def _ingest_logo(
+        self, path: Path, root: str, version: str, logo_name: str, gstore: GraphStore
+    ) -> Optional[str]:
+        """Copy a gen bundle's logo asset into the ingest store's meta dir.
+
+        Returns the basename the viewer should fetch under
+        ``<pkg>/<ver>/meta/``, or ``None`` if the source asset is missing.
+        """
+        src = path / "assets" / logo_name
+        if not src.exists():
+            return None
+        ext = Path(logo_name).suffix
+        dest_name = f"logo{ext}" if ext else "logo"
+        gstore.put(Key(root, version, "meta", dest_name), src.read_bytes(), [])
+        return dest_name
 
     def _ingest_narrative(self, path, gstore: GraphStore) -> None:
         meta = json.loads((path / "papyri.json").read_text())
@@ -362,10 +407,15 @@ class Ingester:
         # rev_aliases = {Cannonical(v): FullQual(k) for k, v in aliases.items()}
         meta = {k: v for k, v in data.items() if k != "aliases"}
 
-        gstore.put_meta(root, version, encoder.encode(meta))
-
         self._ingest_examples(path, gstore, known_refs, aliases, version, root)
         self._ingest_assets(path, root, version, aliases, gstore)
+        # Copy the logo (if any) into <pkg>/<ver>/meta/logo.<ext> so the viewer
+        # can fetch it without sniffing the asset dir. ``meta["logo"]`` is
+        # rewritten to the stable basename under meta/ (viewers read from the
+        # ingest store, not the gen bundle).
+        gen_logo = meta.get("logo")
+        if isinstance(gen_logo, str) and gen_logo:
+            meta["logo"] = self._ingest_logo(path, root, version, gen_logo, gstore)
         try:
             self._ingest_narrative(path, gstore)
         except Exception as e:
@@ -439,6 +489,22 @@ class Ingester:
 
             except Exception as e:
                 raise RuntimeError(f"error writing to {path}") from e
+
+        # Populate a bundle summary from the top-level module's Summary
+        # section so the viewer's landing cards don't need to crack open every
+        # module blob. Keyed on the root module's qa (e.g. ``numpy``).
+        # We read ``_content`` directly rather than ``top.content`` because
+        # ``load_one_uningested`` reseats ``_content`` via ``setattr`` and
+        # leaves the ``_dp`` proxy wrapping the original empty dict.
+        top = nvisited_items.get(root)
+        if top is not None:
+            summary_section = top._content.get("Summary")
+            if summary_section is not None:
+                blurb = _first_paragraph_text(summary_section)
+                if blurb:
+                    meta["summary"] = blurb
+
+        gstore.put_meta(root, version, encoder.encode(meta))
 
     def relink(self) -> None:
         gstore = self.gstore

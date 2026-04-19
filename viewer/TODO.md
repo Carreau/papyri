@@ -1,0 +1,129 @@
+# Viewer redesign — TODO
+
+Scope: layout overhaul + card-based index + sidebar navigation covering
+narrative docs, tutorials, examples, and API. Driven entirely from the
+**ingest store** (`~/.papyri/ingest/`). The gen dir (`~/.papyri/data/`) is
+no longer a viewer input; anything the viewer needs at render time must be
+written by `papyri ingest`.
+
+Tracked against `viewer/PLAN.md`. When an item lands, tick it here and note
+any new constraint in `PLAN.md`.
+
+## Ground constraints
+
+- Viewer reads ingest only. `listBundles()` / `dataDir()` usage must go.
+  Landing page lists `listIngestedBundles()` exclusively.
+- No new Python runtime deps. Changes to `papyri` stay minimal and are
+  justified in their PR body.
+- Keep per-PR diffs small. Order below is the intended merge order.
+
+## 0. Python-side: ingest carries what the viewer needs
+
+Prereq for everything downstream. Land before the TS work starts.
+
+- [x] `crosslink.py` `Ingester._ingest_logo`: copies the gen bundle's
+      logo from `assets/` into `<ingestDir>/<pkg>/<ver>/meta/logo.<ext>`
+      and rewrites the ingested meta's `logo` field to that basename so
+      the viewer doesn't have to sniff extensions.
+- [x] Ingested meta now carries a `summary` field: plain-text first
+      paragraph of the top-level module docstring's `Summary` section,
+      extracted at ingest time from `IngestedDoc._content["Summary"]`.
+- [x] Confirmed: `meta/toc.cbor` (TocTree, tag 4021) is written by
+      `Ingester._ingest_narrative` for bundles that have a `toc.json`.
+- [x] Tutorials bucket documented as a filename convention in
+      `docs/IR.md` (files prefixed `tutorial_` or under `docs/tutorials/`).
+      No new IR field.
+
+## 1. TS: stop reading from gen
+
+Minimal-diff PR that precedes the layout work so follow-ups don't have to
+juggle two code paths.
+
+- [ ] Delete `listBundles`, `dataDir`, and the gen-bundle branch from
+      `src/pages/index.astro`. Landing page lists ingested bundles only.
+- [ ] Remove `dataDir` from `src/lib/paths.ts` (and its tests) once no
+      caller remains.
+- [ ] Drop the "gen only — run papyri ingest" row; an un-ingested bundle
+      simply doesn't appear.
+- [ ] Update `PLAN.md` Config section: no `PAPYRI_DATA_DIR`.
+
+## 2. Shared layout + sidebar shell
+
+Layout redo. No new routes yet — just rehome existing pages under a
+two-column layout.
+
+- [ ] Add `src/layouts/BaseLayout.astro` (header only) and
+      `src/layouts/BundleLayout.astro` (header + sidebar + main slot,
+      takes `{pkg, ver, bundlePath}` as props).
+- [ ] Extract `SiteHeader` content: wordmark on the left, theme toggle on
+      the right, optional global-search slot.
+- [ ] Sidebar structure (stubbed sections render empty until their data
+      source lands):
+      - bundle identity block: logo, pkg, version (links to bundle index)
+      - Docs (from `meta/toc.cbor` — stub)
+      - Tutorials (filtered docs — stub)
+      - Examples (from `examples/` — stub)
+      - API (BundleSearch island + compact qualname list)
+- [ ] CSS grid in `global.css`: `[aside][main]` on ≥900px, stacked below.
+      Replace `main { max-width: 960px }` with a layout-level container.
+- [ ] Mobile: sidebar collapses behind a small toggle (checkbox hack is
+      fine; prefer zero-JS).
+- [ ] Migrate `src/pages/[pkg]/[ver]/index.astro` and
+      `[...slug].astro` onto `BundleLayout`. Landing and 404 stay on
+      `BaseLayout`.
+
+## 3. Landing page — cards
+
+- [ ] `src/components/BundleCard.astro`: logo, pkg, version, blurb,
+      counts (N qualnames / N docs / N examples). Entire card is a link.
+- [ ] `src/pages/index.astro`: responsive grid (CSS `auto-fill,
+      minmax(16rem, 1fr)`), header with a filter island.
+- [ ] `src/components/BundleGridSearch.tsx`: reuses the `filterQualnames`
+      pattern from `BundleSearch` but over `(pkg, blurb, tag)`. Tiny,
+      client-side, no network.
+- [ ] Render logo via a static route served out of the ingest store
+      (see §5) or, if that slips, inline as a data URI at build time.
+
+## 4. Narrative docs, tutorials, examples routes
+
+Blocked on §0 (toc.cbor must exist) for the sidebar to be useful, but the
+routes themselves can land first rendering flat lists.
+
+- [ ] `src/pages/[pkg]/[ver]/docs/[...doc].astro`: load the `docs/<ref>`
+      CBOR blob, render via `<IrNode>`, reuse `BundleLayout`.
+- [ ] `src/pages/[pkg]/[ver]/examples/[...ex].astro`: load
+      `examples/<name>` (Section), render children via `<IrNode>`.
+- [ ] `src/lib/nav.ts`: per-bundle view-model —
+      `{logoUrl, summary, toc, docs, tutorials, examples, qualnames}`.
+      Memoise per-build. `ir-reader.ts` stays the on-disk shim;
+      `nav.ts` is what pages / layouts consume.
+- [ ] Read `meta/toc.cbor`, walk the `TocTree` (tag 4021) into a
+      sidebar-ready tree. Split tutorials off by filename convention
+      (see §0).
+- [ ] Wire the sidebar stubs from §2 to `nav.ts`. Highlight the current
+      entry.
+
+## 5. Assets
+
+- [ ] Static route or `public/`-shuttle for bundle assets so
+      `linkForRef({kind:"assets"})` resolves. Driven by the ingest store
+      contents, not gen.
+- [ ] Fig IR node handling in `IrNode.astro` (currently missing per M2
+      notes in `PLAN.md`).
+
+## 6. Cross-cutting
+
+- [ ] Update `viewer/PLAN.md`: note M6 (layout redo + nav) with notes on
+      decisions; mark the "Dev server / hot-reloads when a new bundle is
+      ingested" claim if we break it.
+- [ ] Vitest coverage: pure helpers in `nav.ts`; snapshot test on the
+      card grid with a fixture ingest bundle.
+- [ ] Playwright smoke: landing card click → bundle index → qualname
+      page → narrative doc → example → asset.
+
+## Out of scope for this pass
+
+- Global full-text search. Per-bundle + per-grid filters only.
+- Re-executing examples, edit-in-browser, auth.
+- Server-rendered dark Shiki theme (follow-up tracked in `PLAN.md`).
+- Splitting the viewer into its own repo (tracked in `PLAN.md`).

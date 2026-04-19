@@ -1,11 +1,15 @@
 ---
-import { extname, join } from "node:path";
+import { join } from "node:path";
 import BundleLayout from "../../../../layouts/BundleLayout.astro";
-import { listIngestedBundles } from "../../../../lib/ir-reader.ts";
-import { getBackrefs, type RefTuple } from "../../../../lib/graph.ts";
-import { listFilesRecursive } from "../../../../lib/nav.ts";
-
-const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"]);
+import {
+  listIngestedBundles,
+  listModules,
+  loadModule,
+  loadCbor,
+  collectImages,
+  type FoundImgNode,
+} from "../../../../lib/ir-reader.ts";
+import { listDocs, listExamples } from "../../../../lib/nav.ts";
 
 export async function getStaticPaths() {
   const bundles = await listIngestedBundles();
@@ -18,46 +22,80 @@ export async function getStaticPaths() {
 const { pkg, ver } = Astro.params;
 const { bundlePath } = Astro.props as { bundlePath: string };
 
-const assetDir = join(bundlePath, "assets");
-const allAssets = await listFilesRecursive(assetDir);
-const imageFiles = allAssets.filter((f) =>
-  IMAGE_EXTS.has(extname(f).toLowerCase()),
-);
-
-interface ImageEntry {
-  filename: string;
-  src: string;
-  backrefs: RefTuple[];
+interface PageRef {
+  label: string;
+  href: string;
 }
 
-const entries: ImageEntry[] = await Promise.all(
-  imageFiles.map(async (filename) => {
-    const backrefs = getBackrefs({
-      pkg: pkg!,
-      ver: ver!,
-      kind: "assets",
-      path: filename,
-    });
-    return {
-      filename,
-      src: `/assets/${pkg}/${ver}/${filename.replace(/:/g, "$")}`,
-      backrefs,
-    };
+interface ImgEntry {
+  img: FoundImgNode;
+  pages: PageRef[];
+}
+
+// Walk every module / doc / example in the bundle and collect all Image and
+// Figure nodes. Group by src URL so each image appears once with all the
+// pages that reference it.
+const imageMap = new Map<string, ImgEntry>();
+
+function addHit(found: FoundImgNode, page: PageRef) {
+  const existing = imageMap.get(found.src);
+  if (existing) {
+    if (!existing.pages.some((p) => p.href === page.href)) {
+      existing.pages.push(page);
+    }
+  } else {
+    imageMap.set(found.src, { img: found, pages: [page] });
+  }
+}
+
+// Modules
+const qualnames = await listModules(bundlePath);
+await Promise.all(
+  qualnames.map(async (qa) => {
+    let doc;
+    try {
+      doc = await loadModule(bundlePath, qa);
+    } catch {
+      return;
+    }
+    const href = `/${pkg}/${ver}/${qa.replace(/:/g, "$")}/`;
+    for (const found of collectImages(doc)) addHit(found, { label: qa, href });
   }),
 );
 
-function refToHref(ref: RefTuple): string | null {
-  switch (ref.kind) {
-    case "module":
-      return `/${ref.pkg}/${ref.ver}/${ref.path.replace(/:/g, "$")}/`;
-    case "docs":
-      return `/${ref.pkg}/${ref.ver}/docs/${ref.path.split("/").map(encodeURIComponent).join("/")}/`;
-    case "examples":
-      return `/${ref.pkg}/${ref.ver}/examples/${ref.path.split("/").map(encodeURIComponent).join("/")}/`;
-    default:
-      return null;
-  }
-}
+// Narrative docs
+const docPaths = await listDocs(bundlePath);
+await Promise.all(
+  docPaths.map(async (docPath) => {
+    let section;
+    try {
+      section = await loadCbor(join(bundlePath, "docs", docPath));
+    } catch {
+      return;
+    }
+    const href = `/${pkg}/${ver}/docs/${docPath.split("/").map(encodeURIComponent).join("/")}/`;
+    for (const found of collectImages(section)) addHit(found, { label: docPath, href });
+  }),
+);
+
+// Examples
+const exPaths = await listExamples(bundlePath);
+await Promise.all(
+  exPaths.map(async (exPath) => {
+    let section;
+    try {
+      section = await loadCbor(join(bundlePath, "examples", exPath));
+    } catch {
+      return;
+    }
+    const href = `/${pkg}/${ver}/examples/${exPath.split("/").map(encodeURIComponent).join("/")}/`;
+    for (const found of collectImages(section)) addHit(found, { label: exPath, href });
+  }),
+);
+
+const entries = [...imageMap.values()].sort((a, b) =>
+  a.img.src.localeCompare(b.img.src),
+);
 ---
 
 <BundleLayout
@@ -81,40 +119,35 @@ function refToHref(ref: RefTuple): string | null {
           <div class="image-card">
             <a
               class="image-thumb-link"
-              href={entry.src}
+              href={entry.img.src}
               target="_blank"
               rel="noopener noreferrer"
             >
               <img
                 class="image-thumb"
-                src={entry.src}
-                alt={entry.filename}
+                src={entry.img.src}
+                alt={entry.img.kind === "Image" ? entry.img.alt : entry.img.assetPath}
                 loading="lazy"
               />
             </a>
             <div class="image-meta">
-              <code class="image-filename">{entry.filename}</code>
-              {entry.backrefs.length > 0 ? (
+              <code class="image-filename">
+                {entry.img.kind === "Figure"
+                  ? entry.img.assetPath
+                  : entry.img.src}
+              </code>
+              {entry.pages.length > 0 ? (
                 <details class="image-refs">
                   <summary>
-                    Used on {entry.backrefs.length} page
-                    {entry.backrefs.length !== 1 ? "s" : ""}
+                    Used on {entry.pages.length} page
+                    {entry.pages.length !== 1 ? "s" : ""}
                   </summary>
                   <ul>
-                    {entry.backrefs.map((ref) => {
-                      const href = refToHref(ref);
-                      return (
-                        <li>
-                          {href ? (
-                            <a href={href}>{ref.path}</a>
-                          ) : (
-                            <span>
-                              {ref.pkg}/{ref.ver}/{ref.kind}/{ref.path}
-                            </span>
-                          )}
-                        </li>
-                      );
-                    })}
+                    {entry.pages.map((p) => (
+                      <li>
+                        <a href={p.href}>{p.label}</a>
+                      </li>
+                    ))}
                   </ul>
                 </details>
               ) : (

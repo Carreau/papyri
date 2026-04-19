@@ -379,6 +379,52 @@ export interface LinkRef {
   path: string;
 }
 
+// ---------------------------------------------------------------------------
+// IR image collection. Walks an arbitrary decoded IR value and yields every
+// Figure (tag 4024, asset reference) and Image (tag 4062, direct URL) node
+// encountered. The source document identity is tracked by the caller.
+// ---------------------------------------------------------------------------
+
+export type FoundImgNode =
+  | { kind: "Figure"; src: string; assetPath: string }
+  | { kind: "Image"; src: string; alt: string };
+
+export function collectImages(node: unknown, out: FoundImgNode[] = []): FoundImgNode[] {
+  if (!node || typeof node !== "object") return out;
+  if (Array.isArray(node)) {
+    for (const item of node) collectImages(item, out);
+    return out;
+  }
+  const n = node as Record<string, unknown>;
+
+  if (n.__type === "Figure") {
+    const ref = n.value as
+      | { module?: string; version?: string; kind?: string; path?: string }
+      | undefined;
+    if (ref?.kind === "assets" && ref.module && ref.version && ref.path) {
+      const assetPath = String(ref.path);
+      out.push({
+        kind: "Figure",
+        src: `/assets/${ref.module}/${ref.version}/${assetPath.replace(/:/g, "$")}`,
+        assetPath,
+      });
+    }
+    // RefInfo is a leaf; don't recurse into it.
+    return out;
+  }
+
+  if (n.__type === "Image") {
+    const url = String(n.url ?? "");
+    if (url) out.push({ kind: "Image", src: url, alt: String(n.alt ?? "") });
+    return out;
+  }
+
+  for (const val of Object.values(n)) {
+    if (val && typeof val === "object") collectImages(val, out);
+  }
+  return out;
+}
+
 export function linkForRef(ref: LinkRef): string | null {
   switch (ref.kind) {
     case "module":

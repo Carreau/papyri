@@ -345,12 +345,19 @@ def describe(
     from papyri.graphstore import GraphStore
     from papyri.config import ingest_dir
     from .nodes import encoder
+    from .crosslink import IngestedDoc  # noqa: F401 — registers tag 4010
 
     path_part = qualname
+    # Only treat a leading "<kind>:" as a kind prefix when it matches a known
+    # kind; otherwise the colon is part of the qualname itself (e.g.
+    # "papyri.nodes:RefInfo").
+    _known_kinds = {"module", "docs", "examples", "meta", "assets"}
     if ":" in path_part and "/" not in path_part:
-        prefix, path_part = path_part.split(":", 1)
-        if kind is None:
-            kind = prefix
+        prefix, rest = path_part.split(":", 1)
+        if prefix in _known_kinds:
+            path_part = rest
+            if kind is None:
+                kind = prefix
     if "/" in path_part:
         parts = path_part.split("/")
         if len(parts) == 4:

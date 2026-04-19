@@ -162,8 +162,14 @@ class GraphStore:
 
         if is_new:
             log.info("creating new database: %s", p)
-            self.conn.executescript(_SCHEMA)
-            self.conn.commit()
+            # executescript() issues an implicit COMMIT in Python ≥3.12 which
+            # can interact with the pragma executions above.  Use explicit DDL
+            # statements inside a normal transaction instead.
+            with self.conn:
+                for stmt in _SCHEMA.strip().split(";"):
+                    stmt = stmt.strip()
+                    if stmt:
+                        self.conn.execute(stmt)
         else:
             # Detect stale schema from before the nodes/links redesign.
             tables = {

@@ -46,58 +46,6 @@ CBOR via the `cbor2` package. Any future JS consumer needs a CBOR library
 (e.g. `cbor-x`) in addition to JSON parsing. Documenting and, if feasible,
 converging on a single encoding is part of Phase 2.
 
-## Scope cuts (to land as one big removal PR)
-
-Everything below is out of scope and should be deleted outright. Future
-sessions should not restore any of it.
-
-### Directories to delete
-
-- `papyri-lab/` — JupyterLab extension (separate Python + TypeScript
-  scaffold).
-- `frontend/` — stale 2023 React/craco scaffold that built into
-  `papyri/app/`.
-- `papyri/templates/` — Jinja templates used only by the Python HTML
-  renderer.
-- `papyri/static/` — MathJax + fontawesome bundled for the Python HTML
-  renderer.
-- `papyri/app/` — baked React build output from `frontend/`.
-- `.github/workflows/papyri-lab-build.yml`.
-
-### Files to delete
-
-- `papyri/render.py` — ~53 KB HTML/ASCII renderer.
-- `papyri/rich_render.py` — `rich` terminal renderer.
-- `papyri/textual.py` — textual TUI renderer.
-- `papyri/ipython.py` — IPython `?` extension.
-- `papyri/jlab.py` — JupyterLab hook.
-
-### CLI commands to remove (in `papyri/__init__.py`)
-
-- `install` (remote bundle download from `pydocs.github.io/pkg`).
-- `browse` (URWID — already dead-on-import; `papyri/browser.py` doesn't
-  exist).
-- `serve`, `serve-static` (Quart-trio live + static HTTP server).
-- `rich`, `textual` (terminal renderers).
-- `open` (webbrowser helper).
-
-### Dependencies that should drop out of `pyproject.toml`
-
-- `quart`, `quart-trio`, `hypercorn`, `httpx`, `trio` (remote install + live
-  serve).
-- `rich`, `textual` (terminal renderers).
-- `jinja2`, `minify_html`, `flatlatex` (HTML rendering).
-- `emoji` (used only in renderers — verify).
-- `matplotlib`, `pygments`, `ipython` — **verify** before dropping; some may
-  be needed by `gen` for example-execution and syntax highlighting in the
-  IR. Audit each before removing.
-- `tree-sitter-builds` — unused alongside `tree_sitter_languages`.
-
-### Requirements files
-
-- `requirements.txt` has a stray `there` package; drop it and sync the file
-  with the trimmed `pyproject.toml`.
-
 ## Python version
 
 - Minimum: **Python 3.14**. `requires-python = ">=3.14"`.
@@ -124,15 +72,14 @@ sessions should not restore any of it.
 
 ### Phase 1 — scope cuts and baseline
 
-- [x] Delete everything in "Scope cuts" above in a single PR.
+- [x] Land the big removal PR (stale scaffolds, unused renderers, dead CLI
+      commands, JupyterLab extension, and their workflows / assets).
 - [x] Trim `papyri/__init__.py` of dead CLI commands and their imports.
 - [x] Trim `pyproject.toml` and `requirements.txt` dependencies to match.
       Note: `rich` is retained because `papyri/gen.py`, `papyri/crosslink.py`,
       `papyri/misc.py`, and `papyri/utils.py` use `rich.progress` /
       `rich.logging` in the core pipeline (not as a docstring renderer).
       Stripping it is a bigger refactor and is not required for Phase 1.
-- [x] ~~Pin `tree-sitter < 0.22` in `pyproject.toml`.~~ Superseded in
-      Phase 2: migrated to `tree-sitter-rst` on `tree-sitter >= 0.24`.
 - [x] Bump `requires-python` to `>=3.14`; update CI to 3.14.
 - [x] Update the linter workflow (`lint.yml`) to 3.14 and keep
       `black` + `flake8` + `mypy`. (Later migrated to `ruff` + `mypy`.)
@@ -206,14 +153,9 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md). Summary:
 
 ## Open questions
 
-- Do we keep `papyri install` as a thin "unzip a local bundle" command
-  (since `papyri ingest` already takes directories), or delete it
-  entirely? **Decided: deleted in Phase 1.**
 - Do we want to re-publish to PyPI under a new version once Phase 1 is
   done, or keep it as "install from git" only for the foreseeable future?
   **Still open.**
-- URL / ownership: `pyproject.toml` now has
-  `Home = "https://github.com/carreau/papyri"`. **Done.**
 
 ## Follow-ups (not yet scheduled)
 
@@ -229,13 +171,3 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md). Summary:
 - Cross-package ingest correctness: `papyri/crosslink.py` still has
   TODOs around version resolution for `Figure`/`RefInfo` across packages.
   See `TODO-review.md`.
-
-## Out of scope (do not revive)
-
-- `papyri.ipython` `?` extension.
-- URWID `browse`.
-- JupyterLab extension (`papyri-lab`).
-- Remote bundle download (`pydocs.github.io/pkg`).
-- Any Python-side HTML, terminal, or TUI renderer. The web viewer under
-  `viewer/` is TypeScript-only and reads the IR directly; do not add
-  Python rendering code to replace it.

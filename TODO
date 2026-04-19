@@ -77,3 +77,52 @@
   first bullet), but if IPython wanted to be friendly it could drop
   the first "synopsis" line now that real annotations exist on
   these functions.
+
+## Linting / stability tooling (branch: claude/add-linting-tools-WkE1K)
+
+Suggestions queued for the linting-tools branch. Extra type checkers
+(`ty`, `pyrefly`) intentionally excluded.
+
+### Ruff rule expansion
+- [ ] Expand `[tool.ruff.lint] select`: add `B` (bugbear), `UP`
+      (pyupgrade), `I` (isort), `SIM` (simplify), `RUF` (ruff-native),
+      `PERF`. Consider `PIE`, `PL` (pylint subset), `RET` once the
+      baseline lands.
+- [ ] Land autofixes from the new rules as a separate commit so review
+      stays tractable.
+
+### Test stability
+- [ ] Add `pytest-xdist` for parallel test execution.
+- [ ] Add `pytest-randomly` to shuffle test order (guards against the
+      kind of import-order bug `take2` ↔ `myst_ast` used to have).
+- [ ] Add `pytest-timeout` with a global timeout so `gen`-adjacent
+      tests cannot hang CI.
+- [ ] Add a golden-file test: `papyri gen examples/papyri.toml
+      --no-infer` then assert the expected files exist under
+      `~/.papyri/data/papyri_<ver>/` and decode as CBOR.
+- [ ] Add a `papyri describe` smoke test against the self-generated
+      bundle.
+
+### Security / supply chain
+- [ ] Add `pip-audit` step to CI for CVE scanning of runtime deps.
+- [ ] Add `bandit` scan scoped to `papyri/gen.py` (which execs
+      examples); accept that it will be noisy and tune rules.
+- [ ] Add Dependabot (or Renovate) config for GitHub Actions pins.
+
+### Mypy
+- [ ] Tighten `[tool.mypy]`: `warn_unused_ignores`,
+      `warn_redundant_casts`, `no_implicit_optional`,
+      `check_untyped_defs`. Full `strict` is too invasive for the IR
+      code.
+
+### Pre-commit
+- [ ] Add `.pre-commit-config.yaml`: `ruff check --fix`, `ruff
+      format`, `mypy`, `check-added-large-files`.
+
+### CI hygiene
+- [ ] Add `permissions: contents: read` to each GitHub workflow
+      (least-privilege).
+- [ ] Add `concurrency:` with `cancel-in-progress: true` to PR
+      workflows.
+- [ ] Add `zizmor` to lint GitHub Actions YAML for injection-prone
+      `${{ }}` usage.

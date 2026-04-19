@@ -1,6 +1,8 @@
 ---
 import { listBundles, listIngestedBundles } from "../lib/ir-reader.ts";
 import { dataDir, ingestDb } from "../lib/paths.ts";
+import Head from "../components/Head.astro";
+import SiteHeader from "../components/SiteHeader.astro";
 import "../styles/global.css";
 
 const root = dataDir();
@@ -39,11 +41,10 @@ rows.sort((a, b) => `${a.pkg}/${a.version}`.localeCompare(`${b.pkg}/${b.version}
 
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Papyri viewer</title>
+    <Head title="Papyri viewer" />
   </head>
   <body>
+    <SiteHeader />
     <main>
       <h1>Papyri viewer</h1>
       <p class="lede">

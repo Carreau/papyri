@@ -144,9 +144,9 @@ Data flow per request/page:
    signature + description from the IR. No crosslinks.
 3. [x] **M2 — crosslinks + backrefs** via `papyri.db`.
 4. [x] **M3 — examples, math, syntax highlighting.**
-5. **M4 — static export** (`astro build`) verified against a real
+5. [x] **M4 — static export** (`astro build`) verified against a real
    ingested set (numpy, scipy).
-6. **M5 — polish**: search, error pages, dark mode.
+6. [x] **M5 — polish**: search, error pages, dark mode.
 
 ### M3 notes
 
@@ -170,6 +170,32 @@ Data flow per request/page:
 - **`example_section_data` is rendered.** It was silently dropped before
   M3. Treated as a `Section`, rendered between regular sections and
   aliases/backrefs.
+
+### M5 notes
+
+- **Dark mode.** Light is the default; writing `data-theme="dark"` on
+  `<html>` flips the color tokens in `global.css`. An inline head script
+  (in `src/components/Head.astro`) reads `localStorage` synchronously
+  before first paint to avoid a FOUC. The toggle itself is a small React
+  island (`ThemeToggle.tsx`) that calls `applyTheme` and persists the
+  choice. Pure helpers (`nextTheme`, `parseTheme`, `applyTheme`) live in
+  `src/lib/theme.ts` with unit tests.
+- **Shiki in dark mode is not dark.** We still ship `github-light` for
+  code blocks; accepted for M5 since code reads on a darker surface. A
+  follow-up is to load a second Shiki theme (e.g. `github-dark`) and
+  swap via CSS custom properties or `html[data-theme="dark"] pre.code`.
+  KaTeX's stylesheet is untouched; the surface around it darkens but
+  glyph strokes stay black. Both fine for now.
+- **Per-bundle client-side search.** At build time
+  `src/pages/[pkg]/[ver]/search.json.ts` emits a tiny manifest
+  (`{qualnames: [...]}`) alongside each bundle index. The `BundleSearch`
+  island (`src/components/BundleSearch.tsx`) fetches it on mount and does
+  case-insensitive substring filtering over up to 50 hits. Scope is
+  deliberately per-bundle — a combined / global index is a follow-up.
+  Pure filter (`filterQualnames` in `src/lib/search.ts`) is unit-tested.
+- **404 page.** `src/pages/404.astro` is a plain Astro page with the same
+  crumb bar pointing to `/`. Astro serves it on unknown routes in dev;
+  GitHub Pages / Netlify pick up `dist/404.html` for not-found responses.
 
 ### M2 notes
 

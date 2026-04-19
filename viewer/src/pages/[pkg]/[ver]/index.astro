@@ -4,6 +4,9 @@ import {
   listModules,
   qualnameToSlug,
 } from "../../../lib/ir-reader.ts";
+import Head from "../../../components/Head.astro";
+import SiteHeader from "../../../components/SiteHeader.astro";
+import BundleSearch from "../../../components/BundleSearch.tsx";
 import "../../../styles/global.css";
 
 export async function getStaticPaths() {
@@ -21,17 +24,18 @@ const qualnames = await listModules(bundlePath);
 
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{pkg} {ver} — Papyri viewer</title>
+    <Head title={`${pkg} ${ver} — Papyri viewer`} />
   </head>
   <body>
+    <SiteHeader />
     <main>
       <p class="crumb"><a href="/">&larr; bundles</a></p>
       <h1>
         {pkg} <span class="version">{ver}</span>
       </h1>
       <p class="lede">{qualnames.length} qualnames</p>
+
+      <BundleSearch client:load pkg={pkg!} ver={ver!} />
 
       <ul class="qualnames">
         {

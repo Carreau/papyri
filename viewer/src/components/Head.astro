@@ -1,0 +1,35 @@
+---
+// Shared <head> fragments used by every page.
+//
+// - Inlines a synchronous theme-priming script so the browser sets
+//   `data-theme="dark"` on <html> before first paint (reading localStorage
+//   via the key that matches `src/lib/theme.ts#THEME_STORAGE_KEY`).
+// - Links the KaTeX CSS (needed by math-rendering pages; harmless elsewhere).
+//
+// The inline script is intentionally hand-rolled so it doesn't need to ship
+// through a bundler — Astro emits it verbatim with `is:inline`.
+import { THEME_STORAGE_KEY } from "../lib/theme.ts";
+
+export interface Props {
+  title: string;
+}
+
+const { title } = Astro.props;
+
+// Note: the key here is stringified so edits to THEME_STORAGE_KEY propagate.
+const themeInit = `
+try {
+  var t = localStorage.getItem(${JSON.stringify(THEME_STORAGE_KEY)});
+  if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+} catch (e) {}
+`.trim();
+---
+
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>{title}</title>
+<script is:inline set:html={themeInit}></script>
+<link
+  rel="stylesheet"
+  href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"
+/>

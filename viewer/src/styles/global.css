@@ -2,10 +2,36 @@
   --fg: #1a1a1a;
   --fg-muted: #555;
   --bg: #fafafa;
+  --surface: #ffffff;
+  --surface-alt: #eeeeee;
   --accent: #2b6cb0;
   --border: #e2e2e2;
+  --admonition-bg: #ffffff;
+  --math-error-fg: #b33;
+  --math-error-bg: #fff4f4;
+  --role-bg: #eef2fa;
   --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Dark theme overrides. Toggled by ThemeToggle.tsx writing data-theme="dark"
+   on <html>. Only surface/background/text/border tokens change — the accent
+   hue stays stable so links and XRef underlines keep their identity across
+   themes. Shiki/KaTeX output carries its own colors (github-light, KaTeX
+   stylesheet) and is left untouched in M5 — the surface darkens around
+   them; a proper dark Shiki theme + dark-adapted KaTeX is a follow-up. */
+html[data-theme="dark"] {
+  --fg: #e6e6e6;
+  --fg-muted: #9aa0a6;
+  --bg: #0f1419;
+  --surface: #1a1f26;
+  --surface-alt: #242b33;
+  --accent: #5ea2eb;
+  --border: #2b333c;
+  --admonition-bg: #1a1f26;
+  --math-error-fg: #ff8b8b;
+  --math-error-bg: #2a1818;
+  --role-bg: #1f2a3a;
 }
 
 * { box-sizing: border-box; }
@@ -54,7 +80,7 @@ ul.bundles .dir { margin-left: auto; font-family: var(--mono); font-size: 0.85re
   color: var(--fg-muted);
 }
 
-code { font-family: var(--mono); background: #eee; padding: 0.1em 0.3em; border-radius: 3px; }
+code { font-family: var(--mono); background: var(--surface-alt); padding: 0.1em 0.3em; border-radius: 3px; }
 
 ul.bundles .name a { color: inherit; text-decoration: none; border-bottom: 1px dotted var(--accent); }
 ul.bundles .name a:hover { border-bottom-style: solid; }
@@ -112,7 +138,7 @@ section h2 {
 }
 
 section.signature pre {
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 0.75rem 1rem;
@@ -122,7 +148,7 @@ section.signature pre {
 section.signature pre code { background: transparent; padding: 0; font-size: 0.9rem; }
 
 pre.code {
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 0.75rem 1rem;
@@ -157,14 +183,14 @@ section.backrefs ul.qualnames { columns: 2; }
 
 aside.admonition {
   border-left: 3px solid var(--accent);
-  background: #fff;
+  background: var(--admonition-bg);
   padding: 0.5rem 0.75rem;
   margin: 1rem 0;
 }
 aside.admonition .admonition-title { font-weight: 600; margin: 0 0 0.25rem; }
 
 details.fallback {
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 0.25rem 0.5rem;
@@ -179,9 +205,9 @@ details.fallback summary {
 /* KaTeX display math gets its own margin; inline math inherits line-height. */
 div.math { margin: 0.75rem 0; overflow-x: auto; }
 code.math-error {
-  color: #b33;
-  background: #fff4f4;
-  border: 1px dashed #b33;
+  color: var(--math-error-fg);
+  background: var(--math-error-bg);
+  border: 1px dashed var(--math-error-fg);
 }
 
 /* Shiki emits inline styles for color, but we still want our own padding. */
@@ -191,7 +217,7 @@ pre.code .shiki-line { display: block; }
    InlineRole, so these render as styled inline code until they get
    cross-referenced. */
 code.role {
-  background: #eef2fa;
+  background: var(--role-bg);
   color: var(--accent);
   padding: 0.05em 0.3em;
   border-radius: 2px;
@@ -211,7 +237,7 @@ dl.fieldlist > dd > p:first-child { margin-top: 0.15rem; }
 /* Generic "directive" admonition for block directives we didn't specialise. */
 aside.directive {
   border-left: 3px solid var(--fg-muted);
-  background: #fff;
+  background: var(--admonition-bg);
   padding: 0.5rem 0.75rem;
   margin: 1rem 0;
 }
@@ -235,10 +261,94 @@ aside.directive .directive-args {
 details.fallback pre {
   overflow-x: auto;
   max-height: 20rem;
-  background: #fafafa;
+  background: var(--bg);
   border-radius: 3px;
   padding: 0.5rem;
   margin: 0.25rem 0;
   font-size: 0.75rem;
 }
 
+/* Site header strip — holds the dark-mode toggle. Lives above main so the
+   toggle stays in a consistent spot across every page. */
+.site-header {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0.75rem 1.25rem 0;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.theme-toggle {
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.25rem 0.5rem;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  font-family: var(--sans);
+}
+.theme-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Bundle search island. Stays above the qualname list; results overlay
+   visually by separating the block with a border-top. */
+.bundle-search {
+  margin: 0 0 1.5rem;
+}
+.bundle-search-input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-family: var(--mono);
+  font-size: 0.9rem;
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.bundle-search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.bundle-search-input:disabled {
+  color: var(--fg-muted);
+  background: var(--surface-alt);
+}
+.bundle-search-error {
+  color: var(--math-error-fg);
+  font-size: 0.85rem;
+  margin: 0.25rem 0 0;
+}
+.bundle-search-results {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0;
+  border-top: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  max-height: 20rem;
+  overflow-y: auto;
+}
+.bundle-search-results li {
+  padding: 0.25rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.bundle-search-results a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.bundle-search-results a:hover {
+  text-decoration: underline;
+}
+.bundle-search-empty {
+  color: var(--fg-muted);
+  font-style: italic;
+}

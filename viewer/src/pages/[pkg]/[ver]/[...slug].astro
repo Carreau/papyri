@@ -12,6 +12,8 @@ import {
 } from "../../../lib/ir-reader.ts";
 import { getBackrefs, resolveRef } from "../../../lib/graph.ts";
 import IrNode from "../../../components/IrNode.astro";
+import Head from "../../../components/Head.astro";
+import SiteHeader from "../../../components/SiteHeader.astro";
 import "../../../styles/global.css";
 
 export async function getStaticPaths() {
@@ -194,20 +196,10 @@ for (const b of backrefs) {
 
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{qualname} — Papyri viewer</title>
-    <!--
-      KaTeX stylesheet. Sourced from CDN for M3 simplicity; vendoring the
-      CSS + font files locally is a straightforward follow-up if offline
-      rendering or strict-CSP sites matter. See viewer/PLAN.md § M3.
-    -->
-    <link
-      rel="stylesheet"
-      href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"
-    />
+    <Head title={`${qualname} — Papyri viewer`} />
   </head>
   <body>
+    <SiteHeader />
     <main>
       <p class="crumb">
         <a href="/">bundles</a> / <a href={`/${pkg}/${ver}/`}>{pkg} {ver}</a>

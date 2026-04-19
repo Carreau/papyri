@@ -1,0 +1,89 @@
+---
+// One card on the landing page. Shows logo, pkg name, version, summary, and
+// counts. The entire card is a single <a> so there are no nested links.
+import { readdir } from "node:fs/promises";
+import { join } from "node:path";
+import { listModules } from "../lib/ir-reader.ts";
+import { loadBundleNav } from "../lib/nav.ts";
+
+interface Props {
+  pkg: string;
+  version: string;
+  bundlePath: string;
+}
+
+const { pkg, version, bundlePath } = Astro.props;
+
+const nav = await loadBundleNav(pkg, version, bundlePath);
+const qualnames = await listModules(bundlePath);
+
+async function countDir(dir: string): Promise<number> {
+  try {
+    const ents = await readdir(dir, { withFileTypes: true });
+    return ents.filter((e) => e.isFile()).length;
+  } catch {
+    return 0;
+  }
+}
+
+const [docCount, exampleCount] = await Promise.all([
+  countDir(join(bundlePath, "docs")),
+  countDir(join(bundlePath, "examples")),
+]);
+
+const summary =
+  typeof nav.meta.summary === "string" ? nav.meta.summary : null;
+const href = `/${pkg}/${version}/`;
+---
+
+<a
+  class="bundle-card"
+  href={href}
+  data-pkg={pkg}
+  data-summary={summary ?? ""}
+>
+  <div class="bundle-card-header">
+    {
+      nav.logoDataUrl ? (
+        <img
+          class="bundle-card-logo"
+          src={nav.logoDataUrl}
+          alt={`${pkg} logo`}
+        />
+      ) : (
+        <span class="bundle-card-logo-empty" aria-hidden="true">
+          {pkg.slice(0, 2).toUpperCase()}
+        </span>
+      )
+    }
+    <div class="bundle-card-title">
+      <span class="bundle-card-pkg">{pkg}</span>
+      <span class="bundle-card-version">{version}</span>
+    </div>
+  </div>
+
+  {summary ? <p class="bundle-card-summary">{summary}</p> : null}
+
+  <div class="bundle-card-counts">
+    <div class="bundle-card-count">
+      <span class="bundle-card-count-num">{qualnames.length}</span>
+      <span class="bundle-card-count-label">API</span>
+    </div>
+    {
+      docCount > 0 ? (
+        <div class="bundle-card-count">
+          <span class="bundle-card-count-num">{docCount}</span>
+          <span class="bundle-card-count-label">Docs</span>
+        </div>
+      ) : null
+    }
+    {
+      exampleCount > 0 ? (
+        <div class="bundle-card-count">
+          <span class="bundle-card-count-num">{exampleCount}</span>
+          <span class="bundle-card-count-label">Examples</span>
+        </div>
+      ) : null
+    }
+  </div>
+</a>

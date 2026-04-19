@@ -53,37 +53,38 @@ juggle two code paths.
 Layout redo. No new routes yet — just rehome existing pages under a
 two-column layout.
 
-- [ ] Add `src/layouts/BaseLayout.astro` (header only) and
+- [x] Add `src/layouts/BaseLayout.astro` (header only) and
       `src/layouts/BundleLayout.astro` (header + sidebar + main slot,
       takes `{pkg, ver, bundlePath}` as props).
-- [ ] Extract `SiteHeader` content: wordmark on the left, theme toggle on
+- [x] Extract `SiteHeader` content: wordmark on the left, theme toggle on
       the right, optional global-search slot.
-- [ ] Sidebar structure (stubbed sections render empty until their data
+- [x] Sidebar structure (stubbed sections render empty until their data
       source lands):
       - bundle identity block: logo, pkg, version (links to bundle index)
       - Docs (from `meta/toc.cbor` — stub)
       - Tutorials (filtered docs — stub)
       - Examples (from `examples/` — stub)
       - API (BundleSearch island + compact qualname list)
-- [ ] CSS grid in `global.css`: `[aside][main]` on ≥900px, stacked below.
+- [x] CSS grid in `global.css`: `[aside][main]` on ≥900px, stacked below.
       Replace `main { max-width: 960px }` with a layout-level container.
-- [ ] Mobile: sidebar collapses behind a small toggle (checkbox hack is
+- [x] Mobile: sidebar collapses behind a small toggle (checkbox hack is
       fine; prefer zero-JS).
-- [ ] Migrate `src/pages/[pkg]/[ver]/index.astro` and
+- [x] Migrate `src/pages/[pkg]/[ver]/index.astro` and
       `[...slug].astro` onto `BundleLayout`. Landing and 404 stay on
       `BaseLayout`.
 
 ## 3. Landing page — cards
 
-- [ ] `src/components/BundleCard.astro`: logo, pkg, version, blurb,
+- [x] `src/components/BundleCard.astro`: logo, pkg, version, blurb,
       counts (N qualnames / N docs / N examples). Entire card is a link.
-- [ ] `src/pages/index.astro`: responsive grid (CSS `auto-fill,
+- [x] `src/pages/index.astro`: responsive grid (CSS `auto-fill,
       minmax(16rem, 1fr)`), header with a filter island.
-- [ ] `src/components/BundleGridSearch.tsx`: reuses the `filterQualnames`
+- [x] `src/components/BundleGridSearch.tsx`: reuses the `filterQualnames`
       pattern from `BundleSearch` but over `(pkg, blurb, tag)`. Tiny,
       client-side, no network.
-- [ ] Render logo via a static route served out of the ingest store
+- [x] Render logo via a static route served out of the ingest store
       (see §5) or, if that slips, inline as a data URI at build time.
+      (Done as data URI at build time; static route deferred to §5.)
 
 ## 4. Narrative docs, tutorials, examples routes
 

@@ -1,0 +1,71 @@
+---
+// Sidebar shell for bundle pages. Identity block at the top, then stubbed
+// sections for Docs / Tutorials / Examples (data wiring lands in §4 of
+// viewer/TODO.md). API section renders the per-bundle search island and
+// the full compact qualname list.
+import BundleSearch from "./BundleSearch.tsx";
+import { qualnameToSlug } from "../lib/ir-reader.ts";
+import type { BundleNav } from "../lib/nav.ts";
+
+interface Props {
+  nav: BundleNav;
+  qualnames: string[];
+  activeQualname?: string;
+}
+
+const { nav, qualnames, activeQualname } = Astro.props;
+const bundleHref = `/${nav.pkg}/${nav.version}/`;
+const summary = typeof nav.meta.summary === "string" ? nav.meta.summary : null;
+---
+
+<aside class="bundle-sidebar" aria-label="Bundle navigation">
+  <a class="bundle-identity" href={bundleHref}>
+    {
+      nav.logoDataUrl ? (
+        <img class="bundle-logo" src={nav.logoDataUrl} alt={`${nav.pkg} logo`} />
+      ) : (
+        <span class="bundle-logo bundle-logo-empty" aria-hidden="true">
+          {nav.pkg.slice(0, 2).toUpperCase()}
+        </span>
+      )
+    }
+    <span class="bundle-identity-text">
+      <span class="bundle-identity-pkg">{nav.pkg}</span>
+      <span class="bundle-identity-version">{nav.version}</span>
+    </span>
+  </a>
+
+  {summary ? <p class="bundle-summary">{summary}</p> : null}
+
+  <nav class="sidebar-section">
+    <h3 class="sidebar-heading">Docs</h3>
+    <p class="sidebar-stub">Narrative pages coming in the next pass.</p>
+  </nav>
+
+  <nav class="sidebar-section">
+    <h3 class="sidebar-heading">Tutorials</h3>
+    <p class="sidebar-stub">Filtered docs; filename convention is
+      `tutorial_*` or `docs/tutorials/*`.</p>
+  </nav>
+
+  <nav class="sidebar-section">
+    <h3 class="sidebar-heading">Examples</h3>
+    <p class="sidebar-stub">From the bundle&apos;s `examples/` dir.</p>
+  </nav>
+
+  <nav class="sidebar-section sidebar-api">
+    <h3 class="sidebar-heading">API</h3>
+    <BundleSearch client:load pkg={nav.pkg} ver={nav.version} />
+    <ul class="sidebar-qualnames">
+      {
+        qualnames.map((qa) => (
+          <li class={qa === activeQualname ? "is-active" : undefined}>
+            <a href={`/${nav.pkg}/${nav.version}/${qualnameToSlug(qa)}/`}>
+              {qa}
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+  </nav>
+</aside>

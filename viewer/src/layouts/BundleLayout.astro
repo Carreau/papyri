@@ -1,0 +1,55 @@
+---
+// Two-column shell for every page under /[pkg]/[ver]/**. Loads the bundle
+// view-model and qualname list once per page and hands them to the sidebar
+// so callers don't repeat the frontmatter.
+import Head from "../components/Head.astro";
+import SiteHeader from "../components/SiteHeader.astro";
+import BundleSidebar from "../components/BundleSidebar.astro";
+import { listModules } from "../lib/ir-reader.ts";
+import { loadBundleNav } from "../lib/nav.ts";
+import "../styles/global.css";
+
+interface Props {
+  pkg: string;
+  ver: string;
+  bundlePath: string;
+  title: string;
+  activeQualname?: string;
+}
+
+const { pkg, ver, bundlePath, title, activeQualname } = Astro.props;
+const [nav, qualnames] = await Promise.all([
+  loadBundleNav(pkg, ver, bundlePath),
+  listModules(bundlePath),
+]);
+---
+
+<html lang="en">
+  <head>
+    <Head title={title} />
+  </head>
+  <body>
+    <SiteHeader />
+    <div class="bundle-layout">
+      <input
+        type="checkbox"
+        id="sidebar-toggle"
+        class="sidebar-toggle-cb"
+        aria-hidden="true"
+      />
+      <label for="sidebar-toggle" class="sidebar-toggle-label">
+        <span class="sidebar-toggle-open" aria-hidden="true">&#9776;</span>
+        <span class="sidebar-toggle-close" aria-hidden="true">&times;</span>
+        <span class="sidebar-toggle-text">Navigation</span>
+      </label>
+      <BundleSidebar
+        nav={nav}
+        qualnames={qualnames}
+        activeQualname={activeQualname}
+      />
+      <main class="bundle-main">
+        <slot />
+      </main>
+    </div>
+  </body>
+</html>

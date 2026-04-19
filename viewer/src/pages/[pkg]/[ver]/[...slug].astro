@@ -12,9 +12,7 @@ import {
 } from "../../../lib/ir-reader.ts";
 import { getBackrefs, resolveRef } from "../../../lib/graph.ts";
 import IrNode from "../../../components/IrNode.astro";
-import Head from "../../../components/Head.astro";
-import SiteHeader from "../../../components/SiteHeader.astro";
-import "../../../styles/global.css";
+import BundleLayout from "../../../layouts/BundleLayout.astro";
 
 export async function getStaticPaths() {
   const bundles = await listIngestedBundles();
@@ -194,102 +192,100 @@ for (const b of backrefs) {
 }
 ---
 
-<html lang="en">
-  <head>
-    <Head title={`${qualname} — Papyri viewer`} />
-  </head>
-  <body>
-    <SiteHeader />
-    <main>
-      <p class="crumb">
-        <a href="/">bundles</a> / <a href={`/${pkg}/${ver}/`}>{pkg} {ver}</a>
-      </p>
+<BundleLayout
+  pkg={pkg!}
+  ver={ver!}
+  bundlePath={bundlePath}
+  title={`${qualname} — Papyri viewer`}
+  activeQualname={qualname}
+>
+  <p class="crumb">
+    <a href="/">bundles</a> / <a href={`/${pkg}/${ver}/`}>{pkg} {ver}</a>
+  </p>
 
-      <header class="qa-header">
-        {doc.item_type ? <p class="kind">{doc.item_type}</p> : null}
-        <h1><code>{doc.qa}</code></h1>
-        {
-          doc.item_file ? (
-            <p class="source">
-              source: <code>{doc.item_file}</code>
-              {doc.item_line != null ? <Fragment>:{doc.item_line}</Fragment> : null}
-            </p>
-          ) : null
-        }
-      </header>
+  <header class="qa-header">
+    {doc.item_type ? <p class="kind">{doc.item_type}</p> : null}
+    <h1><code>{doc.qa}</code></h1>
+    {
+      doc.item_file ? (
+        <p class="source">
+          source: <code>{doc.item_file}</code>
+          {doc.item_line != null ? <Fragment>:{doc.item_line}</Fragment> : null}
+        </p>
+      ) : null
+    }
+  </header>
 
-      {
-        doc.signature ? (
-          <section class="signature">
-            <h2>Signature</h2>
-            <pre><code>{formatSignature(doc.signature)}</code></pre>
-          </section>
-        ) : null
-      }
+  {
+    doc.signature ? (
+      <section class="signature">
+        <h2>Signature</h2>
+        <pre><code>{formatSignature(doc.signature)}</code></pre>
+      </section>
+    ) : null
+  }
 
-      {
-        sections.map(({ title, section }) => (
-          <section class={`doc-section doc-section-${title.toLowerCase().replace(/\s+/g, "-")}`}>
-            <h2>{title}</h2>
-            {sectionChildren(section).map((c) => (
+  {
+    sections.map(({ title, section }) => (
+      <section class={`doc-section doc-section-${title.toLowerCase().replace(/\s+/g, "-")}`}>
+        <h2>{title}</h2>
+        {sectionChildren(section).map((c) => (
+          <IrNode node={c} resolveXref={resolveXref} />
+        ))}
+      </section>
+    ))
+  }
+
+  {
+    arbitrary.length > 0 ? (
+      <section class="doc-section doc-section-arbitrary">
+        <h2>Additional content</h2>
+        {arbitrary.map((s) => (
+          <div>
+            {s.title ? <h3>{s.title}</h3> : null}
+            {sectionChildren(s).map((c) => (
               <IrNode node={c} resolveXref={resolveXref} />
             ))}
-          </section>
-        ))
-      }
+          </div>
+        ))}
+      </section>
+    ) : null
+  }
 
-      {
-        arbitrary.length > 0 ? (
-          <section class="doc-section doc-section-arbitrary">
-            <h2>Additional content</h2>
-            {arbitrary.map((s) => (
-              <div>
-                {s.title ? <h3>{s.title}</h3> : null}
-                {sectionChildren(s).map((c) => (
-                  <IrNode node={c} resolveXref={resolveXref} />
-                ))}
-              </div>
-            ))}
-          </section>
-        ) : null
-      }
+  {
+    exampleSection ? (
+      <section class="doc-section doc-section-examples">
+        <h2>{exampleSection.title}</h2>
+        {exampleSection.children.map((c) => (
+          <IrNode node={c} resolveXref={resolveXref} />
+        ))}
+      </section>
+    ) : null
+  }
 
-      {
-        exampleSection ? (
-          <section class="doc-section doc-section-examples">
-            <h2>{exampleSection.title}</h2>
-            {exampleSection.children.map((c) => (
-              <IrNode node={c} resolveXref={resolveXref} />
-            ))}
-          </section>
-        ) : null
-      }
+  {
+    doc.aliases && doc.aliases.length > 0 ? (
+      <section class="aliases">
+        <h2>Aliases</h2>
+        <ul>
+          {doc.aliases.map((a) => (
+            <li><code>{a}</code></li>
+          ))}
+        </ul>
+      </section>
+    ) : null
+  }
 
-      {
-        doc.aliases && doc.aliases.length > 0 ? (
-          <section class="aliases">
-            <h2>Aliases</h2>
-            <ul>
-              {doc.aliases.map((a) => (
-                <li><code>{a}</code></li>
-              ))}
-            </ul>
-          </section>
-        ) : null
-      }
-
-      {
-        backrefRows.length > 0 ? (
-          <section class="backrefs">
-            <h2>Referenced by</h2>
-            <ul class="qualnames">
-              {backrefRows.map((b) => (
-                <li><a href={b.url}>{b.label}</a></li>
-              ))}
-            </ul>
-          </section>
-        ) : null
-      }
-    </main>
-  </body>
-</html>
+  {
+    backrefRows.length > 0 ? (
+      <section class="backrefs">
+        <h2>Referenced by</h2>
+        <ul class="qualnames">
+          {backrefRows.map((b) => (
+            <li><a href={b.url}>{b.label}</a></li>
+          ))}
+        </ul>
+      </section>
+    ) : null
+  }
+</BundleLayout>

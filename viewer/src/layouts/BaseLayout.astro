@@ -1,0 +1,26 @@
+---
+// Shell used by non-bundle pages (landing, 404). Just head + SiteHeader +
+// main slot. Bundle pages use BundleLayout for the two-column sidebar +
+// main grid.
+import Head from "../components/Head.astro";
+import SiteHeader from "../components/SiteHeader.astro";
+import "../styles/global.css";
+
+interface Props {
+  title: string;
+}
+
+const { title } = Astro.props;
+---
+
+<html lang="en">
+  <head>
+    <Head title={title} />
+  </head>
+  <body>
+    <SiteHeader />
+    <main class="base-main">
+      <slot />
+    </main>
+  </body>
+</html>

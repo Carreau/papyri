@@ -1,43 +1,50 @@
 ---
 import { listIngestedBundles } from "../lib/ir-reader.ts";
-import { ingestDb } from "../lib/paths.ts";
-import Head from "../components/Head.astro";
-import SiteHeader from "../components/SiteHeader.astro";
-import "../styles/global.css";
+import BaseLayout from "../layouts/BaseLayout.astro";
+import BundleCard from "../components/BundleCard.astro";
+import BundleGridSearch from "../components/BundleGridSearch.tsx";
 
 const ingested = await listIngestedBundles();
+
+// Small metadata array passed to the filter island so it can match without
+// reading the DOM: just pkg names and summaries (no logos / big data URIs).
+// The island uses this alongside data-attributes on the card elements.
+const bundlesForFilter = ingested.map((b) => ({
+  pkg: b.pkg,
+  summary: "", // filled server-side in BundleCard; island reads data-summary
+}));
 ---
 
-<html lang="en">
-  <head>
-    <Head title="Papyri viewer" />
-  </head>
-  <body>
-    <SiteHeader />
-    <main>
-      <h1>Papyri viewer</h1>
-      <p class="lede">
-        Graph DB: <code>{ingestDb()}</code>.
-      </p>
+<BaseLayout title="Papyri viewer">
+  <h1>Papyri viewer</h1>
+  <p class="lede">
+    {ingested.length} bundle{ingested.length !== 1 ? "s" : ""} ingested.
+  </p>
 
-      {
-        ingested.length === 0 ? (
-          <div class="empty">
-            No ingested bundles found. Generate one with
-            <code>papyri gen examples/papyri.toml --no-infer</code>, then
-            ingest it with <code>papyri ingest ~/.papyri/data/&lt;bundle&gt;</code>.
-          </div>
-        ) : (
-          <ul class="bundles">
-            {ingested.map((b) => (
-              <li>
-                <a class="name" href={`/${b.pkg}/${b.version}/`}>{b.pkg}</a>
-                <span class="version">{b.version}</span>
-              </li>
-            ))}
-          </ul>
-        )
-      }
-    </main>
-  </body>
-</html>
+  {
+    ingested.length === 0 ? (
+      <div class="empty">
+        No ingested bundles found. Generate one with
+        <code>papyri gen examples/papyri.toml --no-infer</code>, then ingest it
+        with <code>papyri ingest ~/.papyri/data/&lt;bundle&gt;</code>.
+      </div>
+    ) : (
+      <>
+        <BundleGridSearch
+          client:load
+          bundles={bundlesForFilter}
+          gridId="bundle-card-grid"
+        />
+        <div class="bundle-card-grid" id="bundle-card-grid">
+          {ingested.map((b) => (
+            <BundleCard
+              pkg={b.pkg}
+              version={b.version}
+              bundlePath={b.path}
+            />
+          ))}
+        </div>
+      </>
+    )
+  }
+</BaseLayout>

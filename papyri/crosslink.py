@@ -46,7 +46,6 @@ def find_all_refs(
     assert isinstance(graph_store, GraphStore)
     o_family = sorted(list(graph_store.glob((None, None, "module", None))))
 
-    # TODO
     # here we can't compute just the dictionary and use frozenset(....values())
     # as we may have multiple version of lisbraries; this is something that will
     # need to be fixed in the long run
@@ -187,7 +186,10 @@ class IngestedDoc(Node):
             assert section in self.content
             self.content[section] = visitor.visit(self.content[section])
         if (len(visitor.local) or len(visitor.total)) and verbose:
-            # TODO: reenable assert len(visitor.local) == 0, f"{visitor.local} | {self.qa}"
+            # TODO: visitor.local should ideally be empty here (local
+            # refs were meant to be resolved earlier), but many bundles
+            # still carry them. Re-enabling that invariant requires a
+            # pass through the gen-time local-ref resolution first.
             log.info("Newly found %s links in %s", len(visitor.total), repr(self.qa))
             for a, b in visitor.total:
                 log.info("     %s refers to %s", repr(a), repr(b))
@@ -397,12 +399,8 @@ class Ingester:
                 e.add_note(f"error Reading to {f1}")
                 raise
 
-        # known_refs_II = frozenset(nvisited_items.keys())
-
-        # TODO :in progress, crosslink needs version information.
-        # known_ref_info = frozenset(
-        #    RefInfo(root, version, "module", qa) for qa in known_refs_II
-        # ).union(known_refs)
+        # TODO: crosslink still needs per-reference version information to
+        # support cross-package linking correctly. See TODO-review.md.
 
         for _, (qa, doc_blob) in self.progress(
             nvisited_items.items(), description=f"{path.name} Validating..."
@@ -420,16 +418,13 @@ class Ingester:
         for _, (qa, doc_blob) in self.progress(
             nvisited_items.items(), description=f"{path.name} Writing..."
         ):
-            # for qa, doc_blob in nvisited_items.items():
             # we might update other modules with backrefs
             assert hasattr(doc_blob, "arbitrary")
 
-            # TODO: FIX
-            # when walking the tree of figure we can't properly crosslink
-            # as we don't know the version number.
-            # fix it at serialisation time.
+            # TODO: Fig references carry a RefInfo whose version may be
+            # unknown at walk time; a proper fix populates the version
+            # during serialisation so cross-package figure links resolve.
             forward_refs = doc_blob.all_forward_refs()
-            # print_(len(forward_refs))
 
             try:
                 key = Key(mod_root, version, "module", qa)

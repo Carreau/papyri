@@ -1,0 +1,295 @@
+---
+import {
+  linkForRef,
+  listIngestedBundles,
+  listModules,
+  loadModule,
+  qualnameToSlug,
+  type IRNode,
+  type SectionNode,
+  type SignatureNodeT,
+  type ParameterNodeT,
+} from "../../../lib/ir-reader.ts";
+import { getBackrefs, resolveRef } from "../../../lib/graph.ts";
+import IrNode from "../../../components/IrNode.astro";
+import Head from "../../../components/Head.astro";
+import SiteHeader from "../../../components/SiteHeader.astro";
+import "../../../styles/global.css";
+
+export async function getStaticPaths() {
+  const bundles = await listIngestedBundles();
+  const paths: Array<{
+    params: { pkg: string; ver: string; slug: string };
+    props: { bundlePath: string; qualname: string };
+  }> = [];
+  for (const b of bundles) {
+    const qualnames = await listModules(b.path);
+    for (const qa of qualnames) {
+      paths.push({
+        params: { pkg: b.pkg, ver: b.version, slug: qualnameToSlug(qa) },
+        props: { bundlePath: b.path, qualname: qa },
+      });
+    }
+  }
+  return paths;
+}
+
+const { pkg, ver, slug } = Astro.params;
+const { bundlePath, qualname } = Astro.props as {
+  bundlePath: string;
+  qualname: string;
+};
+
+// Defensive: in theory qualname === slugToQualname(slug).
+void slug;
+
+const doc = await loadModule(bundlePath, qualname);
+
+function renderAnnotation(
+  ann: ParameterNodeT["annotation"] | SignatureNodeT["return_annotation"],
+): string | null {
+  if (ann == null) return null;
+  if (typeof ann === "string") return ann;
+  if (typeof ann === "object" && "__type" in ann && ann.__type === "Empty") {
+    return null;
+  }
+  return null;
+}
+
+function renderDefault(def: ParameterNodeT["default"]): string | null {
+  if (def == null) return null;
+  if (typeof def === "string") return def;
+  if (typeof def === "object" && "__type" in def && def.__type === "Empty") {
+    return null;
+  }
+  return null;
+}
+
+function formatParam(p: ParameterNodeT): string {
+  const parts: string[] = [];
+  if (p.kind === "VAR_POSITIONAL") parts.push("*");
+  else if (p.kind === "VAR_KEYWORD") parts.push("**");
+  parts.push(p.name);
+  const ann = renderAnnotation(p.annotation);
+  if (ann) parts.push(`: ${ann}`);
+  const def = renderDefault(p.default);
+  if (def != null) parts.push(` = ${def}`);
+  return parts.join("");
+}
+
+function formatSignature(sig: SignatureNodeT): string {
+  const pieces: string[] = [];
+  let lastKind: string | null = null;
+  for (const p of sig.parameters) {
+    if (p.kind === "KEYWORD_ONLY" && lastKind !== "KEYWORD_ONLY" && lastKind !== "VAR_POSITIONAL") {
+      pieces.push("*");
+    }
+    pieces.push(formatParam(p));
+    lastKind = p.kind;
+  }
+  const ret = renderAnnotation(sig.return_annotation);
+  const retStr = ret ? ` -> ${ret}` : "";
+  return `${sig.target_name}(${pieces.join(", ")})${retStr}`;
+}
+
+// Iteration order of sections: prefer _ordered_sections, fall back to
+// Object.keys. Skip sections whose Section body is empty.
+const orderedKeys: string[] = doc._ordered_sections ?? [];
+const contentKeys: string[] = Object.keys(doc._content ?? {});
+const renderOrder: string[] = [
+  ...orderedKeys.filter((k) => contentKeys.includes(k)),
+  ...contentKeys.filter((k) => !orderedKeys.includes(k)),
+];
+
+interface RenderSection {
+  title: string;
+  section: SectionNode;
+}
+const sections: RenderSection[] = [];
+for (const key of renderOrder) {
+  const s = doc._content[key] as SectionNode | undefined;
+  if (!s) continue;
+  if (!Array.isArray(s.children) || s.children.length === 0) continue;
+  sections.push({ title: key, section: s });
+}
+
+const arbitrary = Array.isArray(doc.arbitrary) ? doc.arbitrary : [];
+
+// example_section_data is a Section (tag 4015) on IngestedDoc that was
+// previously ignored. Render it after the regular sections if it contains
+// anything. Normalise to a list of child IR nodes so the template stays flat.
+const exampleSection = (() => {
+  const es = doc.example_section_data as SectionNode | null | undefined;
+  if (!es) return null;
+  const kids = Array.isArray(es.children) ? es.children : [];
+  if (kids.length === 0) return null;
+  return { title: es.title ?? "Examples", children: kids };
+})();
+
+// Section children sometimes contain node types the renderer doesn't handle.
+// IrNode.astro already falls back to a JSON dump per-node; we don't dump the
+// whole section just because one child is unhandled.
+function sectionChildren(s: SectionNode): IRNode[] {
+  return Array.isArray(s.children) ? s.children : [];
+}
+
+// ---------------------------------------------------------------------------
+// M2 crosslinks.
+// resolveXref is handed to <IrNode> and called per XRef node at render time.
+// It closes over the cached DB handle (openGraphDb caches) so we don't open
+// the file per node. The XRef IR shape:
+//   { __type: "XRef", value: label, reference: RefInfo, kind, anchor }
+// where `reference` is a RefInfo tag node with fields (module, version, kind,
+// path). We prefer that resolved reference, falling back to the top-level
+// XRef.kind / value pair.
+// ---------------------------------------------------------------------------
+interface XRefShape {
+  value?: string;
+  reference?: {
+    __type?: string;
+    module?: string;
+    version?: string;
+    kind?: string;
+    path?: string;
+  } | null;
+  kind?: string;
+}
+
+function resolveXref(raw: unknown): { url: string; label: string } | null {
+  const n = raw as XRefShape | null;
+  if (!n) return null;
+  const label = n.value ?? "";
+  const ref = n.reference;
+  if (!ref || !ref.module || !ref.path || !ref.kind) return null;
+  // Skip papyri's sentinel "unresolved" placeholder.
+  if (ref.module === "current-module" || ref.kind === "to-resolve") return null;
+  const resolved = resolveRef({
+    pkg: ref.module,
+    ver: ref.version ?? "?",
+    kind: ref.kind,
+    path: ref.path,
+  });
+  if (!resolved) return null;
+  const url = linkForRef(resolved);
+  if (!url) return null;
+  return { url, label };
+}
+
+// Backrefs for this document.
+const backrefs = getBackrefs({ pkg, ver, kind: "module", path: qualname });
+interface BackrefRow {
+  url: string;
+  label: string;
+  key: string;
+}
+const backrefRows: BackrefRow[] = [];
+const _seen = new Set<string>();
+for (const b of backrefs) {
+  const url = linkForRef(b);
+  if (!url) continue;
+  const key = `${b.pkg}/${b.ver}/${b.kind}/${b.path}`;
+  if (_seen.has(key)) continue;
+  _seen.add(key);
+  backrefRows.push({ url, label: b.path, key });
+}
+---
+
+<html lang="en">
+  <head>
+    <Head title={`${qualname} — Papyri viewer`} />
+  </head>
+  <body>
+    <SiteHeader />
+    <main>
+      <p class="crumb">
+        <a href="/">bundles</a> / <a href={`/${pkg}/${ver}/`}>{pkg} {ver}</a>
+      </p>
+
+      <header class="qa-header">
+        {doc.item_type ? <p class="kind">{doc.item_type}</p> : null}
+        <h1><code>{doc.qa}</code></h1>
+        {
+          doc.item_file ? (
+            <p class="source">
+              source: <code>{doc.item_file}</code>
+              {doc.item_line != null ? <Fragment>:{doc.item_line}</Fragment> : null}
+            </p>
+          ) : null
+        }
+      </header>
+
+      {
+        doc.signature ? (
+          <section class="signature">
+            <h2>Signature</h2>
+            <pre><code>{formatSignature(doc.signature)}</code></pre>
+          </section>
+        ) : null
+      }
+
+      {
+        sections.map(({ title, section }) => (
+          <section class={`doc-section doc-section-${title.toLowerCase().replace(/\s+/g, "-")}`}>
+            <h2>{title}</h2>
+            {sectionChildren(section).map((c) => (
+              <IrNode node={c} resolveXref={resolveXref} />
+            ))}
+          </section>
+        ))
+      }
+
+      {
+        arbitrary.length > 0 ? (
+          <section class="doc-section doc-section-arbitrary">
+            <h2>Additional content</h2>
+            {arbitrary.map((s) => (
+              <div>
+                {s.title ? <h3>{s.title}</h3> : null}
+                {sectionChildren(s).map((c) => (
+                  <IrNode node={c} resolveXref={resolveXref} />
+                ))}
+              </div>
+            ))}
+          </section>
+        ) : null
+      }
+
+      {
+        exampleSection ? (
+          <section class="doc-section doc-section-examples">
+            <h2>{exampleSection.title}</h2>
+            {exampleSection.children.map((c) => (
+              <IrNode node={c} resolveXref={resolveXref} />
+            ))}
+          </section>
+        ) : null
+      }
+
+      {
+        doc.aliases && doc.aliases.length > 0 ? (
+          <section class="aliases">
+            <h2>Aliases</h2>
+            <ul>
+              {doc.aliases.map((a) => (
+                <li><code>{a}</code></li>
+              ))}
+            </ul>
+          </section>
+        ) : null
+      }
+
+      {
+        backrefRows.length > 0 ? (
+          <section class="backrefs">
+            <h2>Referenced by</h2>
+            <ul class="qualnames">
+              {backrefRows.map((b) => (
+                <li><a href={b.url}>{b.label}</a></li>
+              ))}
+            </ul>
+          </section>
+        ) : null
+      }
+    </main>
+  </body>
+</html>

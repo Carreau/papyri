@@ -39,7 +39,7 @@ def test_find_beyond_decorators():
 
 
 def test_infer():
-    import scipy
+    scipy = pytest.importorskip("scipy")
     from scipy._lib._uarray._backend import Dispatchable
 
     from papyri.gen import Config, parse_script
@@ -75,20 +75,12 @@ def test_infer():
 @pytest.mark.parametrize(
     "module, submodules, objects",
     [
-        pytest.param(
+        (
             "numpy",
-            ("core",),
+            ("_core",),
             (
                 "numpy:array",
-                "numpy.core._multiarray_tests:npy_sinh",
                 "numpy:histogram2d",
-            ),
-            marks=pytest.mark.xfail(
-                reason=(
-                    "numpy canonical path for `numpy:array` changed upstream "
-                    "(numpy 2.x moved it). Tracked in PLAN.md Phase 2."
-                ),
-                strict=False,
             ),
         ),
         ("IPython", (), ("IPython:embed_kernel",)),
@@ -165,7 +157,7 @@ def test_self():
             {
                 "type": "ParameterNode",
                 "name": "var",
-                "annotation": {"data": "Union[float, bool]", "type": "str"},
+                "annotation": {"data": "float | bool", "type": "str"},
                 "kind": "POSITIONAL_OR_KEYWORD",
                 "default": {"type": "Empty"},
             },
@@ -198,70 +190,22 @@ def test_self():
                 "type": "ParameterNode",
             },
         ],
-        "return_annotation": {"data": "typing.Optional[str]", "type": "str"},
+        "return_annotation": {"data": "str | None", "type": "str"},
         "target_name": "example1",
     }
     assert g.data["papyri"].to_dict()["signature"] is None
 
 
-@pytest.mark.xfail(
-    reason=(
-        "papyri.__init__ module docstring was rewritten in Phase 1 scope cuts "
-        "and no longer contains the definition list this test indexes into "
-        "(arbitrary[4].children[1].children[0]). Needs rewriting against the "
-        "new docstring or redirected at another module. Tracked in PLAN.md "
-        "Phase 2."
-    ),
-    strict=False,
-)
 def test_self_2():
+    """RefInfo class should resolve its source file; private methods should not."""
     c = Config(dry_run=True, dummy_progress=True)
     g = Gen(False, config=c)
     g.collect_package_metadata("papyri", ".", {})
     g.collect_api_docs(
-        "papyri", {"papyri", "papyri.nodes:RefInfo", "papyri.nodes:RefInfo.__eq__"}
+        "papyri", {"papyri.nodes:RefInfo", "papyri.nodes:RefInfo.__eq__"}
     )
-    try:
-        import dask  # noqa
 
-        assert (
-            g.data["papyri"].to_dict()["arbitrary"][4]["children"][1]["children"][0][
-                "dt"
-            ]["children"][0]["reference"]["module"]
-            == "dask"
-        )
-    except ModuleNotFoundError:
-        assert (
-            g.data["papyri"].to_dict()["arbitrary"][4]["children"][1]["children"][0][
-                "dt"
-            ]["children"][0]["domain"]
-            is None
-        )
-
-    assert (
-        g.data["papyri.nodes:RefInfo"]
-        .to_dict()["item_file"]
-        .endswith("papyri/nodes.py")
-    )
+    item_file = g.data["papyri.nodes:RefInfo"].to_dict()["item_file"]
+    assert item_file is not None
+    assert item_file.endswith("papyri/nodes.py")
     assert g.data["papyri.nodes:RefInfo.__eq__"].to_dict()["item_file"] is None
-
-
-@pytest.mark.xfail(
-    strict=False,
-    reason=(
-        "item_file equality fails on CI — the resolved path differs from the "
-        "literal 'papyri/nodes.py' (e.g. site-packages install path). Needs "
-        "rewriting to compare paths robustly, or pointing at a fixture. "
-        "Tracked in PLAN.md Phase 2 follow-up."
-    ),
-)
-def test_self_3():
-    # same as previous, but == fails on CI, to fix.
-    from papyri.gen import Gen, Config
-
-    c = Config(dry_run=True, dummy_progress=True)
-    g = Gen(False, config=c)
-    g.collect_package_metadata("papyri", ".", {})
-    g.collect_api_docs("papyri", {"papyri", "papyri.nodes:RefInfo"})
-
-    assert g.data["papyri.nodes:RefInfo"].to_dict()["item_file"] == ("papyri/nodes.py")

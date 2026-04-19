@@ -1,0 +1,39 @@
+name: Viewer
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'viewer/**'
+      - '.github/workflows/viewer.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'viewer/**'
+      - '.github/workflows/viewer.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: viewer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: viewer/pnpm-lock.yaml
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+      - name: Type check
+        run: pnpm check
+      - name: Unit tests
+        run: pnpm test
+      - name: Build (no bundles)
+        run: pnpm build

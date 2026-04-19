@@ -10,18 +10,35 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "check": "astro check"
+    "check": "astro check",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@astrojs/react": "^4.2.0",
     "astro": "^5.1.0",
+    "better-sqlite3": "^12.9.0",
+    "cbor-x": "^1.6.4",
+    "katex": "^0.16.45",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "shiki": "^4.0.2"
   },
   "devDependencies": {
+    "@astrojs/check": "^0.9.8",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/katex": "^0.16.8",
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.4"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "esbuild",
+      "sharp"
+    ]
   }
 }

@@ -138,15 +138,109 @@ Data flow per request/page:
 
 ## Milestones
 
-1. **M0 — scaffolding.** `pnpm init`, Astro app boots, reads
+1. [x] **M0 — scaffolding.** `pnpm init`, Astro app boots, reads
    `~/.papyri/data` and lists bundles. No qualname rendering yet.
-2. **M1 — single-page render.** Given `(pkg, ver, qualname)`, render
+2. [x] **M1 — single-page render.** Given `(pkg, ver, qualname)`, render
    signature + description from the IR. No crosslinks.
-3. **M2 — crosslinks + backrefs** via `papyri.db`.
-4. **M3 — examples, math, syntax highlighting.**
-5. **M4 — static export** (`astro build`) verified against a real
+3. [x] **M2 — crosslinks + backrefs** via `papyri.db`.
+4. [x] **M3 — examples, math, syntax highlighting.**
+5. [x] **M4 — static export** (`astro build`) verified against a real
    ingested set (numpy, scipy).
-6. **M5 — polish**: search, error pages, dark mode.
+6. [x] **M5 — polish**: search, error pages, dark mode.
+
+### M3 notes
+
+- **Math rendering is server-side, not client-side.** Earlier planning
+  text said "KaTeX in the client"; the viewer is SSG, so we render KaTeX
+  at build time via `katex.renderToString` and embed the HTML. This
+  removes the need to ship KaTeX's JS runtime — only the stylesheet is
+  linked from each page. Parse errors fall back to a
+  `<code class="math-error">` span so one bad `:math:` snippet can't
+  break the build.
+- **KaTeX CSS source is the jsDelivr CDN** (`katex@0.16.9/dist/katex.min.css`),
+  not vendored. Tradeoff: zero bytes in the repo and zero build config,
+  but static exports depend on an external origin at load time. Vendor it
+  when we need offline support or a strict CSP.
+- **Syntax highlighting uses Shiki's `createHighlighter` + `github-light`.**
+  Highlighter is a cached module-level singleton so grammars load once per
+  build. The IR `Code` node carries no language tag today (see
+  `papyri/nodes.py:228`), so every `Code` is highlighted as `python`.
+  Adding a language discriminator to the IR is a future refinement; the
+  viewer defaults safely and swaps the string when that lands.
+- **`example_section_data` is rendered.** It was silently dropped before
+  M3. Treated as a `Section`, rendered between regular sections and
+  aliases/backrefs.
+
+### M5 notes
+
+- **Dark mode.** Light is the default; writing `data-theme="dark"` on
+  `<html>` flips the color tokens in `global.css`. An inline head script
+  (in `src/components/Head.astro`) reads `localStorage` synchronously
+  before first paint to avoid a FOUC. The toggle itself is a small React
+  island (`ThemeToggle.tsx`) that calls `applyTheme` and persists the
+  choice. Pure helpers (`nextTheme`, `parseTheme`, `applyTheme`) live in
+  `src/lib/theme.ts` with unit tests.
+- **Shiki in dark mode is not dark.** We still ship `github-light` for
+  code blocks; accepted for M5 since code reads on a darker surface. A
+  follow-up is to load a second Shiki theme (e.g. `github-dark`) and
+  swap via CSS custom properties or `html[data-theme="dark"] pre.code`.
+  KaTeX's stylesheet is untouched; the surface around it darkens but
+  glyph strokes stay black. Both fine for now.
+- **Per-bundle client-side search.** At build time
+  `src/pages/[pkg]/[ver]/search.json.ts` emits a tiny manifest
+  (`{qualnames: [...]}`) alongside each bundle index. The `BundleSearch`
+  island (`src/components/BundleSearch.tsx`) fetches it on mount and does
+  case-insensitive substring filtering over up to 50 hits. Scope is
+  deliberately per-bundle — a combined / global index is a follow-up.
+  Pure filter (`filterQualnames` in `src/lib/search.ts`) is unit-tested.
+- **404 page.** `src/pages/404.astro` is a plain Astro page with the same
+  crumb bar pointing to `/`. Astro serves it on unknown routes in dev;
+  GitHub Pages / Netlify pick up `dist/404.html` for not-found responses.
+
+### M2 notes
+
+- New runtime dep: `better-sqlite3`. Justification: synchronous SQLite
+  client that maps cleanly onto Astro's build-time data loading; the graph
+  is a few MB and all lookups happen at SSG time, so we want a zero-async
+  API rather than e.g. `sql.js`.
+- Async/sync DB access: Astro component frontmatter is async but Astro
+  component *props* are resolved synchronously per render. Rather than
+  pre-resolving every XRef into a flat `{url, label}` table before rendering
+  (which would mean walking the whole IR tree up front), we pass a
+  synchronous `resolveXref(node) => {url, label} | null` function into
+  `<IrNode>` as a prop. The function closes over the cached SQLite handle
+  (`openGraphDb` caches a single `Database` instance per build process), so
+  the DB is opened once and queried on demand from within the recursive
+  renderer. When the graph DB is absent (fresh checkout / CI), `openGraphDb`
+  returns `null` and every `resolveXref` call returns `null`; the viewer
+  then degrades to unresolved `.xref` spans and no "Referenced by" section.
+- `resolveRef` prefers an exact `(pkg, ver, kind, path)` match, falling
+  back to any ingested version of the same `(pkg, kind, path)` sorted
+  lexicographically (highest first). True cross-version picking (prefer
+  the "closest" ingested version to the caller's version) is deferred —
+  our ingested set is tiny, so lexicographic max is fine for now.
+- `Fig` refs are not yet rendered — IrNode doesn't have a Fig branch yet,
+  and asset serving is M3. The graph still resolves asset links so that
+  whenever the renderer gains a Fig branch, the URLs are already correct.
+
+### M1 notes
+
+- CBOR decoding uses `cbor-x` with a global `addExtension` entry per IR
+  tag from `docs/IR.md`. Each extension re-shapes the positional
+  `CBORTag(tag, [values...])` payload into `{ __type, __tag, ...fields }`
+  using the field order declared in `FIELD_ORDER` (mirrors
+  `typing.get_type_hints(cls)` on the Python side). Unknown tags fall
+  through as `{ __type: "unknown", __tag, value }` and the UI falls back
+  to a `<details><pre>` JSON dump per-node, not per-section.
+- URL slug for qualnames: colon `:` is rewritten to `$` because colons
+  are awkward on some filesystems and in URL bars. `papyri.nodes:RefInfo`
+  becomes `papyri.nodes$RefInfo`. `qualnameToSlug` /
+  `slugToQualname` in `ir-reader.ts` are the single source of truth.
+- Source of truth for ingest bundles is `~/.papyri/ingest/<pkg>/<ver>/`
+  (via `listIngestedBundles`), not `~/.papyri/data/`: ingested blobs are
+  `IngestedDoc` (tag 4010) with resolved refs, which is what the viewer
+  wants. The landing page still lists gen bundles for context and
+  annotates ones that haven't been ingested yet.
 
 ## Open questions
 

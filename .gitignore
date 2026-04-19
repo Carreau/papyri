@@ -7,12 +7,31 @@ htmlcov
 .coverage
 html
 build
+dist/
 *.lprof
+*.prof
 test.dat
 test.npy
 test.out
 node_modules
 *.js.map
+*.egg-info/
+
+# macOS
+.DS_Store
+
+# Editor / tooling local state
+.vim/
+.ipynb_checkpoints/
+.ignore
+
+# Phase 1 scope cuts: these directories were deleted from the repo but may
+# linger on disk from older checkouts. Keep them out of `git status` noise.
+frontend/
+papyri-lab/
+papyri-lab2/
+papyri/app/
+papyri/static/
 
 papyri/app/asset-manifest.json
 papyri/app/index.html

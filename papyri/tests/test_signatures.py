@@ -386,7 +386,7 @@ def function_with_annotation5(a: int, b: Union[int, float]) -> Optional[bool]:
         },
         {
           "annotation": {
-            "data": "Union[int, float]",
+            "data": "int | float",
             "type": "str"
           },
           "default": {
@@ -398,7 +398,7 @@ def function_with_annotation5(a: int, b: Union[int, float]) -> Optional[bool]:
         }
       ],
       "return_annotation": {
-          "data": "typing.Optional[bool]",
+          "data": "bool | None",
           "type": "str"
       },
       "target_name":"function_with_annotation5",

@@ -1,39 +1,76 @@
 ---
-import { listBundles } from "../lib/ir-reader.ts";
-import { dataDir } from "../lib/paths.ts";
+import { listBundles, listIngestedBundles } from "../lib/ir-reader.ts";
+import { dataDir, ingestDb } from "../lib/paths.ts";
+import Head from "../components/Head.astro";
+import SiteHeader from "../components/SiteHeader.astro";
 import "../styles/global.css";
 
 const root = dataDir();
 const bundles = await listBundles(root);
+const ingested = await listIngestedBundles();
+
+// Index bundles by (pkg, ver) so we can tell which ones are viewable.
+const ingestedByKey = new Map<string, true>();
+for (const b of ingested) ingestedByKey.set(`${b.pkg}/${b.version}`, true);
+
+// Rows to display: union of gen bundles and ingested bundles. Viewable rows
+// link through; gen-only rows are listed but marked as "not ingested".
+interface Row {
+  pkg: string;
+  version: string;
+  dirName: string | null;
+  viewable: boolean;
+}
+const rows: Row[] = [];
+for (const b of bundles) {
+  const pkg = b.meta?.module ?? b.dirName;
+  const version = b.meta?.version ?? "?";
+  rows.push({
+    pkg,
+    version,
+    dirName: b.dirName,
+    viewable: ingestedByKey.has(`${pkg}/${version}`),
+  });
+}
+for (const ib of ingested) {
+  if (bundles.find((b) => b.meta?.module === ib.pkg && b.meta?.version === ib.version)) continue;
+  rows.push({ pkg: ib.pkg, version: ib.version, dirName: null, viewable: true });
+}
+rows.sort((a, b) => `${a.pkg}/${a.version}`.localeCompare(`${b.pkg}/${b.version}`));
 ---
 
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Papyri viewer</title>
+    <Head title="Papyri viewer" />
   </head>
   <body>
+    <SiteHeader />
     <main>
       <h1>Papyri viewer</h1>
       <p class="lede">
-        Reading IR from <code>{root}</code>
+        Gen bundles: <code>{root}</code>. Graph DB: <code>{ingestDb()}</code>.
       </p>
 
       {
-        bundles.length === 0 ? (
+        rows.length === 0 ? (
           <div class="empty">
             No bundles found. Generate one with
-            <code>papyri gen examples/papyri.toml --no-infer</code>, then point
-            <code>PAPYRI_DATA_DIR</code> at the directory that contains it.
+            <code>papyri gen examples/papyri.toml --no-infer</code>, then
+            ingest it with <code>papyri ingest ~/.papyri/data/&lt;bundle&gt;</code>.
           </div>
         ) : (
           <ul class="bundles">
-            {bundles.map((b) => (
+            {rows.map((r) => (
               <li>
-                <span class="name">{b.meta?.module ?? b.dirName}</span>
-                <span class="version">{b.meta?.version ?? "?"}</span>
-                <span class="dir">{b.dirName}</span>
+                {r.viewable ? (
+                  <a class="name" href={`/${r.pkg}/${r.version}/`}>{r.pkg}</a>
+                ) : (
+                  <span class="name">{r.pkg}</span>
+                )}
+                <span class="version">{r.version}</span>
+                <span class="dir">
+                  {r.viewable ? (r.dirName ?? "ingested") : "gen only — run papyri ingest"}
+                </span>
               </li>
             ))}
           </ul>

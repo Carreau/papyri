@@ -697,9 +697,12 @@ class DFSCollector:
 
     def visit_ModuleType(self, mod, stack):
         for k in dir(mod):
-            # TODO: scipy 1.8 workaround, remove.
+            # Defensive: modules with a custom __dir__ / __getattr__ can list
+            # names that aren't actually resolvable. Originally added for a
+            # scipy 1.8 quirk; kept because it's generic. Log at DEBUG —
+            # observable under verbose tracing, not end-user noise.
             if not hasattr(mod, k):
-                self.log.warning(f"Name not found in module: {mod.__name__}.{k}")
+                self.log.debug("Name not found in module: %s.%s", mod.__name__, k)
                 continue
             self._open_list.append((getattr(mod, k), stack + [k]))
 
@@ -801,7 +804,6 @@ class GeneratedDoc(Node):
 
     @classmethod
     def _deserialise(cls, **kwargs):
-        # print_("will deserialise", cls)
         try:
             instance = cls(**kwargs)
         except Exception as e:
@@ -1409,7 +1411,6 @@ class Gen:
         # TODO fix this if plt.close not called and still a lingering figure.
         fig_managers = _pylab_helpers.Gcf.get_all_fig_managers()
         if len(fig_managers) != 0:
-            # print_(f"Unclosed figures in {qa}!!")
             plt.close("all")
 
         return processed_example_data(example_section_data), doctest_runner.figs
@@ -2052,7 +2053,6 @@ class Gen:
             api_object = APIObjectInfo(
                 "other", item_docstring, None, target_item.__name__, qa
             )
-            # print_("Other", target_item)
             # assert False, type(target_item)
 
         if item_docstring is None and not isinstance(target_item, ModuleType):

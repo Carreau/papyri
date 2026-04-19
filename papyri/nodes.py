@@ -598,9 +598,8 @@ class GenCode(UnserializableNode):
         return super().validate()
 
     def _validate(self):
-        for e in self.entries:  # noqa: B007
+        for _ in self.entries:
             pass
-            # assert len(e) == 3
 
     def __repr__(self):
         return f"<{self.__class__.__name__}: {self.entries=} {self.out=} {self.ce_status=}>"
@@ -737,7 +736,7 @@ class DefListItem(Node):
 class SeeAlsoItem(Node):
     name: XRef
 
-    # TODO: Chck why we hav a Union Here, and if we have only Paragraphs, remove the union.
+    # TODO: check why we have a Union here, and if we have only Paragraphs, remove the union.
     descriptions: List[Union[Paragraph]]
     # there are a few case when the lhs is `:func:something`... in scipy.
     type: Optional[str]
@@ -745,12 +744,6 @@ class SeeAlsoItem(Node):
     @property
     def children(self):
         return [self.name, self.type, *self.descriptions]
-
-    # @classmethod
-    # def from_json(cls, name, descriptions, type):
-    #    assert isinstance(descriptions, list)
-    #    return cls(Ref(**name), descriptions, type)
-    #    assert isinstance(self.descriptions, list)
 
     def __hash__(self):
         return hash((self.name, tuple(self.descriptions)))

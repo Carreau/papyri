@@ -1,0 +1,10 @@
+---
+// Header strip that sits above the page's own crumb bar. Keeps the theme
+// toggle in a single place so every page gets it consistently. Pages that
+// want a tighter layout can skip this and manage the toggle themselves.
+import ThemeToggle from "./ThemeToggle.tsx";
+---
+
+<div class="site-header">
+  <ThemeToggle client:load />
+</div>

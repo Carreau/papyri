@@ -6,3 +6,74 @@
 - `numpy.core.shape_base._concatenate_shapes` improperly parse
 - Issues with `scipy.sparse.data._create_method.<locals>.method` that likely get conflicting canonical name with another
   function tan/float
+
+## Findings from running `papyri gen` on IPython 9.12.0 and numpy 2.4.4 (Py 3.14, 2026-04-19)
+
+### Papyri bugs
+
+- PEP 649 / lazy-annotations compat in `papyri/signature.py`.
+  `ObjectSignature.from_str` does `exec(f"def {sig}:pass", {}, glob)` then
+  `cls(glob[oname])`, which calls `inspect.signature(target_item)`. On
+  Python 3.14, annotations are evaluated lazily in the empty globals
+  passed to exec, so any name referenced in the signature string
+  (`Any`, `collections`, `t_total`, ...) raises `NameError` when
+  `inspect.signature()` resolves them. Reproduces on:
+    - IPython.core.oinspect:OInfo             (`Any` not defined)
+    - IPython.terminal.shortcuts:Binding,
+      BaseBinding, RuntimeBinding              (`collections` not defined)
+    - IPython.utils.timing:clock2              (`t_user` not defined)
+    - IPython.utils.timing:timings,
+      timings_out                              (`t_total` not defined)
+  Fix sketch: on Py 3.14+, call
+  `inspect.signature(target_item, annotation_format=annotationlib.Format.STRING)`
+  (or FORWARDREF) so names stay unresolved, or pass a richer globals
+  dict (e.g. `{"Any": typing.Any, "Optional": typing.Optional, ...}`)
+  into the `exec`, or catch `NameError` and fall back to stringified
+  annotations.
+
+- `AssertionError` in `papyri/ts.py:468`
+  (`assert len(post_text) >= len(self.as_text(tc))`). Fires on numpy
+  dtype classes whose docstring starts with a short signature line
+  followed by a `--` underline shorter than the title, which
+  tree-sitter-rst parses as a section header. Affects ~25 entries:
+  `numpy:dtype`, `numpy.fft:fft`, and all of `numpy.dtypes:*DType`
+  (BoolDType, Int8/16/32/64DType, UInt8/16/32/64DType,
+  LongLongDType, ULongLongDType, BytesDType, StrDType, StringDType,
+  CLongDoubleDType, Complex64/128DType, Float16/32/64DType,
+  DateTime64DType, TimeDelta64DType, ObjectDType, VoidDType,
+  LongDoubleDType). Either loosen the assert to a soft-fail / log, or
+  detect the "too-short adornment" case earlier and treat the first
+  line as a signature instead of a title.
+
+- Typos fixed on `claude/test-papyri-codebases-rFFwR`:
+    - papyri/vref.py:52  "Cound" -> "Could" (raised by
+      numpy.polynomial._polybase:ABCPolyBase).
+    - papyri/ts.py:366   "charter" -> "character" (backtick warning,
+      e.g. numpy.random._mt19937:MT19937._legacy_seeding).
+
+### Upstream docstring issues worth reporting
+
+- numpy.random._mt19937:MT19937._legacy_seeding has a malformed
+  backtick sequence in its docstring:
+    `SeedSequence, or ``None`
+  The backticks are unbalanced. Intended:
+    `SeedSequence`, or ``None``
+  Lives in `_mt19937.pyx` in the numpy repo. Triggers the
+  "Improper backtick" warning in papyri's tree-sitter RST parser
+  three times.
+
+- numpy.polynomial._polybase:ABCPolyBase uses a `Class Attributes`
+  section name that numpydoc (and therefore papyri's
+  `vref.NumpyDocString._guess_header`) does not recognise. Either
+  add `Class Attributes` to papyri's alias table or rename the
+  section in numpy to one of the canonical numpydoc section names.
+
+- Non-signature first line in docstrings for
+  `IPython.utils.timing:{clock2,timings,timings_out}` is not a real
+  Python signature — it uses tuple-literal return annotations like
+  `-> (t_user, t_system)`. This is fine as human-readable text but
+  the names break papyri's exec-based signature parser on 3.14. Not
+  really an IPython bug; the right fix is on papyri's side (see
+  first bullet), but if IPython wanted to be friendly it could drop
+  the first "synopsis" line now that real annotations exist on
+  these functions.

@@ -400,3 +400,33 @@ export function qualnameToSlug(qa: string): string {
 export function slugToQualname(slug: string): string {
   return slug.replace(/\$/g, ":");
 }
+
+// ---------------------------------------------------------------------------
+// URL shaping for a RefInfo-shaped tuple.
+// `module` / `docs` / `examples` get the natural page URLs we render; `assets`
+// gets a static path (actual asset serving is deferred to M3). Unknown kinds
+// return null so the caller can render an unresolved span.
+// ---------------------------------------------------------------------------
+
+export interface LinkRef {
+  pkg: string;
+  ver: string;
+  kind: string;
+  path: string;
+}
+
+export function linkForRef(ref: LinkRef): string | null {
+  switch (ref.kind) {
+    case "module":
+      return `/${ref.pkg}/${ref.ver}/${qualnameToSlug(ref.path)}/`;
+    case "docs":
+      return `/${ref.pkg}/${ref.ver}/docs/${encodeURIComponent(ref.path)}/`;
+    case "examples":
+      return `/${ref.pkg}/${ref.ver}/examples/${encodeURIComponent(ref.path)}/`;
+    case "assets":
+      // M3 will serve these; use a stable static path for now.
+      return `/assets/${ref.pkg}/${ref.ver}/${ref.path}`;
+    default:
+      return null;
+  }
+}

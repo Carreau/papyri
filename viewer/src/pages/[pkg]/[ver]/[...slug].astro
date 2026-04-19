@@ -1,5 +1,6 @@
 ---
 import {
+  linkForRef,
   listIngestedBundles,
   listModules,
   loadModule,
@@ -9,6 +10,7 @@ import {
   type SignatureNodeT,
   type ParameterNodeT,
 } from "../../../lib/ir-reader.ts";
+import { getBackrefs, resolveRef } from "../../../lib/graph.ts";
 import IrNode from "../../../components/IrNode.astro";
 import "../../../styles/global.css";
 
@@ -117,6 +119,66 @@ const arbitrary = Array.isArray(doc.arbitrary) ? doc.arbitrary : [];
 function sectionChildren(s: SectionNode): IRNode[] {
   return Array.isArray(s.children) ? s.children : [];
 }
+
+// ---------------------------------------------------------------------------
+// M2 crosslinks.
+// resolveXref is handed to <IrNode> and called per XRef node at render time.
+// It closes over the cached DB handle (openGraphDb caches) so we don't open
+// the file per node. The XRef IR shape:
+//   { __type: "XRef", value: label, reference: RefInfo, kind, anchor }
+// where `reference` is a RefInfo tag node with fields (module, version, kind,
+// path). We prefer that resolved reference, falling back to the top-level
+// XRef.kind / value pair.
+// ---------------------------------------------------------------------------
+interface XRefShape {
+  value?: string;
+  reference?: {
+    __type?: string;
+    module?: string;
+    version?: string;
+    kind?: string;
+    path?: string;
+  } | null;
+  kind?: string;
+}
+
+function resolveXref(raw: unknown): { url: string; label: string } | null {
+  const n = raw as XRefShape | null;
+  if (!n) return null;
+  const label = n.value ?? "";
+  const ref = n.reference;
+  if (!ref || !ref.module || !ref.path || !ref.kind) return null;
+  // Skip papyri's sentinel "unresolved" placeholder.
+  if (ref.module === "current-module" || ref.kind === "to-resolve") return null;
+  const resolved = resolveRef({
+    pkg: ref.module,
+    ver: ref.version ?? "?",
+    kind: ref.kind,
+    path: ref.path,
+  });
+  if (!resolved) return null;
+  const url = linkForRef(resolved);
+  if (!url) return null;
+  return { url, label };
+}
+
+// Backrefs for this document.
+const backrefs = getBackrefs({ pkg, ver, kind: "module", path: qualname });
+interface BackrefRow {
+  url: string;
+  label: string;
+  key: string;
+}
+const backrefRows: BackrefRow[] = [];
+const _seen = new Set<string>();
+for (const b of backrefs) {
+  const url = linkForRef(b);
+  if (!url) continue;
+  const key = `${b.pkg}/${b.ver}/${b.kind}/${b.path}`;
+  if (_seen.has(key)) continue;
+  _seen.add(key);
+  backrefRows.push({ url, label: b.path, key });
+}
 ---
 
 <html lang="en">
@@ -158,7 +220,7 @@ function sectionChildren(s: SectionNode): IRNode[] {
           <section class={`doc-section doc-section-${title.toLowerCase().replace(/\s+/g, "-")}`}>
             <h2>{title}</h2>
             {sectionChildren(section).map((c) => (
-              <IrNode node={c} />
+              <IrNode node={c} resolveXref={resolveXref} />
             ))}
           </section>
         ))
@@ -172,7 +234,7 @@ function sectionChildren(s: SectionNode): IRNode[] {
               <div>
                 {s.title ? <h3>{s.title}</h3> : null}
                 {sectionChildren(s).map((c) => (
-                  <IrNode node={c} />
+                  <IrNode node={c} resolveXref={resolveXref} />
                 ))}
               </div>
             ))}
@@ -187,6 +249,19 @@ function sectionChildren(s: SectionNode): IRNode[] {
             <ul>
               {doc.aliases.map((a) => (
                 <li><code>{a}</code></li>
+              ))}
+            </ul>
+          </section>
+        ) : null
+      }
+
+      {
+        backrefRows.length > 0 ? (
+          <section class="backrefs">
+            <h2>Referenced by</h2>
+            <ul class="qualnames">
+              {backrefRows.map((b) => (
+                <li><a href={b.url}>{b.label}</a></li>
               ))}
             </ul>
           </section>

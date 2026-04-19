@@ -4,8 +4,24 @@
 // sections (Paragraph, Text, Emphasis, Strong, Link, InlineCode, Code,
 // BulletList, ListItem, Param, Parameters, XRef). Anything else falls
 // through to a <details><pre>JSON</pre> dump so the page still renders.
+//
+// M2 adds XRef -> real <a href> resolution. The resolver is passed in as
+// a prop (closes over the opened SQLite DB in the page frontmatter) rather
+// than looked up here, so the DB handle is opened once per build. The same
+// resolver is threaded through recursive Astro.self calls.
 import type { IRNode } from "../lib/ir-reader.ts";
-const { node } = Astro.props as { node: IRNode };
+
+export interface XRefResolution {
+  url: string;
+  label: string;
+}
+
+type Resolver = (node: unknown) => XRefResolution | null;
+
+const { node, resolveXref } = Astro.props as {
+  node: IRNode;
+  resolveXref?: Resolver;
+};
 
 function asArray(x: unknown): IRNode[] {
   return Array.isArray(x) ? (x as IRNode[]) : [];
@@ -13,6 +29,9 @@ function asArray(x: unknown): IRNode[] {
 
 // Flatten XRef description: SeeAlsoItem descriptions contain Paragraphs.
 const type = node && (node as { __type?: string }).__type;
+
+const xrefResolved =
+  type === "XRef" && resolveXref ? resolveXref(node) : null;
 ---
 
 {
@@ -21,19 +40,19 @@ const type = node && (node as { __type?: string }).__type;
   ) : type === "Paragraph" ? (
     <p>
       {asArray((node as any).children).map((c) => (
-        <Astro.self node={c} />
+        <Astro.self node={c} resolveXref={resolveXref} />
       ))}
     </p>
   ) : type === "Emphasis" ? (
     <em>
       {asArray((node as any).children).map((c) => (
-        <Astro.self node={c} />
+        <Astro.self node={c} resolveXref={resolveXref} />
       ))}
     </em>
   ) : type === "Strong" ? (
     <strong>
       {asArray((node as any).children).map((c) => (
-        <Astro.self node={c} />
+        <Astro.self node={c} resolveXref={resolveXref} />
       ))}
     </strong>
   ) : type === "InlineCode" ? (
@@ -43,25 +62,25 @@ const type = node && (node as { __type?: string }).__type;
   ) : type === "Link" ? (
     <a href={(node as any).url} title={(node as any).title}>
       {asArray((node as any).children).map((c) => (
-        <Astro.self node={c} />
+        <Astro.self node={c} resolveXref={resolveXref} />
       ))}
     </a>
   ) : type === "BulletList" ? (
     <ul>
       {asArray((node as any).children).map((c) => (
-        <Astro.self node={c} />
+        <Astro.self node={c} resolveXref={resolveXref} />
       ))}
     </ul>
   ) : type === "ListItem" ? (
     <li>
       {asArray((node as any).children).map((c) => (
-        <Astro.self node={c} />
+        <Astro.self node={c} resolveXref={resolveXref} />
       ))}
     </li>
   ) : type === "Blockquote" ? (
     <blockquote>
       {asArray((node as any).children).map((c) => (
-        <Astro.self node={c} />
+        <Astro.self node={c} resolveXref={resolveXref} />
       ))}
     </blockquote>
   ) : type === "ThematicBreak" ? (
@@ -69,7 +88,7 @@ const type = node && (node as { __type?: string }).__type;
   ) : type === "Heading" ? (
     <h3>
       {asArray((node as any).children).map((c) => (
-        <Astro.self node={c} />
+        <Astro.self node={c} resolveXref={resolveXref} />
       ))}
     </h3>
   ) : type === "Math" ? (
@@ -79,7 +98,7 @@ const type = node && (node as { __type?: string }).__type;
   ) : type === "Parameters" ? (
     <dl class="params">
       {asArray((node as any).children).map((p) => (
-        <Astro.self node={p} />
+        <Astro.self node={p} resolveXref={resolveXref} />
       ))}
     </dl>
   ) : type === "Param" ? (
@@ -92,28 +111,32 @@ const type = node && (node as { __type?: string }).__type;
       </dt>
       <dd>
         {asArray((node as any).desc).map((c) => (
-          <Astro.self node={c} />
+          <Astro.self node={c} resolveXref={resolveXref} />
         ))}
       </dd>
     </Fragment>
   ) : type === "XRef" ? (
-    <span class="xref">{(node as any).value}</span>
+    xrefResolved ? (
+      <a class="xref" href={xrefResolved.url}>{xrefResolved.label}</a>
+    ) : (
+      <span class="xref unresolved">{(node as any).value}</span>
+    )
   ) : type === "Section" ? (
     <div>
       {asArray((node as any).children).map((c) => (
-        <Astro.self node={c} />
+        <Astro.self node={c} resolveXref={resolveXref} />
       ))}
     </div>
   ) : type === "Admonition" ? (
     <aside class={`admonition ${(node as any).kind ?? "note"}`}>
       {asArray((node as any).children).map((c) => (
-        <Astro.self node={c} />
+        <Astro.self node={c} resolveXref={resolveXref} />
       ))}
     </aside>
   ) : type === "AdmonitionTitle" ? (
     <p class="admonition-title">
       {asArray((node as any).children).map((c) => (
-        <Astro.self node={c} />
+        <Astro.self node={c} resolveXref={resolveXref} />
       ))}
     </p>
   ) : (

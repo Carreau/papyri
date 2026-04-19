@@ -142,11 +142,37 @@ Data flow per request/page:
    `~/.papyri/data` and lists bundles. No qualname rendering yet.
 2. [x] **M1 — single-page render.** Given `(pkg, ver, qualname)`, render
    signature + description from the IR. No crosslinks.
-3. **M2 — crosslinks + backrefs** via `papyri.db`.
+3. [x] **M2 — crosslinks + backrefs** via `papyri.db`.
 4. **M3 — examples, math, syntax highlighting.**
 5. **M4 — static export** (`astro build`) verified against a real
    ingested set (numpy, scipy).
 6. **M5 — polish**: search, error pages, dark mode.
+
+### M2 notes
+
+- New runtime dep: `better-sqlite3`. Justification: synchronous SQLite
+  client that maps cleanly onto Astro's build-time data loading; the graph
+  is a few MB and all lookups happen at SSG time, so we want a zero-async
+  API rather than e.g. `sql.js`.
+- Async/sync DB access: Astro component frontmatter is async but Astro
+  component *props* are resolved synchronously per render. Rather than
+  pre-resolving every XRef into a flat `{url, label}` table before rendering
+  (which would mean walking the whole IR tree up front), we pass a
+  synchronous `resolveXref(node) => {url, label} | null` function into
+  `<IrNode>` as a prop. The function closes over the cached SQLite handle
+  (`openGraphDb` caches a single `Database` instance per build process), so
+  the DB is opened once and queried on demand from within the recursive
+  renderer. When the graph DB is absent (fresh checkout / CI), `openGraphDb`
+  returns `null` and every `resolveXref` call returns `null`; the viewer
+  then degrades to unresolved `.xref` spans and no "Referenced by" section.
+- `resolveRef` prefers an exact `(pkg, ver, kind, path)` match, falling
+  back to any ingested version of the same `(pkg, kind, path)` sorted
+  lexicographically (highest first). True cross-version picking (prefer
+  the "closest" ingested version to the caller's version) is deferred —
+  our ingested set is tiny, so lexicographic max is fine for now.
+- `Fig` refs are not yet rendered — IrNode doesn't have a Fig branch yet,
+  and asset serving is M3. The graph still resolves asset links so that
+  whenever the renderer gains a Fig branch, the URLs are already correct.
 
 ### M1 notes
 

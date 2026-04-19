@@ -251,8 +251,12 @@ Data flow per request/page:
   it handles both.
 - Do we vendor a tiny IR schema doc inside `viewer/` or wait for
   `docs/IR.md` (Phase 2) and consume that?
-- Publishing target: GitHub Pages from `viewer/dist/`? Out of scope for
-  v0, but the static export should make it trivial.
+- Publishing target: resolved — **Cloudflare Pages**, driven from
+  `.github/workflows/cloudflare-pages.yml`. The static export is
+  deployed as-is; all papyri-side state (bundles, ingest store, graph
+  DB) is a build input, never a runtime dependency. See
+  [`DEPLOY.md`](DEPLOY.md) for the Cloudflare setup, secrets, and the
+  upgrade path to D1 + R2 if we ever outgrow SSG.
 - Should the viewer have its own CI workflow, or piggyback on the
   existing Python CI? Probably separate, filtered on `viewer/**`.
 - IR-drift policy: do we pin a "known-good" IR commit hash in

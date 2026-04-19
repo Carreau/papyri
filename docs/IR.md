@@ -128,6 +128,23 @@ section set; narrative content lives in `arbitrary`.
 Examples (`examples/`) are bare `Section` blobs — one section per
 standalone example file.
 
+#### Tutorials convention
+
+Narrative documents of kind "tutorial" do not get a dedicated IR field
+or directory; they are stored alongside the rest of the narrative under
+`docs/`. Consumers that need to split tutorials out (the viewer's
+sidebar, for instance) filter by filename convention:
+
+- Files whose basename starts with `tutorial_` (e.g.
+  `docs/tutorial_intro`) are treated as tutorials.
+- Files that sit under a `tutorials/` path component (e.g.
+  `docs/tutorials/intro`) are treated as tutorials.
+
+Authors pick either convention when laying out their source docs; both
+flow through `papyri gen` → `papyri ingest` unchanged. Promoting this to
+a first-class IR field is a future change — flagging it here so the
+convention stays stable in the meantime.
+
 ### `assets/`
 
 Raw bytes. Images, logos, etc. Referenced from IR via the `Fig` node,
@@ -144,6 +161,7 @@ against everything already ingested, and writes into
 ├── papyri.db                              # SQLite graph index
 └── <module>/
     └── <version>/
+        ├── meta.cbor                      # bundle meta (minus aliases, plus summary)
         ├── module/
         │   └── <qualname>.cbor            # IngestedDoc (CBOR)
         ├── docs/
@@ -153,10 +171,28 @@ against everything already ingested, and writes into
         ├── assets/
         │   └── <filename>                 # raw bytes
         └── meta/
-            ├── meta.cbor                  # bundle meta (minus aliases)
             ├── toc.cbor                   # List[TocTree] (CBOR)
-            └── aliases.cbor               # Dict[str,str] (CBOR)
+            ├── aliases.cbor               # Dict[str,str] (CBOR)
+            └── logo.<ext>                 # optional, copied from gen assets/
 ```
+
+### `meta.cbor`
+
+CBOR-encoded dict, written by `Ingester.ingest` after all API docs have
+been processed. Carries the same fields as `papyri.json` (minus
+`aliases`, which lives in `meta/aliases.cbor`), with two ingest-time
+additions for viewer consumption:
+
+| Field     | Type            | Notes                                                    |
+| --------- | --------------- | -------------------------------------------------------- |
+| `module`  | `str`           | Root package name.                                       |
+| `version` | `str`           | Package version string.                                  |
+| `tag`     | `str`           | Release tag.                                             |
+| `logo`    | `str \| null`   | Basename under `<pkg>/<ver>/meta/` (e.g. `"logo.png"`), or null. Rewritten from the gen-side filename at ingest time so consumers don't have to sniff the asset directory. |
+| `summary` | `str` (opt.)    | Plain-text first paragraph of the top-level module's docstring `Summary` section. Added when available; absent otherwise. |
+
+Any other keys present in the bundle's `papyri.json` (e.g. `pypi`,
+`github_slug`) pass through unchanged.
 
 An `IngestedDoc` (`papyri/crosslink.py`, `@register(4010)`) is a
 `GeneratedDoc` that has been walked by the cross-link visitor so that

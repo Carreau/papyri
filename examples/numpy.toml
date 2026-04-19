@@ -42,7 +42,6 @@ execute_exclude_patterns = [
 ]
 
 submodules = [
-    'compat',
     'core',
     'ctypeslib',
     'doc',

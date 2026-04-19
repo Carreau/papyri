@@ -21,20 +21,18 @@ any new constraint in `PLAN.md`.
 
 Prereq for everything downstream. Land before the TS work starts.
 
-- [ ] `crosslink.py` `_ingest_narrative` / new helper: copy `meta.logo`
-      bytes from the gen bundle into the ingest store at a stable path,
-      e.g. `<ingestDir>/<pkg>/<ver>/meta/logo.<ext>`. Record the filename
-      (or full relative path) in the ingested meta blob so the viewer
-      doesn't have to sniff extensions.
-- [ ] Include a short bundle summary in the ingested meta (first paragraph
-      of the top-level module docstring, already available via
-      `IngestedDoc._content.Summary`). Populate at ingest time so the
-      landing-card blurb doesn't require loading every top-level module.
-- [ ] Confirm `meta/toc.cbor` (TocTree, tag 4021) is written for bundles
-      that have narrative docs; if not, fix.
-- [ ] Decide on "tutorials" bucket: v0 is a filename convention inside
-      `docs/` (`tutorial_*` or path under `tutorials/`). Document the
-      convention in `docs/IR.md`. No new IR field.
+- [x] `crosslink.py` `Ingester._ingest_logo`: copies the gen bundle's
+      logo from `assets/` into `<ingestDir>/<pkg>/<ver>/meta/logo.<ext>`
+      and rewrites the ingested meta's `logo` field to that basename so
+      the viewer doesn't have to sniff extensions.
+- [x] Ingested meta now carries a `summary` field: plain-text first
+      paragraph of the top-level module docstring's `Summary` section,
+      extracted at ingest time from `IngestedDoc._content["Summary"]`.
+- [x] Confirmed: `meta/toc.cbor` (TocTree, tag 4021) is written by
+      `Ingester._ingest_narrative` for bundles that have a `toc.json`.
+- [x] Tutorials bucket documented as a filename convention in
+      `docs/IR.md` (files prefixed `tutorial_` or under `docs/tutorials/`).
+      No new IR field.
 
 ## 1. TS: stop reading from gen
 

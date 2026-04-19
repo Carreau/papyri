@@ -11,7 +11,7 @@ from typing import Any
 import cbor2
 from rich.logging import RichHandler
 
-from .common_ast import Node, register
+from .node_base import Node, register
 from .config import ingest_dir
 from .gen import GeneratedDoc, _OrderedDictProxy, normalise_ref
 from .graphstore import GraphStore, Key

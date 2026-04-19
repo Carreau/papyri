@@ -11,7 +11,7 @@ from functools import lru_cache
 from textwrap import indent
 from typing import Any
 
-from .common_ast import Node
+from .node_base import Node
 from .directives import (
     block_math_handler,
     deprecated_handler,

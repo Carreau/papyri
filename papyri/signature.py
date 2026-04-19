@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from .common_ast import Node, register
+from .node_base import Node, register
 from .errors import TextSignatureParsingFailed
 
 

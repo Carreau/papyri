@@ -50,14 +50,14 @@ from rich.progress import BarColumn, Progress, TextColumn, track
 
 log = logging.getLogger("papyri")
 
-from .common_ast import Node, register
+from .node_base import Node, register
 from .errors import (
     IncorrectInternalDocsLen,
     NumpydocParseError,
     TextSignatureParsingFailed,
     UnseenError,
 )
-from .miscs import BlockExecutor, DummyP
+from .misc import BlockExecutor, DummyP
 from .nodes import (
     Fig,
     GenCode,
@@ -89,7 +89,7 @@ from .utils import (
     pos_to_nl,
     progress,
 )
-from .vref import NumpyDocString
+from .numpydoc_compat import NumpyDocString
 
 
 class ErrorCollector:

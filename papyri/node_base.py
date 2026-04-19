@@ -6,7 +6,7 @@ from typing import Any
 
 import cbor2
 
-from .miniserde import deserialize, get_type_hints
+from .serde import deserialize, get_type_hints
 from .node_serializer import serialize as _serialize
 
 

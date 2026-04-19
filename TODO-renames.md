@@ -250,13 +250,16 @@ Not renaming: `gen`, `ingest`, `relink`, `describe`.
 
 ## 9. Module filenames
 
-- [ ] `papyri/miniserde.py` → `papyri/serde.py` (drop "mini").
-- [ ] `papyri/common_ast.py` → `papyri/node_base.py` (only defines
-      `Base` and `Node`). Or fold into `papyri/nodes.py`.
-- [ ] `papyri/miscs.py` → `papyri/misc.py` (singular). Or dissolve
-      into proper homes.
-- [ ] `papyri/vref.py` — audit what it does, rename to match.
-- [ ] `papyri/myst_serialiser.py` → `papyri/node_serializer.py`
+- [x] `papyri/miniserde.py` → `papyri/serde.py` (dropped "mini").
+- [x] `papyri/common_ast.py` → `papyri/node_base.py`. Kept separate
+      from `nodes.py` (folding was an option but `Base`/`Node` are
+      usefully its own import surface for the ~5 sites that only
+      need the base class).
+- [x] `papyri/miscs.py` → `papyri/misc.py` (singular).
+- [x] `papyri/vref.py` → `papyri/numpydoc_compat.py`. It's the
+      NumpyDocString subclass with a more-lenient section alias
+      table; new name says what it is.
+- [x] `papyri/myst_serialiser.py` → `papyri/node_serializer.py`
       (covered in item 1b).
 
 ## 10. Viewer-side follow-ups

@@ -8,7 +8,7 @@ It is aimed at papyri maintainers and at authors of IR consumers (the
 in-tree `viewer/`, or any future out-of-tree consumer). See `PLAN.md` for
 project-wide scope; the code of record for everything below is
 `papyri/gen.py`, `papyri/crosslink.py`, `papyri/graphstore.py`,
-`papyri/common_ast.py`, and `papyri/nodes.py`.
+`papyri/node_base.py`, and `papyri/nodes.py`.
 
 ## Two stores, two stages
 
@@ -281,7 +281,7 @@ it into a `Key` for the `links` table.
 ## Node type registry (CBOR tags)
 
 Every serializable IR node has a unique CBOR tag declared by
-`@register(<int>)` in `papyri/common_ast.py`. The global tag map is
+`@register(<int>)` in `papyri/node_base.py`. The global tag map is
 `TAG_MAP` / `REV_TAG_MAP`; `Encoder` (`papyri/nodes.py`) wraps
 `cbor2.dumps` / `cbor2.loads` so each tagged blob is decoded back into
 the right Python class.
@@ -348,7 +348,7 @@ preserved. Non-Python consumers can treat it as an array.
 `UnprocessedDirective`, `GenCode`, and `GenToken` inherit from
 `UnserializableNode` — they are gen-time intermediates; reaching the
 CBOR encoder with any of them is a bug. See
-`common_ast.UnserializableNode` for the invariant.
+`node_base.UnserializableNode` for the invariant.
 
 ## Debug / inspection
 

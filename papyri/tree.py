@@ -508,6 +508,7 @@ class DirectiveVisiter(TreeReplacer):
         aliases,
         version,
         config=None,
+        module: str | None = None,
     ):
         """
         qa: str
@@ -550,6 +551,9 @@ class DirectiveVisiter(TreeReplacer):
         self._targets: set[Any] = set()
         self.version = version
         self._tocs: Any = []
+        # For API docs, the module can be derived from qa (first dotted component).
+        # For narrative docs it must be passed explicitly.
+        self.module: str = module if module is not None else qa.split(".")[0]
 
     def replace_GenCode(self, code):
         """Flatten a GenCode intermediate into a plain Code node."""
@@ -573,20 +577,28 @@ class DirectiveVisiter(TreeReplacer):
         return [Code(content)]
 
     def _toctree_handler(self, argument, options, content):
-        assert not argument
+        # argument is ignored (rare cases like ``.. toctree:: My Title``).
         toc = []
-
         lls = []
+
+        glob = options.get("glob") if isinstance(options, dict) else False
 
         for line in content.splitlines():
             line = line.strip()
-            if line == "self":
-                # TODO in toctree one line can refer to self
+            # Skip blank lines, comments, and the special "self" entry.
+            if not line or line.startswith("..") or line == "self":
                 continue
+            # Skip glob patterns — we don't expand them at gen time.
+            if glob and ("*" in line or "?" in line):
+                continue
+
             if "<" in line and line.endswith(">"):
-                title, url = line[:-1].split("<")
-                title = title.strip()
-                assert "<" not in url
+                # "Title Text <path>" form — split on last " <".
+                try:
+                    title, url = line[:-1].rsplit(" <", 1)
+                    title = title.strip()
+                except ValueError:
+                    continue
                 toc.append([title, url])
                 link = CrossRef(
                     title,
@@ -596,8 +608,7 @@ class DirectiveVisiter(TreeReplacer):
                 )
                 RESOLVER.add_reference(link, url)
                 lls.append(link)
-            else:
-                assert "<" not in line
+            elif "<" not in line:
                 toc.append([None, line])
                 link = CrossRef(
                     line,
@@ -607,6 +618,7 @@ class DirectiveVisiter(TreeReplacer):
                 )
                 RESOLVER.add_reference(link, line)
                 lls.append(link)
+            # Lines with "<" but not ending ">" are malformed — skip silently.
 
         self._tocs.append(toc)
 
@@ -803,10 +815,8 @@ def _obj_from_path(parts):
 class GenVisitor(DirectiveVisiter):
     def visit_Section(self, node):
         if node.target:
-            # TODO: This is wrong, we should likely change this to the current module that get visited.
-            # it likely only affects narative
             RESOLVER.add_target(
-                RefInfo("papyri", "0.0.8", "docs", node.target), node.target
+                RefInfo(self.module, self.version, "docs", node.target), node.target
             )
 
     def replace_Fig(self, fig):

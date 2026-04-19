@@ -151,6 +151,50 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md). Summary:
   is still in flux. Splitting out remains an option once the IR schema
   stabilizes in Phase 2.
 
+### Phase 4 — Narrative docs (IPython as reference target)
+
+The skeleton already exists: `papyri gen` parses `.rst` files from
+`docs_path`, `papyri ingest` converts `toc.json → toc.cbor`, and the
+viewer has `docs/[...doc].astro` + sidebar TOC rendering. The gaps are
+robustness and coverage holes.
+
+**Phase A — make it build** (current focus)
+
+- [ ] Harden `toc.py:make_tree()` to not crash when there is no `index`
+      root document. Fall back to a flat listing of all collected docs.
+      IPython and other packages may root the docs tree at a key other
+      than `"index"` or may have an empty toctree graph.
+- [ ] Fix `tree.py:_toctree_handler`: remove `assert not argument` (some
+      builds pass a title); skip empty and comment lines; silently drop
+      `:glob:` entries (we don't expand globs at gen time).
+- [ ] Fix `tree.py:GenVisitor.visit_Section`: section target refs are
+      currently registered against the hardcoded
+      `RefInfo("papyri", "0.0.8", "docs", …)` regardless of which package
+      is being built. Pass the real `(module, version)` pair through
+      `GenVisitor` and use them here.
+- [ ] Update `examples/IPython.toml`: add `narrative_exclude` patterns
+      to skip auto-generated API stubs (`api/generated/`) and Sphinx
+      build artefacts that are not human-authored prose.
+
+**Phase B — make it useful in the viewer**
+
+- [ ] Fix narrative page `<h1>`: extract the first heading from
+      `doc.arbitrary[0].title` instead of displaying the raw key
+      (`config:details`).
+- [ ] Add `id=` anchors to headings so within-doc navigation works.
+- [ ] Add a within-doc mini-TOC (sidebar or top-of-page) listing `<h2>`
+      headings for long narrative pages.
+
+**Phase C — `:doc:` cross-links**
+
+- [ ] Handle the `:doc:` Sphinx role in `GenVisitor`: emit a `CrossRef`
+      with `kind="docs"` instead of verbatim text.
+- [ ] Resolve those refs in `IngestVisitor` (map to `Key(pkg, ver,
+      "docs", path)`).
+- [ ] Gracefully skip Sphinx-only directives that are not meaningful
+      outside the Sphinx build environment: `.. autofunction::`,
+      `.. autoclass::`, `.. automodule::`, `.. ipython::`.
+
 ## Open questions
 
 - Do we want to re-publish to PyPI under a new version once Phase 1 is

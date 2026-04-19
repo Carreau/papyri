@@ -9,6 +9,14 @@ execute_exclude_patterns = [
    'IPython.core.display_functions:display'
 ]
 exclude = []
+# Exclude Sphinx-generated API stubs and build artefacts that are not
+# human-authored prose.  These files typically use ``.. automodule::`` /
+# ``.. autoclass::`` directives that have no meaning outside a Sphinx build.
+narrative_exclude = [
+    "api/generated",
+    "_build",
+    "config/api",
+]
 [global.expected_errors]
 IncorrectInternalDocsLen = [
     "IPython.core.magics.namespace:NamespaceMagics.xdel",

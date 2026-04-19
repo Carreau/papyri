@@ -1467,6 +1467,7 @@ class Gen:
                         aliases={},
                         version=self._meta["version"],
                         config=self.config.directives,
+                        module=self.root,
                     )
                     blob.arbitrary = [dv.visit(s) for s in data]
                 except Exception as e:

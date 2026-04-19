@@ -11,9 +11,35 @@ log = logging.getLogger("papyri")
 # jupyter_pytest monkeypatch  of setenv_HOME
 GLOBAL_PATH = _Path("~/.papyri/ingest/papyri.db").expanduser()
 
+_SCHEMA = """
+CREATE TABLE nodes(
+    id         INTEGER PRIMARY KEY,
+    package    TEXT NOT NULL,
+    version    TEXT NOT NULL,
+    category   TEXT NOT NULL,
+    identifier TEXT NOT NULL,
+    UNIQUE(package, version, category, identifier)
+);
+CREATE TABLE links(
+    source INTEGER NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+    dest   INTEGER NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+    PRIMARY KEY (source, dest)
+);
+CREATE INDEX idx_links_dest ON links(dest);
+"""
+
+# Applied to every connection, old or new.
+_PRAGMAS = [
+    "PRAGMA foreign_keys = 1",
+    "PRAGMA journal_mode = WAL",
+    "PRAGMA synchronous = NORMAL",
+    "PRAGMA cache_size = -65536",
+    "PRAGMA mmap_size = 268435456",
+]
+
 
 class Path:
-    """just a path wrapper that has a conveninent `.read_json` and `.write_json` method"""
+    """path wrapper with .read_json / .write_json backed by CBOR"""
 
     def __init__(self, path):
         assert isinstance(path, _Path), path
@@ -26,7 +52,6 @@ class Path:
     def write_json(self, data):
         with open(self.path, "wb") as f:
             return cbor2.dump(data, f)
-        # self.path.write_text(json.dumps(data))
 
     def __truediv__(self, other):
         return type(self)(self.path / other)
@@ -87,8 +112,13 @@ class Key:
 
 class GraphStore:
     """
-    Class abstraction over the filesystem to store documents in a graph-like
-    structure
+    Abstraction over a filesystem blob store plus a SQLite graph index.
+
+    Each document is stored as a CBOR blob on disk, keyed by a 4-tuple
+    (package, version, category, identifier).  The SQLite database tracks
+    which documents exist and which forward/back references connect them.
+    The filesystem is the source of truth for blob content; SQLite is the
+    source of truth for graph structure.
 
     We do not want to use the server or alike as most of our users will use REPL
     or IDE and performance is not our goal as we are likely going to access
@@ -116,78 +146,45 @@ class GraphStore:
     When we put a document, we ask for all the documents this references; and
     should update the edges accordingly.
 
-    I don't really want to store a global edge document – though it might seem
-    the most reasonable; sqlite ? So I was thinking of storing a companion
-    document with all the back references; but maybe sqlite is a better
-    approach.
-
     One more question is about the dangling documents? Like document we have references to,
     but do not exist yet, and a bunch of other stuff.
 
     """
 
     def __init__(self, root: _Path, link_finder=None):
-        # for now we are going to try to do in-memory operation, just to
-        # see how we can handle that with SQL, and move to on-disk later.
         p = GLOBAL_PATH
         log.debug("connecting to database %s", p)
-        if not p.exists():
-            log.info("database does not exist, creating: %s", p)
-            self.conn = sqlite3.connect(p)
-            self.conn.execute("PRAGMA foreign_keys = 1")
+        is_new = not p.exists()
+        self.conn = sqlite3.connect(str(p))
+        self.conn.row_factory = sqlite3.Row
+        for pragma in _PRAGMAS:
+            self.conn.execute(pragma)
 
-            log.debug("Creating documents table")
-            self.conn.cursor().execute("""
-                CREATE TABLE documents(
-                id INTEGER PRIMARY KEY,
-                package TEXT NOT NULL,
-                version TEXT NOT NULL,
-                category TEXT NOT NULL,
-                identifier TEXT NOT NULL, unique(package, version, category, identifier))
-                """)
-
-            self.conn.cursor().execute("""
-                CREATE TABLE destinations(
-                id INTEGER PRIMARY KEY,
-                package TEXT NOT NULL,
-                version TEXT NOT NULL,
-                category TEXT NOT NULL,
-                identifier TEXT NOT NULL, unique(package, version, category, identifier))
-                """)
-
-            log.debug("Creating links table")
-            self.conn.cursor().execute("""
-                CREATE TABLE links(
-                id INTEGER PRIMARY KEY,
-                source INTEGER NOT NULL,
-                dest INTEGER NOT NULL,
-                metadata TEXT,
-                FOREIGN KEY (source) REFERENCES documents(id) ON DELETE CASCADE
-                FOREIGN KEY (dest) REFERENCES destinations(id) ON DELETE CASCADE)
-                """)
-            for cid in [
-                "CREATE INDEX module on documents(package) ;",
-                "CREATE INDEX px on documents(identifier);",
-                "CREATE INDEX qa on destinations(identifier);",
-                "CREATE INDEX ax on destinations(package, version, category, identifier);",
-                "CREATE INDEX sx on links(source);",
-                "CREATE INDEX dx on links(dest);",
-            ]:
-                self.conn.cursor().execute(cid)
-
+        if is_new:
+            log.info("creating new database: %s", p)
+            self.conn.executescript(_SCHEMA)
             self.conn.commit()
         else:
-            self.conn = sqlite3.connect(str(p))
+            # Detect stale schema from before the nodes/links redesign.
+            tables = {
+                row[0]
+                for row in self.conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                )
+            }
+            if "nodes" not in tables:
+                raise RuntimeError(
+                    f"Database at {p} has an outdated schema. "
+                    "Run 'papyri drop' and re-ingest to rebuild it."
+                )
 
-        # assert isinstance(link_finder, dict)
         assert isinstance(root, _Path)
         self._root = Path(root)
         self._link_finder = link_finder
 
     def _key_to_path(self, key: Key) -> Path:
         """
-        Given A key, return path to the current file
-        and the back referenced.
+        Given a key, return path to the current file.
 
         Parameters
         ----------
@@ -195,92 +192,64 @@ class GraphStore:
 
         Returns
         -------
-        data_path:  _Path
-        backref_path : _Path
-
+        data_path : Path
         """
         path = self._root
         assert None not in key, key
         for k in key[:-1]:
             path = path / k
-        path0 = path / (key[-1])
-        return path0
-
-    def _path_to_key(self, path: Path):
-        """
-        Given a path, return the key for the document.
-
-        Opposite of _key_to_path
-
-        Parameters
-        ----------
-        path : Path
-
-        Returns
-        -------
-        key : Key
-        """
-        path = path.relative_to(self._root.path)
-        if len(path.parts) == 4:
-            a, b, c, d = path.parts
-            return Key(a, b, c, d)
-        else:
-            return path.parts
+        return path / key[-1]
 
     def remove(self, key: Key) -> None:
         path = self._key_to_path(key)
-        path.unlink()
-        #  this is likely incorrect if we want to deal with dangling links.
-        log.debug("Removing link from table")
-        self.conn.execute(
-            "delete from links where source=?",
-            (str(key),),
-        )
+        path.path.unlink()
+        with self.conn:
+            row = self.conn.execute(
+                "SELECT id FROM nodes WHERE package=? AND version=? AND category=? AND identifier=?",
+                list(key),
+            ).fetchone()
+            if row:
+                # Only delete outgoing links; keep the node so other documents
+                # that reference it don't get dangling dest entries.
+                self.conn.execute("DELETE FROM links WHERE source=?", (row["id"],))
 
     def _get(self, key: Key) -> bytes:
         assert isinstance(key, Key)
-        path = self._key_to_path(key)
-
-        # TODO: this is partially incorrect.
-        # as we only match on the identifier,
-        # we should match on more.
-        return path.read_bytes()
+        return self._key_to_path(key).read_bytes()
 
     def _get_backrefs(self, key: Key) -> set[Key]:
-        cur = self.conn.cursor()
-        backrows = list(
-            cur.execute(
-                """
-        select documents.*
-        from links
-            inner join documents on links.source=documents.id
-            inner join destinations on links.dest=destinations.id
-        where destinations.identifier=?""",
-                (key.path,),
-            )
-        )
-
-        sql_backrefs = {Key(*s[1:]) for s in backrows}
-        return sql_backrefs
+        rows = self.conn.execute(
+            """
+            SELECT n_src.package, n_src.version, n_src.category, n_src.identifier
+            FROM links
+            JOIN nodes AS n_src  ON links.source = n_src.id
+            JOIN nodes AS n_dest ON links.dest   = n_dest.id
+            WHERE n_dest.package=?
+              AND n_dest.version=?
+              AND n_dest.category=?
+              AND n_dest.identifier=?
+            """,
+            list(key),
+        ).fetchall()
+        return {Key(r[0], r[1], r[2], r[3]) for r in rows}
 
     def get_forwardrefs(self, key: Key) -> set[Key]:
-        cur = self.conn.cursor()
-        forward_rows = list(
-            cur.execute(
-                """
-        select destinations.*
-        from links
-            inner join documents on links.source=documents.id
-            inner join destinations on links.dest=destinations.id
-        where documents.identifier=?""",
-                (key.path,),
-            )
-        )
+        rows = self.conn.execute(
+            """
+            SELECT n_dest.package, n_dest.version, n_dest.category, n_dest.identifier
+            FROM links
+            JOIN nodes AS n_src  ON links.source = n_src.id
+            JOIN nodes AS n_dest ON links.dest   = n_dest.id
+            WHERE n_src.package=?
+              AND n_src.version=?
+              AND n_src.category=?
+              AND n_src.identifier=?
+            """,
+            list(key),
+        ).fetchall()
+        return {Key(r[0], r[1], r[2], r[3]) for r in rows}
 
-        sql_forward_ref = {Key(*s[1:]) for s in forward_rows}
-        return sql_forward_ref
-
-    def get_all(self, key):
+    def get_all(self, key: Key):
         a = self._get(key)
         b = self._get_backrefs(key)
         c = self.get_forwardrefs(key)
@@ -292,63 +261,16 @@ class GraphStore:
     def get(self, key: Key) -> bytes:
         return self._get(key)
 
-    def _maybe_insert_source(self, key):
-        with self.conn:
-            c1 = self.conn.cursor()
-            rows = list(
-                c1.execute(
-                    """
-                select id from documents where (
-                    package=?
-                AND version=?
-                AND category=?
-                AND identifier=?)
-                """,
-                    list(key),
-                )
-            )
-            if not rows:
-                c1.execute(
-                    """
-                    insert into documents values
-                    (Null, ?, ?, ?, ?)
-                    """,
-                    list(key),
-                )
-                source_id = c1.lastrowid
-            else:
-                [(source_id,)] = rows
-
-        return source_id
-
-    def _maybe_insert_dest(self, ref):
-        with self.conn:
-            c1 = self.conn.cursor()
-            rows = list(
-                c1.execute(
-                    """
-                select id from destinations where (
-                    package=?
-                AND version=?
-                AND category=?
-                AND identifier=?)
-                """,
-                    list(ref),
-                )
-            )
-            if not rows:
-                c1.execute(
-                    """
-                    insert into destinations values
-                    (Null, ?, ?, ?, ?)
-                    """,
-                    list(ref),
-                )
-                dest_id = c1.lastrowid
-            else:
-                [(dest_id,)] = rows
-
-        return dest_id
+    def _maybe_insert_node(self, key) -> int:
+        """Insert node if not present, return its id. Must be called within a transaction."""
+        self.conn.execute(
+            "INSERT OR IGNORE INTO nodes(package, version, category, identifier) VALUES (?, ?, ?, ?)",
+            list(key),
+        )
+        return self.conn.execute(
+            "SELECT id FROM nodes WHERE package=? AND version=? AND category=? AND identifier=?",
+            list(key),
+        ).fetchone()["id"]
 
     def _meta_path(self, module: str, version: str):
         assert isinstance(module, str)
@@ -357,23 +279,19 @@ class GraphStore:
 
     def put_meta(self, module: str, version: str, data: bytes) -> None:
         assert isinstance(data, bytes)
-
         mp = self._meta_path(module, version)
         mp.path.parent.mkdir(parents=True, exist_ok=True)
-
         mp.write_bytes(data)
 
     def get_meta(self, key: Key) -> bytes:
-        mp = self._meta_path(key.module, key.version)
-        return mp.read_bytes()
+        return self._meta_path(key.module, key.version).read_bytes()
 
     def put(self, key: Key, bytes_: bytes, refs) -> None:
         """
-        Store object ``bytes``, as path ``key`` with the corresponding
+        Store object ``bytes_``, as path ``key`` with the corresponding
         links to other objects.
 
-        refs : List[Key] ?
-
+        refs : List[Key]
         """
         assert isinstance(key, Key)
         for r in refs:
@@ -389,38 +307,45 @@ class GraphStore:
         path.write_bytes(bytes_)
 
         new_refs = set(refs)
-        del refs
-
         removed_refs = old_refs - new_refs
         added_refs = new_refs - old_refs
 
         with self.conn:
-            source_id = self._maybe_insert_source(key)
-            params = []
-            for ref in added_refs:
-                params.append((source_id, self._maybe_insert_dest(ref), "debug"))
+            source_id = self._maybe_insert_node(key)
 
-            to_del = []
+            add_params = [
+                (source_id, self._maybe_insert_node(ref)) for ref in added_refs
+            ]
+
+            del_params = []
             for ref in removed_refs:
-                to_del.append((source_id, self._maybe_insert_dest(ref)))
-            c3 = self.conn.cursor()
-            c3.executemany("insert or ignore into links values (NULL, ?,?,?)", params)
-            c3.executemany("delete from links where source=? and dest=? ", to_del)
+                row = self.conn.execute(
+                    "SELECT id FROM nodes WHERE package=? AND version=? AND category=? AND identifier=?",
+                    list(ref),
+                ).fetchone()
+                if row:
+                    del_params.append((source_id, row["id"]))
+
+            c = self.conn.cursor()
+            c.executemany("INSERT OR IGNORE INTO links(source, dest) VALUES (?,?)", add_params)
+            c.executemany("DELETE FROM links WHERE source=? AND dest=?", del_params)
 
     def glob(self, pattern) -> list[Key]:
-        acc = ""
-        for p in pattern:
-            if p is None:
-                acc += "/*"
-            else:
-                acc += "/" + p
-        acc = acc[1:]
-        try:
-            res = [
-                self._path_to_key(p)
-                for p in self._root.glob(acc)
-                if not p.name.endswith(".br")
-            ]  # !!
-        except Exception as e:
-            raise type(e)("Acc:" + acc, pattern) from e
-        return res
+        package, version, category, identifier = pattern
+        clauses = []
+        params = []
+        for col, val in [
+            ("package", package),
+            ("version", version),
+            ("category", category),
+            ("identifier", identifier),
+        ]:
+            if val is not None:
+                clauses.append(f"{col}=?")
+                params.append(val)
+        where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+        rows = self.conn.execute(
+            f"SELECT package, version, category, identifier FROM nodes {where}",
+            params,
+        ).fetchall()
+        return [Key(r[0], r[1], r[2], r[3]) for r in rows]

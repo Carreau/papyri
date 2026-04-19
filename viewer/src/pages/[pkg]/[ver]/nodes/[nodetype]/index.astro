@@ -1,0 +1,258 @@
+---
+import { join } from "node:path";
+import BundleLayout from "../../../../../layouts/BundleLayout.astro";
+import {
+  listIngestedBundles,
+  listModules,
+  loadModule,
+  loadCbor,
+  collectNodes,
+  type IRNode,
+  type TypedNode,
+} from "../../../../../lib/ir-reader.ts";
+import { listDocs, listExamples } from "../../../../../lib/nav.ts";
+
+// ---------------------------------------------------------------------------
+// Supported node-type slugs. Each entry lists which IR __type names to
+// collect and how to extract a display string from a matched node.
+// ---------------------------------------------------------------------------
+
+interface NodeConfig {
+  label: string;
+  types: ReadonlySet<string>;
+  /** Extract a short display key used for deduplication and rendering. */
+  displayValue(n: IRNode): string | null;
+}
+
+const NODE_CONFIGS: Record<string, NodeConfig> = {
+  math: {
+    label: "Math",
+    types: new Set(["Math", "InlineMath"]),
+    displayValue(n) {
+      const v = (n as TypedNode).value;
+      return typeof v === "string" ? v : null;
+    },
+  },
+  code: {
+    label: "Code",
+    types: new Set(["Code", "InlineCode"]),
+    displayValue(n) {
+      const v = (n as TypedNode).value;
+      return typeof v === "string" ? v : null;
+    },
+  },
+};
+
+export async function getStaticPaths() {
+  const bundles = await listIngestedBundles();
+  const paths: Array<{
+    params: { pkg: string; ver: string; nodetype: string };
+    props: { bundlePath: string };
+  }> = [];
+  for (const b of bundles) {
+    for (const slug of Object.keys(NODE_CONFIGS)) {
+      paths.push({
+        params: { pkg: b.pkg, ver: b.version, nodetype: slug },
+        props: { bundlePath: b.path },
+      });
+    }
+  }
+  return paths;
+}
+
+const { pkg, ver, nodetype } = Astro.params;
+const { bundlePath } = Astro.props as { bundlePath: string };
+
+const config = NODE_CONFIGS[nodetype!]!;
+
+interface PageRef {
+  label: string;
+  href: string;
+}
+
+// Map from display value → { __type, value, pages[] }.
+const valueMap = new Map<string, { nodeType: string; value: string; pages: PageRef[] }>();
+
+function addHits(nodes: IRNode[], page: PageRef) {
+  for (const n of nodes) {
+    const val = config.displayValue(n);
+    if (val === null) continue;
+    const existing = valueMap.get(val);
+    if (existing) {
+      if (!existing.pages.some((p) => p.href === page.href)) {
+        existing.pages.push(page);
+      }
+    } else {
+      valueMap.set(val, { nodeType: n.__type, value: val, pages: [page] });
+    }
+  }
+}
+
+// Walk modules
+const qualnames = await listModules(bundlePath);
+await Promise.all(
+  qualnames.map(async (qa) => {
+    let doc;
+    try {
+      doc = await loadModule(bundlePath, qa);
+    } catch {
+      return;
+    }
+    addHits(
+      collectNodes(doc, config.types),
+      { label: qa, href: `/${pkg}/${ver}/${qa.replace(/:/g, "$")}/` },
+    );
+  }),
+);
+
+// Walk narrative docs
+const docPaths = await listDocs(bundlePath);
+await Promise.all(
+  docPaths.map(async (docPath) => {
+    let section;
+    try {
+      section = await loadCbor(join(bundlePath, "docs", docPath));
+    } catch {
+      return;
+    }
+    addHits(
+      collectNodes(section, config.types),
+      {
+        label: docPath,
+        href: `/${pkg}/${ver}/docs/${docPath.split("/").map(encodeURIComponent).join("/")}/`,
+      },
+    );
+  }),
+);
+
+// Walk examples
+const exPaths = await listExamples(bundlePath);
+await Promise.all(
+  exPaths.map(async (exPath) => {
+    let section;
+    try {
+      section = await loadCbor(join(bundlePath, "examples", exPath));
+    } catch {
+      return;
+    }
+    addHits(
+      collectNodes(section, config.types),
+      {
+        label: exPath,
+        href: `/${pkg}/${ver}/examples/${exPath.split("/").map(encodeURIComponent).join("/")}/`,
+      },
+    );
+  }),
+);
+
+// Sort by value length ascending so short formulas appear first
+const entries = [...valueMap.values()].sort(
+  (a, b) => a.value.length - b.value.length || a.value.localeCompare(b.value),
+);
+---
+
+<BundleLayout
+  pkg={pkg!}
+  ver={ver!}
+  bundlePath={bundlePath}
+  title={`${config.label} — ${pkg} ${ver} — Papyri viewer`}
+>
+  <p class="crumb"><a href={`/${pkg}/${ver}/`}>&larr; {pkg} {ver}</a></p>
+  <h1>{config.label}</h1>
+  <p class="lede">
+    {entries.length} unique value{entries.length !== 1 ? "s" : ""}
+  </p>
+
+  {
+    entries.length === 0 ? (
+      <p class="no-nodes">No {config.label.toLowerCase()} nodes in this bundle.</p>
+    ) : (
+      <dl class="node-list">
+        {entries.map((entry) => (
+          <div class="node-entry">
+            <dt>
+              <span class="node-kind">{entry.nodeType}</span>
+              <pre class="node-value"><code>{entry.value}</code></pre>
+            </dt>
+            <dd>
+              <details class="node-refs">
+                <summary>
+                  {entry.pages.length} page{entry.pages.length !== 1 ? "s" : ""}
+                </summary>
+                <ul>
+                  {entry.pages.map((p) => (
+                    <li><a href={p.href}>{p.label}</a></li>
+                  ))}
+                </ul>
+              </details>
+            </dd>
+          </div>
+        ))}
+      </dl>
+    )
+  }
+</BundleLayout>
+
+<style>
+  .no-nodes {
+    color: var(--fg-muted);
+    margin-top: 1rem;
+  }
+  .node-list {
+    margin-top: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  .node-entry {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--surface);
+  }
+  .node-entry dt {
+    background: var(--surface-alt);
+    padding: 0.5rem 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  .node-kind {
+    font-size: 0.72rem;
+    font-family: var(--mono);
+    color: var(--fg-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .node-value {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 0.85rem;
+    font-family: var(--mono);
+    max-height: 12rem;
+    overflow-y: auto;
+  }
+  .node-value code {
+    background: transparent;
+    padding: 0;
+  }
+  .node-entry dd {
+    margin: 0;
+    padding: 0.5rem 0.75rem;
+  }
+  .node-refs summary {
+    cursor: pointer;
+    font-size: 0.82rem;
+    color: var(--accent);
+  }
+  .node-refs ul {
+    margin: 0.3rem 0 0 1rem;
+    padding: 0;
+    list-style: disc;
+    font-size: 0.82rem;
+  }
+  .node-refs li {
+    margin: 0.15rem 0;
+  }
+</style>

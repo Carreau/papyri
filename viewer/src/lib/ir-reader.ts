@@ -380,47 +380,70 @@ export interface LinkRef {
 }
 
 // ---------------------------------------------------------------------------
-// IR image collection. Walks an arbitrary decoded IR value and yields every
-// Figure (tag 4024, asset reference) and Image (tag 4062, direct URL) node
-// encountered. The source document identity is tracked by the caller.
+// Generic IR node collection.
+//
+// collectNodes walks a decoded IR tree and returns every node whose __type
+// is in the given set. Callers can then filter/map the results to extract
+// the specific fields they care about.
+//
+//   collectNodes(doc, new Set(["Math", "InlineMath"]))  → all math nodes
+//   collectNodes(doc, new Set(["Code", "InlineCode"]))  → all code nodes
+//   collectNodes(doc, new Set(["Figure", "Image"]))     → all image nodes
+// ---------------------------------------------------------------------------
+
+/**
+ * Walk a decoded IR tree and return every node whose __type is in `types`.
+ * Recurses into all array-typed and object-typed field values so nested
+ * structures (Section > Paragraph > InlineMath, etc.) are fully traversed.
+ */
+export function collectNodes(
+  node: unknown,
+  types: ReadonlySet<string>,
+  out: IRNode[] = [],
+): IRNode[] {
+  if (!node || typeof node !== "object") return out;
+  if (Array.isArray(node)) {
+    for (const item of node) collectNodes(item, types, out);
+    return out;
+  }
+  const n = node as Record<string, unknown>;
+  if (typeof n.__type === "string" && types.has(n.__type)) {
+    out.push(n as IRNode);
+  }
+  for (const val of Object.values(n)) {
+    if (val && typeof val === "object") collectNodes(val, types, out);
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Image collection — domain-specific wrapper around collectNodes that
+// resolves Figure RefInfo references to viewer asset URLs.
 // ---------------------------------------------------------------------------
 
 export type FoundImgNode =
   | { kind: "Figure"; src: string; assetPath: string }
   | { kind: "Image"; src: string; alt: string };
 
-export function collectImages(node: unknown, out: FoundImgNode[] = []): FoundImgNode[] {
-  if (!node || typeof node !== "object") return out;
-  if (Array.isArray(node)) {
-    for (const item of node) collectImages(item, out);
-    return out;
-  }
-  const n = node as Record<string, unknown>;
-
-  if (n.__type === "Figure") {
-    const ref = n.value as
-      | { module?: string; version?: string; kind?: string; path?: string }
-      | undefined;
-    if (ref?.kind === "assets" && ref.module && ref.version && ref.path) {
-      const assetPath = String(ref.path);
-      out.push({
-        kind: "Figure",
-        src: `/assets/${ref.module}/${ref.version}/${assetPath.replace(/:/g, "$")}`,
-        assetPath,
-      });
+export function collectImages(node: unknown): FoundImgNode[] {
+  const out: FoundImgNode[] = [];
+  for (const n of collectNodes(node, new Set(["Figure", "Image"]))) {
+    if (n.__type === "Figure") {
+      const ref = (n as TypedNode).value as
+        | { module?: string; version?: string; kind?: string; path?: string }
+        | undefined;
+      if (ref?.kind === "assets" && ref.module && ref.version && ref.path) {
+        const assetPath = String(ref.path);
+        out.push({
+          kind: "Figure",
+          src: `/assets/${ref.module}/${ref.version}/${assetPath.replace(/:/g, "$")}`,
+          assetPath,
+        });
+      }
+    } else if (n.__type === "Image") {
+      const url = String((n as TypedNode).url ?? "");
+      if (url) out.push({ kind: "Image", src: url, alt: String((n as TypedNode).alt ?? "") });
     }
-    // RefInfo is a leaf; don't recurse into it.
-    return out;
-  }
-
-  if (n.__type === "Image") {
-    const url = String(n.url ?? "");
-    if (url) out.push({ kind: "Image", src: url, alt: String(n.alt ?? "") });
-    return out;
-  }
-
-  for (const val of Object.values(n)) {
-    if (val && typeof val === "object") collectImages(val, out);
   }
   return out;
 }

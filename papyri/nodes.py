@@ -112,7 +112,7 @@ class InlineRole(Node):
 
 
 @register(4002)
-class XRef(Node):
+class CrossRef(Node):
     """
     A cross-reference produced by the gen step and resolved by ingest.
 
@@ -145,7 +145,7 @@ class XRef(Node):
         )
 
     def __repr__(self):
-        return f"<XRef: {self.value=} {self.reference=} {self.kind=}>"
+        return f"<CrossRef: {self.value=} {self.reference=} {self.kind=}>"
 
     def __hash__(self):
         return hash((self.value, self.reference, self.kind, self.anchor))
@@ -383,7 +383,7 @@ class IntermediateNode(Node):
 
 
 @register(4024)
-class Fig(Node):
+class Figure(Node):
     value: RefInfo
 
 
@@ -453,7 +453,7 @@ class Section(Node):
     children: list[
         DefList
         | FieldList
-        | Fig
+        | Figure
         | Admonition
         | Blockquote
         | Code
@@ -520,7 +520,7 @@ class DocParam(Node):
     name: str
     annotation: str
     desc: list[
-        Fig
+        Figure
         | DefListItem
         | DefList
         | Directive
@@ -608,7 +608,7 @@ def compress_word(stream) -> list[Any]:
 inline_nodes = tuple(
     [
         InlineRole,
-        XRef,
+        CrossRef,
         Link,
         SubstitutionRef,
     ]
@@ -696,7 +696,7 @@ class DefListItem(Node):
 
 @register(4028)
 class SeeAlsoItem(Node):
-    name: XRef
+    name: CrossRef
 
     # TODO: check why we have a Union here, and if we have only Paragraphs, remove the union.
     descriptions: list[Paragraph]
@@ -754,7 +754,7 @@ def parse_rst_section(text, qa):
 # ---- Union type aliases -----------------------------------------------------
 
 StaticPhrasingContent: TypeAlias = (
-    Text | InlineCode | InlineMath | InlineRole | XRef | SubstitutionRef | Unimplemented
+    Text | InlineCode | InlineMath | InlineRole | CrossRef | SubstitutionRef | Unimplemented
 )
 
 PhrasingContent: TypeAlias = StaticPhrasingContent | Emphasis | Strong | Link

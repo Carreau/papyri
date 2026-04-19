@@ -2,10 +2,10 @@
 // Recursive renderer for papyri IR nodes.
 // M1 scope: handles the block/inline subset produced by typical numpydoc
 // sections (Paragraph, Text, Emphasis, Strong, Link, InlineCode, Code,
-// BulletList, ListItem, DocParam, Parameters, XRef). Anything else falls
+// BulletList, ListItem, DocParam, Parameters, CrossRef). Anything else falls
 // through to a <details><pre>JSON</pre> dump so the page still renders.
 //
-// M2 adds XRef -> real <a href> resolution. The resolver is passed in as
+// M2 adds CrossRef -> real <a href> resolution. The resolver is passed in as
 // a prop (closes over the opened SQLite DB in the page frontmatter) rather
 // than looked up here, so the DB handle is opened once per build. The same
 // resolver is threaded through recursive Astro.self calls.
@@ -13,12 +13,12 @@ import type { IRNode } from "../lib/ir-reader.ts";
 import { renderMath } from "../lib/math.ts";
 import { highlight } from "../lib/highlight.ts";
 
-export interface XRefResolution {
+export interface CrossRefResolution {
   url: string;
   label: string;
 }
 
-type Resolver = (node: unknown) => XRefResolution | null;
+type Resolver = (node: unknown) => CrossRefResolution | null;
 
 const { node, resolveXref } = Astro.props as {
   node: IRNode;
@@ -29,11 +29,11 @@ function asArray(x: unknown): IRNode[] {
   return Array.isArray(x) ? (x as IRNode[]) : [];
 }
 
-// Flatten XRef description: SeeAlsoItem descriptions contain Paragraphs.
+// Flatten CrossRef description: SeeAlsoItem descriptions contain Paragraphs.
 const type = node && (node as { __type?: string }).__type;
 
 const xrefResolved =
-  type === "XRef" && resolveXref ? resolveXref(node) : null;
+  type === "CrossRef" && resolveXref ? resolveXref(node) : null;
 
 // Pre-render KaTeX / Shiki output here so the template below can use
 // `set:html`. Astro frontmatter is async, so top-level await is legal.
@@ -133,7 +133,7 @@ const codeHtml =
         ))}
       </dd>
     </Fragment>
-  ) : type === "XRef" ? (
+  ) : type === "CrossRef" ? (
     xrefResolved ? (
       <a class="xref" href={xrefResolved.url}>{xrefResolved.label}</a>
     ) : (
@@ -159,7 +159,7 @@ const codeHtml =
     </p>
   ) : type === "InlineRole" ? (
     // Inline cross-references like `:py:class:`X`` or `:func:`foo``. The
-    // graph resolves XRef, not InlineRole, so for now we render as styled
+    // graph resolves CrossRef, not InlineRole, so for now we render as styled
     // inline code with the role as a CSS class hook. Tracked as a future
     // refinement when/if the IR gets cross-referenced InlineRoles.
     <code
@@ -218,8 +218,8 @@ const codeHtml =
     </aside>
   ) : type === "Image" ? (
     <img src={(node as any).url} alt={(node as any).alt ?? ""} />
-  ) : type === "Fig" ? (
-    // Fig.value is a RefInfo(module, version, kind="assets", path=filename).
+  ) : type === "Figure" ? (
+    // Figure.value is a RefInfo(module, version, kind="assets", path=filename).
     // We don't currently serve assets from the viewer, so just show a
     // placeholder with the asset path for now. Tracked as M3 follow-up.
     <figure class="fig">

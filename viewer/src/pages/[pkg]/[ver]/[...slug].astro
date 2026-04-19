@@ -135,15 +135,15 @@ function sectionChildren(s: SectionNode): IRNode[] {
 
 // ---------------------------------------------------------------------------
 // M2 crosslinks.
-// resolveXref is handed to <IrNode> and called per XRef node at render time.
+// resolveXref is handed to <IrNode> and called per CrossRef node at render time.
 // It closes over the cached DB handle (openGraphDb caches) so we don't open
-// the file per node. The XRef IR shape:
-//   { __type: "XRef", value: label, reference: RefInfo, kind, anchor }
+// the file per node. The CrossRef IR shape:
+//   { __type: "CrossRef", value: label, reference: RefInfo, kind, anchor }
 // where `reference` is a RefInfo tag node with fields (module, version, kind,
 // path). We prefer that resolved reference, falling back to the top-level
-// XRef.kind / value pair.
+// CrossRef.kind / value pair.
 // ---------------------------------------------------------------------------
-interface XRefShape {
+interface CrossRefShape {
   value?: string;
   reference?: {
     __type?: string;
@@ -156,7 +156,7 @@ interface XRefShape {
 }
 
 function resolveXref(raw: unknown): { url: string; label: string } | null {
-  const n = raw as XRefShape | null;
+  const n = raw as CrossRefShape | null;
   if (!n) return null;
   const label = n.value ?? "";
   const ref = n.reference;

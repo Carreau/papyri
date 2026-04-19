@@ -32,7 +32,7 @@ remains authoritative.
   - the main `.process` loop has a stale `assert len(visitor.local)
     == 0` that would need a gen-time pass over local refs before it
     can be re-enabled.
-  - `doc_blob.all_forward_refs()` on Figures: Fig's `RefInfo.version`
+  - `doc_blob.all_forward_refs()` on Figures: Figure's `RefInfo.version`
     is populated at walk time today; proper fix populates it at
     serialisation time.
   Neither is urgent, but anyone touching cross-package linking should

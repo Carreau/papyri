@@ -171,14 +171,13 @@ names: `ExamplesSection` / `SeeAlsoSection` / `SignatureSection`.
 
 ### 5d. Small or abbreviated names
 
-- [ ] `Fig` (nodes.py:401) → `Figure`. Matches `Image`, `Math`,
-      `Heading`. ~30 call sites.
-- [ ] `XRef` (nodes.py:116) → `CrossRef` (spelled out). Or `Ref`, but
-      `RefInfo` is the 4-tuple ref; keeping `CrossRef` makes the
-      distinction visible.
+- [x] `Fig` → `Figure`. Done; viewer `FIELD_ORDER[4024]` + `IrNode`
+      dispatch follow.
+- [x] `XRef` → `CrossRef`. Done; viewer `FIELD_ORDER[4002]` + dispatch
+      follow; `XRefShape` / `XRefResolution` helpers renamed to
+      `CrossRefShape` / `CrossRefResolution` for consistency.
 - [ ] `ThematicBreak` (nodes.py:358) → `Rule` (HTML-familiar) or
-      leave. MyST origin; dropping it fits item 1 but isn't a
-      hard-requirement rename.
+      leave. Not obviously a win; keeping for now.
 
 ### 5e. In-memory intermediates (`Gen*`)
 
@@ -268,7 +267,7 @@ nothing falls through.
       any references to `RefInfo`/`Key` fields (item 3), `Param`
       shape (item 5c), `arbitrary` (item 7).
 - [ ] `viewer/src/components/IrNode.astro` — dispatches on class
-      name; update every rename in item 5 (`Fig`, `XRef`,
+      name; update every rename in item 5 (`Figure`, `CrossRef`,
       `AdmonitionTitle`, etc.).
 - [ ] `viewer/src/pages/[pkg]/[ver]/[...slug].astro` — route param
       and glob patterns reference `module/`.

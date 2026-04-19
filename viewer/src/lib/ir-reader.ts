@@ -149,7 +149,7 @@ export type IRNode = TypedNode | UnknownNode;
 const FIELD_ORDER: Record<number, { name: string; fields: string[] }> = {
   4000: { name: "RefInfo", fields: ["module", "version", "kind", "path"] },
   4001: { name: "Root", fields: ["children"] },
-  4002: { name: "XRef", fields: ["value", "reference", "kind", "anchor"] },
+  4002: { name: "CrossRef", fields: ["value", "reference", "kind", "anchor"] },
   4003: { name: "InlineRole", fields: ["value", "domain", "role"] },
   4010: {
     name: "IngestedDoc",
@@ -197,7 +197,7 @@ const FIELD_ORDER: Record<number, { name: string; fields: string[] }> = {
     name: "TocTree",
     fields: ["children", "title", "ref", "open", "current"],
   },
-  4024: { name: "Fig", fields: ["value"] },
+  4024: { name: "Figure", fields: ["value"] },
   4026: { name: "Parameters", fields: ["children"] },
   4027: { name: "SubstitutionDef", fields: ["value", "children"] },
   4028: { name: "SeeAlsoItem", fields: ["name", "descriptions", "type"] },

@@ -214,7 +214,7 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md). Summary:
   search.json`; a cross-bundle index would enable "find `linspace`
   across numpy and scipy".
 - Cross-package ingest correctness: `papyri/crosslink.py` still has
-  TODOs around version resolution for `Fig`/`RefInfo` across packages.
+  TODOs around version resolution for `Figure`/`RefInfo` across packages.
   See `TODO-review.md`.
 
 ## Out of scope (do not revive)

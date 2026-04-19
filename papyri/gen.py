@@ -60,7 +60,7 @@ from .errors import (
 from .misc import BlockExecutor, DummyP
 from .nodes import (
     DocParam,
-    Fig,
+    Figure,
     GenCode,
     GenToken,
     NumpydocExample,
@@ -71,7 +71,7 @@ from .nodes import (
     Section,
     SeeAlsoItem,
     Text,
-    XRef,
+    CrossRef,
     encoder,
     parse_rst_section,
 )
@@ -1043,7 +1043,7 @@ def _normalize_see_also(see_also: Section, qa: str):
                 )
                 # `exists` is derived from `refinfo.kind`; the "to-resolve" kind
                 # flags this as a placeholder for the ingest relink pass.
-                link = XRef(name, refinfo, "module")
+                link = CrossRef(name, refinfo, "module")
                 sai = SeeAlsoItem(link, desc, type_)
                 new_see_also.append(sai)
                 del desc
@@ -1122,7 +1122,7 @@ class PapyriDocTestRunner(doctest.DocTestRunner):
 
         for figname, _ in figs:
             self._example_section_data.append(
-                Fig(
+                Figure(
                     RefInfo.from_untrusted(
                         self.gen.root, self.gen.version, "assets", figname
                     )
@@ -1908,7 +1908,7 @@ class Gen:
                     l
                     + [GenCode(tok_entries, "", ce_status)]  # ignore: type
                     + [
-                        Fig(
+                        Figure(
                             RefInfo.from_untrusted(
                                 self.root, self.version, "assets", name
                             )

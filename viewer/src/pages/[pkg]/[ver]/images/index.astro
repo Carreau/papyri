@@ -1,0 +1,191 @@
+---
+import { extname, join } from "node:path";
+import BundleLayout from "../../../../layouts/BundleLayout.astro";
+import { listIngestedBundles } from "../../../../lib/ir-reader.ts";
+import { getBackrefs, type RefTuple } from "../../../../lib/graph.ts";
+import { listFilesRecursive } from "../../../../lib/nav.ts";
+
+const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"]);
+
+export async function getStaticPaths() {
+  const bundles = await listIngestedBundles();
+  return bundles.map((b) => ({
+    params: { pkg: b.pkg, ver: b.version },
+    props: { bundlePath: b.path },
+  }));
+}
+
+const { pkg, ver } = Astro.params;
+const { bundlePath } = Astro.props as { bundlePath: string };
+
+const assetDir = join(bundlePath, "assets");
+const allAssets = await listFilesRecursive(assetDir);
+const imageFiles = allAssets.filter((f) =>
+  IMAGE_EXTS.has(extname(f).toLowerCase()),
+);
+
+interface ImageEntry {
+  filename: string;
+  src: string;
+  backrefs: RefTuple[];
+}
+
+const entries: ImageEntry[] = await Promise.all(
+  imageFiles.map(async (filename) => {
+    const backrefs = getBackrefs({
+      pkg: pkg!,
+      ver: ver!,
+      kind: "assets",
+      path: filename,
+    });
+    return {
+      filename,
+      src: `/assets/${pkg}/${ver}/${filename.replace(/:/g, "$")}`,
+      backrefs,
+    };
+  }),
+);
+
+function refToHref(ref: RefTuple): string | null {
+  switch (ref.kind) {
+    case "module":
+      return `/${ref.pkg}/${ref.ver}/${ref.path.replace(/:/g, "$")}/`;
+    case "docs":
+      return `/${ref.pkg}/${ref.ver}/docs/${ref.path.split("/").map(encodeURIComponent).join("/")}/`;
+    case "examples":
+      return `/${ref.pkg}/${ref.ver}/examples/${ref.path.split("/").map(encodeURIComponent).join("/")}/`;
+    default:
+      return null;
+  }
+}
+---
+
+<BundleLayout
+  pkg={pkg!}
+  ver={ver!}
+  bundlePath={bundlePath}
+  title={`Images — ${pkg} ${ver} — Papyri viewer`}
+>
+  <p class="crumb"><a href={`/${pkg}/${ver}/`}>&larr; {pkg} {ver}</a></p>
+  <h1>Images</h1>
+  <p class="lede">
+    {entries.length} image{entries.length !== 1 ? "s" : ""}
+  </p>
+
+  {
+    entries.length === 0 ? (
+      <p class="no-images">No images in this bundle.</p>
+    ) : (
+      <div class="image-gallery">
+        {entries.map((entry) => (
+          <div class="image-card">
+            <a
+              class="image-thumb-link"
+              href={entry.src}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <img
+                class="image-thumb"
+                src={entry.src}
+                alt={entry.filename}
+                loading="lazy"
+              />
+            </a>
+            <div class="image-meta">
+              <code class="image-filename">{entry.filename}</code>
+              {entry.backrefs.length > 0 ? (
+                <details class="image-refs">
+                  <summary>
+                    Used on {entry.backrefs.length} page
+                    {entry.backrefs.length !== 1 ? "s" : ""}
+                  </summary>
+                  <ul>
+                    {entry.backrefs.map((ref) => {
+                      const href = refToHref(ref);
+                      return (
+                        <li>
+                          {href ? (
+                            <a href={href}>{ref.path}</a>
+                          ) : (
+                            <span>
+                              {ref.pkg}/{ref.ver}/{ref.kind}/{ref.path}
+                            </span>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </details>
+              ) : (
+                <span class="image-no-refs">Not referenced</span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
+</BundleLayout>
+
+<style>
+  .no-images {
+    color: var(--fg-muted);
+    margin-top: 1rem;
+  }
+  .image-gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1.25rem;
+    margin-top: 1.5rem;
+  }
+  .image-card {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+  }
+  .image-thumb-link {
+    display: block;
+    background: var(--surface-alt);
+  }
+  .image-thumb {
+    width: 100%;
+    height: 160px;
+    object-fit: contain;
+    display: block;
+  }
+  .image-meta {
+    padding: 0.6rem 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    flex: 1;
+  }
+  .image-filename {
+    font-size: 0.78rem;
+    word-break: break-all;
+    color: var(--fg-muted);
+  }
+  .image-refs summary {
+    cursor: pointer;
+    font-size: 0.82rem;
+    color: var(--accent);
+  }
+  .image-refs ul {
+    margin: 0.3rem 0 0 1rem;
+    padding: 0;
+    list-style: disc;
+    font-size: 0.82rem;
+  }
+  .image-refs li {
+    margin: 0.15rem 0;
+  }
+  .image-no-refs {
+    font-size: 0.82rem;
+    color: var(--fg-muted);
+    font-style: italic;
+  }
+</style>

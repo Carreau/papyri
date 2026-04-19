@@ -1,5 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { extname, join, relative, sep } from "node:path";
+
+const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"]);
 import { Decoder } from "cbor-x";
 import { listModules, loadCbor, type TypedNode } from "./ir-reader.ts";
 
@@ -60,6 +62,8 @@ export interface BundleNav {
   tutorials: NavEntry[];
   examples: NavEntry[];
   qualnames: string[];
+  /** Number of image assets (png/jpg/gif/svg/webp) in the bundle. */
+  imageCount: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -285,16 +289,21 @@ async function buildNav(
   version: string,
   bundlePath: string,
 ): Promise<BundleNav> {
-  const [meta, toc, docPaths, examplePaths, qualnames] = await Promise.all([
-    readMetaCbor(bundlePath),
-    readToc(bundlePath),
-    listDocs(bundlePath),
-    listExamples(bundlePath),
-    listModules(bundlePath),
-  ]);
+  const [meta, toc, docPaths, examplePaths, qualnames, assetPaths] =
+    await Promise.all([
+      readMetaCbor(bundlePath),
+      readToc(bundlePath),
+      listDocs(bundlePath),
+      listExamples(bundlePath),
+      listModules(bundlePath),
+      listFilesRecursive(join(bundlePath, "assets")),
+    ]);
   const url = await logoDataUrl(bundlePath, meta.logo);
   const { docs, tutorials } = docsToEntries(pkg, version, docPaths);
   const examples = examplesToEntries(pkg, version, examplePaths);
+  const imageCount = assetPaths.filter((p) =>
+    IMAGE_EXTS.has(extname(p).toLowerCase()),
+  ).length;
   return {
     pkg,
     version,
@@ -306,6 +315,7 @@ async function buildNav(
     tutorials,
     examples,
     qualnames,
+    imageCount,
   };
 }
 

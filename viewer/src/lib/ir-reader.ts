@@ -388,8 +388,10 @@ export function linkForRef(ref: LinkRef): string | null {
     case "examples":
       return `/${ref.pkg}/${ref.ver}/examples/${encodeURIComponent(ref.path)}/`;
     case "assets":
-      // M3 will serve these; use a stable static path for now.
-      return `/assets/${ref.pkg}/${ref.ver}/${ref.path}`;
+      // Colons are legal on disk but break Astro's URL-based path writer.
+      // Same slug rule as qualnames: `:` -> `$`. Kept in sync with the
+      // asset endpoint's `slugifyAssetPath`.
+      return `/assets/${ref.pkg}/${ref.ver}/${ref.path.replace(/:/g, "$")}`;
     default:
       return null;
   }

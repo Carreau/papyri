@@ -109,11 +109,14 @@ routes themselves can land first rendering flat lists.
 
 ## 5. Assets
 
-- [ ] Static route or `public/`-shuttle for bundle assets so
-      `linkForRef({kind:"assets"})` resolves. Driven by the ingest store
-      contents, not gen.
-- [ ] Fig IR node handling in `IrNode.astro` (currently missing per M2
-      notes in `PLAN.md`).
+- [x] Static route or `public/`-shuttle for bundle assets so
+      `linkForRef({kind:"assets"})` resolves. Implemented as an Astro
+      endpoint (`src/pages/assets/[pkg]/[ver]/[...asset].ts`) that reads
+      from the ingest store at build time; colons in asset filenames are
+      slugified `: -> $` to sidestep Astro's URL-based output writer
+      (rule mirrors qualnameToSlug).
+- [x] Fig IR node handling in `IrNode.astro`: renders `<img>` pointing
+      at the resolved asset URL.
 
 ## 6. Cross-cutting
 

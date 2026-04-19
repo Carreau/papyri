@@ -336,6 +336,20 @@ aside.directive .directive-args {
 .substitution { font-style: italic; color: var(--fg-muted); }
 .unimplemented { color: var(--fg-muted); font-style: italic; }
 
+/* Figures rendered from IR Fig nodes. Cap image width to the column so
+   large plots don't force horizontal scroll on the main content. */
+figure.fig {
+  margin: 1rem 0;
+  text-align: center;
+}
+figure.fig img {
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+}
+
 details.fallback pre {
   overflow-x: auto;
   max-height: 20rem;

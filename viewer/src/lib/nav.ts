@@ -198,11 +198,13 @@ async function readToc(bundlePath: string): Promise<TocItem[]> {
 }
 
 // ---------------------------------------------------------------------------
-// File listings for docs/ and examples/. Both are walked recursively so
-// nested layouts (docs/tutorials/*) come through. Each entry is a relative
-// POSIX-style path; URL encoding happens at the consumer.
+// File listings for docs/ / examples/ / assets/. Walked recursively so
+// nested layouts (docs/tutorials/*, fig-*.png under assets/) come through.
+// Each entry is a relative POSIX-style path; URL encoding happens at the
+// consumer. Exposed because the assets endpoint (`src/pages/assets/...`)
+// reuses the same walker.
 // ---------------------------------------------------------------------------
-async function listFilesRecursive(root: string): Promise<string[]> {
+export async function listFilesRecursive(root: string): Promise<string[]> {
   const out: string[] = [];
   async function walk(dir: string): Promise<void> {
     let ents;

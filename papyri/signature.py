@@ -4,8 +4,8 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from .node_base import Node, register
 from .errors import TextSignatureParsingFailed
+from .node_base import Node, register
 
 
 @register(4031)

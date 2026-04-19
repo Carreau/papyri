@@ -50,7 +50,6 @@ from rich.progress import BarColumn, Progress, TextColumn, track
 
 log = logging.getLogger("papyri")
 
-from .node_base import Node, register
 from .errors import (
     IncorrectInternalDocsLen,
     NumpydocParseError,
@@ -58,7 +57,9 @@ from .errors import (
     UnseenError,
 )
 from .misc import BlockExecutor, DummyP
+from .node_base import Node, register
 from .nodes import (
+    CrossRef,
     DocParam,
     Figure,
     GenCode,
@@ -71,10 +72,10 @@ from .nodes import (
     Section,
     SeeAlsoItem,
     Text,
-    CrossRef,
     encoder,
     parse_rst_section,
 )
+from .numpydoc_compat import NumpyDocString
 from .signature import Signature as ObjectSignature
 from .signature import SignatureNode
 from .toc import make_tree
@@ -89,7 +90,6 @@ from .utils import (
     pos_to_nl,
     progress,
 )
-from .numpydoc_compat import NumpyDocString
 
 
 class ErrorCollector:

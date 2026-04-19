@@ -6,8 +6,8 @@ from typing import Any
 
 import cbor2
 
-from .serde import deserialize, get_type_hints
 from .node_serializer import serialize as _serialize
+from .serde import deserialize, get_type_hints
 
 
 class Base:

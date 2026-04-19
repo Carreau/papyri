@@ -546,9 +546,7 @@ class DocParam(Node):
         return [self.name, self.annotation, self.desc][index]
 
     def __repr__(self):
-        return (
-            f"<{self.__class__.__name__}: {self.name=}, {self.annotation=}, {self.desc=}>"
-        )
+        return f"<{self.__class__.__name__}: {self.name=}, {self.annotation=}, {self.desc=}>"
 
 
 class GenToken(UnserializableNode):
@@ -754,7 +752,13 @@ def parse_rst_section(text, qa):
 # ---- Union type aliases -----------------------------------------------------
 
 StaticPhrasingContent: TypeAlias = (
-    Text | InlineCode | InlineMath | InlineRole | CrossRef | SubstitutionRef | Unimplemented
+    Text
+    | InlineCode
+    | InlineMath
+    | InlineRole
+    | CrossRef
+    | SubstitutionRef
+    | Unimplemented
 )
 
 PhrasingContent: TypeAlias = StaticPhrasingContent | Emphasis | Strong | Link

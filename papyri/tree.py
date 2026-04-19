@@ -11,7 +11,6 @@ from functools import lru_cache
 from textwrap import indent
 from typing import Any
 
-from .node_base import Node
 from .directives import (
     block_math_handler,
     deprecated_handler,
@@ -20,9 +19,11 @@ from .directives import (
     versionchanged_handler,
     warning_handler,
 )
+from .node_base import Node
 from .nodes import (
     BulletList,
     Code,
+    CrossRef,
     Directive,
     InlineCode,
     InlineMath,
@@ -34,7 +35,6 @@ from .nodes import (
     SubstitutionDef,
     Text,
     UnprocessedDirective,
-    CrossRef,
 )
 from .utils import Cannonical, FullQual, full_qual, obj_from_qualname
 

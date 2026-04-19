@@ -49,7 +49,7 @@ line-length = 88
 extend-exclude = ["node_modules", "jupyter_server_test_config.py"]
 
 [tool.ruff.lint]
-select = ["E", "F", "W"]
+select = ["E", "F", "W", "B", "I", "UP"]
 ignore = [
     "E201",   # Whitespace after '('
     "E202",   # Whitespace before ')'
@@ -68,5 +68,7 @@ ignore = [
     "E731",   # Do not assign a lambda expression
     "E741",   # Ambiguous variable name
     "F811",   # Redefinition of unused name
+    "B008",   # typer.Option() in function defaults is the intended typer pattern
+    "UP040",  # `type` keyword requires Python 3.12+; local runtime is 3.11
 ]
 mccabe.max-complexity = 50

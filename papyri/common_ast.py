@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import json
 import typing
-from typing import Dict, Any
+from typing import Any
 
 import cbor2
 
-from .miniserde import get_type_hints, deserialize
+from .miniserde import deserialize, get_type_hints
 from .node_serializer import serialize as _serialize
 
 
@@ -25,7 +25,7 @@ class Node(Base):
         tt = get_type_hints(type(self))
         if type(self).__name__ == "Directive":
             tt = {k: v for k, v in tt.items() if k != "type"}
-        for attr, val in zip(tt, args):
+        for attr, val in zip(tt, args, strict=False):
             setattr(self, attr, val)
         for k, v in kwargs.items():
             assert k in tt, f"{k} not in {tt}"
@@ -91,14 +91,18 @@ class UnserializableNode(Node):
     _dont_serialise = True
 
     def cbor(self, encoder):
-        assert False, f"{type(self).__name__} must be rewritten before serialization"
+        raise NotImplementedError(
+            f"{type(self).__name__} must be rewritten before serialization"
+        )
 
     def to_json(self) -> bytes:
-        assert False, f"{type(self).__name__} must be rewritten before serialization"
+        raise NotImplementedError(
+            f"{type(self).__name__} must be rewritten before serialization"
+        )
 
 
-TAG_MAP: Dict[Any, int] = {}
-REV_TAG_MAP: Dict[int, Any] = {}
+TAG_MAP: dict[Any, int] = {}
+REV_TAG_MAP: dict[int, Any] = {}
 
 
 def indent(text, marker="   |"):

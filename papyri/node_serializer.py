@@ -10,10 +10,23 @@ its regular fields. The tag is either the class's ``type`` class-attribute
 Used by ``Node.to_dict`` / ``Node.to_json``.
 """
 
+import types
 from typing import Union
 from typing import get_type_hints as gth
 
 base_types = {int, str, bool, type(None)}
+
+
+def _is_union(annotation) -> bool:
+    """Return True for both typing.Union[...] and X | Y (types.UnionType)."""
+    return (
+        isinstance(annotation, types.UnionType)
+        or getattr(annotation, "__origin__", None) is Union
+    )
+
+
+def _union_args(annotation) -> tuple:
+    return annotation.__args__
 
 
 def serialize(instance, annotation):
@@ -34,8 +47,8 @@ def serialize(instance, annotation):
             key_annotation, value_annotation = annotation.__args__
             # assert key_annotation == str, key_annotation
             return {k: serialize(v, value_annotation) for k, v in instance.items()}
-        if getattr(annotation, "__origin__", None) is Union:
-            inner_annotation = annotation.__args__
+        if _is_union(annotation):
+            inner_annotation = _union_args(annotation)
             if len(inner_annotation) == 2 and inner_annotation[1] == type(None):
                 # assert inner_annotation[0] is not None
                 # here we are optional; we _likely_ can avoid doing the union trick and store just the type, or null

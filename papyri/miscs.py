@@ -2,13 +2,12 @@
 Misc helper functions
 """
 
+import ast
 import io
 import sys
-import ast
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 
 from rich.progress import Progress
-
-from contextlib import redirect_stdout, redirect_stderr, contextmanager
 
 
 @contextmanager
@@ -93,7 +92,7 @@ class BlockExecutor:
         try:
             *nodes, interactive_node = module.body
         except Exception as e:
-            raise type(e)(f"{module.body} {text}")
+            raise type(e)(f"{module.body} {text}") from e
         exec(compile(ast.Module(nodes, []), name, "exec"), ns)
         acc = []
         with capture_displayhook(acc):

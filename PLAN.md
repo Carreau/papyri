@@ -176,9 +176,17 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md). Summary:
   `viewer/PLAN.md` for the tech rationale).
 - Reads the IR directly from `~/.papyri/data/…` and the SQLite graph; no
   new intermediate format.
-- Milestones: M0 scaffolding (bundle list) → M1 single-page render → M2
-  crosslinks + backrefs → M3 examples/math/highlighting → M4 static export
-  → M5 polish.
+- Milestones: all five landed.
+  - [x] M0 scaffolding (bundle list)
+  - [x] M1 single-page render (CBOR decode, signature + sections)
+  - [x] M2 crosslinks + backrefs (SQLite via `better-sqlite3`)
+  - [x] M3 math (KaTeX SSR) + syntax highlighting (Shiki)
+  - [x] M4 verified against a real-world bundle (numpy 2.3.5, 5396 pages,
+        zero unhandled IR nodes)
+  - [x] M5 polish: 404 page, dark mode, per-bundle client-side search
+- CI: `.github/workflows/viewer.yml` runs `pnpm check`, `pnpm test`
+  (vitest, 35 cases), and `pnpm build` on any push/PR touching
+  `viewer/**`.
 - Originally planned as a separate sibling repo; now in-tree while the IR
   is still in flux. Splitting out remains an option once the IR schema
   stabilizes in Phase 2.
@@ -187,12 +195,27 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md). Summary:
 
 - Do we keep `papyri install` as a thin "unzip a local bundle" command
   (since `papyri ingest` already takes directories), or delete it
-  entirely? **Current decision: delete.**
+  entirely? **Decided: deleted in Phase 1.**
 - Do we want to re-publish to PyPI under a new version once Phase 1 is
   done, or keep it as "install from git" only for the foreseeable future?
-- URL / ownership: `pyproject.toml` still has `Home =
-  "https://github.com/Jupyter/papyri"`. Update to `carreau/papyri` as part
-  of Phase 1.
+  **Still open.**
+- URL / ownership: `pyproject.toml` now has
+  `Home = "https://github.com/carreau/papyri"`. **Done.**
+
+## Follow-ups (not yet scheduled)
+
+- Static export hardening for `viewer/dist/` deployment (the current
+  build works, but a documented "publish this dir to GitHub Pages" story
+  is missing).
+- Dark-adapted Shiki theme + dark-mode-aware KaTeX glyphs. The current
+  M5 dark mode keeps the `github-light` Shiki palette on a dark
+  surface, which is readable but not ideal.
+- Per-bundle → global search. The current manifest is `<pkg>/<ver>/
+  search.json`; a cross-bundle index would enable "find `linspace`
+  across numpy and scipy".
+- Cross-package ingest correctness: `papyri/crosslink.py` still has
+  TODOs around version resolution for `Fig`/`RefInfo` across packages.
+  See `TODO-review.md`.
 
 ## Out of scope (do not revive)
 

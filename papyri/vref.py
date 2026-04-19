@@ -49,7 +49,7 @@ class NumpyDocString(nds.NumpyDocString):
         for k, v in self.aliases.items():
             if header.lower() in v:
                 return k
-        raise ValueError("Cound not find match for section:", header)
+        raise ValueError("Could not find match for section:", header)
 
     def _read_sections(self):
         for name, data in super()._read_sections():

@@ -55,3 +55,122 @@ ul.bundles .dir { margin-left: auto; font-family: var(--mono); font-size: 0.85re
 }
 
 code { font-family: var(--mono); background: #eee; padding: 0.1em 0.3em; border-radius: 3px; }
+
+ul.bundles .name a { color: inherit; text-decoration: none; border-bottom: 1px dotted var(--accent); }
+ul.bundles .name a:hover { border-bottom-style: solid; }
+
+p.crumb { font-size: 0.85rem; color: var(--fg-muted); margin: 0 0 1rem; }
+p.crumb a { color: var(--accent); text-decoration: none; }
+p.crumb a:hover { text-decoration: underline; }
+
+h1 .version {
+  font-family: var(--mono);
+  font-size: 0.7em;
+  color: var(--fg-muted);
+  font-weight: normal;
+  margin-left: 0.35em;
+}
+
+ul.qualnames {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  columns: 2;
+  column-gap: 2rem;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+}
+ul.qualnames li { padding: 0.1rem 0; break-inside: avoid; }
+ul.qualnames a { color: var(--accent); text-decoration: none; }
+ul.qualnames a:hover { text-decoration: underline; }
+
+header.qa-header { margin-bottom: 1.5rem; }
+header.qa-header .kind {
+  margin: 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-muted);
+}
+header.qa-header h1 { font-size: 1.3rem; margin: 0.1rem 0 0.4rem; font-weight: 500; }
+header.qa-header h1 code { background: transparent; padding: 0; }
+header.qa-header .source { margin: 0; font-size: 0.8rem; color: var(--fg-muted); }
+
+section.signature,
+section.doc-section,
+section.aliases {
+  margin: 1.5rem 0;
+}
+section h2 {
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--fg-muted);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.25rem;
+  margin: 0 0 0.75rem;
+}
+
+section.signature pre {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.75rem 1rem;
+  overflow-x: auto;
+  margin: 0;
+}
+section.signature pre code { background: transparent; padding: 0; font-size: 0.9rem; }
+
+pre.code {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.75rem 1rem;
+  overflow-x: auto;
+}
+pre.code code { background: transparent; padding: 0; }
+
+dl.params { margin: 0; }
+dl.params dt {
+  margin: 0.5rem 0 0.1rem;
+  font-family: var(--mono);
+  font-size: 0.9rem;
+}
+dl.params dt .pname { background: transparent; padding: 0; color: var(--accent); }
+dl.params dt .ptype { color: var(--fg-muted); font-style: italic; }
+dl.params dd { margin: 0 0 0.25rem 1.25rem; }
+dl.params dd p { margin: 0.25rem 0; }
+
+.xref { color: var(--accent); }
+
+aside.admonition {
+  border-left: 3px solid var(--accent);
+  background: #fff;
+  padding: 0.5rem 0.75rem;
+  margin: 1rem 0;
+}
+aside.admonition .admonition-title { font-weight: 600; margin: 0 0 0.25rem; }
+
+details.fallback {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.25rem 0.5rem;
+  margin: 0.5rem 0;
+  font-size: 0.8rem;
+}
+details.fallback summary {
+  cursor: pointer;
+  color: var(--fg-muted);
+  font-family: var(--mono);
+}
+details.fallback pre {
+  overflow-x: auto;
+  max-height: 20rem;
+  background: #fafafa;
+  border-radius: 3px;
+  padding: 0.5rem;
+  margin: 0.25rem 0;
+  font-size: 0.75rem;
+}
+

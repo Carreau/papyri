@@ -138,15 +138,34 @@ Data flow per request/page:
 
 ## Milestones
 
-1. **M0 — scaffolding.** `pnpm init`, Astro app boots, reads
+1. [x] **M0 — scaffolding.** `pnpm init`, Astro app boots, reads
    `~/.papyri/data` and lists bundles. No qualname rendering yet.
-2. **M1 — single-page render.** Given `(pkg, ver, qualname)`, render
+2. [x] **M1 — single-page render.** Given `(pkg, ver, qualname)`, render
    signature + description from the IR. No crosslinks.
 3. **M2 — crosslinks + backrefs** via `papyri.db`.
 4. **M3 — examples, math, syntax highlighting.**
 5. **M4 — static export** (`astro build`) verified against a real
    ingested set (numpy, scipy).
 6. **M5 — polish**: search, error pages, dark mode.
+
+### M1 notes
+
+- CBOR decoding uses `cbor-x` with a global `addExtension` entry per IR
+  tag from `docs/IR.md`. Each extension re-shapes the positional
+  `CBORTag(tag, [values...])` payload into `{ __type, __tag, ...fields }`
+  using the field order declared in `FIELD_ORDER` (mirrors
+  `typing.get_type_hints(cls)` on the Python side). Unknown tags fall
+  through as `{ __type: "unknown", __tag, value }` and the UI falls back
+  to a `<details><pre>` JSON dump per-node, not per-section.
+- URL slug for qualnames: colon `:` is rewritten to `$` because colons
+  are awkward on some filesystems and in URL bars. `papyri.nodes:RefInfo`
+  becomes `papyri.nodes$RefInfo`. `qualnameToSlug` /
+  `slugToQualname` in `ir-reader.ts` are the single source of truth.
+- Source of truth for ingest bundles is `~/.papyri/ingest/<pkg>/<ver>/`
+  (via `listIngestedBundles`), not `~/.papyri/data/`: ingested blobs are
+  `IngestedDoc` (tag 4010) with resolved refs, which is what the viewer
+  wants. The landing page still lists gen bundles for context and
+  annotates ones that haven't been ingested yet.
 
 ## Open questions
 

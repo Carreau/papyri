@@ -1,0 +1,125 @@
+---
+// Recursive renderer for papyri IR nodes.
+// M1 scope: handles the block/inline subset produced by typical numpydoc
+// sections (Paragraph, Text, Emphasis, Strong, Link, InlineCode, Code,
+// BulletList, ListItem, Param, Parameters, XRef). Anything else falls
+// through to a <details><pre>JSON</pre> dump so the page still renders.
+import type { IRNode } from "../lib/ir-reader.ts";
+const { node } = Astro.props as { node: IRNode };
+
+function asArray(x: unknown): IRNode[] {
+  return Array.isArray(x) ? (x as IRNode[]) : [];
+}
+
+// Flatten XRef description: SeeAlsoItem descriptions contain Paragraphs.
+const type = node && (node as { __type?: string }).__type;
+---
+
+{
+  type === "Text" ? (
+    <Fragment>{(node as any).value}</Fragment>
+  ) : type === "Paragraph" ? (
+    <p>
+      {asArray((node as any).children).map((c) => (
+        <Astro.self node={c} />
+      ))}
+    </p>
+  ) : type === "Emphasis" ? (
+    <em>
+      {asArray((node as any).children).map((c) => (
+        <Astro.self node={c} />
+      ))}
+    </em>
+  ) : type === "Strong" ? (
+    <strong>
+      {asArray((node as any).children).map((c) => (
+        <Astro.self node={c} />
+      ))}
+    </strong>
+  ) : type === "InlineCode" ? (
+    <code>{(node as any).value}</code>
+  ) : type === "Code" ? (
+    <pre class="code"><code>{(node as any).value}</code></pre>
+  ) : type === "Link" ? (
+    <a href={(node as any).url} title={(node as any).title}>
+      {asArray((node as any).children).map((c) => (
+        <Astro.self node={c} />
+      ))}
+    </a>
+  ) : type === "BulletList" ? (
+    <ul>
+      {asArray((node as any).children).map((c) => (
+        <Astro.self node={c} />
+      ))}
+    </ul>
+  ) : type === "ListItem" ? (
+    <li>
+      {asArray((node as any).children).map((c) => (
+        <Astro.self node={c} />
+      ))}
+    </li>
+  ) : type === "Blockquote" ? (
+    <blockquote>
+      {asArray((node as any).children).map((c) => (
+        <Astro.self node={c} />
+      ))}
+    </blockquote>
+  ) : type === "ThematicBreak" ? (
+    <hr />
+  ) : type === "Heading" ? (
+    <h3>
+      {asArray((node as any).children).map((c) => (
+        <Astro.self node={c} />
+      ))}
+    </h3>
+  ) : type === "Math" ? (
+    <div class="math">{(node as any).value}</div>
+  ) : type === "InlineMath" ? (
+    <span class="math">{(node as any).value}</span>
+  ) : type === "Parameters" ? (
+    <dl class="params">
+      {asArray((node as any).children).map((p) => (
+        <Astro.self node={p} />
+      ))}
+    </dl>
+  ) : type === "Param" ? (
+    <Fragment>
+      <dt>
+        <code class="pname">{(node as any).param}</code>
+        {(node as any).type_ ? (
+          <span class="ptype"> : {(node as any).type_}</span>
+        ) : null}
+      </dt>
+      <dd>
+        {asArray((node as any).desc).map((c) => (
+          <Astro.self node={c} />
+        ))}
+      </dd>
+    </Fragment>
+  ) : type === "XRef" ? (
+    <span class="xref">{(node as any).value}</span>
+  ) : type === "Section" ? (
+    <div>
+      {asArray((node as any).children).map((c) => (
+        <Astro.self node={c} />
+      ))}
+    </div>
+  ) : type === "Admonition" ? (
+    <aside class={`admonition ${(node as any).kind ?? "note"}`}>
+      {asArray((node as any).children).map((c) => (
+        <Astro.self node={c} />
+      ))}
+    </aside>
+  ) : type === "AdmonitionTitle" ? (
+    <p class="admonition-title">
+      {asArray((node as any).children).map((c) => (
+        <Astro.self node={c} />
+      ))}
+    </p>
+  ) : (
+    <details class="fallback">
+      <summary>unhandled: {type ?? "raw"}</summary>
+      <pre>{JSON.stringify(node, null, 2)}</pre>
+    </details>
+  )
+}

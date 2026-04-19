@@ -1,0 +1,197 @@
+---
+import {
+  listIngestedBundles,
+  listModules,
+  loadModule,
+  qualnameToSlug,
+  type IRNode,
+  type SectionNode,
+  type SignatureNodeT,
+  type ParameterNodeT,
+} from "../../../lib/ir-reader.ts";
+import IrNode from "../../../components/IrNode.astro";
+import "../../../styles/global.css";
+
+export async function getStaticPaths() {
+  const bundles = await listIngestedBundles();
+  const paths: Array<{
+    params: { pkg: string; ver: string; slug: string };
+    props: { bundlePath: string; qualname: string };
+  }> = [];
+  for (const b of bundles) {
+    const qualnames = await listModules(b.path);
+    for (const qa of qualnames) {
+      paths.push({
+        params: { pkg: b.pkg, ver: b.version, slug: qualnameToSlug(qa) },
+        props: { bundlePath: b.path, qualname: qa },
+      });
+    }
+  }
+  return paths;
+}
+
+const { pkg, ver, slug } = Astro.params;
+const { bundlePath, qualname } = Astro.props as {
+  bundlePath: string;
+  qualname: string;
+};
+
+// Defensive: in theory qualname === slugToQualname(slug).
+void slug;
+
+const doc = await loadModule(bundlePath, qualname);
+
+function renderAnnotation(
+  ann: ParameterNodeT["annotation"] | SignatureNodeT["return_annotation"],
+): string | null {
+  if (ann == null) return null;
+  if (typeof ann === "string") return ann;
+  if (typeof ann === "object" && "__type" in ann && ann.__type === "Empty") {
+    return null;
+  }
+  return null;
+}
+
+function renderDefault(def: ParameterNodeT["default"]): string | null {
+  if (def == null) return null;
+  if (typeof def === "string") return def;
+  if (typeof def === "object" && "__type" in def && def.__type === "Empty") {
+    return null;
+  }
+  return null;
+}
+
+function formatParam(p: ParameterNodeT): string {
+  const parts: string[] = [];
+  if (p.kind === "VAR_POSITIONAL") parts.push("*");
+  else if (p.kind === "VAR_KEYWORD") parts.push("**");
+  parts.push(p.name);
+  const ann = renderAnnotation(p.annotation);
+  if (ann) parts.push(`: ${ann}`);
+  const def = renderDefault(p.default);
+  if (def != null) parts.push(` = ${def}`);
+  return parts.join("");
+}
+
+function formatSignature(sig: SignatureNodeT): string {
+  const pieces: string[] = [];
+  let lastKind: string | null = null;
+  for (const p of sig.parameters) {
+    if (p.kind === "KEYWORD_ONLY" && lastKind !== "KEYWORD_ONLY" && lastKind !== "VAR_POSITIONAL") {
+      pieces.push("*");
+    }
+    pieces.push(formatParam(p));
+    lastKind = p.kind;
+  }
+  const ret = renderAnnotation(sig.return_annotation);
+  const retStr = ret ? ` -> ${ret}` : "";
+  return `${sig.target_name}(${pieces.join(", ")})${retStr}`;
+}
+
+// Iteration order of sections: prefer _ordered_sections, fall back to
+// Object.keys. Skip sections whose Section body is empty.
+const orderedKeys: string[] = doc._ordered_sections ?? [];
+const contentKeys: string[] = Object.keys(doc._content ?? {});
+const renderOrder: string[] = [
+  ...orderedKeys.filter((k) => contentKeys.includes(k)),
+  ...contentKeys.filter((k) => !orderedKeys.includes(k)),
+];
+
+interface RenderSection {
+  title: string;
+  section: SectionNode;
+}
+const sections: RenderSection[] = [];
+for (const key of renderOrder) {
+  const s = doc._content[key] as SectionNode | undefined;
+  if (!s) continue;
+  if (!Array.isArray(s.children) || s.children.length === 0) continue;
+  sections.push({ title: key, section: s });
+}
+
+const arbitrary = Array.isArray(doc.arbitrary) ? doc.arbitrary : [];
+
+// Section children sometimes contain node types the renderer doesn't handle.
+// IrNode.astro already falls back to a JSON dump per-node; we don't dump the
+// whole section just because one child is unhandled.
+function sectionChildren(s: SectionNode): IRNode[] {
+  return Array.isArray(s.children) ? s.children : [];
+}
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{qualname} — Papyri viewer</title>
+  </head>
+  <body>
+    <main>
+      <p class="crumb">
+        <a href="/">bundles</a> / <a href={`/${pkg}/${ver}/`}>{pkg} {ver}</a>
+      </p>
+
+      <header class="qa-header">
+        {doc.item_type ? <p class="kind">{doc.item_type}</p> : null}
+        <h1><code>{doc.qa}</code></h1>
+        {
+          doc.item_file ? (
+            <p class="source">
+              source: <code>{doc.item_file}</code>
+              {doc.item_line != null ? <Fragment>:{doc.item_line}</Fragment> : null}
+            </p>
+          ) : null
+        }
+      </header>
+
+      {
+        doc.signature ? (
+          <section class="signature">
+            <h2>Signature</h2>
+            <pre><code>{formatSignature(doc.signature)}</code></pre>
+          </section>
+        ) : null
+      }
+
+      {
+        sections.map(({ title, section }) => (
+          <section class={`doc-section doc-section-${title.toLowerCase().replace(/\s+/g, "-")}`}>
+            <h2>{title}</h2>
+            {sectionChildren(section).map((c) => (
+              <IrNode node={c} />
+            ))}
+          </section>
+        ))
+      }
+
+      {
+        arbitrary.length > 0 ? (
+          <section class="doc-section doc-section-arbitrary">
+            <h2>Additional content</h2>
+            {arbitrary.map((s) => (
+              <div>
+                {s.title ? <h3>{s.title}</h3> : null}
+                {sectionChildren(s).map((c) => (
+                  <IrNode node={c} />
+                ))}
+              </div>
+            ))}
+          </section>
+        ) : null
+      }
+
+      {
+        doc.aliases && doc.aliases.length > 0 ? (
+          <section class="aliases">
+            <h2>Aliases</h2>
+            <ul>
+              {doc.aliases.map((a) => (
+                <li><code>{a}</code></li>
+              ))}
+            </ul>
+          </section>
+        ) : null
+      }
+    </main>
+  </body>
+</html>

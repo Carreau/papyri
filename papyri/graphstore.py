@@ -327,7 +327,9 @@ class GraphStore:
                     del_params.append((source_id, row["id"]))
 
             c = self.conn.cursor()
-            c.executemany("INSERT OR IGNORE INTO links(source, dest) VALUES (?,?)", add_params)
+            c.executemany(
+                "INSERT OR IGNORE INTO links(source, dest) VALUES (?,?)", add_params
+            )
             c.executemany("DELETE FROM links WHERE source=? AND dest=?", del_params)
 
     def glob(self, pattern) -> list[Key]:

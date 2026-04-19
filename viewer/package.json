@@ -10,7 +10,9 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "check": "astro check"
+    "check": "astro check",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@astrojs/react": "^4.2.0",
@@ -26,6 +28,7 @@
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.4"
   }
 }

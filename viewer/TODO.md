@@ -91,19 +91,21 @@ two-column layout.
 Blocked on §0 (toc.cbor must exist) for the sidebar to be useful, but the
 routes themselves can land first rendering flat lists.
 
-- [ ] `src/pages/[pkg]/[ver]/docs/[...doc].astro`: load the `docs/<ref>`
+- [x] `src/pages/[pkg]/[ver]/docs/[...doc].astro`: load the `docs/<ref>`
       CBOR blob, render via `<IrNode>`, reuse `BundleLayout`.
-- [ ] `src/pages/[pkg]/[ver]/examples/[...ex].astro`: load
+- [x] `src/pages/[pkg]/[ver]/examples/[...ex].astro`: load
       `examples/<name>` (Section), render children via `<IrNode>`.
-- [ ] `src/lib/nav.ts`: per-bundle view-model —
+- [x] `src/lib/nav.ts`: per-bundle view-model —
       `{logoUrl, summary, toc, docs, tutorials, examples, qualnames}`.
-      Memoise per-build. `ir-reader.ts` stays the on-disk shim;
-      `nav.ts` is what pages / layouts consume.
-- [ ] Read `meta/toc.cbor`, walk the `TocTree` (tag 4021) into a
-      sidebar-ready tree. Split tutorials off by filename convention
-      (see §0).
-- [ ] Wire the sidebar stubs from §2 to `nav.ts`. Highlight the current
-      entry.
+      Memoised per-build via a module-level `Map<bundlePath, Promise>`.
+      `ir-reader.ts` grew a shared `loadCbor()` helper; `nav.ts` is now
+      the sole consumer on the page side.
+- [x] Read `meta/toc.cbor`, walk the `TocTree` (tag 4021) into a
+      sidebar-ready tree. Tutorials split off by filename convention
+      (`tutorial_*` or `docs/tutorials/*`).
+- [x] Wire the sidebar stubs from §2 to `nav.ts`. Highlight the current
+      entry via `activeQualname` / `activeDocPath` / `activeExamplePath`
+      props on `BundleLayout`.
 
 ## 5. Assets
 

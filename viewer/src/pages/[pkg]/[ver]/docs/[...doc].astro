@@ -1,0 +1,117 @@
+---
+import {
+  linkForRef,
+  listIngestedBundles,
+  loadCbor,
+  type IngestedDoc,
+  type IRNode,
+  type SectionNode,
+} from "../../../../lib/ir-reader.ts";
+import { listDocs } from "../../../../lib/nav.ts";
+import { resolveRef } from "../../../../lib/graph.ts";
+import IrNode from "../../../../components/IrNode.astro";
+import BundleLayout from "../../../../layouts/BundleLayout.astro";
+import { join } from "node:path";
+
+export async function getStaticPaths() {
+  const bundles = await listIngestedBundles();
+  const paths: Array<{
+    params: { pkg: string; ver: string; doc: string };
+    props: { bundlePath: string; docPath: string };
+  }> = [];
+  for (const b of bundles) {
+    const docs = await listDocs(b.path);
+    for (const d of docs) {
+      paths.push({
+        params: { pkg: b.pkg, ver: b.version, doc: d },
+        props: { bundlePath: b.path, docPath: d },
+      });
+    }
+  }
+  return paths;
+}
+
+const { pkg, ver } = Astro.params;
+const { bundlePath, docPath } = Astro.props as {
+  bundlePath: string;
+  docPath: string;
+};
+
+// Doc blobs are IngestedDoc (tag 4010). The body lives in `arbitrary` as
+// Section children; `_content` is typically empty for narrative docs.
+const doc = (await loadCbor(join(bundlePath, "docs", docPath))) as IngestedDoc;
+
+const sections: SectionNode[] = Array.isArray(doc.arbitrary) ? doc.arbitrary : [];
+
+function sectionChildren(s: SectionNode): IRNode[] {
+  return Array.isArray(s.children) ? s.children : [];
+}
+
+// Mirror the qualname page's resolveXref: close over the cached DB handle
+// so XRefs become resolved links at render time.
+interface XRefShape {
+  value?: string;
+  reference?: {
+    module?: string;
+    version?: string;
+    kind?: string;
+    path?: string;
+  } | null;
+  kind?: string;
+}
+
+function resolveXref(raw: unknown): { url: string; label: string } | null {
+  const n = raw as XRefShape | null;
+  if (!n) return null;
+  const label = n.value ?? "";
+  const ref = n.reference;
+  if (!ref || !ref.module || !ref.path || !ref.kind) return null;
+  if (ref.module === "current-module" || ref.kind === "to-resolve") return null;
+  const resolved = resolveRef({
+    pkg: ref.module,
+    ver: ref.version ?? "?",
+    kind: ref.kind,
+    path: ref.path,
+  });
+  if (!resolved) return null;
+  const url = linkForRef(resolved);
+  if (!url) return null;
+  return { url, label };
+}
+
+const pageTitle = doc.qa || docPath;
+---
+
+<BundleLayout
+  pkg={pkg!}
+  ver={ver!}
+  bundlePath={bundlePath}
+  title={`${pageTitle} — ${pkg} ${ver}`}
+  activeDocPath={docPath}
+>
+  <p class="crumb">
+    <a href="/">bundles</a> / <a href={`/${pkg}/${ver}/`}>{pkg} {ver}</a> /
+    <span>docs</span>
+  </p>
+
+  <header class="qa-header">
+    <p class="kind">Doc</p>
+    <h1>{pageTitle}</h1>
+    <p class="source"><code>docs/{docPath}</code></p>
+  </header>
+
+  {
+    sections.length === 0 ? (
+      <p class="lede">This doc is empty.</p>
+    ) : (
+      sections.map((s) => (
+        <section class="doc-section">
+          {s.title ? <h2>{s.title}</h2> : null}
+          {sectionChildren(s).map((c) => (
+            <IrNode node={c} resolveXref={resolveXref} />
+          ))}
+        </section>
+      ))
+    )
+  }
+</BundleLayout>

@@ -336,6 +336,18 @@ export async function loadModule(
   throw new Error(`unexpected decode result for ${qualname}: ${typeof obj}`);
 }
 
+/**
+ * Generic CBOR loader that applies the IR tag extensions. Returns the decoded
+ * value as-is; callers cast to the shape they expect (IngestedDoc, Section,
+ * TocTree, or a plain-object meta dict).
+ */
+export async function loadCbor<T = unknown>(path: string): Promise<T> {
+  ensureExtensions();
+  const raw = await readFile(path);
+  const dec = new Decoder({ mapsAsObjects: true });
+  return dec.decode(raw) as T;
+}
+
 // ---------------------------------------------------------------------------
 // URL slug encoding. Qualnames contain ':' (e.g. "papyri.gen:Config.__init__"),
 // which is illegal on some filesystems and awkward in URLs. We encode to/from

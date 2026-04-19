@@ -1,11 +1,10 @@
 ---
 // Two-column shell for every page under /[pkg]/[ver]/**. Loads the bundle
-// view-model and qualname list once per page and hands them to the sidebar
-// so callers don't repeat the frontmatter.
+// view-model once per page (memoised in `nav.ts`) and hands it to the
+// sidebar so callers don't repeat the frontmatter.
 import Head from "../components/Head.astro";
 import SiteHeader from "../components/SiteHeader.astro";
 import BundleSidebar from "../components/BundleSidebar.astro";
-import { listModules } from "../lib/ir-reader.ts";
 import { loadBundleNav } from "../lib/nav.ts";
 import "../styles/global.css";
 
@@ -15,13 +14,20 @@ interface Props {
   bundlePath: string;
   title: string;
   activeQualname?: string;
+  activeDocPath?: string;
+  activeExamplePath?: string;
 }
 
-const { pkg, ver, bundlePath, title, activeQualname } = Astro.props;
-const [nav, qualnames] = await Promise.all([
-  loadBundleNav(pkg, ver, bundlePath),
-  listModules(bundlePath),
-]);
+const {
+  pkg,
+  ver,
+  bundlePath,
+  title,
+  activeQualname,
+  activeDocPath,
+  activeExamplePath,
+} = Astro.props;
+const nav = await loadBundleNav(pkg, ver, bundlePath);
 ---
 
 <html lang="en">
@@ -44,8 +50,9 @@ const [nav, qualnames] = await Promise.all([
       </label>
       <BundleSidebar
         nav={nav}
-        qualnames={qualnames}
         activeQualname={activeQualname}
+        activeDocPath={activeDocPath}
+        activeExamplePath={activeExamplePath}
       />
       <main class="bundle-main">
         <slot />

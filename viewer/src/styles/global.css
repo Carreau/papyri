@@ -584,6 +584,59 @@ details.fallback pre {
   font-size: 0.8rem;
 }
 
+/* Flat link list — docs, tutorials, examples rendered without hierarchy. */
+.sidebar-flat {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: 0.8rem;
+}
+.sidebar-flat li {
+  padding: 0.15rem 0.25rem;
+  border-radius: 3px;
+}
+.sidebar-flat li.is-active {
+  border-left: 2px solid var(--accent);
+  padding-left: 0.35rem;
+  font-weight: 600;
+  background: var(--surface-alt);
+}
+.sidebar-flat a {
+  color: var(--accent);
+  text-decoration: none;
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sidebar-flat a:hover { text-decoration: underline; }
+
+/* Nested toc. Two levels are enough for papyri's current trees; deeper
+   nesting inherits padding from the parent <ul>. */
+.sidebar-toc {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: 0.8rem;
+}
+.sidebar-toc li { padding: 0.15rem 0.25rem; border-radius: 3px; }
+.sidebar-toc li.is-active {
+  border-left: 2px solid var(--accent);
+  padding-left: 0.35rem;
+  font-weight: 600;
+  background: var(--surface-alt);
+}
+.sidebar-toc a {
+  color: var(--accent);
+  text-decoration: none;
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sidebar-toc a:hover { text-decoration: underline; }
+.sidebar-toc ul.sidebar-toc { margin-left: 0.75rem; }
+
 /* Dense qualname list */
 .sidebar-qualnames {
   list-style: none;

@@ -188,7 +188,7 @@ const FIELD_ORDER: Record<number, { name: string; fields: string[] }> = {
   4013: { name: "NumpydocSeeAlso", fields: ["value"] },
   4014: { name: "NumpydocSignature", fields: ["value"] },
   4015: { name: "Section", fields: ["children", "title", "level", "target"] },
-  4016: { name: "Param", fields: ["param", "type_", "desc"] },
+  4016: { name: "DocParam", fields: ["name", "annotation", "desc"] },
   4017: { name: "UnimplementedInline", fields: ["children"] },
   4018: { name: "Unimplemented", fields: ["placeholder", "value"] },
   4019: { name: "ThematicBreak", fields: [] },
@@ -206,7 +206,7 @@ const FIELD_ORDER: Record<number, { name: string; fields: string[] }> = {
     fields: ["kind", "parameters", "return_annotation", "target_name"],
   },
   4030: {
-    name: "ParameterNode",
+    name: "SigParam",
     fields: ["name", "annotation", "kind", "default"],
   },
   4031: { name: "Empty", fields: [] },
@@ -316,8 +316,8 @@ export interface SectionNode {
   target: string | null;
 }
 
-export interface ParameterNodeT {
-  __type: "ParameterNode";
+export interface SigParamT {
+  __type: "SigParam";
   __tag: 4030;
   name: string;
   annotation: string | EmptyNode | null;
@@ -334,7 +334,7 @@ export interface SignatureNodeT {
   __type: "SignatureNode";
   __tag: 4029;
   kind: string;
-  parameters: ParameterNodeT[];
+  parameters: SigParamT[];
   return_annotation: string | EmptyNode;
   target_name: string;
 }

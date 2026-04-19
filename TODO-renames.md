@@ -158,19 +158,16 @@ names: `ExamplesSection` / `SeeAlsoSection` / `SignatureSection`.
 
 ### 5b. Three "parameter" classes
 
-- [ ] `papyri/nodes.py:537` `Param` → `DocParam` (docstring param
-      entry, holds `param`/`type_`/`desc`). Also see 5c for the
-      `param` field name.
-- [ ] `papyri/nodes.py:528` `Parameters` → keep (container name fits).
-- [ ] `papyri/signature.py:26` `ParameterNode` → `SigParam` (or
-      `SignatureParam` if spelling-out wins).
+- [x] `papyri/nodes.py` `Param` → `DocParam` (docstring param entry).
+- [x] `papyri/nodes.py` `Parameters` — kept as the container name.
+- [x] `papyri/signature.py` `ParameterNode` → `SigParam`.
 
 ### 5c. Field rename inside renamed `DocParam`
 
-- [ ] `Param.param` (self-named attribute) → `Param.name`. Mechanical
-      replacement. Touches validators, `__repr__`, viewer (`Param`
-      rendering at `viewer/src/components/IrNode.astro:122`).
-- [ ] `Param.type_` (trailing-underscore dodge) → `Param.annotation`.
+- [x] `DocParam.param` → `DocParam.name`. Updated `__getitem__` and
+      `__repr__`; viewer `IrNode.astro` dispatch updated too.
+- [x] `DocParam.type_` → `DocParam.annotation`. Same rename across
+      the two gen.py constructor sites and the viewer.
 
 ### 5d. Small or abbreviated names
 

@@ -32,7 +32,7 @@ def function_1(posonly, /, pos_or_k, pos_ok_k_d=1, *varargs, **varkwargs):
           },
           "kind": "POSITIONAL_ONLY",
           "name": "posonly",
-          "type": "ParameterNode"
+          "type": "SigParam"
         },
         {
           "annotation": {
@@ -43,7 +43,7 @@ def function_1(posonly, /, pos_or_k, pos_ok_k_d=1, *varargs, **varkwargs):
           },
           "kind": "POSITIONAL_OR_KEYWORD",
           "name": "pos_or_k",
-          "type": "ParameterNode"
+          "type": "SigParam"
         },
         {
           "annotation": {
@@ -55,7 +55,7 @@ def function_1(posonly, /, pos_or_k, pos_ok_k_d=1, *varargs, **varkwargs):
           },
           "kind": "POSITIONAL_OR_KEYWORD",
           "name": "pos_ok_k_d",
-          "type": "ParameterNode"
+          "type": "SigParam"
         },
         {
           "annotation": {
@@ -66,7 +66,7 @@ def function_1(posonly, /, pos_or_k, pos_ok_k_d=1, *varargs, **varkwargs):
           },
           "kind": "VAR_POSITIONAL",
           "name": "varargs",
-          "type": "ParameterNode"
+          "type": "SigParam"
         },
         {
           "annotation": {
@@ -77,7 +77,7 @@ def function_1(posonly, /, pos_or_k, pos_ok_k_d=1, *varargs, **varkwargs):
           },
           "kind": "VAR_KEYWORD",
           "name": "varkwargs",
-          "type": "ParameterNode"
+          "type": "SigParam"
         }
       ],
       "return_annotation": {"type": "Empty"},
@@ -101,7 +101,7 @@ def async_function_2(posonly, /, pos_or_k, pos_ok_k_d=1, *varargs, **varkwargs):
           },
           "kind": "POSITIONAL_ONLY",
           "name": "posonly",
-          "type": "ParameterNode"
+          "type": "SigParam"
         },
         {
           "annotation": {
@@ -112,7 +112,7 @@ def async_function_2(posonly, /, pos_or_k, pos_ok_k_d=1, *varargs, **varkwargs):
           },
           "kind": "POSITIONAL_OR_KEYWORD",
           "name": "pos_or_k",
-          "type": "ParameterNode"
+          "type": "SigParam"
         },
         {
           "annotation": {
@@ -124,7 +124,7 @@ def async_function_2(posonly, /, pos_or_k, pos_ok_k_d=1, *varargs, **varkwargs):
           },
           "kind": "POSITIONAL_OR_KEYWORD",
           "name": "pos_ok_k_d",
-          "type": "ParameterNode"
+          "type": "SigParam"
         },
         {
           "annotation": {
@@ -135,7 +135,7 @@ def async_function_2(posonly, /, pos_or_k, pos_ok_k_d=1, *varargs, **varkwargs):
           },
           "kind": "VAR_POSITIONAL",
           "name": "varargs",
-          "type": "ParameterNode"
+          "type": "SigParam"
         },
         {
           "annotation": {
@@ -146,7 +146,7 @@ def async_function_2(posonly, /, pos_or_k, pos_ok_k_d=1, *varargs, **varkwargs):
           },
           "kind": "VAR_KEYWORD",
           "name": "varkwargs",
-          "type": "ParameterNode"
+          "type": "SigParam"
         }
       ],
       "return_annotation": {"type": "Empty"},
@@ -170,7 +170,7 @@ def generator_function_3(posonly, /, pos_or_k, pos_ok_k_d=1, *varargs, **varkwar
           },
           "kind": "POSITIONAL_ONLY",
           "name": "posonly",
-          "type": "ParameterNode"
+          "type": "SigParam"
         },
         {
           "annotation": {
@@ -181,7 +181,7 @@ def generator_function_3(posonly, /, pos_or_k, pos_ok_k_d=1, *varargs, **varkwar
           },
           "kind": "POSITIONAL_OR_KEYWORD",
           "name": "pos_or_k",
-          "type": "ParameterNode"
+          "type": "SigParam"
         },
         {
           "annotation": {
@@ -193,7 +193,7 @@ def generator_function_3(posonly, /, pos_or_k, pos_ok_k_d=1, *varargs, **varkwar
           },
           "kind": "POSITIONAL_OR_KEYWORD",
           "name": "pos_ok_k_d",
-          "type": "ParameterNode"
+          "type": "SigParam"
         },
         {
           "annotation": {
@@ -204,7 +204,7 @@ def generator_function_3(posonly, /, pos_or_k, pos_ok_k_d=1, *varargs, **varkwar
           },
           "kind": "VAR_POSITIONAL",
           "name": "varargs",
-          "type": "ParameterNode"
+          "type": "SigParam"
         },
         {
           "annotation": {
@@ -215,7 +215,7 @@ def generator_function_3(posonly, /, pos_or_k, pos_ok_k_d=1, *varargs, **varkwar
           },
           "kind": "VAR_KEYWORD",
           "name": "varkwargs",
-          "type": "ParameterNode"
+          "type": "SigParam"
         }
       ],
       "return_annotation": {"type": "Empty"},
@@ -241,7 +241,7 @@ async def async_generator_function_4(
           },
           "kind": "POSITIONAL_ONLY",
           "name": "posonly",
-          "type": "ParameterNode"
+          "type": "SigParam"
         },
         {
           "annotation": {
@@ -252,7 +252,7 @@ async def async_generator_function_4(
           },
           "kind": "POSITIONAL_OR_KEYWORD",
           "name": "pos_or_k",
-          "type": "ParameterNode"
+          "type": "SigParam"
         },
         {
           "annotation": {
@@ -264,7 +264,7 @@ async def async_generator_function_4(
           },
           "kind": "POSITIONAL_OR_KEYWORD",
           "name": "pos_ok_k_d",
-          "type": "ParameterNode"
+          "type": "SigParam"
         },
         {
           "annotation": {
@@ -275,7 +275,7 @@ async def async_generator_function_4(
           },
           "kind": "VAR_POSITIONAL",
           "name": "varargs",
-          "type": "ParameterNode"
+          "type": "SigParam"
         },
         {
           "annotation": {
@@ -286,7 +286,7 @@ async def async_generator_function_4(
           },
           "kind": "VAR_KEYWORD",
           "name": "varkwargs",
-          "type": "ParameterNode"
+          "type": "SigParam"
         }
       ],
       "return_annotation": {"type": "Empty"},
@@ -312,7 +312,7 @@ async def coroutine_function_5(
           },
           "kind": "POSITIONAL_ONLY",
           "name": "posonly",
-          "type": "ParameterNode"
+          "type": "SigParam"
         },
         {
           "annotation": {
@@ -323,7 +323,7 @@ async def coroutine_function_5(
           },
           "kind": "POSITIONAL_OR_KEYWORD",
           "name": "pos_or_k",
-          "type": "ParameterNode"
+          "type": "SigParam"
         },
         {
           "annotation": {
@@ -335,7 +335,7 @@ async def coroutine_function_5(
           },
           "kind": "POSITIONAL_OR_KEYWORD",
           "name": "pos_ok_k_d",
-          "type": "ParameterNode"
+          "type": "SigParam"
         },
         {
           "annotation": {
@@ -346,7 +346,7 @@ async def coroutine_function_5(
           },
           "kind": "VAR_POSITIONAL",
           "name": "varargs",
-          "type": "ParameterNode"
+          "type": "SigParam"
         },
         {
           "annotation": {
@@ -357,7 +357,7 @@ async def coroutine_function_5(
           },
           "kind": "VAR_KEYWORD",
           "name": "varkwargs",
-          "type": "ParameterNode"
+          "type": "SigParam"
         }
       ],
       "return_annotation": {"type": "Empty"},
@@ -383,7 +383,7 @@ def function_with_annotation5(a: int, b: int | float) -> bool | None:
           },
           "kind": "POSITIONAL_OR_KEYWORD",
           "name": "a",
-          "type": "ParameterNode"
+          "type": "SigParam"
         },
         {
           "annotation": {
@@ -395,7 +395,7 @@ def function_with_annotation5(a: int, b: int | float) -> bool | None:
           },
           "kind": "POSITIONAL_OR_KEYWORD",
           "name": "b",
-          "type": "ParameterNode"
+          "type": "SigParam"
         }
       ],
       "return_annotation": {

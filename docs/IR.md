@@ -301,7 +301,7 @@ for the authoritative list):
 | 4013 | `NumpydocSeeAlso`  | `nodes.py`   |
 | 4014 | `NumpydocSignature`| `nodes.py`   |
 | 4015 | `Section`          | `nodes.py`   |
-| 4016 | `Param`            | `nodes.py`   |
+| 4016 | `DocParam`         | `nodes.py`   |
 | 4017 | `UnimplementedInline` | `nodes.py` |
 | 4018 | `Unimplemented`    | `nodes.py`   |
 | 4019 | `ThematicBreak`    | `nodes.py`   |
@@ -312,7 +312,7 @@ for the authoritative list):
 | 4027 | `SubstitutionDef`  | `nodes.py`   |
 | 4028 | `SeeAlsoItem`      | `nodes.py`   |
 | 4029 | `SignatureNode`    | `signature.py` |
-| 4030 | `ParameterNode`    | `signature.py` |
+| 4030 | `SigParam`         | `signature.py` |
 | 4031 | `Empty`            | `signature.py` |
 | 4033 | `DefList`          | `nodes.py`   |
 | 4034 | `Options`          | `nodes.py`   |

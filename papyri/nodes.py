@@ -508,7 +508,7 @@ class Section(Node):
 
 @register(4026)
 class Parameters(Node):
-    children: list[Param]
+    children: list[DocParam]
 
     def validate(self):
         assert len(self.children) > 0
@@ -516,9 +516,9 @@ class Parameters(Node):
 
 
 @register(4016)
-class Param(Node):
-    param: str
-    type_: str
+class DocParam(Node):
+    name: str
+    annotation: str
     desc: list[
         Fig
         | DefListItem
@@ -543,11 +543,11 @@ class Param(Node):
         self.desc = values
 
     def __getitem__(self, index):
-        return [self.param, self.type_, self.desc][index]
+        return [self.name, self.annotation, self.desc][index]
 
     def __repr__(self):
         return (
-            f"<{self.__class__.__name__}: {self.param=}, {self.type_=}, {self.desc=}>"
+            f"<{self.__class__.__name__}: {self.name=}, {self.annotation=}, {self.desc=}>"
         )
 
 

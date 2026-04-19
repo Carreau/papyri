@@ -59,13 +59,13 @@ from .errors import (
 )
 from .misc import BlockExecutor, DummyP
 from .nodes import (
+    DocParam,
     Fig,
     GenCode,
     GenToken,
     NumpydocExample,
     NumpydocSeeAlso,
     NumpydocSignature,
-    Param,
     Parameters,
     RefInfo,
     Section,
@@ -882,7 +882,7 @@ def _numpy_data_to_section(data: list[tuple[str, str, list[str]]], title: str, q
             items = parse_rst_section("\n".join(desc), qa)
             for l in items:
                 assert not isinstance(l, Section)
-        acc.append(Param(param, type_, desc=items).validate())
+        acc.append(DocParam(param, type_, desc=items).validate())
     if acc:
         return Section([Parameters(acc)], title).validate()
     else:
@@ -1825,7 +1825,7 @@ class Gen:
                         raise type(e)(f"from {qa}") from e
                     for l in items:
                         assert not isinstance(l, Section)
-                new_content.append(Param(param, type_, desc=items).validate())
+                new_content.append(DocParam(param, type_, desc=items).validate())
             if new_content:
                 blob.content[s] = Section([Parameters(new_content)], None)
             else:

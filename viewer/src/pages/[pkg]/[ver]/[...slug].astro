@@ -8,7 +8,7 @@ import {
   type IRNode,
   type SectionNode,
   type SignatureNodeT,
-  type ParameterNodeT,
+  type SigParamT,
 } from "../../../lib/ir-reader.ts";
 import { getBackrefs, resolveRef } from "../../../lib/graph.ts";
 import IrNode from "../../../components/IrNode.astro";
@@ -46,7 +46,7 @@ void slug;
 const doc = await loadModule(bundlePath, qualname);
 
 function renderAnnotation(
-  ann: ParameterNodeT["annotation"] | SignatureNodeT["return_annotation"],
+  ann: SigParamT["annotation"] | SignatureNodeT["return_annotation"],
 ): string | null {
   if (ann == null) return null;
   if (typeof ann === "string") return ann;
@@ -56,7 +56,7 @@ function renderAnnotation(
   return null;
 }
 
-function renderDefault(def: ParameterNodeT["default"]): string | null {
+function renderDefault(def: SigParamT["default"]): string | null {
   if (def == null) return null;
   if (typeof def === "string") return def;
   if (typeof def === "object" && "__type" in def && def.__type === "Empty") {
@@ -65,7 +65,7 @@ function renderDefault(def: ParameterNodeT["default"]): string | null {
   return null;
 }
 
-function formatParam(p: ParameterNodeT): string {
+function formatParam(p: SigParamT): string {
   const parts: string[] = [];
   if (p.kind === "VAR_POSITIONAL") parts.push("*");
   else if (p.kind === "VAR_KEYWORD") parts.push("**");

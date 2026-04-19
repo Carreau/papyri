@@ -16,9 +16,9 @@ from .config import ingest_dir
 from .gen import GeneratedDoc, _OrderedDictProxy, normalise_ref
 from .graphstore import GraphStore, Key
 from .nodes import (
+    DocParam,
     Fig,
     Paragraph,
-    Param,
     RefInfo,
     Section,
     SeeAlsoItem,
@@ -170,7 +170,7 @@ class IngestedDoc(Node):
             _local_refs = _local_refs + [
                 [u.strip() for u in x[0].split(",")]
                 for x in self.content.get(s, [])
-                if isinstance(x, Param)
+                if isinstance(x, DocParam)
             ]
 
         def flat(l):

@@ -2,7 +2,7 @@
 // Recursive renderer for papyri IR nodes.
 // M1 scope: handles the block/inline subset produced by typical numpydoc
 // sections (Paragraph, Text, Emphasis, Strong, Link, InlineCode, Code,
-// BulletList, ListItem, Param, Parameters, XRef). Anything else falls
+// BulletList, ListItem, DocParam, Parameters, XRef). Anything else falls
 // through to a <details><pre>JSON</pre> dump so the page still renders.
 //
 // M2 adds XRef -> real <a href> resolution. The resolver is passed in as
@@ -119,12 +119,12 @@ const codeHtml =
         <Astro.self node={p} resolveXref={resolveXref} />
       ))}
     </dl>
-  ) : type === "Param" ? (
+  ) : type === "DocParam" ? (
     <Fragment>
       <dt>
-        <code class="pname">{(node as any).param}</code>
-        {(node as any).type_ ? (
-          <span class="ptype"> : {(node as any).type_}</span>
+        <code class="pname">{(node as any).name}</code>
+        {(node as any).annotation ? (
+          <span class="ptype"> : {(node as any).annotation}</span>
         ) : null}
       </dt>
       <dd>

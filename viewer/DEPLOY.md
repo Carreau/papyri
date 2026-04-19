@@ -2,8 +2,10 @@
 
 The viewer is a pure static site (`astro build` → `viewer/dist/`), so it
 deploys to Cloudflare Pages with no runtime adapter, no Workers, and no
-database at request time. This document explains the GitHub-Actions-driven
-setup used by `.github/workflows/cloudflare-pages.yml`.
+database at request time. This document sketches the intended GitHub
+Actions setup; the workflow is **not yet committed** — once we're ready
+to turn it on, drop the YAML below into
+`.github/workflows/cloudflare-pages.yml`.
 
 ## Architecture
 
@@ -56,18 +58,17 @@ Actions*:
 | `CLOUDFLARE_ACCOUNT_ID`     | Your Cloudflare account ID             |
 | `CLOUDFLARE_PAGES_PROJECT`  | The project name (e.g. `papyri-viewer`) |
 
-With those three set, the `Deploy viewer to Cloudflare Pages` workflow
-runs on every push to `main` (production deploy) and on every pull
-request against `main` (preview deploy on a branch subdomain).
+With those three set, the workflow below will run on every push to
+`main` (production deploy) and on every pull request against `main`
+(preview deploy on a branch subdomain).
 
 ## Scaling the content set
 
-The workflow currently ships papyri's own docs by running `papyri gen
+The proposed workflow ships papyri's own docs by running `papyri gen
 examples/papyri.toml` and ingesting the result. To publish additional
 libraries, either:
 
-- add more TOMLs to the `Generate + ingest bundles` step in
-  `.github/workflows/cloudflare-pages.yml`, or
+- add more TOMLs to the `Generate + ingest bundles` step, or
 - generate bundles in a separate job (mirroring
   `python-package.yml`'s matrix), upload them as artifacts, and
   download + ingest them from the deploy job.
@@ -96,3 +97,81 @@ designated shock absorbers. To switch to edge rendering:
 
 None of this is needed today — flagged only so future-us knows the
 ramp is clean.
+
+## Proposed workflow YAML
+
+Save as `.github/workflows/cloudflare-pages.yml` when you're ready to
+turn the automated deploy on.
+
+```yaml
+name: Deploy viewer to Cloudflare Pages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+  deployments: write
+
+concurrency:
+  group: cloudflare-pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Install papyri
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Generate + ingest bundles
+        run: |
+          papyri gen examples/papyri.toml --no-infer
+          for d in ~/.papyri/data/*/; do
+            papyri ingest "$d"
+          done
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: viewer/pnpm-lock.yaml
+
+      - name: Install viewer deps
+        working-directory: viewer
+        run: pnpm install --frozen-lockfile
+
+      - name: Build static site
+        working-directory: viewer
+        run: pnpm build
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: >-
+            pages deploy viewer/dist
+            --project-name=${{ secrets.CLOUDFLARE_PAGES_PROJECT }}
+            --branch=${{ github.head_ref || github.ref_name }}
+```

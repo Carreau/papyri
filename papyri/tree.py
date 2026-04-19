@@ -537,7 +537,7 @@ class DirectiveVisiter(TreeReplacer):
             "deprecated": deprecated_handler,
         }
 
-        for k, v in config.items():
+        for k, v in (config or {}).items():
             self._handlers[k] = obj_from_qualname(v)
 
         self.known_refs = frozenset(known_refs)

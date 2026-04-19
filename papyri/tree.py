@@ -5,51 +5,49 @@ usually trees, and update nodes.
 """
 
 import logging
-
 from collections import Counter, defaultdict
+from collections.abc import Callable
 from functools import lru_cache
-from typing import Any, Dict, FrozenSet, List, Set, Tuple, Callable
-
-from .nodes import (
-    InlineRole,
-    XRef,
-    RefInfo,
-    SubstitutionDef,
-)
-from .common_ast import Node
-from .nodes import (
-    Directive,
-    Link,
-    Text,
-    BulletList,
-    ListItem,
-    InlineMath,
-    InlineCode,
-    Code,
-    Paragraph,
-    UnprocessedDirective,
-)
-from .utils import full_qual, FullQual, Cannonical, obj_from_qualname
 from textwrap import indent
+from typing import Any
+
+from .common_ast import Node
 from .directives import (
     block_math_handler,
+    deprecated_handler,
     note_handler,
     versionadded_handler,
     versionchanged_handler,
-    deprecated_handler,
     warning_handler,
 )
+from .nodes import (
+    BulletList,
+    Code,
+    Directive,
+    InlineCode,
+    InlineMath,
+    InlineRole,
+    Link,
+    ListItem,
+    Paragraph,
+    RefInfo,
+    SubstitutionDef,
+    Text,
+    UnprocessedDirective,
+    XRef,
+)
+from .utils import Cannonical, FullQual, full_qual, obj_from_qualname
 
 log = logging.getLogger("papyri")
 
 
-_cache: Dict[int, Tuple[Dict[str, RefInfo], FrozenSet[str]]] = {}
+_cache: dict[int, tuple[dict[str, RefInfo], frozenset[str]]] = {}
 
 
 # @lru_cache(maxsize=100000)
 def _build_resolver_cache(
-    known_refs: FrozenSet[RefInfo],
-) -> Tuple[Dict[str, RefInfo], FrozenSet[str]]:
+    known_refs: frozenset[RefInfo],
+) -> tuple[dict[str, RefInfo], frozenset[str]]:
     """
     Build resolver cached.
 
@@ -72,13 +70,13 @@ def _build_resolver_cache(
 
     """
 
-    _map: Dict[str, List[RefInfo]] = defaultdict(lambda: [])
+    _map: dict[str, list[RefInfo]] = defaultdict(lambda: [])
     assert isinstance(known_refs, frozenset)
     for k in known_refs:
         assert isinstance(k, RefInfo)
         _map[k.path].append(k)
 
-    _m2: Dict[str, RefInfo] = {}
+    _m2: dict[str, RefInfo] = {}
     for kk, v in _map.items():
         cand = list(sorted(v, key=lambda x: "" if x.version is None else x.version))
         assert len({c.module for c in cand}) == 1, cand
@@ -104,8 +102,8 @@ def endswith(end, refs):
 
 
 class DelayedResolver:
-    _targets: Dict[str, RefInfo]
-    _references: Dict[str, List[XRef]]
+    _targets: dict[str, RefInfo]
+    _references: dict[str, list[XRef]]
 
     def __init__(self):
         self._targets = dict()
@@ -133,10 +131,10 @@ RESOLVER = DelayedResolver()
 
 def resolve_(
     qa: str,
-    known_refs: FrozenSet[RefInfo],
-    local_refs: FrozenSet[str],
+    known_refs: frozenset[RefInfo],
+    local_refs: frozenset[str],
     ref: str,
-    rev_aliases: Dict[Cannonical, FullQual],
+    rev_aliases: dict[Cannonical, FullQual],
 ) -> RefInfo:
     """
     Given the current context (qa), and a str (ref), compute the RefInfo object.
@@ -187,10 +185,10 @@ def resolve_(
 
     # this is a mappign from the key to the most relevant
     # Refinfo to a document
-    k_path_map: Dict[str, RefInfo]
+    k_path_map: dict[str, RefInfo]
 
     # hashable for cachign /optimisation.
-    keyset: FrozenSet[str]
+    keyset: frozenset[str]
 
     k_path_map, keyset = _cache[hk]
 
@@ -325,7 +323,7 @@ class TreeReplacer:
     def _call_method(self, method, node):
         return method(node)
 
-    def generic_visit(self, node) -> List[Node]:
+    def generic_visit(self, node) -> list[Node]:
         assert node is not None
         assert not isinstance(node, str)
         assert isinstance(node, Node), node
@@ -388,10 +386,10 @@ class TreeReplacer:
 # other that don't care about domain/role.
 
 
-Handler = Callable[[str], List[Node]]
+Handler = Callable[[str], list[Node]]
 
-DIRECTIVE_MAP: Dict[str, Dict[str, List[Handler]]] = {}
-BLOCK_DIRECTIVE_MAP: Dict[str, Dict[str, List[Handler]]] = {}
+DIRECTIVE_MAP: dict[str, dict[str, list[Handler]]] = {}
+BLOCK_DIRECTIVE_MAP: dict[str, dict[str, list[Handler]]] = {}
 
 
 def directive_handler(domain, role):
@@ -416,7 +414,7 @@ def _x_any_unimplemented_to_verbatim(domain, role, value):
 
 for role in ("type", "expr", "member", "macro", "enumerator", "func", "data"):
     directive_handler("c", role)(
-        lambda value: _x_any_unimplemented_to_verbatim("c", role, value)
+        lambda value, _role=role: _x_any_unimplemented_to_verbatim("c", _role, value)
     )
 for role in (
     "any",
@@ -445,7 +443,7 @@ for role in (
     "rc",  # matplotlib
 ):
     directive_handler("py", role)(
-        lambda value: _x_any_unimplemented_to_verbatim("py", role, value)
+        lambda value, _role=role: _x_any_unimplemented_to_verbatim("py", _role, value)
     )
 
 
@@ -492,8 +490,8 @@ def py_pep_hander(value):
     ]
 
 
-_MISSING_DIRECTIVES: List[str] = []
-_MISSING_INLINE_DIRECTIVES: List[str] = []
+_MISSING_DIRECTIVES: list[str] = []
+_MISSING_INLINE_DIRECTIVES: list[str] = []
 
 
 class DirectiveVisiter(TreeReplacer):
@@ -505,7 +503,7 @@ class DirectiveVisiter(TreeReplacer):
     def __init__(
         self,
         qa: str,
-        known_refs: FrozenSet[RefInfo],
+        known_refs: frozenset[RefInfo],
         local_refs,
         aliases,
         version,
@@ -543,13 +541,13 @@ class DirectiveVisiter(TreeReplacer):
         self.known_refs = frozenset(known_refs)
         self.local_refs = frozenset(local_refs)
         self.qa = qa
-        self.local: List[str] = []
-        self.total: List[Tuple[Any, str]] = []
+        self.local: list[str] = []
+        self.total: list[tuple[Any, str]] = []
         # long -> short
-        self.aliases: Dict[str, str] = aliases
+        self.aliases: dict[str, str] = aliases
         # short -> long
         self.rev_aliases = {v: k for k, v in aliases.items()}
-        self._targets: Set[Any] = set()
+        self._targets: set[Any] = set()
         self.version = version
         self._tocs: Any = []
 
@@ -570,8 +568,8 @@ class DirectiveVisiter(TreeReplacer):
         return self._block_verbatim_helper("autosummary", argument, options, content)
 
     def _code_handler(
-        self, argument: str, options: Dict[str, str], content: str
-    ) -> List[Code]:
+        self, argument: str, options: dict[str, str], content: str
+    ) -> list[Code]:
         return [Code(content)]
 
     def _toctree_handler(self, argument, options, content):
@@ -670,14 +668,14 @@ class DirectiveVisiter(TreeReplacer):
             domain = "py"
         if role is None:
             role = "py"
-        domain_handler: Dict[str, List[Handler]] = DIRECTIVE_MAP.get(domain, {})
-        handlers: List[Handler] = domain_handler.get(role, [])
+        domain_handler: dict[str, list[Handler]] = DIRECTIVE_MAP.get(domain, {})
+        handlers: list[Handler] = domain_handler.get(role, [])
         for h in handlers:
             res = h(directive.value)
             if res is not None:
                 return res
 
-        loc: FrozenSet[str]
+        loc: frozenset[str]
         if directive.role not in ["any", None]:
             loc = frozenset()
         else:
@@ -698,16 +696,16 @@ class DirectiveVisiter(TreeReplacer):
             try:
                 text, to_resolve = text.split(" <")
                 text = text.rstrip()
-            except ValueError:
-                assert False, directive.value
+            except ValueError as e:
+                raise AssertionError(directive.value) from e
             assert to_resolve.endswith(">"), (text, to_resolve)
             to_resolve = to_resolve.rstrip(">")
         elif ("\n <" in text) and text.endswith(">"):
             try:
                 text, to_resolve = text.split(" <")
                 text = text.rstrip()
-            except ValueError:
-                assert False, directive.value
+            except ValueError as e:
+                raise AssertionError(directive.value) from e
             assert to_resolve.endswith(">"), (text, to_resolve)
             to_resolve = to_resolve.rstrip(">")
 
@@ -759,7 +757,9 @@ class DirectiveVisiter(TreeReplacer):
             target_qa = self._import_solver(tqa)
             if target_qa is not None:
                 if target_qa.split(".")[0] == self.qa.split("."):
-                    assert False, "local reference should have explicit versions"
+                    raise AssertionError(
+                        "local reference should have explicit versions"
+                    )
                 module = target_qa.split(":")[0].split(".")[0]
                 ri = RefInfo(
                     module=module,
@@ -786,7 +786,7 @@ def _import_max(parts):
         except (ImportError, RuntimeError):
             return
         except Exception as e:
-            raise type(e)(parts)
+            raise type(e)(parts) from e
 
 
 def _obj_from_path(parts):
@@ -818,7 +818,7 @@ class GenVisitor(DirectiveVisiter):
 
 class IngestVisitor(DirectiveVisiter):
     def replace_GenCode(self, code):
-        assert False
+        raise NotImplementedError
 
     def replace_InlineRole(self, d):
         if (d.domain, d.role) not in _MISSING_INLINE_DIRECTIVES:
@@ -831,4 +831,4 @@ class IngestVisitor(DirectiveVisiter):
         return [refinfo]
 
     def replace_BlockDirective(self, block_directive: Directive):
-        assert False, "should be unreachable"
+        raise AssertionError("should be unreachable")

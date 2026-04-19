@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from papyri.gen import APIObjectInfo, BlockExecutor, Config, Gen, NumpyDocString, Config
+from papyri.gen import APIObjectInfo, BlockExecutor, Config, Gen, NumpyDocString
 
 
 @lru_cache
@@ -130,7 +130,7 @@ def test_numpy_2(module, submodules, objects):
 
 
 def test_self():
-    from papyri.gen import Gen, Config
+    from papyri.gen import Config, Gen
 
     c = Config(dry_run=True, dummy_progress=True)
     g = Gen(False, config=c)

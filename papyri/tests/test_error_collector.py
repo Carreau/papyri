@@ -1,7 +1,9 @@
-from papyri.gen import ErrorCollector
 import logging
+
 import pytest
+
 from papyri.errors import UnseenError
+from papyri.gen import ErrorCollector
 
 log = logging.getLogger(__name__)
 

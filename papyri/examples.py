@@ -206,20 +206,20 @@ but a space.
 
 """
 
-from typing import Optional, Union, Dict, Any, List
+from typing import Any
 
 
 async def example1(
     pos: int,
     only: None,
     /,
-    var: Union[float, bool],
+    var: float | bool,
     args=1,
     *,
     kwarg,
     also=None,
     **kwargs,
-) -> Optional[str]:
+) -> str | None:
     """
     first example.
 
@@ -325,13 +325,13 @@ def annotation_with_hex_addresses(x: foo = lambda x: x):  # type: ignore [valid-
     pass
 
 
-def _mydirective_handler(args: str, options: Dict[str, str], value: str):
+def _mydirective_handler(args: str, options: dict[str, str], value: str):
     from .nodes import Paragraph, Text
     from .ts import parse
 
     parsed_arguments = parse(args.encode(), qa="custom directive")
 
-    acc: List[Any] = []
+    acc: list[Any] = []
     for p in parsed_arguments:
         acc.extend(p.children)
 

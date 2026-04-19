@@ -1,6 +1,3 @@
-from typing import Dict
-
-
 def flatten(dct):
     return {k: [s for sub in toc for s in sub] for k, toc in dct.items()}
 
@@ -19,7 +16,7 @@ def dotdotcount(path):
     return n, acc
 
 
-def _tree(current_path, unnest, counter, depth=0) -> Dict:
+def _tree(current_path, unnest, counter, depth=0) -> dict:
     if current_path not in counter:
         print("Warning, ", current_path, "not in Counter")
         counter[current_path] = 0

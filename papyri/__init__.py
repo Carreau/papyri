@@ -54,7 +54,7 @@ Directive must not have spaces before double colon::
 
 import sys
 from pathlib import Path
-from typing import List, Optional, Annotated
+from typing import Annotated
 
 import tomli_w
 import typer
@@ -103,7 +103,7 @@ def _intro():
 
 @app.command()
 def ingest(
-    paths: List[Path],
+    paths: list[Path],
     check: bool = False,
     relink: bool = False,
     dummy_progress: bool = typer.Option(False, help="Disable rich progress bar"),
@@ -160,10 +160,10 @@ def gen(
             autocompletion=find_toml,
         ),
     ],
-    infer: Optional[bool] = typer.Option(
+    infer: bool | None = typer.Option(
         True, help="Whether to run type inference on code examples."
     ),
-    exec: Optional[bool] = typer.Option(
+    exec: bool | None = typer.Option(
         None, help="Whether to attempt to execute doctring code."
     ),
     debug: bool = False,
@@ -177,7 +177,7 @@ def gen(
     fail_unseen_error: bool = typer.Option(
         False, help="Overwrite fail on unseen error option"
     ),
-    only: List[str] = typer.Option(None, "--only"),
+    only: list[str] = typer.Option(None, "--only"),
 ):
     """
     Generate documentation IR for a given package.
@@ -190,11 +190,12 @@ def gen(
     changes matplotlib defaults).
     """
     _intro()
-    from papyri.gen import gen_main
+    import os
+    from os.path import join
+
     from IPython.utils.tempdir import TemporaryWorkingDirectory
 
-    from os.path import join
-    import os
+    from papyri.gen import gen_main
 
     here = os.getcwd()
 
@@ -249,7 +250,7 @@ def drop():
 
 
 def complete_nodename():
-    from . import nodes, common_ast
+    from . import common_ast, nodes
 
     return dir(nodes) + dir(common_ast)
 
@@ -271,13 +272,13 @@ def find(
 
     $ papyri find Math
     """
-    from papyri.graphstore import GraphStore
     from papyri.config import ingest_dir
-    from . import nodes
-    from .tree import TreeVisitor
-    from .nodes import encoder
-    from . import common_ast
+    from papyri.graphstore import GraphStore
+
+    from . import common_ast, nodes
     from .crosslink import IngestedDoc
+    from .nodes import encoder
+    from .tree import TreeVisitor
 
     store = GraphStore(ingest_dir, {})
 
@@ -321,17 +322,17 @@ def describe(
         ),
     ],
     kind: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(
             help="Restrict to a specific kind: module, docs, examples, meta, assets.",
         ),
     ] = None,
     package: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(help="Restrict to a specific package name."),
     ] = None,
     version: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(help="Restrict to a specific package version."),
     ] = None,
 ):
@@ -342,10 +343,11 @@ def describe(
     decoded structure, backrefs, and forward refs. Intended as a
     maintainer-side debug tool for inspecting the IR.
     """
-    from papyri.graphstore import GraphStore
     from papyri.config import ingest_dir
-    from .nodes import encoder
+    from papyri.graphstore import GraphStore
+
     from .crosslink import IngestedDoc  # noqa: F401 — registers tag 4010
+    from .nodes import encoder
 
     path_part = qualname
     # Only treat a leading "<kind>:" as a kind prefix when it matches a known

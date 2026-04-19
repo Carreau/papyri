@@ -1,35 +1,34 @@
 from __future__ import annotations
 
-import shutil
-
 import json
 import logging
+import shutil
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, FrozenSet, List, Optional, Tuple, Any
+from typing import Any
 
-from rich.logging import RichHandler
 import cbor2
+from rich.logging import RichHandler
 
+from .common_ast import Node, register
 from .config import ingest_dir
-from .gen import GeneratedDoc, normalise_ref, _OrderedDictProxy
+from .gen import GeneratedDoc, _OrderedDictProxy, normalise_ref
 from .graphstore import GraphStore, Key
-from .signature import SignatureNode
 from .nodes import (
-    Param,
-    Paragraph,
-    RefInfo,
     Fig,
+    Paragraph,
+    Param,
+    RefInfo,
     Section,
     SeeAlsoItem,
     Text,
-    encoder,
     TocTree,
+    encoder,
 )
-from .common_ast import Node, register
-from .tree import IngestVisitor, resolve_, TreeVisitor
-from .utils import progress, dummy_progress, FullQual, Cannonical
+from .signature import SignatureNode
+from .tree import IngestVisitor, TreeVisitor, resolve_
+from .utils import Cannonical, FullQual, dummy_progress, progress
 
 warnings.simplefilter("ignore", UserWarning)
 
@@ -44,7 +43,7 @@ log = logging.getLogger("papyri")
 
 def find_all_refs(
     graph_store: GraphStore,
-) -> Tuple[FrozenSet[RefInfo], Dict[str, RefInfo]]:
+) -> tuple[frozenset[RefInfo], dict[str, RefInfo]]:
     assert isinstance(graph_store, GraphStore)
     o_family = sorted(list(graph_store.glob((None, None, "module", None))))
 
@@ -78,18 +77,18 @@ class IngestedDoc(Node):
         "arbitrary",
     )
 
-    _content: Dict[str, Section]
-    _ordered_sections: List[str]
-    item_file: Optional[str]
-    item_line: Optional[int]
-    item_type: Optional[str]
-    aliases: List[str]
+    _content: dict[str, Section]
+    _ordered_sections: list[str]
+    item_file: str | None
+    item_line: int | None
+    item_type: str | None
+    aliases: list[str]
     example_section_data: Section
-    see_also: List[SeeAlsoItem]  # see also data
-    signature: Optional[SignatureNode]
-    references: Optional[List[str]]
+    see_also: list[SeeAlsoItem]  # see also data
+    signature: SignatureNode | None
+    references: list[str] | None
     qa: str
-    arbitrary: List[Section]
+    arbitrary: list[Section]
 
     __isfrozen = False
 
@@ -111,15 +110,15 @@ class IngestedDoc(Node):
 
     def __setattr__(self, key, value):
         if self.__isfrozen and not hasattr(self, key):
-            raise TypeError("%r is a frozen class" % self)
+            raise TypeError(f"{self!r} is a frozen class")
         object.__setattr__(self, key, value)
 
     def _freeze(self):
         self.__isfrozen = True
 
-    def all_forward_refs(self) -> List[Key]:
+    def all_forward_refs(self) -> list[Key]:
         visitor = TreeVisitor({RefInfo, Fig})
-        res: Dict[Any, List[Any]] = {}
+        res: dict[Any, list[Any]] = {}
         for sec in (
             list(self.content.values())
             + [self.example_section_data]  # type: ignore
@@ -136,14 +135,14 @@ class IngestedDoc(Node):
         return list(sorted(ssr))
 
     def process(
-        self, known_refs, aliases: Optional[Dict[str, str]], verbose=True, *, version
+        self, known_refs, aliases: dict[str, str] | None, verbose=True, *, version
     ) -> None:
         """
         Process a doc blob, to find all local and nonlocal references.
         """
         assert isinstance(known_refs, frozenset)
         assert self.content is not None
-        _local_refs: List[List[str]] = []
+        _local_refs: list[list[str]] = []
         sections_ = [
             "Parameters",
             "Returns",
@@ -213,9 +212,9 @@ def load_one_uningested(
     bytes_: bytes,
     qa: str,
     known_refs,
-    aliases: Dict[str, str],
+    aliases: dict[str, str],
     *,
-    version: Optional[str],
+    version: str | None,
 ) -> IngestedDoc:
     """
     Decode a CBOR-encoded GeneratedDoc from the gen bundle and make it an ingested
@@ -240,7 +239,7 @@ def load_one_uningested(
     return blob
 
 
-def _flatten_text(node: Any, out: List[str]) -> None:
+def _flatten_text(node: Any, out: list[str]) -> None:
     if isinstance(node, Text):
         out.append(node.value)
         return
@@ -251,7 +250,7 @@ def _flatten_text(node: Any, out: List[str]) -> None:
         _flatten_text(child, out)
 
 
-def _first_paragraph_text(section: Section) -> Optional[str]:
+def _first_paragraph_text(section: Section) -> str | None:
     """Return the plain-text content of the first Paragraph in ``section``.
 
     Used to pull a bundle-level blurb out of the top-level module docstring's
@@ -259,7 +258,7 @@ def _first_paragraph_text(section: Section) -> Optional[str]:
     """
     for child in section.children:
         if isinstance(child, Paragraph):
-            parts: List[str] = []
+            parts: list[str] = []
             _flatten_text(child, parts)
             text = "".join(parts).strip()
             if text:
@@ -275,7 +274,7 @@ class Ingester:
 
     def _ingest_logo(
         self, path: Path, root: str, version: str, logo_name: str, gstore: GraphStore
-    ) -> Optional[str]:
+    ) -> str | None:
         """Copy a gen bundle's logo asset into the ingest store's meta dir.
 
         Returns the basename the viewer should fetch under
@@ -403,7 +402,7 @@ class Ingester:
         version = data["version"]
         root = data["module"]
         # long : short
-        aliases: Dict[str, str] = data.get("aliases", {})
+        aliases: dict[str, str] = data.get("aliases", {})
         # rev_aliases = {Cannonical(v): FullQual(k) for k, v in aliases.items()}
         meta = {k: v for k, v in data.items() if k != "aliases"}
 
@@ -460,7 +459,7 @@ class Ingester:
             try:
                 doc_blob.validate()
             except Exception as e:
-                raise type(e)(f"from {qa}")
+                raise type(e)(f"from {qa}") from e
             if ":" in qa:
                 qa, _ = qa.split(":")
             mod_root = qa.split(".")[0]
@@ -509,7 +508,7 @@ class Ingester:
     def relink(self) -> None:
         gstore = self.gstore
         known_refs, _ = find_all_refs(gstore)
-        aliases: Dict[str, str] = {}
+        aliases: dict[str, str] = {}
         for key in gstore.glob((None, None, "meta", "aliases.cbor")):
             aliases.update(cbor2.loads(gstore.get(key)))  # type: ignore [call-overload]
 
@@ -529,7 +528,7 @@ class Ingester:
                 doc_blob = encoder.decode(data)
                 assert isinstance(doc_blob, IngestedDoc)
             except Exception as e:
-                raise type(e)(key)
+                raise type(e)(key) from e
             assert doc_blob.content is not None, data
 
             for sa in doc_blob.see_also:

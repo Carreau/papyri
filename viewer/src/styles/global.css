@@ -176,6 +176,17 @@ details.fallback summary {
   color: var(--fg-muted);
   font-family: var(--mono);
 }
+/* KaTeX display math gets its own margin; inline math inherits line-height. */
+div.math { margin: 0.75rem 0; overflow-x: auto; }
+code.math-error {
+  color: #b33;
+  background: #fff4f4;
+  border: 1px dashed #b33;
+}
+
+/* Shiki emits inline styles for color, but we still want our own padding. */
+pre.code .shiki-line { display: block; }
+
 details.fallback pre {
   overflow-x: auto;
   max-height: 20rem;

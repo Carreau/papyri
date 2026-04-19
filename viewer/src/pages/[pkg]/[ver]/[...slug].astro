@@ -113,6 +113,17 @@ for (const key of renderOrder) {
 
 const arbitrary = Array.isArray(doc.arbitrary) ? doc.arbitrary : [];
 
+// example_section_data is a Section (tag 4015) on IngestedDoc that was
+// previously ignored. Render it after the regular sections if it contains
+// anything. Normalise to a list of child IR nodes so the template stays flat.
+const exampleSection = (() => {
+  const es = doc.example_section_data as SectionNode | null | undefined;
+  if (!es) return null;
+  const kids = Array.isArray(es.children) ? es.children : [];
+  if (kids.length === 0) return null;
+  return { title: es.title ?? "Examples", children: kids };
+})();
+
 // Section children sometimes contain node types the renderer doesn't handle.
 // IrNode.astro already falls back to a JSON dump per-node; we don't dump the
 // whole section just because one child is unhandled.
@@ -186,6 +197,15 @@ for (const b of backrefs) {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{qualname} — Papyri viewer</title>
+    <!--
+      KaTeX stylesheet. Sourced from CDN for M3 simplicity; vendoring the
+      CSS + font files locally is a straightforward follow-up if offline
+      rendering or strict-CSP sites matter. See viewer/PLAN.md § M3.
+    -->
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"
+    />
   </head>
   <body>
     <main>
@@ -237,6 +257,17 @@ for (const b of backrefs) {
                   <IrNode node={c} resolveXref={resolveXref} />
                 ))}
               </div>
+            ))}
+          </section>
+        ) : null
+      }
+
+      {
+        exampleSection ? (
+          <section class="doc-section doc-section-examples">
+            <h2>{exampleSection.title}</h2>
+            {exampleSection.children.map((c) => (
+              <IrNode node={c} resolveXref={resolveXref} />
             ))}
           </section>
         ) : null

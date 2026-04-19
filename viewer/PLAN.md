@@ -143,10 +143,33 @@ Data flow per request/page:
 2. [x] **M1 — single-page render.** Given `(pkg, ver, qualname)`, render
    signature + description from the IR. No crosslinks.
 3. [x] **M2 — crosslinks + backrefs** via `papyri.db`.
-4. **M3 — examples, math, syntax highlighting.**
+4. [x] **M3 — examples, math, syntax highlighting.**
 5. **M4 — static export** (`astro build`) verified against a real
    ingested set (numpy, scipy).
 6. **M5 — polish**: search, error pages, dark mode.
+
+### M3 notes
+
+- **Math rendering is server-side, not client-side.** Earlier planning
+  text said "KaTeX in the client"; the viewer is SSG, so we render KaTeX
+  at build time via `katex.renderToString` and embed the HTML. This
+  removes the need to ship KaTeX's JS runtime — only the stylesheet is
+  linked from each page. Parse errors fall back to a
+  `<code class="math-error">` span so one bad `:math:` snippet can't
+  break the build.
+- **KaTeX CSS source is the jsDelivr CDN** (`katex@0.16.9/dist/katex.min.css`),
+  not vendored. Tradeoff: zero bytes in the repo and zero build config,
+  but static exports depend on an external origin at load time. Vendor it
+  when we need offline support or a strict CSP.
+- **Syntax highlighting uses Shiki's `createHighlighter` + `github-light`.**
+  Highlighter is a cached module-level singleton so grammars load once per
+  build. The IR `Code` node carries no language tag today (see
+  `papyri/nodes.py:228`), so every `Code` is highlighted as `python`.
+  Adding a language discriminator to the IR is a future refinement; the
+  viewer defaults safely and swaps the string when that lands.
+- **`example_section_data` is rendered.** It was silently dropped before
+  M3. Treated as a `Section`, rendered between regular sections and
+  aliases/backrefs.
 
 ### M2 notes
 

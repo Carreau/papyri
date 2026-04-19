@@ -10,6 +10,8 @@
 // than looked up here, so the DB handle is opened once per build. The same
 // resolver is threaded through recursive Astro.self calls.
 import type { IRNode } from "../lib/ir-reader.ts";
+import { renderMath } from "../lib/math.ts";
+import { highlight } from "../lib/highlight.ts";
 
 export interface XRefResolution {
   url: string;
@@ -32,6 +34,22 @@ const type = node && (node as { __type?: string }).__type;
 
 const xrefResolved =
   type === "XRef" && resolveXref ? resolveXref(node) : null;
+
+// Pre-render KaTeX / Shiki output here so the template below can use
+// `set:html`. Astro frontmatter is async, so top-level await is legal.
+const mathHtml =
+  type === "Math"
+    ? renderMath(String((node as any).value ?? ""), true)
+    : type === "InlineMath"
+      ? renderMath(String((node as any).value ?? ""), false)
+      : null;
+
+// IR Code nodes don't carry a language tag (see papyri/nodes.py:228), so
+// default to python. The `highlight` helper handles its own errors.
+const codeHtml =
+  type === "Code"
+    ? await highlight(String((node as any).value ?? ""), "python")
+    : null;
 ---
 
 {
@@ -58,7 +76,7 @@ const xrefResolved =
   ) : type === "InlineCode" ? (
     <code>{(node as any).value}</code>
   ) : type === "Code" ? (
-    <pre class="code"><code>{(node as any).value}</code></pre>
+    <pre class="code" set:html={codeHtml ?? ""}></pre>
   ) : type === "Link" ? (
     <a href={(node as any).url} title={(node as any).title}>
       {asArray((node as any).children).map((c) => (
@@ -92,9 +110,9 @@ const xrefResolved =
       ))}
     </h3>
   ) : type === "Math" ? (
-    <div class="math">{(node as any).value}</div>
+    <div class="math" set:html={mathHtml ?? ""}></div>
   ) : type === "InlineMath" ? (
-    <span class="math">{(node as any).value}</span>
+    <span class="math" set:html={mathHtml ?? ""}></span>
   ) : type === "Parameters" ? (
     <dl class="params">
       {asArray((node as any).children).map((p) => (

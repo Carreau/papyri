@@ -74,7 +74,6 @@ pnpm preview
 
 | Variable            | Default                          | Purpose                                  |
 | ------------------- | -------------------------------- | ---------------------------------------- |
-| `PAPYRI_DATA_DIR`   | `~/.papyri/data`                 | Root of per-bundle gen output.           |
 | `PAPYRI_INGEST_DIR` | `~/.papyri/ingest`               | Root of the ingested store.              |
 | `PAPYRI_INGEST_DB`  | `~/.papyri/ingest/papyri.db`     | SQLite graph database.                   |
 

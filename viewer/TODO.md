@@ -39,13 +39,14 @@ Prereq for everything downstream. Land before the TS work starts.
 Minimal-diff PR that precedes the layout work so follow-ups don't have to
 juggle two code paths.
 
-- [ ] Delete `listBundles`, `dataDir`, and the gen-bundle branch from
+- [x] Delete `listBundles`, `dataDir`, and the gen-bundle branch from
       `src/pages/index.astro`. Landing page lists ingested bundles only.
-- [ ] Remove `dataDir` from `src/lib/paths.ts` (and its tests) once no
-      caller remains.
-- [ ] Drop the "gen only — run papyri ingest" row; an un-ingested bundle
+- [x] Remove `dataDir` from `src/lib/paths.ts` (and its tests) once no
+      caller remains. (Also removed now-dead `listBundles`, `Bundle`,
+      `BundleMeta` from `ir-reader.ts`.)
+- [x] Drop the "gen only — run papyri ingest" row; an un-ingested bundle
       simply doesn't appear.
-- [ ] Update `PLAN.md` Config section: no `PAPYRI_DATA_DIR`.
+- [x] Update `PLAN.md` Config section: no `PAPYRI_DATA_DIR`.
 
 ## 2. Shared layout + sidebar shell
 

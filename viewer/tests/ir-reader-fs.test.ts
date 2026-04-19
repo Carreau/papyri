@@ -3,7 +3,6 @@ import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  listBundles,
   listIngestedBundles,
   listModules,
 } from "../src/lib/ir-reader.ts";
@@ -15,28 +14,6 @@ describe("fs-facing helpers", () => {
   });
   afterEach(async () => {
     await rm(dir, { recursive: true, force: true });
-  });
-
-  it("listBundles: missing root -> [], empty root -> []", async () => {
-    expect(await listBundles(join(dir, "does-not-exist"))).toEqual([]);
-    expect(await listBundles(dir)).toEqual([]);
-  });
-
-  it("listBundles reads a minimal fake bundle layout", async () => {
-    const bPath = join(dir, "numpy_1.26.4");
-    await mkdir(bPath, { recursive: true });
-    await writeFile(
-      join(bPath, "papyri.json"),
-      JSON.stringify({ module: "numpy", version: "1.26.4" }),
-    );
-    await mkdir(join(dir, "no_meta_0.1"), { recursive: true });
-
-    const bundles = await listBundles(dir);
-    expect(bundles).toHaveLength(2);
-    const numpy = bundles.find((b) => b.dirName === "numpy_1.26.4")!;
-    expect(numpy.meta).toEqual({ module: "numpy", version: "1.26.4" });
-    expect(numpy.path).toBe(bPath);
-    expect(bundles.find((b) => b.dirName === "no_meta_0.1")!.meta).toBeNull();
   });
 
   it("listIngestedBundles: [] on empty/missing, discovers <pkg>/<ver>", async () => {

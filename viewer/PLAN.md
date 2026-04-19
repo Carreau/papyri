@@ -132,7 +132,8 @@ Data flow per request/page:
 
 ## Config
 
-- `PAPYRI_DATA_DIR` — defaults to `~/.papyri/data`.
+- `PAPYRI_INGEST_DIR` — defaults to `~/.papyri/ingest`. The viewer reads
+  bundles, assets, and metadata from here; the gen dir is not an input.
 - `PAPYRI_INGEST_DB` — defaults to `~/.papyri/ingest/papyri.db`.
 - `--mode dev | build` via Astro.
 

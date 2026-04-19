@@ -157,6 +157,95 @@ const codeHtml =
         <Astro.self node={c} resolveXref={resolveXref} />
       ))}
     </p>
+  ) : type === "InlineRole" ? (
+    // Inline cross-references like `:py:class:`X`` or `:func:`foo``. The
+    // graph resolves XRef, not InlineRole, so for now we render as styled
+    // inline code with the role as a CSS class hook. Tracked as a future
+    // refinement when/if the IR gets cross-referenced InlineRoles.
+    <code
+      class={`role ${(node as any).domain ? `role-${(node as any).domain}` : ""} ${(node as any).role ? `role-name-${(node as any).role}` : ""}`.trim()}
+    >
+      {(node as any).value}
+    </code>
+  ) : type === "DefList" ? (
+    <dl class="deflist">
+      {asArray((node as any).children).map((c) => (
+        <Astro.self node={c} resolveXref={resolveXref} />
+      ))}
+    </dl>
+  ) : type === "DefListItem" ? (
+    <Fragment>
+      <dt>
+        <Astro.self node={(node as any).dt} resolveXref={resolveXref} />
+      </dt>
+      <dd>
+        {asArray((node as any).dd).map((c) => (
+          <Astro.self node={c} resolveXref={resolveXref} />
+        ))}
+      </dd>
+    </Fragment>
+  ) : type === "FieldList" ? (
+    <dl class="fieldlist">
+      {asArray((node as any).children).map((c) => (
+        <Astro.self node={c} resolveXref={resolveXref} />
+      ))}
+    </dl>
+  ) : type === "FieldListItem" ? (
+    <Fragment>
+      <dt>
+        {asArray((node as any).name).map((c) => (
+          <Astro.self node={c} resolveXref={resolveXref} />
+        ))}
+      </dt>
+      <dd>
+        {asArray((node as any).body).map((c) => (
+          <Astro.self node={c} resolveXref={resolveXref} />
+        ))}
+      </dd>
+    </Fragment>
+  ) : type === "Directive" ? (
+    // Processed directives the gen/ingest pass couldn't rewrite into a more
+    // specific node (Math, Admonition, etc.). Render as an admonition-like
+    // block so the content is visible; show the directive name as a tag.
+    <aside class={`directive directive-${(node as any).name ?? "unknown"}`}>
+      <p class="directive-name">
+        <code>:{(node as any).name}:</code>
+        {(node as any).args ? <span class="directive-args">{(node as any).args}</span> : null}
+      </p>
+      {asArray((node as any).children).map((c) => (
+        <Astro.self node={c} resolveXref={resolveXref} />
+      ))}
+    </aside>
+  ) : type === "Image" ? (
+    <img src={(node as any).url} alt={(node as any).alt ?? ""} />
+  ) : type === "Fig" ? (
+    // Fig.value is a RefInfo(module, version, kind="assets", path=filename).
+    // We don't currently serve assets from the viewer, so just show a
+    // placeholder with the asset path for now. Tracked as M3 follow-up.
+    <figure class="fig">
+      <code class="role">asset: {(node as any).value?.path ?? "?"}</code>
+    </figure>
+  ) : type === "Target" ? (
+    <span id={(node as any).label} class="target" />
+  ) : type === "Comment" ? (
+    null
+  ) : type === "SubstitutionRef" || type === "SubstitutionDef" ? (
+    // Substitutions aren't resolved yet — render the substitution body if any
+    // so the reader sees something. Tracked in viewer/PLAN.md follow-ups.
+    <span class="substitution">
+      {(node as any).value ?? ""}
+    </span>
+  ) : type === "UnimplementedInline" ? (
+    <span class="unimplemented">
+      {asArray((node as any).children).map((c) => (
+        <Astro.self node={c} resolveXref={resolveXref} />
+      ))}
+    </span>
+  ) : type === "Unimplemented" ? (
+    <div class="unimplemented">
+      {(node as any).placeholder ? <code>{(node as any).placeholder}</code> : null}
+      {(node as any).value ? <span>{(node as any).value}</span> : null}
+    </div>
   ) : (
     <details class="fallback">
       <summary>unhandled: {type ?? "raw"}</summary>

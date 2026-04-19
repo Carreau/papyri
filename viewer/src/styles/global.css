@@ -187,6 +187,51 @@ code.math-error {
 /* Shiki emits inline styles for color, but we still want our own padding. */
 pre.code .shiki-line { display: block; }
 
+/* Inline role markers (like :py:class:`X`). The graph resolves XRef, not
+   InlineRole, so these render as styled inline code until they get
+   cross-referenced. */
+code.role {
+  background: #eef2fa;
+  color: var(--accent);
+  padding: 0.05em 0.3em;
+  border-radius: 2px;
+}
+
+/* Definition / field lists from RST: term + description blocks. */
+dl.deflist, dl.fieldlist { margin: 0.75rem 0; }
+dl.deflist > dt, dl.fieldlist > dt {
+  font-family: var(--mono);
+  font-weight: 600;
+  margin-top: 0.5rem;
+}
+dl.deflist > dd, dl.fieldlist > dd { margin-left: 1.25rem; }
+dl.deflist > dd > p:first-child,
+dl.fieldlist > dd > p:first-child { margin-top: 0.15rem; }
+
+/* Generic "directive" admonition for block directives we didn't specialise. */
+aside.directive {
+  border-left: 3px solid var(--fg-muted);
+  background: #fff;
+  padding: 0.5rem 0.75rem;
+  margin: 1rem 0;
+}
+aside.directive .directive-name {
+  font-size: 0.8rem;
+  color: var(--fg-muted);
+  margin: 0 0 0.25rem;
+}
+aside.directive .directive-name code {
+  background: transparent;
+  padding: 0;
+}
+aside.directive .directive-args {
+  margin-left: 0.5rem;
+  font-family: var(--mono);
+}
+
+.substitution { font-style: italic; color: var(--fg-muted); }
+.unimplemented { color: var(--fg-muted); font-style: italic; }
+
 details.fallback pre {
   overflow-x: auto;
   max-height: 20rem;

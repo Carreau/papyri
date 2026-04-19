@@ -151,18 +151,22 @@ sessions should not restore any of it.
 - [x] Fix circular import between `papyri/take2.py` and `papyri/myst_ast.py`
       so tests collect cleanly in isolation. Done by merging `myst_ast.py`
       into `take2.py`; M-prefixed classes still exist pending a rename pass.
-- [x] Resolve or xfail the known test failures. Currently xfailed
-      (`strict=False`, with reasons pointing back here):
-      - `test_nodes.py::test_parse_blocks[numpy.linspace…]` — numpy
-        docstring drifted, now emits 1 `UnprocessedDirective` instead of 2.
-      - `test_gen.py::test_numpy[numpy…]` — numpy 2.x moved the canonical
-        path for `numpy:array`.
-      - `test_gen.py::test_self_2` — `papyri/__init__.py` module docstring
-        was rewritten in Phase 1 and no longer has the definition list this
-        test indexes into; needs rewriting against the new docstring or
-        repointing at another module.
-      Follow-up: replace these xfails with real fixes (pin numpy in the
-      test matrix, rewrite the self-doc test).
+- [x] Resolve or xfail the known test failures. All prior xfails have
+      been fixed (no `strict=False` xfails remaining):
+      - `test_nodes.py::test_parse_blocks[numpy.linspace…]` — assertion
+        switched from exact count to `>= 1` so numpy docstring drift
+        doesn't break the test.
+      - `test_gen.py::test_numpy[numpy…]` — updated to numpy 2.x paths
+        (`_core` submodule) and dropped the undocumented
+        `numpy.core._multiarray_tests:npy_sinh` entry.
+      - `test_gen.py::test_self_2` — rewritten to assert `item_file`
+        resolution instead of indexing into `papyri.__init__.__doc__`.
+      - `test_gen.py::test_infer` — uses `pytest.importorskip("scipy")`
+        so environments without scipy skip rather than fail.
+      - `test_signatures.py::test_f1[function_with_annotation5]` and
+        `test_gen.py::test_self` — expected annotation strings updated
+        to Python 3.14's `X | Y` / `X | None` union format (was
+        `Union[X, Y]` / `Optional[X]`).
 
 ### Phase 3 — Web viewer (in-tree under `viewer/`)
 

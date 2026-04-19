@@ -508,6 +508,7 @@ class DirectiveVisiter(TreeReplacer):
         aliases,
         version,
         config=None,
+        module: str | None = None,
     ):
         """
         qa: str
@@ -520,6 +521,8 @@ class DirectiveVisiter(TreeReplacer):
             pass
         version : str
             current version when linking
+        module : str, optional
+            root module name being documented; derived from qa when omitted
 
         """
         assert isinstance(qa, str), qa
@@ -541,6 +544,7 @@ class DirectiveVisiter(TreeReplacer):
         self.known_refs = frozenset(known_refs)
         self.local_refs = frozenset(local_refs)
         self.qa = qa
+        self.module: str = module if module is not None else qa.split(".")[0]
         self.local: list[str] = []
         self.total: list[tuple[Any, str]] = []
         # long -> short
@@ -803,10 +807,8 @@ def _obj_from_path(parts):
 class GenVisitor(DirectiveVisiter):
     def visit_Section(self, node):
         if node.target:
-            # TODO: This is wrong, we should likely change this to the current module that get visited.
-            # it likely only affects narative
             RESOLVER.add_target(
-                RefInfo("papyri", "0.0.8", "docs", node.target), node.target
+                RefInfo(self.module, self.version, "docs", node.target), node.target
             )
 
     def replace_Fig(self, fig):

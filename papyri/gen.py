@@ -1467,6 +1467,7 @@ class Gen:
                         aliases={},
                         version=self._meta["version"],
                         config=self.config.directives,
+                        module=self._meta.get("module"),
                     )
                     blob.arbitrary = [dv.visit(s) for s in data]
                 except Exception as e:
@@ -1925,6 +1926,7 @@ class Gen:
                     aliases={},
                     version=self.version,
                     config=self.config.directives,
+                    module=self.root,
                 )
                 s2 = dv.visit(s)
 

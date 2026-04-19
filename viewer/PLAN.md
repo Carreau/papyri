@@ -37,8 +37,6 @@ SQLite cross-link graph (`~/.papyri/ingest/papyri.db`).
 - Authentication, multi-tenant hosting, comments, edit-in-browser.
 - Full-text search. Start with qualname/prefix search against the graph;
   revisit later.
-- Server-side math rendering via `flatlatex` (that was removed on purpose).
-- Re-implementing the old `papyri serve` / `serve-static` Quart stack.
 
 ## Features
 
@@ -53,7 +51,7 @@ SQLite cross-link graph (`~/.papyri/ingest/papyri.db`).
   match.
 - **Back-references**: "used by" / "referenced from" section fed by the
   graph.
-- **Math**: KaTeX in the client (swap in for the removed `flatlatex`).
+- **Math**: KaTeX in the client.
 - **Code highlighting**: Python, text, console. Precomputed at build where
   possible.
 - **Example blocks**: render captured stdout/plots/HTML assets from the
@@ -97,8 +95,6 @@ Leaning toward the minimum that reads the IR cleanly.
   there's no reason to diverge.
 - **Plain Express/Fastify + server-rendered React**: more plumbing than
   Astro, no static-export story out of the box.
-- **Python-side rendering** (Jinja etc.): out of scope — top-level
-  `PLAN.md` explicitly removed this.
 
 ## Architecture sketch
 

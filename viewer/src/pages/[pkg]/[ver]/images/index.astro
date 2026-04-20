@@ -1,0 +1,224 @@
+---
+import { join } from "node:path";
+import BundleLayout from "../../../../layouts/BundleLayout.astro";
+import {
+  listIngestedBundles,
+  listModules,
+  loadModule,
+  loadCbor,
+  collectImages,
+  type FoundImgNode,
+} from "../../../../lib/ir-reader.ts";
+import { listDocs, listExamples } from "../../../../lib/nav.ts";
+
+export async function getStaticPaths() {
+  const bundles = await listIngestedBundles();
+  return bundles.map((b) => ({
+    params: { pkg: b.pkg, ver: b.version },
+    props: { bundlePath: b.path },
+  }));
+}
+
+const { pkg, ver } = Astro.params;
+const { bundlePath } = Astro.props as { bundlePath: string };
+
+interface PageRef {
+  label: string;
+  href: string;
+}
+
+interface ImgEntry {
+  img: FoundImgNode;
+  pages: PageRef[];
+}
+
+// Walk every module / doc / example in the bundle and collect all Image and
+// Figure nodes. Group by src URL so each image appears once with all the
+// pages that reference it.
+const imageMap = new Map<string, ImgEntry>();
+
+function addHit(found: FoundImgNode, page: PageRef) {
+  const existing = imageMap.get(found.src);
+  if (existing) {
+    if (!existing.pages.some((p) => p.href === page.href)) {
+      existing.pages.push(page);
+    }
+  } else {
+    imageMap.set(found.src, { img: found, pages: [page] });
+  }
+}
+
+// Modules
+const qualnames = await listModules(bundlePath);
+await Promise.all(
+  qualnames.map(async (qa) => {
+    let doc;
+    try {
+      doc = await loadModule(bundlePath, qa);
+    } catch {
+      return;
+    }
+    const href = `/${pkg}/${ver}/${qa.replace(/:/g, "$")}/`;
+    for (const found of collectImages(doc)) addHit(found, { label: qa, href });
+  }),
+);
+
+// Narrative docs
+const docPaths = await listDocs(bundlePath);
+await Promise.all(
+  docPaths.map(async (docPath) => {
+    let section;
+    try {
+      section = await loadCbor(join(bundlePath, "docs", docPath));
+    } catch {
+      return;
+    }
+    const href = `/${pkg}/${ver}/docs/${docPath.split("/").map(encodeURIComponent).join("/")}/`;
+    for (const found of collectImages(section)) addHit(found, { label: docPath, href });
+  }),
+);
+
+// Examples
+const exPaths = await listExamples(bundlePath);
+await Promise.all(
+  exPaths.map(async (exPath) => {
+    let section;
+    try {
+      section = await loadCbor(join(bundlePath, "examples", exPath));
+    } catch {
+      return;
+    }
+    const href = `/${pkg}/${ver}/examples/${exPath.split("/").map(encodeURIComponent).join("/")}/`;
+    for (const found of collectImages(section)) addHit(found, { label: exPath, href });
+  }),
+);
+
+const entries = [...imageMap.values()].sort((a, b) =>
+  a.img.src.localeCompare(b.img.src),
+);
+---
+
+<BundleLayout
+  pkg={pkg!}
+  ver={ver!}
+  bundlePath={bundlePath}
+  title={`Images — ${pkg} ${ver} — Papyri viewer`}
+>
+  <p class="crumb"><a href={`/${pkg}/${ver}/`}>&larr; {pkg} {ver}</a></p>
+  <h1>Images</h1>
+  <p class="lede">
+    {entries.length} image{entries.length !== 1 ? "s" : ""}
+  </p>
+
+  {
+    entries.length === 0 ? (
+      <p class="no-images">No images in this bundle.</p>
+    ) : (
+      <div class="image-gallery">
+        {entries.map((entry) => (
+          <div class="image-card">
+            <a
+              class="image-thumb-link"
+              href={entry.img.src}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <img
+                class="image-thumb"
+                src={entry.img.src}
+                alt={entry.img.kind === "Image" ? entry.img.alt : entry.img.assetPath}
+                loading="lazy"
+              />
+            </a>
+            <div class="image-meta">
+              <code class="image-filename">
+                {entry.img.kind === "Figure"
+                  ? entry.img.assetPath
+                  : entry.img.src}
+              </code>
+              {entry.pages.length > 0 ? (
+                <details class="image-refs">
+                  <summary>
+                    Used on {entry.pages.length} page
+                    {entry.pages.length !== 1 ? "s" : ""}
+                  </summary>
+                  <ul>
+                    {entry.pages.map((p) => (
+                      <li>
+                        <a href={p.href}>{p.label}</a>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              ) : (
+                <span class="image-no-refs">Not referenced</span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
+</BundleLayout>
+
+<style>
+  .no-images {
+    color: var(--fg-muted);
+    margin-top: 1rem;
+  }
+  .image-gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1.25rem;
+    margin-top: 1.5rem;
+  }
+  .image-card {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+  }
+  .image-thumb-link {
+    display: block;
+    background: var(--surface-alt);
+  }
+  .image-thumb {
+    width: 100%;
+    height: 160px;
+    object-fit: contain;
+    display: block;
+  }
+  .image-meta {
+    padding: 0.6rem 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    flex: 1;
+  }
+  .image-filename {
+    font-size: 0.78rem;
+    word-break: break-all;
+    color: var(--fg-muted);
+  }
+  .image-refs summary {
+    cursor: pointer;
+    font-size: 0.82rem;
+    color: var(--accent);
+  }
+  .image-refs ul {
+    margin: 0.3rem 0 0 1rem;
+    padding: 0;
+    list-style: disc;
+    font-size: 0.82rem;
+  }
+  .image-refs li {
+    margin: 0.15rem 0;
+  }
+  .image-no-refs {
+    font-size: 0.82rem;
+    color: var(--fg-muted);
+    font-style: italic;
+  }
+</style>

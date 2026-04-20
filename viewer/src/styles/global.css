@@ -1,3 +1,7 @@
+/* IR-node visual skin. Separate file so component-level rules stay out of
+   the page-chrome stylesheet. */
+@import "./ir-nodes.css";
+
 :root {
   --fg: #1a1a1a;
   --fg-muted: #555;
@@ -225,140 +229,9 @@ section.signature pre {
 }
 section.signature pre code { background: transparent; padding: 0; font-size: 0.9rem; }
 
-pre.code {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 0.75rem 1rem;
-  overflow-x: auto;
-}
-pre.code code { background: transparent; padding: 0; }
-
-dl.params { margin: 0; }
-dl.params dt {
-  margin: 0.5rem 0 0.1rem;
-  font-family: var(--mono);
-  font-size: 0.9rem;
-}
-dl.params dt .pname { background: transparent; padding: 0; color: var(--accent); }
-dl.params dt .ptype { color: var(--fg-muted); font-style: italic; }
-dl.params dd { margin: 0 0 0.25rem 1.25rem; }
-dl.params dd p { margin: 0.25rem 0; }
-
-a.xref {
-  color: var(--accent);
-  text-decoration: none;
-  border-bottom: 1px dotted var(--accent);
-}
-a.xref:hover { border-bottom-style: solid; }
-.xref.unresolved {
-  color: var(--fg-muted);
-  border-bottom: 1px dotted var(--fg-muted);
-}
-
+/* Page chrome only — IR-node styles live in ir-nodes.css (imported at top). */
 section.backrefs { margin: 1.5rem 0; }
 section.backrefs ul.qualnames { columns: 2; }
-
-aside.admonition {
-  border-left: 3px solid var(--accent);
-  background: var(--admonition-bg);
-  padding: 0.5rem 0.75rem;
-  margin: 1rem 0;
-}
-aside.admonition .admonition-title { font-weight: 600; margin: 0 0 0.25rem; }
-
-details.fallback {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 0.25rem 0.5rem;
-  margin: 0.5rem 0;
-  font-size: 0.8rem;
-}
-details.fallback summary {
-  cursor: pointer;
-  color: var(--fg-muted);
-  font-family: var(--mono);
-}
-/* KaTeX display math gets its own margin; inline math inherits line-height. */
-div.math { margin: 0.75rem 0; overflow-x: auto; }
-code.math-error {
-  color: var(--math-error-fg);
-  background: var(--math-error-bg);
-  border: 1px dashed var(--math-error-fg);
-}
-
-/* Shiki emits inline styles for color, but we still want our own padding. */
-pre.code .shiki-line { display: block; }
-
-/* Inline role markers (like :py:class:`X`). The graph resolves XRef, not
-   InlineRole, so these render as styled inline code until they get
-   cross-referenced. */
-code.role {
-  background: var(--role-bg);
-  color: var(--accent);
-  padding: 0.05em 0.3em;
-  border-radius: 2px;
-}
-
-/* Definition / field lists from RST: term + description blocks. */
-dl.deflist, dl.fieldlist { margin: 0.75rem 0; }
-dl.deflist > dt, dl.fieldlist > dt {
-  font-family: var(--mono);
-  font-weight: 600;
-  margin-top: 0.5rem;
-}
-dl.deflist > dd, dl.fieldlist > dd { margin-left: 1.25rem; }
-dl.deflist > dd > p:first-child,
-dl.fieldlist > dd > p:first-child { margin-top: 0.15rem; }
-
-/* Generic "directive" admonition for block directives we didn't specialise. */
-aside.directive {
-  border-left: 3px solid var(--fg-muted);
-  background: var(--admonition-bg);
-  padding: 0.5rem 0.75rem;
-  margin: 1rem 0;
-}
-aside.directive .directive-name {
-  font-size: 0.8rem;
-  color: var(--fg-muted);
-  margin: 0 0 0.25rem;
-}
-aside.directive .directive-name code {
-  background: transparent;
-  padding: 0;
-}
-aside.directive .directive-args {
-  margin-left: 0.5rem;
-  font-family: var(--mono);
-}
-
-.substitution { font-style: italic; color: var(--fg-muted); }
-.unimplemented { color: var(--fg-muted); font-style: italic; }
-
-/* Figures rendered from IR Fig nodes. Cap image width to the column so
-   large plots don't force horizontal scroll on the main content. */
-figure.fig {
-  margin: 1rem 0;
-  text-align: center;
-}
-figure.fig img {
-  max-width: 100%;
-  height: auto;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--surface);
-}
-
-details.fallback pre {
-  overflow-x: auto;
-  max-height: 20rem;
-  background: var(--bg);
-  border-radius: 3px;
-  padding: 0.5rem;
-  margin: 0.25rem 0;
-  font-size: 0.75rem;
-}
 
 /* ---------------------------------------------------------------------------
    Site header. Capped at the content max-width; wordmark on the left, tools

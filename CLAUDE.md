@@ -82,9 +82,9 @@ service *could* be built later without a breaking change to the IR.
 
 ## Known environmental gotchas
 
-- RST parsing uses the PyPI `tree-sitter-rst` wheel on top of
-  `tree-sitter >= 0.24`. The unmaintained `tree_sitter_languages`
-  package is no longer used; don't add it back.
+- RST parsing uses `tree-sitter-language-pack` (the maintained successor
+  of the abandoned `tree_sitter_languages`) on top of `tree-sitter >= 0.24`.
+  Get the parser via `get_parser("rst")`. Don't re-add `tree_sitter_languages`.
 - `test_take2.py` has a `take2` ↔ `myst_ast` circular import that only
   manifests when collected in isolation (`pytest papyri/tests/test_take2.py`).
   The full-module collection path hides it.

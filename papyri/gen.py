@@ -59,6 +59,7 @@ from .errors import (
 from .misc import BlockExecutor, DummyP
 from .node_base import Node, register
 from .nodes import (
+    Comment,
     CrossRef,
     DocParam,
     Figure,
@@ -145,7 +146,7 @@ try:
 except (ImportError, OSError):
     sys.exit("""
             Tree Sitter RST parser not available; reinstall papyri to pull
-            the `tree-sitter` and `tree-sitter-rst` wheels from PyPI:
+            the `tree-sitter` and `tree-sitter-language-pack` wheels from PyPI:
 
             $ pip install -e .
             """)
@@ -690,13 +691,15 @@ class DFSCollector:
     def visit_ModuleType(self, mod, stack):
         for k in dir(mod):
             # Defensive: modules with a custom __dir__ / __getattr__ can list
-            # names that aren't actually resolvable. Originally added for a
-            # scipy 1.8 quirk; kept because it's generic. Log at DEBUG —
-            # observable under verbose tracing, not end-user noise.
-            if not hasattr(mod, k):
-                self.log.debug("Name not found in module: %s.%s", mod.__name__, k)
+            # names that aren't actually resolvable, or raise non-AttributeError
+            # exceptions (e.g. scipy raises ModuleNotFoundError from __getattr__).
+            # Log at DEBUG — observable under verbose tracing, not end-user noise.
+            try:
+                val = getattr(mod, k)
+            except Exception as e:
+                self.log.debug("Could not access %s.%s: %s", mod.__name__, k, e)
                 continue
-            self._open_list.append((getattr(mod, k), stack + [k]))
+            self._open_list.append((val, stack + [k]))
 
     def visit_ClassType(self, klass, stack):
         for k, v in klass.__dict__.items():
@@ -1034,7 +1037,9 @@ def _normalize_see_also(see_also: Section, qa: str):
                 elif raw_description:
                     assert isinstance(raw_description, list)
                     type_ = type_or_description
-                    desc = [paragraph(raw_description, qa)]
+                    parsed = paragraph(raw_description, qa)
+                    # RST `..` with no content parses as a Comment; drop it
+                    desc = [] if isinstance(parsed, Comment) else [parsed]
                 else:
                     type_ = type_or_description
                     desc = []
@@ -1467,7 +1472,7 @@ class Gen:
                         aliases={},
                         version=self._meta["version"],
                         config=self.config.directives,
-                        module=self.root,
+                        module=self._meta.get("module"),
                     )
                     blob.arbitrary = [dv.visit(s) for s in data]
                 except Exception as e:
@@ -1926,6 +1931,7 @@ class Gen:
                     aliases={},
                     version=self.version,
                     config=self.config.directives,
+                    module=self.root,
                 )
                 s2 = dv.visit(s)
 

@@ -134,6 +134,15 @@ function isTocActive(item: TocItem): boolean {
     ) : null
   }
 
+  <nav class="sidebar-section">
+    <h3 class="sidebar-heading">Browse</h3>
+    <ul class="sidebar-flat">
+      <li><a href={`/${nav.pkg}/${nav.version}/images/`}>Images</a></li>
+      <li><a href={`/${nav.pkg}/${nav.version}/nodes/math/`}>Math</a></li>
+      <li><a href={`/${nav.pkg}/${nav.version}/nodes/code/`}>Code</a></li>
+    </ul>
+  </nav>
+
   <nav class="sidebar-section sidebar-api">
     <h3 class="sidebar-heading">API</h3>
     <BundleSearch client:load pkg={nav.pkg} ver={nav.version} />

@@ -4,7 +4,14 @@ from pathlib import Path
 
 import pytest
 
-from papyri.gen import APIObjectInfo, BlockExecutor, Config, Gen, NumpyDocString
+from papyri.gen import (
+    APIObjectInfo,
+    BlockExecutor,
+    Config,
+    Gen,
+    NumpyDocString,
+    _normalize_see_also,
+)
 
 
 @lru_cache
@@ -209,3 +216,42 @@ def test_self_2():
     assert item_file is not None
     assert item_file.endswith("papyri/nodes.py")
     assert g.data["papyri.nodes:RefInfo.__eq__"].to_dict()["item_file"] is None
+
+
+def test_normalize_see_also_rst_comment_description():
+    """RST `..` used as placeholder description should yield an empty description.
+
+    Some scipy docstrings use bare `..` in See Also sections, e.g.
+    scipy.ndimage._measurements:minimum_position.  numpydoc passes ['..'] as
+    the raw_description, which tree-sitter parses as a Comment node.  The
+    SeeAlsoItem.descriptions field only accepts Paragraph nodes, so Comment
+    nodes must be dropped rather than forwarded.
+    """
+    # Mirrors what numpydoc produces for:
+    #   :func:`minimum_position`, :func:`extrema`
+    #       ..
+    #   :func:`standard_deviation`
+    #       ..
+    see_also = [
+        ([("minimum_position", ""), ("extrema", "")], [".."]),
+        ([("standard_deviation", "")], [".."]),
+    ]
+    items = _normalize_see_also(see_also, qa="test:func")  # type: ignore[arg-type]
+    assert len(items) == 3  # one SeeAlsoItem per name
+    for item in items:
+        assert item.descriptions == [], (
+            f"Expected empty descriptions for '..', got {item.descriptions!r}"
+        )
+
+
+def test_normalize_see_also_real_description():
+    """Real descriptions (non-comment) should be preserved."""
+    from papyri.nodes import Paragraph
+
+    see_also = [
+        ([("minimum_position", "")], ["Finds the position of the minimum."]),
+    ]
+    items = _normalize_see_also(see_also, qa="test:func")  # type: ignore[arg-type]
+    assert len(items) == 1
+    assert len(items[0].descriptions) == 1
+    assert isinstance(items[0].descriptions[0], Paragraph)

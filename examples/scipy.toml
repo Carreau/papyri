@@ -279,7 +279,6 @@ WrongTypeAtField = [
                         "scipy.stats._page_trend_test:page_trend_test",
                         "scipy.stats._stats_py:percentileofscore",
                         "scipy.stats._stats_py:power_divergence",
-                        "scipy.stats._morestats:ppcc_max",
                         "scipy.stats._morestats:ppcc_plot",
                         "scipy.stats._quantile:quantile",
                         "scipy.stats._stats_py:scoreatpercentile",

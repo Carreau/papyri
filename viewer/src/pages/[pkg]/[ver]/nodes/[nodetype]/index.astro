@@ -8,40 +8,9 @@ import {
   loadCbor,
   collectNodes,
   type IRNode,
-  type TypedNode,
 } from "../../../../../lib/ir-reader.ts";
 import { listDocs, listExamples } from "../../../../../lib/nav.ts";
-
-// ---------------------------------------------------------------------------
-// Supported node-type slugs. Each entry lists which IR __type names to
-// collect and how to extract a display string from a matched node.
-// ---------------------------------------------------------------------------
-
-interface NodeConfig {
-  label: string;
-  types: ReadonlySet<string>;
-  /** Extract a short display key used for deduplication and rendering. */
-  displayValue(n: IRNode): string | null;
-}
-
-const NODE_CONFIGS: Record<string, NodeConfig> = {
-  math: {
-    label: "Math",
-    types: new Set(["Math", "InlineMath"]),
-    displayValue(n) {
-      const v = (n as TypedNode).value;
-      return typeof v === "string" ? v : null;
-    },
-  },
-  code: {
-    label: "Code",
-    types: new Set(["Code", "InlineCode"]),
-    displayValue(n) {
-      const v = (n as TypedNode).value;
-      return typeof v === "string" ? v : null;
-    },
-  },
-};
+import { NODE_CONFIGS } from "../../../../../lib/node-configs.ts";
 
 export async function getStaticPaths() {
   const bundles = await listIngestedBundles();

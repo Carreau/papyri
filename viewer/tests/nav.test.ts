@@ -2,18 +2,23 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { LocalStore } from "../src/lib/storage-local.ts";
+import { initStore } from "../src/lib/storage.ts";
 import {
   isTutorial,
   listDocs,
   listExamples,
   listFilesRecursive,
   loadBundleNav,
+  clearNavCache,
 } from "../src/lib/nav.ts";
 
 describe("nav.ts", () => {
   let dir: string;
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), "papyri-viewer-nav-"));
+    initStore(new LocalStore(dir));
+    clearNavCache();
   });
   afterEach(async () => {
     await rm(dir, { recursive: true, force: true });
@@ -41,52 +46,52 @@ describe("nav.ts", () => {
 
   describe("listFilesRecursive", () => {
     it("returns [] for a missing root", async () => {
-      expect(await listFilesRecursive(join(dir, "nope"))).toEqual([]);
+      expect(await listFilesRecursive("pkg", "1.0", "nope")).toEqual([]);
     });
 
     it("walks nested files and normalises separators", async () => {
-      await mkdir(join(dir, "a", "b"), { recursive: true });
-      await writeFile(join(dir, "a", "b", "deep.txt"), "x");
-      await writeFile(join(dir, "a", "shallow.txt"), "x");
-      await writeFile(join(dir, "root.txt"), "x");
-      const got = await listFilesRecursive(dir);
+      await mkdir(join(dir, "pkg", "1.0", "a", "b"), { recursive: true });
+      await writeFile(join(dir, "pkg", "1.0", "a", "b", "deep.txt"), "x");
+      await writeFile(join(dir, "pkg", "1.0", "a", "shallow.txt"), "x");
+      await writeFile(join(dir, "pkg", "1.0", "root.txt"), "x");
+      const got = await listFilesRecursive("pkg", "1.0", "");
       expect(got).toEqual(["a/b/deep.txt", "a/shallow.txt", "root.txt"]);
     });
   });
 
   describe("listDocs / listExamples", () => {
     it("read from the bundle's docs/ and examples/ dirs", async () => {
-      await mkdir(join(dir, "docs", "tutorials"), { recursive: true });
-      await writeFile(join(dir, "docs", "index"), "x");
-      await writeFile(join(dir, "docs", "crossrefs"), "x");
-      await writeFile(join(dir, "docs", "tutorials", "intro"), "x");
+      await mkdir(join(dir, "pkg", "1.0", "docs", "tutorials"), { recursive: true });
+      await writeFile(join(dir, "pkg", "1.0", "docs", "index"), "x");
+      await writeFile(join(dir, "pkg", "1.0", "docs", "crossrefs"), "x");
+      await writeFile(join(dir, "pkg", "1.0", "docs", "tutorials", "intro"), "x");
 
-      await mkdir(join(dir, "examples"), { recursive: true });
-      await writeFile(join(dir, "examples", "simple_plot.py"), "x");
+      await mkdir(join(dir, "pkg", "1.0", "examples"), { recursive: true });
+      await writeFile(join(dir, "pkg", "1.0", "examples", "simple_plot.py"), "x");
 
-      expect(await listDocs(dir)).toEqual([
+      expect(await listDocs("pkg", "1.0")).toEqual([
         "crossrefs",
         "index",
         "tutorials/intro",
       ]);
-      expect(await listExamples(dir)).toEqual(["simple_plot.py"]);
+      expect(await listExamples("pkg", "1.0")).toEqual(["simple_plot.py"]);
     });
 
     it("returns [] when the dir is absent", async () => {
-      expect(await listDocs(dir)).toEqual([]);
-      expect(await listExamples(dir)).toEqual([]);
+      expect(await listDocs("pkg", "1.0")).toEqual([]);
+      expect(await listExamples("pkg", "1.0")).toEqual([]);
     });
   });
 
   describe("loadBundleNav", () => {
     it("splits tutorials off from docs by filename convention", async () => {
-      await mkdir(join(dir, "docs", "tutorials"), { recursive: true });
-      await writeFile(join(dir, "docs", "index"), "x");
-      await writeFile(join(dir, "docs", "tutorial_intro"), "x");
-      await writeFile(join(dir, "docs", "tutorials", "basics"), "x");
-      await mkdir(join(dir, "module"));
+      await mkdir(join(dir, "pkg", "1.0", "docs", "tutorials"), { recursive: true });
+      await writeFile(join(dir, "pkg", "1.0", "docs", "index"), "x");
+      await writeFile(join(dir, "pkg", "1.0", "docs", "tutorial_intro"), "x");
+      await writeFile(join(dir, "pkg", "1.0", "docs", "tutorials", "basics"), "x");
+      await mkdir(join(dir, "pkg", "1.0", "module"));
 
-      const nav = await loadBundleNav("pkg", "1.0", dir);
+      const nav = await loadBundleNav("pkg", "1.0");
       expect(nav.docs.map((e) => e.name)).toEqual(["index"]);
       expect(nav.tutorials.map((e) => e.name).sort()).toEqual([
         "tutorial_intro",
@@ -95,15 +100,15 @@ describe("nav.ts", () => {
     });
 
     it("produces URL hrefs that encode path segments", async () => {
-      await mkdir(join(dir, "docs"), { recursive: true });
-      await writeFile(join(dir, "docs", "a b"), "x");
-      const nav = await loadBundleNav("pkg", "1.0", dir);
+      await mkdir(join(dir, "pkg", "1.0", "docs"), { recursive: true });
+      await writeFile(join(dir, "pkg", "1.0", "docs", "a b"), "x");
+      const nav = await loadBundleNav("pkg", "1.0");
       const entry = nav.docs.find((e) => e.name === "a b");
       expect(entry?.href).toBe("/pkg/1.0/docs/a%20b/");
     });
 
     it("returns an empty view-model for a bare bundle dir", async () => {
-      const nav = await loadBundleNav("pkg", "1.0", dir);
+      const nav = await loadBundleNav("pkg", "1.0");
       expect(nav.docs).toEqual([]);
       expect(nav.tutorials).toEqual([]);
       expect(nav.examples).toEqual([]);

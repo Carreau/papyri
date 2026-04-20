@@ -1,0 +1,25 @@
+name = "papyri-upload-api"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+
+# account_id = "<your-account-id>"
+
+# ---------------------------------------------------------------------------
+# Bindings
+# ---------------------------------------------------------------------------
+
+[[r2_buckets]]
+binding = "BUNDLE_STORE"
+bucket_name = "papyri-bundles"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "papyri-graph"
+database_id = "<papyri-graph-d1-id>"
+
+[vars]
+GITHUB_REPO = "carreau/papyri"
+GITHUB_INGEST_WORKFLOW = "ingest.yml"
+
+# Set GITHUB_TOKEN as a secret:
+#   wrangler secret put GITHUB_TOKEN

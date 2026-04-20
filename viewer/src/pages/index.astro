@@ -6,12 +6,9 @@ import BundleGridSearch from "../components/BundleGridSearch.tsx";
 
 const ingested = await listIngestedBundles();
 
-// Small metadata array passed to the filter island so it can match without
-// reading the DOM: just pkg names and summaries (no logos / big data URIs).
-// The island uses this alongside data-attributes on the card elements.
 const bundlesForFilter = ingested.map((b) => ({
   pkg: b.pkg,
-  summary: "", // filled server-side in BundleCard; island reads data-summary
+  summary: "",
 }));
 ---
 
@@ -37,11 +34,7 @@ const bundlesForFilter = ingested.map((b) => ({
         />
         <div class="bundle-card-grid" id="bundle-card-grid">
           {ingested.map((b) => (
-            <BundleCard
-              pkg={b.pkg}
-              version={b.version}
-              bundlePath={b.path}
-            />
+            <BundleCard pkg={b.pkg} version={b.version} />
           ))}
         </div>
       </>

@@ -195,6 +195,55 @@ robustness and coverage holes.
       outside the Sphinx build environment: `.. autofunction::`,
       `.. autoclass::`, `.. automodule::`, `.. ipython::`.
 
+### Phase 5 — Upload API + SSR viewer
+
+Goal: enable library maintainers to push DocBundles to a hosted service,
+and make the viewer render new bundles without a full rebuild.
+
+- [x] **5a — Viewer SSR migration.** Switch Astro from `output: "static"` to
+      `output: "server"` with `@astrojs/cloudflare` adapter. Replace
+      `better-sqlite3` + filesystem reads with abstract `BundleStore` /
+      `GraphBackend` singletons initialized by Astro middleware. Local dev
+      keeps `better-sqlite3` + `node:fs` (dev-only dynamic imports). Cloud
+      reads from R2 (`BUNDLE_STORE` binding) and D1 (`DB` binding). All
+      `getStaticPaths` removed; routes are fully dynamic. `bundlePath: string`
+      prop removed from layouts/components (they derive data from `pkg`/`ver`).
+      New files: `src/lib/storage{,.ts,-local.ts,-r2.ts}`,
+      `src/lib/graph{-local,-d1}.ts`, `src/middleware.ts`, `wrangler.toml`.
+      `better-sqlite3` moved to `devDependencies`; `@astrojs/cloudflare` added.
+- [x] **5b — Upload API Worker.** New `upload-api/` directory with a Cloudflare
+      Worker (`src/index.ts`) handling `POST /upload/<pkg>/<ver>`.
+      Auth via `Bearer` token; token hashes stored in D1. Token model supports
+      one token → many packages so a maintainer doesn't need a separate token per
+      project. Raw bundle ZIP stored in R2 at `bundles/<pkg>/<ver>.zip`. On
+      success, dispatches the GitHub Actions ingest workflow.
+- [x] **5c — Cloud ingest pipeline.** `.github/workflows/ingest.yml` triggered
+      by `workflow_dispatch` (pkg, ver inputs). Downloads raw bundle ZIP from R2,
+      runs `papyri ingest`, uploads decoded blobs back to R2 under
+      `ingest/<pkg>/<ver>/`, and pipes `papyri export-to-d1` output to
+      `wrangler d1 execute` to update the D1 graph.
+- [x] **5d — CLI: `papyri token` + `papyri upload` + `papyri export-to-d1`.**
+      `papyri token create <name> <pkg...>` — generates token, prints SQL to
+      stdout (pipe to `wrangler d1 execute`). `papyri token add-pkg <hash> <pkg...>`
+      and `papyri token revoke <hash>` also emit SQL. `papyri token schema` prints
+      CREATE TABLE DDL for the token tables. `papyri upload <bundle_dir> --token
+      <TOKEN>` zips and POSTs the bundle. `papyri export-to-d1 [<db>]` dumps the
+      local SQLite graph as INSERT statements for D1.
+
+D1 token schema (run `papyri token schema | wrangler d1 execute …` once)::
+
+    tokens(token_hash TEXT PK, name TEXT, created_at TEXT)
+    token_packages(token_hash TEXT FK, pkg TEXT, PRIMARY KEY (token_hash, pkg))
+
+R2 key layout::
+
+    bundles/<pkg>/<ver>.zip          — raw uploaded bundle
+    ingest/<pkg>/<ver>/module/…      — decoded CBOR blobs (viewer reads these)
+    ingest/<pkg>/<ver>/meta/…
+    ingest/<pkg>/<ver>/docs/…
+    ingest/<pkg>/<ver>/examples/…
+    ingest/<pkg>/<ver>/assets/…
+
 ## Open questions
 
 - Do we want to re-publish to PyPI under a new version once Phase 1 is

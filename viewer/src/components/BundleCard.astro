@@ -1,34 +1,20 @@
 ---
-// One card on the landing page. Shows logo, pkg name, version, summary, and
-// counts. The entire card is a single <a> so there are no nested links.
-import { readdir } from "node:fs/promises";
-import { join } from "node:path";
 import { listModules } from "../lib/ir-reader.ts";
-import { loadBundleNav } from "../lib/nav.ts";
+import { loadBundleNav, listBundleFiles } from "../lib/nav.ts";
 
 interface Props {
   pkg: string;
   version: string;
-  bundlePath: string;
 }
 
-const { pkg, version, bundlePath } = Astro.props;
+const { pkg, version } = Astro.props;
 
-const nav = await loadBundleNav(pkg, version, bundlePath);
-const qualnames = await listModules(bundlePath);
-
-async function countDir(dir: string): Promise<number> {
-  try {
-    const ents = await readdir(dir, { withFileTypes: true });
-    return ents.filter((e) => e.isFile()).length;
-  } catch {
-    return 0;
-  }
-}
+const nav = await loadBundleNav(pkg, version);
+const qualnames = await listModules(pkg, version);
 
 const [docCount, exampleCount] = await Promise.all([
-  countDir(join(bundlePath, "docs")),
-  countDir(join(bundlePath, "examples")),
+  listBundleFiles(pkg, version, "docs").then((f) => f.length),
+  listBundleFiles(pkg, version, "examples").then((f) => f.length),
 ]);
 
 const summary =

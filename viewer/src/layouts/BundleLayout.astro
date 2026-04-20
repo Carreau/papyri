@@ -11,7 +11,6 @@ import "../styles/global.css";
 interface Props {
   pkg: string;
   ver: string;
-  bundlePath: string;
   title: string;
   activeQualname?: string;
   activeDocPath?: string;
@@ -21,13 +20,12 @@ interface Props {
 const {
   pkg,
   ver,
-  bundlePath,
   title,
   activeQualname,
   activeDocPath,
   activeExamplePath,
 } = Astro.props;
-const nav = await loadBundleNav(pkg, ver, bundlePath);
+const nav = await loadBundleNav(pkg, ver);
 ---
 
 <html lang="en">

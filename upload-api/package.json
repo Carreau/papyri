@@ -1,0 +1,16 @@
+{
+  "name": "papyri-upload-api",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Cloudflare Worker: authenticated bundle upload endpoint for papyri.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250430.0",
+    "typescript": "^5.7.0",
+    "wrangler": "^3.114.0"
+  }
+}

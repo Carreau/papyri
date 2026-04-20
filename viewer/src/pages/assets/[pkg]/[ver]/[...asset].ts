@@ -1,20 +1,9 @@
-// Static endpoint that serves files from a bundle's ingest `assets/` dir.
-// `linkForRef({kind: "assets"})` renders URLs like
-//   /assets/<pkg>/<ver>/<filename>
-// and at build time this endpoint is materialised into
-//   dist/assets/<pkg>/<ver>/<filename>
-// so the viewer can be hosted by any static file server.
-//
-// Only `assets/` is exposed. `meta/` / `docs/` / `examples/` / `module/` are
-// CBOR blobs decoded by the page routes, not linkable resources.
-import { readFile } from "node:fs/promises";
-import { extname, join } from "node:path";
+// Dynamic endpoint that serves bundle assets.
+// `linkForRef({kind: "assets"})` renders URLs like /assets/<pkg>/<ver>/<file>.
+// Colons in filenames are rewritten to `$` in the URL slug; the store key
+// uses the original filename (with the colon reversed here).
 import type { APIRoute } from "astro";
-import {
-  listIngestedBundles,
-  type IngestedBundle,
-} from "../../../../lib/ir-reader.ts";
-import { listFilesRecursive } from "../../../../lib/nav.ts";
+import { getStore } from "../../../../lib/storage.ts";
 
 const MIME: Record<string, string> = {
   ".png": "image/png",
@@ -32,39 +21,25 @@ const MIME: Record<string, string> = {
   ".pdf": "application/pdf",
 };
 
-// papyri writes asset filenames like `fig-papyri.examples:example1-0.png`.
-// Colons are legal on disk but unsafe in URLs (Astro rejects them as a
-// scheme-prefix during output-path generation), so we mirror the qualname
-// slug rule and rewrite `:` -> `$` in the URL-facing param. The endpoint
-// still reads the underlying file via the unrewritten `filePath` prop.
+/** Reverse the slug rule `:` -> `$` to recover the original asset filename. */
+export function unslugifyAssetPath(slug: string): string {
+  return slug.replace(/\$/g, ":");
+}
+
+/** Apply the slug rule `:` -> `$` for URL generation. */
 export function slugifyAssetPath(p: string): string {
   return p.replace(/:/g, "$");
 }
 
-export async function getStaticPaths() {
-  const bundles: IngestedBundle[] = await listIngestedBundles();
-  const paths: Array<{
-    params: { pkg: string; ver: string; asset: string };
-    props: { filePath: string };
-  }> = [];
-  for (const b of bundles) {
-    const assetDir = join(b.path, "assets");
-    const files = await listFilesRecursive(assetDir);
-    for (const f of files) {
-      paths.push({
-        params: { pkg: b.pkg, ver: b.version, asset: slugifyAssetPath(f) },
-        props: { filePath: join(assetDir, f) },
-      });
-    }
+export const GET: APIRoute = async ({ params }) => {
+  const { pkg, ver, asset } = params;
+  const fileName = unslugifyAssetPath(asset ?? "");
+  const raw = await getStore().readBytes(pkg!, ver!, `assets/${fileName}`);
+  if (!raw) {
+    return new Response("Not found", { status: 404 });
   }
-  return paths;
-}
-
-export const GET: APIRoute = async ({ props }) => {
-  const { filePath } = props as { filePath: string };
-  const buf = await readFile(filePath);
-  const mime = MIME[extname(filePath).toLowerCase()] ?? "application/octet-stream";
-  return new Response(new Uint8Array(buf), {
-    headers: { "content-type": mime },
-  });
+  const dot = fileName.lastIndexOf(".");
+  const ext = dot >= 0 ? fileName.slice(dot).toLowerCase() : "";
+  const mime = MIME[ext] ?? "application/octet-stream";
+  return new Response(raw.buffer as ArrayBuffer, { headers: { "content-type": mime } });
 };

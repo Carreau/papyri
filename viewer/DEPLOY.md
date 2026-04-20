@@ -1,177 +1,108 @@
-# Deploying the viewer to Cloudflare Pages
+# Deploying the viewer (Cloudflare Workers SSR)
 
-The viewer is a pure static site (`astro build` → `viewer/dist/`), so it
-deploys to Cloudflare Pages with no runtime adapter, no Workers, and no
-database at request time. This document sketches the intended GitHub
-Actions setup; the workflow is **not yet committed** — once we're ready
-to turn it on, drop the YAML below into
-`.github/workflows/cloudflare-pages.yml`.
+The viewer has moved from Astro SSG (static pre-build) to Astro SSR running
+as a Cloudflare Worker. Pages are rendered on request; bundle data is read
+from Cloudflare R2 and the cross-link graph from Cloudflare D1.
 
 ## Architecture
 
 ```
-  GitHub Actions
-  ├─ papyri gen examples/papyri.toml   → ~/.papyri/data/<pkg>_<ver>/
-  ├─ papyri ingest ~/.papyri/data/...  → ~/.papyri/ingest/papyri.db
-  ├─ pnpm build (Astro SSG)            → viewer/dist/
-  └─ wrangler pages deploy viewer/dist → Cloudflare Pages
+  Library maintainer
+  └─ papyri gen → ~/.papyri/data/<pkg>_<ver>/
+  └─ papyri upload --token <TOKEN>  →  upload-api/ Worker
+                                           │
+                                           ├─ stores bundle ZIP → R2  bundles/<pkg>/<ver>.zip
+                                           └─ triggers GitHub Actions ingest workflow
+                                                       │
+                                                       ├─ papyri ingest → decoded CBOR → R2  ingest/<pkg>/<ver>/…
+                                                       └─ papyri export-to-d1 | wrangler d1 execute → D1
+
+  End-user browser
+  └─ GET /<pkg>/<ver>/<qualname>/  →  viewer/ Worker
+                                         ├─ reads ingest/<pkg>/<ver>/module/<qualname> from R2
+                                         └─ queries cross-link graph from D1
 ```
-
-At build time Astro walks the graph DB and the ingest tree, pre-renders
-every qualname page, inlines KaTeX math, highlights code with Shiki,
-and emits one `index.html` per URL. Cloudflare Pages then serves those
-files straight from its global edge cache — no origin, no cold starts,
-no per-request DB access.
-
-## Storage model
-
-| Artifact                               | Where it lives at build time   | Where it lives at runtime                         |
-| -------------------------------------- | ------------------------------ | ------------------------------------------------- |
-| Per-bundle IR (JSON + CBOR blobs)      | `~/.papyri/data/<pkg>_<ver>/`  | Consumed at build; not shipped                    |
-| Ingest store (decoded CBOR per qualname) | `~/.papyri/ingest/<pkg>/<ver>/` | Consumed at build; not shipped                    |
-| Graph DB (`papyri.db`, SQLite)         | `~/.papyri/ingest/papyri.db`   | Consumed at build; not shipped                    |
-| Rendered HTML + assets                 | `viewer/dist/`                 | Cloudflare Pages edge (global, immutable per deploy) |
-| Example assets (plots, captured HTML)  | `viewer/dist/assets/...`       | Cloudflare Pages edge                             |
-
-In other words: all papyri-side state is a **build input**, not a
-runtime dependency. The Pages deploy contains nothing but pre-rendered
-HTML and static assets.
 
 ## One-time Cloudflare setup
 
-1. In the Cloudflare dashboard, create a Pages project. Pick
-   **"Direct Upload"** (not the Git integration — we drive deploys
-   from GitHub Actions so we can run papyri first). Name it something
-   stable, e.g. `papyri-viewer`.
-2. Create an API token with the `Pages:Edit` permission scoped to the
-   account that owns the project. Copy the token.
-3. Note the Cloudflare **Account ID** from the dashboard sidebar.
+1. **Create an R2 bucket** named `papyri-bundles`.
+2. **Create a D1 database** named `papyri-graph`. Note the database ID.
+3. **Set up the D1 schema**:
+   ```sh
+   # Graph tables (documents, destinations, links):
+   wrangler d1 execute papyri-graph --remote \
+     --file papyri/graphstore_schema.sql
 
-## GitHub secrets
+   # Token tables:
+   papyri token schema \
+     | wrangler d1 execute papyri-graph --remote --file /dev/stdin
+   ```
+4. **Update `wrangler.toml`** in `viewer/` and `upload-api/` with your
+   Cloudflare `account_id` and the D1 `database_id`.
+5. **Deploy the upload API**:
+   ```sh
+   cd upload-api
+   pnpm install
+   wrangler secret put GITHUB_TOKEN   # fine-grained PAT, Actions:write
+   wrangler deploy
+   ```
+6. **Deploy the viewer**:
+   ```sh
+   cd viewer
+   pnpm install --frozen-lockfile
+   pnpm build
+   wrangler deploy
+   ```
 
-Add three repo-level secrets under *Settings → Secrets and variables →
-Actions*:
+## Shared R2 bucket
 
-| Secret                      | Value                                  |
-| --------------------------- | -------------------------------------- |
-| `CLOUDFLARE_API_TOKEN`      | The Pages:Edit token from step 2 above |
-| `CLOUDFLARE_ACCOUNT_ID`     | Your Cloudflare account ID             |
-| `CLOUDFLARE_PAGES_PROJECT`  | The project name (e.g. `papyri-viewer`) |
+Both the upload API and the viewer bind to the **same** R2 bucket
+(`papyri-bundles`). The upload API writes to `bundles/` and the ingest
+pipeline writes to `ingest/`. The viewer reads from `ingest/` only.
 
-With those three set, the workflow below will run on every push to
-`main` (production deploy) and on every pull request against `main`
-(preview deploy on a branch subdomain).
+## GitHub Actions secrets
 
-## Scaling the content set
+| Secret | Used by |
+|---|---|
+| `CLOUDFLARE_API_TOKEN` | ingest.yml — `wrangler d1 execute` |
+| `CLOUDFLARE_ACCOUNT_ID` | ingest.yml + rclone |
+| `R2_ACCESS_KEY_ID` | ingest.yml — rclone |
+| `R2_SECRET_ACCESS_KEY` | ingest.yml — rclone |
 
-The proposed workflow ships papyri's own docs by running `papyri gen
-examples/papyri.toml` and ingesting the result. To publish additional
-libraries, either:
+The upload API also needs `GITHUB_TOKEN` set as a **wrangler secret** (not a
+GitHub Actions secret) so the Worker can dispatch the ingest workflow.
 
-- add more TOMLs to the `Generate + ingest bundles` step, or
-- generate bundles in a separate job (mirroring
-  `python-package.yml`'s matrix), upload them as artifacts, and
-  download + ingest them from the deploy job.
+## Local development
 
-Watch the Pages project's asset count and build time as the set grows.
-Cloudflare Pages allows up to 20,000 files per deploy and a 25 MiB
-per-file limit as of writing; papyri emits one HTML per qualname plus
-assets, which adds up fast across large libraries. If we hit either
-limit the next step is to either prune to module-level pages with
-client-side rendering of qualnames, or move to the SSR-on-Workers
-path (see below).
+`pnpm dev` starts the Astro dev server in Node.js mode. In this mode,
+`Astro.locals.runtime` is undefined, so the middleware falls back to:
+- `~/.papyri/ingest/` for bundle files (via `LocalStore` + `node:fs`)
+- `~/.papyri/ingest/papyri.db` for the graph (via `LocalGraph` + `better-sqlite3`)
 
-## If we ever outgrow SSG
+This matches the pre-4a behaviour — run `papyri gen` + `papyri ingest` locally
+and `pnpm dev` serves them as before.
 
-`viewer/PLAN.md` already flags the `ir-reader` / `graph` modules as the
-designated shock absorbers. To switch to edge rendering:
+To test against actual R2/D1 locally, use `wrangler dev` with bindings
+configured in `viewer/wrangler.toml`. Remote bindings are supported with
+`wrangler dev --remote`.
 
-- Replace `better-sqlite3` with the Cloudflare **D1** binding behind
-  `src/lib/graph.ts`. Papyri's SQLite schema (`papyri/graphstore.py`)
-  is pure SQL and should port with minor tweaks.
-- Push the ingest store's CBOR blobs to **Cloudflare R2** (keyed by
-  `<pkg>/<ver>/module/<qualname>`), and have the Worker fetch + decode
-  them with `cbor-x` on demand. `cbor-x` runs unmodified in Workers.
-- Swap the Astro build output to `@astrojs/cloudflare` so pages run as
-  Worker routes.
+## Ingesting a bundle without the upload API
 
-None of this is needed today — flagged only so future-us knows the
-ramp is clean.
+For local testing or CI-based ingest, you can skip the upload API and run
+the ingest pipeline directly:
 
-## Proposed workflow YAML
+```sh
+# Generate
+papyri gen examples/papyri.toml --no-infer
 
-Save as `.github/workflows/cloudflare-pages.yml` when you're ready to
-turn the automated deploy on.
+# Ingest locally
+papyri ingest ~/.papyri/data/papyri_<ver>
 
-```yaml
-name: Deploy viewer to Cloudflare Pages
+# Push ingested blobs to R2
+rclone sync ~/.papyri/ingest/papyri/<ver>/ \
+  r2:papyri-bundles/ingest/papyri/<ver>/
 
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-  workflow_dispatch:
-
-permissions:
-  contents: read
-  pull-requests: write
-  deployments: write
-
-concurrency:
-  group: cloudflare-pages-${{ github.ref }}
-  cancel-in-progress: true
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python 3.14
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.14"
-          cache: pip
-
-      - name: Install papyri
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e .
-
-      - name: Generate + ingest bundles
-        run: |
-          papyri gen examples/papyri.toml --no-infer
-          for d in ~/.papyri/data/*/; do
-            papyri ingest "$d"
-          done
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-          cache-dependency-path: viewer/pnpm-lock.yaml
-
-      - name: Install viewer deps
-        working-directory: viewer
-        run: pnpm install --frozen-lockfile
-
-      - name: Build static site
-        working-directory: viewer
-        run: pnpm build
-
-      - name: Deploy to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: >-
-            pages deploy viewer/dist
-            --project-name=${{ secrets.CLOUDFLARE_PAGES_PROJECT }}
-            --branch=${{ github.head_ref || github.ref_name }}
+# Export graph to D1
+papyri export-to-d1 \
+  | wrangler d1 execute papyri-graph --remote --file /dev/stdin
 ```

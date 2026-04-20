@@ -1,65 +1,41 @@
 ---
 import {
   linkForRef,
-  listIngestedBundles,
-  listModules,
   loadModule,
-  qualnameToSlug,
+  slugToQualname,
+  buildXrefResolver,
   type IRNode,
   type SectionNode,
   type SignatureNodeT,
   type SigParamT,
 } from "../../../lib/ir-reader.ts";
-import { getBackrefs, resolveRef } from "../../../lib/graph.ts";
+import { getBackrefs } from "../../../lib/graph.ts";
 import IrNode from "../../../components/IrNode.astro";
 import BundleLayout from "../../../layouts/BundleLayout.astro";
 
-export async function getStaticPaths() {
-  const bundles = await listIngestedBundles();
-  const paths: Array<{
-    params: { pkg: string; ver: string; slug: string };
-    props: { bundlePath: string; qualname: string };
-  }> = [];
-  for (const b of bundles) {
-    const qualnames = await listModules(b.path);
-    for (const qa of qualnames) {
-      paths.push({
-        params: { pkg: b.pkg, ver: b.version, slug: qualnameToSlug(qa) },
-        props: { bundlePath: b.path, qualname: qa },
-      });
-    }
-  }
-  return paths;
-}
-
 const { pkg, ver, slug } = Astro.params;
-const { bundlePath, qualname } = Astro.props as {
-  bundlePath: string;
-  qualname: string;
-};
+const qualname = slugToQualname(slug!);
 
-// Defensive: in theory qualname === slugToQualname(slug).
-void slug;
-
-const doc = await loadModule(bundlePath, qualname);
+let doc;
+try {
+  doc = await loadModule(pkg!, ver!, qualname);
+} catch {
+  return Astro.redirect("/404");
+}
 
 function renderAnnotation(
   ann: SigParamT["annotation"] | SignatureNodeT["return_annotation"],
 ): string | null {
   if (ann == null) return null;
   if (typeof ann === "string") return ann;
-  if (typeof ann === "object" && "__type" in ann && ann.__type === "Empty") {
-    return null;
-  }
+  if (typeof ann === "object" && "__type" in ann && ann.__type === "Empty") return null;
   return null;
 }
 
 function renderDefault(def: SigParamT["default"]): string | null {
   if (def == null) return null;
   if (typeof def === "string") return def;
-  if (typeof def === "object" && "__type" in def && def.__type === "Empty") {
-    return null;
-  }
+  if (typeof def === "object" && "__type" in def && def.__type === "Empty") return null;
   return null;
 }
 
@@ -79,7 +55,11 @@ function formatSignature(sig: SignatureNodeT): string {
   const pieces: string[] = [];
   let lastKind: string | null = null;
   for (const p of sig.parameters) {
-    if (p.kind === "KEYWORD_ONLY" && lastKind !== "KEYWORD_ONLY" && lastKind !== "VAR_POSITIONAL") {
+    if (
+      p.kind === "KEYWORD_ONLY" &&
+      lastKind !== "KEYWORD_ONLY" &&
+      lastKind !== "VAR_POSITIONAL"
+    ) {
       pieces.push("*");
     }
     pieces.push(formatParam(p));
@@ -90,8 +70,6 @@ function formatSignature(sig: SignatureNodeT): string {
   return `${sig.target_name}(${pieces.join(", ")})${retStr}`;
 }
 
-// Iteration order of sections: prefer _ordered_sections, fall back to
-// Object.keys. Skip sections whose Section body is empty.
 const orderedKeys: string[] = doc._ordered_sections ?? [];
 const contentKeys: string[] = Object.keys(doc._content ?? {});
 const renderOrder: string[] = [
@@ -99,10 +77,7 @@ const renderOrder: string[] = [
   ...contentKeys.filter((k) => !orderedKeys.includes(k)),
 ];
 
-interface RenderSection {
-  title: string;
-  section: SectionNode;
-}
+interface RenderSection { title: string; section: SectionNode; }
 const sections: RenderSection[] = [];
 for (const key of renderOrder) {
   const s = doc._content[key] as SectionNode | undefined;
@@ -113,9 +88,6 @@ for (const key of renderOrder) {
 
 const arbitrary = Array.isArray(doc.arbitrary) ? doc.arbitrary : [];
 
-// example_section_data is a Section (tag 4015) on IngestedDoc that was
-// previously ignored. Render it after the regular sections if it contains
-// anything. Normalise to a list of child IR nodes so the template stays flat.
 const exampleSection = (() => {
   const es = doc.example_section_data as SectionNode | null | undefined;
   if (!es) return null;
@@ -124,62 +96,26 @@ const exampleSection = (() => {
   return { title: es.title ?? "Examples", children: kids };
 })();
 
-// Section children sometimes contain node types the renderer doesn't handle.
-// IrNode.astro already falls back to a JSON dump per-node; we don't dump the
-// whole section just because one child is unhandled.
 function sectionChildren(s: SectionNode): IRNode[] {
   return Array.isArray(s.children) ? s.children : [];
 }
 
-// ---------------------------------------------------------------------------
-// M2 crosslinks.
-// resolveXref is handed to <IrNode> and called per CrossRef node at render time.
-// It closes over the cached DB handle (openGraphDb caches) so we don't open
-// the file per node. The CrossRef IR shape:
-//   { __type: "CrossRef", value: label, reference: RefInfo, kind, anchor }
-// where `reference` is a RefInfo tag node with fields (module, version, kind,
-// path). We prefer that resolved reference, falling back to the top-level
-// CrossRef.kind / value pair.
-// ---------------------------------------------------------------------------
-interface CrossRefShape {
-  value?: string;
-  reference?: {
-    __type?: string;
-    module?: string;
-    version?: string;
-    kind?: string;
-    path?: string;
-  } | null;
-  kind?: string;
-}
+// Collect all nodes for pre-resolving CrossRefs.
+const allNodes: unknown[] = [
+  ...sections.flatMap((s) => sectionChildren(s.section)),
+  ...arbitrary.flatMap(sectionChildren),
+  ...(exampleSection?.children ?? []),
+];
+const resolveXref = await buildXrefResolver(allNodes);
 
-function resolveXref(raw: unknown): { url: string; label: string } | null {
-  const n = raw as CrossRefShape | null;
-  if (!n) return null;
-  const label = n.value ?? "";
-  const ref = n.reference;
-  if (!ref || !ref.module || !ref.path || !ref.kind) return null;
-  // Skip papyri's sentinel "unresolved" placeholder.
-  if (ref.module === "current-module" || ref.kind === "to-resolve") return null;
-  const resolved = resolveRef({
-    pkg: ref.module,
-    ver: ref.version ?? "?",
-    kind: ref.kind,
-    path: ref.path,
-  });
-  if (!resolved) return null;
-  const url = linkForRef(resolved);
-  if (!url) return null;
-  return { url, label };
-}
-
-// Backrefs for this document.
-const backrefs = getBackrefs({ pkg, ver, kind: "module", path: qualname });
-interface BackrefRow {
-  url: string;
-  label: string;
-  key: string;
-}
+// Backrefs (async, uses the graph backend).
+const backrefs = await getBackrefs({
+  pkg: pkg!,
+  ver: ver!,
+  kind: "module",
+  path: qualname,
+});
+interface BackrefRow { url: string; label: string; key: string; }
 const backrefRows: BackrefRow[] = [];
 const _seen = new Set<string>();
 for (const b of backrefs) {
@@ -195,7 +131,6 @@ for (const b of backrefs) {
 <BundleLayout
   pkg={pkg!}
   ver={ver!}
-  bundlePath={bundlePath}
   title={`${qualname} — Papyri viewer`}
   activeQualname={qualname}
 >
@@ -227,7 +162,9 @@ for (const b of backrefs) {
 
   {
     sections.map(({ title, section }) => (
-      <section class={`doc-section doc-section-${title.toLowerCase().replace(/\s+/g, "-")}`}>
+      <section
+        class={`doc-section doc-section-${title.toLowerCase().replace(/\s+/g, "-")}`}
+      >
         <h2>{title}</h2>
         {sectionChildren(section).map((c) => (
           <IrNode node={c} resolveXref={resolveXref} />

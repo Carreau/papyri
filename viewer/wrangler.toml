@@ -1,0 +1,28 @@
+name = "papyri-viewer"
+main = "dist/_worker.js"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# Assets directory (Astro SSR output)
+assets = { directory = "dist/_astro" }
+
+# Route configuration — serve the viewer Worker on the root domain.
+# Adjust account_id and routes for your Cloudflare deployment.
+# account_id = "<your-account-id>"
+
+# ---------------------------------------------------------------------------
+# Cloudflare bindings
+# ---------------------------------------------------------------------------
+
+[[r2_buckets]]
+binding = "BUNDLE_STORE"
+bucket_name = "papyri-bundles"
+# For local dev with `wrangler dev`, use a local R2 simulation:
+# preview_bucket_name = "papyri-bundles-preview"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "papyri-graph"
+database_id = "<papyri-graph-d1-id>"
+# For local dev:
+# preview_database_id = "local"

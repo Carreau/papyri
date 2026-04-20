@@ -9,7 +9,6 @@ import { Encoder, Tag } from "cbor-x";
 const tg = (tag: number, fields: unknown[]) => new Tag(fields, tag);
 const enc = new Encoder({ useRecords: false });
 
-// IngestedDoc (4010) fields, in declared order (see ir-reader FIELD_ORDER).
 const mkDoc = (qa: string, o: Record<string, unknown> = {}) =>
   tg(4010, [
     {}, [], o.item_file ?? null, o.item_line ?? null, o.item_type ?? null,
@@ -25,30 +24,37 @@ const bytesUnknown = enc.encode(
   mkDoc("pkg:qux", { arbitrary: [tg(9999, ["mystery"])] }),
 );
 
+import { LocalStore } from "../src/lib/storage-local.ts";
+import { initStore } from "../src/lib/storage.ts";
+import { LocalGraph } from "../src/lib/graph-local.ts";
+import { initGraph } from "../src/lib/graph.ts";
+
 let loadModule: typeof import("../src/lib/ir-reader.ts").loadModule;
 beforeAll(async () => {
   ({ loadModule } = await import("../src/lib/ir-reader.ts"));
 });
 
 describe("loadModule (CBOR roundtrip)", () => {
-  let dir: string;
+  let storeRoot: string;
   beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), "papyri-viewer-cbor-"));
+    storeRoot = await mkdtemp(join(tmpdir(), "papyri-viewer-cbor-"));
+    initStore(new LocalStore(storeRoot));
+    // graph must be initialised too (buildXrefResolver uses it)
+    initGraph(new LocalGraph(join(storeRoot, "nope.db")));
   });
   afterEach(async () => {
-    await rm(dir, { recursive: true, force: true });
+    await rm(storeRoot, { recursive: true, force: true });
   });
 
-  const writeBlob = async (name: string, bytes: Uint8Array) => {
-    const b = join(dir, "pkg", "1.0");
-    await mkdir(join(b, "module"), { recursive: true });
-    await writeFile(join(b, "module", name), bytes);
-    return b;
+  const writeBlob = async (pkg: string, ver: string, name: string, bytes: Uint8Array) => {
+    const modDir = join(storeRoot, pkg, ver, "module");
+    await mkdir(modDir, { recursive: true });
+    await writeFile(join(modDir, name), bytes);
   };
 
   it("decodes an IngestedDoc (tag 4010) with nested tagged children", async () => {
-    const bundle = await writeBlob("pkg.mod$foo", bytesFull);
-    const out = await loadModule(bundle, "pkg.mod$foo");
+    await writeBlob("pkg", "1.0", "pkg.mod$foo", bytesFull);
+    const out = await loadModule("pkg", "1.0", "pkg.mod$foo");
     expect(out.__type).toBe("IngestedDoc");
     expect(out.__tag).toBe(4010);
     expect(out.qa).toBe("pkg.mod:foo");
@@ -61,16 +67,14 @@ describe("loadModule (CBOR roundtrip)", () => {
   });
 
   it("falls back to .cbor when the bare filename is absent", async () => {
-    const bundle = await writeBlob("pkg$bar.cbor", bytesBar);
-    expect((await loadModule(bundle, "pkg$bar")).qa).toBe("pkg:bar");
+    await writeBlob("pkg", "1.0", "pkg$bar.cbor", bytesBar);
+    expect((await loadModule("pkg", "1.0", "pkg$bar")).qa).toBe("pkg:bar");
   });
 
   it("leaves unregistered inner tags as raw cbor-x Tag instances", async () => {
-    // ir-reader only registers decoders for tags in FIELD_ORDER; this pins
-    // that unknown tags flow through as-is so a future fallback fails loudly.
     const { Tag: DecTag } = await import("cbor-x");
-    const bundle = await writeBlob("pkg$qux", bytesUnknown);
-    const out = await loadModule(bundle, "pkg$qux");
+    await writeBlob("pkg", "1.0", "pkg$qux", bytesUnknown);
+    const out = await loadModule("pkg", "1.0", "pkg$qux");
     const arb = out.arbitrary as unknown[];
     expect(arb).toHaveLength(1);
     const inner = arb[0] as InstanceType<typeof DecTag>;

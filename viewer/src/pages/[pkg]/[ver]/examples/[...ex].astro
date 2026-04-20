@@ -1,85 +1,30 @@
 ---
 import {
-  linkForRef,
-  listIngestedBundles,
-  loadCbor,
+  loadBundleCbor,
+  buildXrefResolver,
   type IRNode,
   type SectionNode,
 } from "../../../../lib/ir-reader.ts";
-import { listExamples } from "../../../../lib/nav.ts";
-import { resolveRef } from "../../../../lib/graph.ts";
 import IrNode from "../../../../components/IrNode.astro";
 import BundleLayout from "../../../../layouts/BundleLayout.astro";
-import { join } from "node:path";
 
-export async function getStaticPaths() {
-  const bundles = await listIngestedBundles();
-  const paths: Array<{
-    params: { pkg: string; ver: string; ex: string };
-    props: { bundlePath: string; examplePath: string };
-  }> = [];
-  for (const b of bundles) {
-    const examples = await listExamples(b.path);
-    for (const e of examples) {
-      paths.push({
-        params: { pkg: b.pkg, ver: b.version, ex: e },
-        props: { bundlePath: b.path, examplePath: e },
-      });
-    }
-  }
-  return paths;
+const { pkg, ver, ex } = Astro.params;
+const examplePath = decodeURIComponent(ex ?? "");
+
+let section: SectionNode;
+try {
+  section = await loadBundleCbor<SectionNode>(pkg!, ver!, `examples/${examplePath}`);
+} catch {
+  return Astro.redirect("/404");
 }
 
-const { pkg, ver } = Astro.params;
-const { bundlePath, examplePath } = Astro.props as {
-  bundlePath: string;
-  examplePath: string;
-};
-
-// Example blobs are Section (tag 4015) — the decoder hands us a typed node.
-const section = (await loadCbor(
-  join(bundlePath, "examples", examplePath),
-)) as SectionNode;
-
-const children: IRNode[] = Array.isArray(section.children)
-  ? section.children
-  : [];
-
-interface XRefShape {
-  value?: string;
-  reference?: {
-    module?: string;
-    version?: string;
-    kind?: string;
-    path?: string;
-  } | null;
-  kind?: string;
-}
-
-function resolveXref(raw: unknown): { url: string; label: string } | null {
-  const n = raw as XRefShape | null;
-  if (!n) return null;
-  const label = n.value ?? "";
-  const ref = n.reference;
-  if (!ref || !ref.module || !ref.path || !ref.kind) return null;
-  if (ref.module === "current-module" || ref.kind === "to-resolve") return null;
-  const resolved = resolveRef({
-    pkg: ref.module,
-    ver: ref.version ?? "?",
-    kind: ref.kind,
-    path: ref.path,
-  });
-  if (!resolved) return null;
-  const url = linkForRef(resolved);
-  if (!url) return null;
-  return { url, label };
-}
+const children: IRNode[] = Array.isArray(section.children) ? section.children : [];
+const resolveXref = await buildXrefResolver(children);
 ---
 
 <BundleLayout
   pkg={pkg!}
   ver={ver!}
-  bundlePath={bundlePath}
   title={`${examplePath} — ${pkg} ${ver}`}
   activeExamplePath={examplePath}
 >

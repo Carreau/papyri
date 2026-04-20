@@ -407,5 +407,373 @@ def describe(
                 print(f"  {f.module} {f.version} {f.kind} {f.path}")
 
 
+# ---------------------------------------------------------------------------
+# papyri token — manage upload tokens
+# ---------------------------------------------------------------------------
+
+token_app = typer.Typer(
+    help="Manage per-project upload tokens for the hosted service.",
+    no_args_is_help=True,
+)
+app.add_typer(token_app, name="token")
+
+
+@token_app.command("create")
+def token_create(
+    name: Annotated[
+        str,
+        typer.Argument(
+            help="Human-readable label, e.g. 'numpy-ci' or 'org-key'.",
+        ),
+    ],
+    packages: Annotated[
+        list[str],
+        typer.Argument(
+            help="One or more package names this token is authorized to upload for.",
+        ),
+    ],
+):
+    """
+    Generate a new upload token authorized for one or more packages.
+
+    The plaintext token is printed once and never stored. The command also
+    emits SQL to stdout that must be applied to the D1 database — pipe it
+    to wrangler::
+
+        papyri token create my-key numpy scipy \\
+          | wrangler d1 execute papyri-graph --remote --file /dev/stdin
+    """
+    import hashlib
+    import secrets
+
+    if not packages:
+        typer.echo("At least one package name is required.", err=True)
+        raise typer.Exit(code=1)
+
+    token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+
+    typer.echo("", err=True)
+    typer.echo("=== New upload token (save this — shown only once) ===", err=True)
+    typer.echo(f"  {token}", err=True)
+    typer.echo("", err=True)
+    typer.echo(f"Token hash : {token_hash}", err=True)
+    typer.echo(f"Name       : {name}", err=True)
+    typer.echo(f"Packages   : {', '.join(packages)}", err=True)
+    typer.echo("", err=True)
+    typer.echo("Pipe the SQL below into D1 to register:", err=True)
+    typer.echo(
+        "  papyri token create ... | wrangler d1 execute papyri-graph --remote --file /dev/stdin",
+        err=True,
+    )
+    typer.echo("", err=True)
+
+    # Emit SQL to stdout so the caller can pipe to wrangler.
+    _name_safe = name.replace("'", "''")
+    print(
+        f"INSERT OR IGNORE INTO tokens (token_hash, name) "
+        f"VALUES ('{token_hash}', '{_name_safe}');"
+    )
+    for pkg in packages:
+        _pkg_safe = pkg.replace("'", "''")
+        print(
+            f"INSERT OR IGNORE INTO token_packages (token_hash, pkg) "
+            f"VALUES ('{token_hash}', '{_pkg_safe}');"
+        )
+
+
+@token_app.command("add-pkg")
+def token_add_pkg(
+    token_hash: Annotated[
+        str,
+        typer.Argument(help="Full SHA-256 token hash (from `papyri token create`)."),
+    ],
+    packages: Annotated[
+        list[str],
+        typer.Argument(help="Package names to add to this token."),
+    ],
+):
+    """
+    Authorize an existing token for additional packages.
+
+    Emits SQL to stdout — pipe to wrangler::
+
+        papyri token add-pkg <hash> astropy \\
+          | wrangler d1 execute papyri-graph --remote --file /dev/stdin
+    """
+    if not packages:
+        typer.echo("At least one package name is required.", err=True)
+        raise typer.Exit(code=1)
+    _hash_safe = token_hash.replace("'", "''")
+    for pkg in packages:
+        _pkg_safe = pkg.replace("'", "''")
+        print(
+            f"INSERT OR IGNORE INTO token_packages (token_hash, pkg) "
+            f"VALUES ('{_hash_safe}', '{_pkg_safe}');"
+        )
+
+
+@token_app.command("revoke")
+def token_revoke(
+    token_hash: Annotated[
+        str,
+        typer.Argument(help="Full SHA-256 token hash to revoke."),
+    ],
+):
+    """
+    Revoke an upload token.
+
+    Emits SQL to stdout — pipe to wrangler::
+
+        papyri token revoke <hash> \\
+          | wrangler d1 execute papyri-graph --remote --file /dev/stdin
+    """
+    _hash_safe = token_hash.replace("'", "''")
+    print(f"DELETE FROM token_packages WHERE token_hash = '{_hash_safe}';")
+    print(f"DELETE FROM tokens WHERE token_hash = '{_hash_safe}';")
+
+
+@token_app.command("schema")
+def token_schema():
+    """
+    Print the CREATE TABLE SQL for token storage.
+
+    Run once when setting up the D1 database::
+
+        papyri token schema \\
+          | wrangler d1 execute papyri-graph --remote --file /dev/stdin
+    """
+    print(
+        """
+-- Token storage schema (safe to run multiple times — uses IF NOT EXISTS).
+CREATE TABLE IF NOT EXISTS tokens (
+    token_hash TEXT PRIMARY KEY,
+    name       TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS token_packages (
+    token_hash TEXT NOT NULL REFERENCES tokens(token_hash) ON DELETE CASCADE,
+    pkg        TEXT NOT NULL,
+    PRIMARY KEY (token_hash, pkg)
+);
+""".strip()
+    )
+
+
+# ---------------------------------------------------------------------------
+# papyri upload — push a bundle to the hosted service
+# ---------------------------------------------------------------------------
+
+
+@app.command()
+def upload(
+    bundle_dir: Annotated[
+        Path,
+        typer.Argument(
+            help="Path to the generated bundle directory (contains papyri.json).",
+        ),
+    ],
+    token: Annotated[
+        str,
+        typer.Option(
+            "--token",
+            envvar="PAPYRI_UPLOAD_TOKEN",
+            help="Bearer token authorizing this upload.",
+        ),
+    ],
+    api: Annotated[
+        str,
+        typer.Option(
+            "--api",
+            envvar="PAPYRI_UPLOAD_URL",
+            help="Base URL of the upload API (e.g. https://upload.papyri.dev).",
+        ),
+    ] = "https://upload.papyri.dev",
+    overwrite: bool = typer.Option(
+        False, help="Replace an existing bundle at the same (pkg, ver)."
+    ),
+):
+    """
+    Package a generated DocBundle and upload it to the hosted service.
+
+    Reads package name and version from papyri.json inside BUNDLE_DIR,
+    then ZIPs the directory contents and POSTs to the upload API::
+
+        papyri upload ~/.papyri/data/numpy_2.3.5 \\
+            --token $PAPYRI_UPLOAD_TOKEN
+    """
+    import io
+    import json
+    import urllib.request
+    import zipfile
+
+    bundle_dir = bundle_dir.expanduser().resolve()
+    if not bundle_dir.is_dir():
+        typer.echo(f"Not a directory: {bundle_dir}", err=True)
+        raise typer.Exit(code=1)
+
+    papyri_json = bundle_dir / "papyri.json"
+    if not papyri_json.exists():
+        typer.echo(
+            f"papyri.json not found in {bundle_dir}. "
+            "Is this a valid bundle directory?",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    meta = json.loads(papyri_json.read_text())
+    pkg = meta.get("module")
+    ver = meta.get("version")
+    if not pkg or not ver:
+        typer.echo("Could not read pkg/version from papyri.json.", err=True)
+        raise typer.Exit(code=1)
+
+    typer.echo(f"Packaging {pkg} {ver} from {bundle_dir} …")
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for child in sorted(bundle_dir.rglob("*")):
+            if child.is_file():
+                zf.write(child, child.relative_to(bundle_dir))
+    body = buf.getvalue()
+    typer.echo(f"Bundle size: {len(body) / 1024:.0f} KB")
+
+    url = f"{api.rstrip('/')}/upload/{pkg}/{ver}"
+    if overwrite:
+        url += "?overwrite=1"
+    typer.echo(f"Uploading to {url} …")
+
+    req = urllib.request.Request(
+        url,
+        data=body,
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/zip",
+            "Content-Length": str(len(body)),
+        },
+    )
+    try:
+        with urllib.request.urlopen(req) as resp:
+            status = resp.status
+            result = json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        body_text = e.read().decode(errors="replace")
+        typer.echo(f"Upload failed: HTTP {e.code} — {body_text}", err=True)
+        raise typer.Exit(code=1)
+
+    if result.get("ok"):
+        typer.echo(f"Upload accepted (HTTP {status}).")
+        if "warning" in result:
+            typer.echo(f"Warning: {result['warning']}", err=True)
+    else:
+        typer.echo(f"Unexpected response: {result}", err=True)
+        raise typer.Exit(code=1)
+
+
+# ---------------------------------------------------------------------------
+# papyri export-to-d1 — export the local SQLite graph to D1
+# ---------------------------------------------------------------------------
+
+
+@app.command("export-to-d1")
+def export_to_d1(
+    db_path: Annotated[
+        Path | None,
+        typer.Argument(
+            help="Path to papyri.db (defaults to ~/.papyri/ingest/papyri.db).",
+        ),
+    ] = None,
+):
+    """
+    Export the local papyri graph database to SQL INSERT statements.
+
+    Reads ~/.papyri/ingest/papyri.db (or DB_PATH) and emits SQL that
+    can be piped into a Cloudflare D1 database::
+
+        papyri export-to-d1 \\
+          | wrangler d1 execute papyri-graph --remote --file /dev/stdin
+    """
+    import sqlite3
+    from pathlib import Path as P
+
+    from papyri.config import ingest_dir
+
+    if db_path is None:
+        db_path = P(ingest_dir) / "papyri.db"
+
+    db_path = db_path.expanduser().resolve()
+    if not db_path.exists():
+        typer.echo(f"Database not found: {db_path}", err=True)
+        raise typer.Exit(code=1)
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+
+    # Emit a CREATE TABLE guard for each papyri graph table.
+    print(
+        """
+CREATE TABLE IF NOT EXISTS documents (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    package    TEXT NOT NULL,
+    version    TEXT NOT NULL,
+    category   TEXT NOT NULL,
+    identifier TEXT NOT NULL,
+    UNIQUE(package, version, category, identifier)
+);
+CREATE TABLE IF NOT EXISTS destinations (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    package    TEXT NOT NULL,
+    version    TEXT NOT NULL,
+    category   TEXT NOT NULL,
+    identifier TEXT NOT NULL,
+    UNIQUE(package, version, category, identifier)
+);
+CREATE TABLE IF NOT EXISTS links (
+    source INTEGER NOT NULL REFERENCES documents(id),
+    dest   INTEGER NOT NULL REFERENCES destinations(id),
+    PRIMARY KEY (source, dest)
+);
+""".strip()
+    )
+
+    def _q(val: object) -> str:
+        if val is None:
+            return "NULL"
+        return "'" + str(val).replace("'", "''") + "'"
+
+    for table in ("documents", "destinations"):
+        rows = cur.execute(
+            f"SELECT package, version, category, identifier FROM {table}"
+        ).fetchall()
+        for r in rows:
+            print(
+                f"INSERT OR IGNORE INTO {table} (package, version, category, identifier) "
+                f"VALUES ({_q(r['package'])}, {_q(r['version'])}, "
+                f"{_q(r['category'])}, {_q(r['identifier'])});"
+            )
+
+    # Links reference integer IDs. Re-emit by joining on the unique keys.
+    rows = cur.execute(
+        "SELECT d.package, d.version, d.category, d.identifier, "
+        "       ds.package AS dp, ds.version AS dv, ds.category AS dc, ds.identifier AS di "
+        "FROM links l "
+        "JOIN documents d ON d.id = l.source "
+        "JOIN destinations ds ON ds.id = l.dest"
+    ).fetchall()
+    for r in rows:
+        print(
+            f"INSERT OR IGNORE INTO links (source, dest) "
+            f"SELECT d.id, ds.id FROM documents d, destinations ds "
+            f"WHERE d.package={_q(r['package'])} AND d.version={_q(r['version'])} "
+            f"AND d.category={_q(r['category'])} AND d.identifier={_q(r['identifier'])} "
+            f"AND ds.package={_q(r['dp'])} AND ds.version={_q(r['dv'])} "
+            f"AND ds.category={_q(r['dc'])} AND ds.identifier={_q(r['di'])};"
+        )
+
+    conn.close()
+
+
 if __name__ == "__main__":
     app()

@@ -1,0 +1,98 @@
+name: Cloud ingest — download bundle from R2, ingest, push back
+
+# Triggered by the upload API after a maintainer pushes a new bundle.
+on:
+  workflow_dispatch:
+    inputs:
+      pkg:
+        description: "Package name (e.g. numpy)"
+        required: true
+      ver:
+        description: "Package version (e.g. 2.3.5)"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Install papyri
+        run: pip install -e .
+
+      # ---------------------------------------------------------------------------
+      # 1. Download the raw bundle ZIP from R2
+      # ---------------------------------------------------------------------------
+      - name: Install rclone
+        run: |
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+
+      - name: Configure rclone for Cloudflare R2
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          mkdir -p ~/.config/rclone
+          cat >~/.config/rclone/rclone.conf <<EOF
+          [r2]
+          type = s3
+          provider = Cloudflare
+          access_key_id = ${R2_ACCESS_KEY_ID}
+          secret_access_key = ${R2_SECRET_ACCESS_KEY}
+          endpoint = https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com
+          EOF
+
+      - name: Download bundle ZIP from R2
+        run: |
+          mkdir -p /tmp/bundle-download
+          rclone copy "r2:papyri-bundles/bundles/${{ inputs.pkg }}/${{ inputs.ver }}.zip" \
+                      /tmp/bundle-download/ --progress
+
+      # ---------------------------------------------------------------------------
+      # 2. Unzip and ingest
+      # ---------------------------------------------------------------------------
+      - name: Unzip bundle
+        run: |
+          DEST=~/.papyri/data/${{ inputs.pkg }}_${{ inputs.ver }}
+          mkdir -p "$DEST"
+          unzip -q /tmp/bundle-download/${{ inputs.ver }}.zip -d "$DEST"
+
+      - name: Run papyri ingest
+        run: |
+          papyri ingest ~/.papyri/data/${{ inputs.pkg }}_${{ inputs.ver }}
+
+      # ---------------------------------------------------------------------------
+      # 3. Upload ingested blobs back to R2
+      # ---------------------------------------------------------------------------
+      - name: Upload ingested bundle to R2
+        run: |
+          rclone sync \
+            ~/.papyri/ingest/${{ inputs.pkg }}/${{ inputs.ver }}/ \
+            "r2:papyri-bundles/ingest/${{ inputs.pkg }}/${{ inputs.ver }}/" \
+            --progress
+
+      # ---------------------------------------------------------------------------
+      # 4. Export graph changes to D1
+      # ---------------------------------------------------------------------------
+      - name: Install wrangler
+        run: npm install -g wrangler@3
+
+      - name: Export graph to D1
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          papyri export-to-d1 ~/.papyri/ingest/papyri.db \
+            | wrangler d1 execute papyri-graph \
+                --remote \
+                --file /dev/stdin

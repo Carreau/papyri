@@ -1,88 +1,33 @@
-import { readdir, readFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import { Decoder, Tag, addExtension } from "cbor-x";
+import { getStore } from "./storage.ts";
+import { resolveRef } from "./graph.ts";
 
 // ---------------------------------------------------------------------------
-// Ingest store. Structure: ~/.papyri/ingest/<pkg>/<ver>/{module,docs,...}.
-// The viewer only consumes the ingest store; the gen dir (~/.papyri/data/)
-// is a `papyri` CLI concern. See `viewer/PLAN.md`.
+// Bundle discovery
 // ---------------------------------------------------------------------------
-
-export function ingestDir(): string {
-  return process.env.PAPYRI_INGEST_DIR ?? join(homedir(), ".papyri", "ingest");
-}
 
 export interface IngestedBundle {
   pkg: string;
   version: string;
-  /** Absolute path to `<ingestDir>/<pkg>/<version>/`. */
-  path: string;
 }
 
-export async function listIngestedBundles(
-  root: string = ingestDir(),
-): Promise<IngestedBundle[]> {
-  let pkgs;
-  try {
-    pkgs = await readdir(root, { withFileTypes: true });
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
-    throw err;
-  }
-
-  const out: IngestedBundle[] = [];
-  for (const p of pkgs) {
-    if (!p.isDirectory()) continue;
-    const pkgPath = join(root, p.name);
-    let vers;
-    try {
-      vers = await readdir(pkgPath, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-    for (const v of vers) {
-      if (!v.isDirectory()) continue;
-      out.push({ pkg: p.name, version: v.name, path: join(pkgPath, v.name) });
-    }
-  }
-  out.sort((a, b) => `${a.pkg}/${a.version}`.localeCompare(`${b.pkg}/${b.version}`));
-  return out;
+export async function listIngestedBundles(): Promise<IngestedBundle[]> {
+  const raw = await getStore().listBundles();
+  return raw.map((b) => ({ pkg: b.pkg, version: b.ver }));
 }
 
-/**
- * List qualnames under a bundle's `module/` directory, without the `.cbor`
- * extension (the ingest store actually doesn't use one; this tolerates both).
- */
-export async function listModules(bundlePath: string): Promise<string[]> {
-  const modDir = join(bundlePath, "module");
-  let ents;
-  try {
-    ents = await readdir(modDir, { withFileTypes: true });
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
-    throw err;
-  }
-  const names = ents
-    .filter((e) => e.isFile())
-    .map((e) => (e.name.endsWith(".cbor") ? e.name.slice(0, -5) : e.name));
-  names.sort();
-  return names;
+/** List qualnames available under a bundle's `module/` directory. */
+export async function listModules(pkg: string, ver: string): Promise<string[]> {
+  const files = await getStore().listDir(pkg, ver, "module");
+  return files
+    .map((f) => (f.endsWith(".cbor") ? f.slice(0, -5) : f))
+    .sort();
 }
 
 // ---------------------------------------------------------------------------
-// CBOR tag-based decoder.
-//
-// The papyri encoder writes each node as CBORTag(tag, [values...]) where the
-// values array is positional, in the order given by `typing.get_type_hints`
-// on the node class. Tag numbers come from `docs/IR.md` § "Node type
-// registry". We translate the positional array back into a typed object
-// here so the rest of the viewer can treat IR nodes as plain TS records.
-// Unknown tags are returned as { __type: "unknown", tag, value } so the UI
-// can degrade to a JSON dump instead of crashing.
+// CBOR tag-based decoder (unchanged from M1)
 // ---------------------------------------------------------------------------
 
-// A node we recognised.
 export interface TypedNode {
   __type: string;
   __tag: number;
@@ -97,7 +42,6 @@ export interface UnknownNode {
 
 export type IRNode = TypedNode | UnknownNode;
 
-/** Field order per tag, from `get_type_hints(cls)` on the Python side. */
 const FIELD_ORDER: Record<number, { name: string; fields: string[] }> = {
   4000: { name: "RefInfo", fields: ["module", "version", "kind", "path"] },
   4001: { name: "Root", fields: ["children"] },
@@ -198,23 +142,15 @@ const FIELD_ORDER: Record<number, { name: string; fields: string[] }> = {
   4063: { name: "CitationReference", fields: ["label"] },
 };
 
-/** Tag 4444: bare Python tuple; treated as a plain array. */
 const TUPLE_TAG = 4444;
 
 function buildTyped(tag: number, value: unknown): IRNode {
   if (tag === TUPLE_TAG) {
-    // Shouldn't flow through here because we register an extension that
-    // returns the raw array, but guard anyway.
     return { __type: "tuple", __tag: tag, value: value } as TypedNode;
   }
   const spec = FIELD_ORDER[tag];
-  if (!spec) {
-    return { __type: "unknown", __tag: tag, value };
-  }
-  if (!Array.isArray(value)) {
-    // Degenerate: expected a positional array but got something else.
-    return { __type: "unknown", __tag: tag, value };
-  }
+  if (!spec) return { __type: "unknown", __tag: tag, value };
+  if (!Array.isArray(value)) return { __type: "unknown", __tag: tag, value };
   const node: TypedNode = { __type: spec.name, __tag: tag };
   spec.fields.forEach((fname, i) => {
     node[fname] = value[i];
@@ -222,16 +158,10 @@ function buildTyped(tag: number, value: unknown): IRNode {
   return node;
 }
 
-// Register a global cbor-x extension for every known tag so the decoder
-// hands us typed nodes instead of `Tag` wrappers. cbor-x keys extensions by
-// tag number, so re-registering on module reload is fine.
 let _extensionsRegistered = false;
 function ensureExtensions(): void {
   if (_extensionsRegistered) return;
   _extensionsRegistered = true;
-
-  // Tuple tag → return the raw array (the IR is structure-typed; we don't
-  // distinguish list vs tuple on the JS side).
   addExtension({
     Class: Object as unknown as new (...a: unknown[]) => object,
     tag: TUPLE_TAG,
@@ -242,7 +172,6 @@ function ensureExtensions(): void {
       return item;
     },
   });
-
   for (const tagStr of Object.keys(FIELD_ORDER)) {
     const tag = Number(tagStr);
     addExtension({
@@ -259,8 +188,7 @@ function ensureExtensions(): void {
 }
 
 // ---------------------------------------------------------------------------
-// Typed shapes for the node types M1 actually reads. Everything else is
-// accessed as a `TypedNode` / `UnknownNode` via `__type`.
+// Typed shapes
 // ---------------------------------------------------------------------------
 
 export interface SectionNode {
@@ -312,53 +240,55 @@ export interface IngestedDoc {
   arbitrary: SectionNode[];
 }
 
-/** Read one module blob from an ingest bundle dir and decode it. */
+// ---------------------------------------------------------------------------
+// Bundle file readers
+// ---------------------------------------------------------------------------
+
+function decodeCbor<T>(raw: Uint8Array): T {
+  ensureExtensions();
+  const dec = new Decoder({ mapsAsObjects: true });
+  return dec.decode(raw) as T;
+}
+
+/** Read and decode a CBOR blob from a bundle. Key is relative to bundle root. */
+export async function loadBundleCbor<T = unknown>(
+  pkg: string,
+  ver: string,
+  key: string,
+): Promise<T> {
+  const raw = await getStore().readBytes(pkg, ver, key);
+  if (!raw) throw new Error(`Bundle file not found: ${pkg}/${ver}/${key}`);
+  return decodeCbor<T>(raw);
+}
+
+/** Load one module blob (IngestedDoc) from the bundle's `module/` directory. */
 export async function loadModule(
-  bundlePath: string,
+  pkg: string,
+  ver: string,
   qualname: string,
 ): Promise<IngestedDoc> {
   ensureExtensions();
-  const primary = join(bundlePath, "module", qualname);
-  let raw: Buffer;
-  try {
-    raw = await readFile(primary);
-  } catch {
-    raw = await readFile(primary + ".cbor");
+  // Try without extension first, then with .cbor suffix.
+  let raw = await getStore().readBytes(pkg, ver, `module/${qualname}`);
+  if (!raw) raw = await getStore().readBytes(pkg, ver, `module/${qualname}.cbor`);
+  if (!raw) {
+    throw new Error(`Module not found: ${pkg}/${ver}/module/${qualname}`);
   }
   const dec = new Decoder({ mapsAsObjects: true });
   const obj = dec.decode(raw);
-  if (obj && (obj as IRNode).__type === "IngestedDoc") {
-    return obj as IngestedDoc;
-  }
-  // Some encoders hand back a raw Tag if our extension wasn't applied — this
-  // shouldn't happen in practice, but provide a clear error.
+  if (obj && (obj as IRNode).__type === "IngestedDoc") return obj as IngestedDoc;
   if (obj instanceof Tag) {
     throw new Error(
       `expected IngestedDoc (tag 4010), got raw tag ${obj.tag} for ${qualname}`,
     );
   }
-  throw new Error(`unexpected decode result for ${qualname}: ${typeof obj}`);
-}
-
-/**
- * Generic CBOR loader that applies the IR tag extensions. Returns the decoded
- * value as-is; callers cast to the shape they expect (IngestedDoc, Section,
- * TocTree, or a plain-object meta dict).
- */
-export async function loadCbor<T = unknown>(path: string): Promise<T> {
-  ensureExtensions();
-  const raw = await readFile(path);
-  const dec = new Decoder({ mapsAsObjects: true });
-  return dec.decode(raw) as T;
+  throw new Error(
+    `unexpected decode result for ${qualname}: ${typeof obj}`,
+  );
 }
 
 // ---------------------------------------------------------------------------
-// URL slug encoding. Qualnames contain ':' (e.g. "papyri.gen:Config.__init__"),
-// which is illegal on some filesystems and awkward in URLs. We encode to/from
-// using a single "$" separator: "pkg.mod:Class.method" <-> "pkg.mod$Class.method".
-// Dots are preserved, so the slug reads naturally in browser URL bars.
-// If a qualname itself contained '$' that would collide, but Python qualnames
-// never do.
+// URL slug encoding
 // ---------------------------------------------------------------------------
 
 export function qualnameToSlug(qa: string): string {
@@ -370,10 +300,7 @@ export function slugToQualname(slug: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// URL shaping for a RefInfo-shaped tuple.
-// `module` / `docs` / `examples` get the natural page URLs we render; `assets`
-// gets a static path (actual asset serving is deferred to M3). Unknown kinds
-// return null so the caller can render an unresolved span.
+// URL shaping for a RefInfo-shaped tuple
 // ---------------------------------------------------------------------------
 
 export interface LinkRef {
@@ -461,11 +388,87 @@ export function linkForRef(ref: LinkRef): string | null {
     case "examples":
       return `/${ref.pkg}/${ref.ver}/examples/${encodeURIComponent(ref.path)}/`;
     case "assets":
-      // Colons are legal on disk but break Astro's URL-based path writer.
-      // Same slug rule as qualnames: `:` -> `$`. Kept in sync with the
-      // asset endpoint's `slugifyAssetPath`.
       return `/assets/${ref.pkg}/${ref.ver}/${ref.path.replace(/:/g, "$")}`;
     default:
       return null;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Cross-ref pre-collection (used by pages to batch-resolve before rendering)
+// ---------------------------------------------------------------------------
+
+interface CrossRefNode {
+  __type: "CrossRef";
+  value?: string;
+  reference?: {
+    module?: string;
+    version?: string;
+    kind?: string;
+    path?: string;
+  } | null;
+}
+
+/** Walk an IR tree and collect all CrossRef nodes (deduped by ref key). */
+export function collectCrossRefs(
+  nodes: unknown[],
+): Map<string, CrossRefNode> {
+  const out = new Map<string, CrossRefNode>();
+  function walk(node: unknown): void {
+    if (!node || typeof node !== "object") return;
+    const n = node as { __type?: string; [k: string]: unknown };
+    if (n.__type === "CrossRef") {
+      const ref = n.reference as CrossRefNode["reference"];
+      if (ref?.module && ref.path && ref.kind) {
+        const key = `${ref.module}|${ref.version ?? "?"}|${ref.kind}|${ref.path}`;
+        if (!out.has(key)) out.set(key, n as CrossRefNode);
+      }
+    }
+    for (const v of Object.values(n)) {
+      if (Array.isArray(v)) v.forEach(walk);
+      else if (v && typeof v === "object") walk(v);
+    }
+  }
+  nodes.forEach(walk);
+  return out;
+}
+
+export type XrefResolver = (node: unknown) => { url: string; label: string } | null;
+
+/**
+ * Pre-resolve all CrossRef nodes found in `nodes`. Returns a sync resolver
+ * closure suitable for passing to `<IrNode resolveXref={...} />`.
+ * Uses the graph singleton so middleware must run first.
+ */
+export async function buildXrefResolver(nodes: unknown[]): Promise<XrefResolver> {
+  const refs = collectCrossRefs(nodes);
+  const resolved = new Map<string, { url: string; label: string } | null>();
+
+  await Promise.all(
+    [...refs.entries()].map(async ([key, node]) => {
+      const ref = node.reference!;
+      if (ref.module === "current-module" || ref.kind === "to-resolve") {
+        resolved.set(key, null);
+        return;
+      }
+      const r = await resolveRef({
+        pkg: ref.module!,
+        ver: ref.version ?? "?",
+        kind: ref.kind!,
+        path: ref.path!,
+      });
+      if (!r) { resolved.set(key, null); return; }
+      const url = linkForRef(r);
+      resolved.set(key, url ? { url, label: node.value ?? "" } : null);
+    }),
+  );
+
+  return (raw: unknown) => {
+    const n = raw as CrossRefNode | null;
+    if (!n?.reference) return null;
+    const ref = n.reference;
+    if (!ref.module || !ref.path || !ref.kind) return null;
+    const key = `${ref.module}|${ref.version ?? "?"}|${ref.kind}|${ref.path}`;
+    return resolved.get(key) ?? null;
+  };
 }

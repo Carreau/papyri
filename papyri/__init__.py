@@ -311,10 +311,17 @@ def find(
 
 @app.command()
 def train_dict(
+    source: Annotated[
+        Path | None,
+        typer.Option(
+            help="Directory to scan for CBOR sample blobs. "
+            "Defaults to ~/.papyri/data (the gen-bundle root).",
+        ),
+    ] = None,
     output: Annotated[
         Path | None,
         typer.Option(
-            help="Where to write the trained dictionary. Defaults to <ingest>/papyri.zdict.",
+            help="Where to write the trained dictionary. Defaults to <source>/papyri.zdict.",
         ),
     ] = None,
     dict_size: Annotated[
@@ -337,33 +344,34 @@ def train_dict(
     ] = 0,
 ):
     """
-    Train a zstd dictionary on already-ingested CBOR blobs and report the
+    Train a zstd dictionary on already-generated CBOR blobs and report the
     resulting size comparison.
 
     Prints totals for raw bytes, zstd without a dictionary, and zstd with the
     freshly-trained dictionary, so the per-blob win is easy to see before
-    wiring the dictionary into the store. Run `papyri ingest` on one or more
-    bundles first.
+    wiring the dictionary into the bundle writer. Run `papyri gen` on one or
+    more projects first (or pass `--source` to point at an ingest store).
     """
     import random
 
     import zstandard
 
-    from papyri.config import ingest_dir
+    from papyri.config import data_dir
 
-    out = Path(output) if output else ingest_dir / "papyri.zdict"
+    src = Path(source) if source else data_dir
+    out = Path(output) if output else src / "papyri.zdict"
 
     candidates = [
         p
-        for p in ingest_dir.rglob("*")
+        for p in src.rglob("*")
         if p.is_file()
         and not p.name.endswith((".zst", ".br"))
         and "assets" not in p.parts
-        and p.name != "papyri.db"
+        and p.name not in ("papyri.db", "papyri.json", "toc.json")
         and p.suffix != ".zdict"
     ]
     if not candidates:
-        sys.exit(f"no ingested blobs under {ingest_dir}; run `papyri ingest` first.")
+        sys.exit(f"no CBOR blobs under {src}; run `papyri gen` first.")
 
     rng = random.Random(seed)
     sample_paths = (
@@ -374,7 +382,7 @@ def train_dict(
     samples = [p.read_bytes() for p in sample_paths]
     total_raw = sum(len(s) for s in samples)
 
-    print(f"Training on {len(samples)} blobs ({total_raw:,} bytes) from {ingest_dir}…")
+    print(f"Training on {len(samples)} blobs ({total_raw:,} bytes) from {src}…")
     zdict = zstandard.train_dictionary(dict_size, samples)
     dict_bytes = zdict.as_bytes()
     out.parent.mkdir(parents=True, exist_ok=True)

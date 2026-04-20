@@ -38,6 +38,7 @@ from typing import (
 
 import jedi
 import tomli_w
+import zstandard
 from IPython.core.oinspect import find_file
 from IPython.utils.path import compress_user
 from matplotlib import _pylab_helpers
@@ -1190,6 +1191,21 @@ class PapyriDocTestRunner(doctest.DocTestRunner):
         return Section(acc, None)
 
 
+# Experimental: write a `.zst` sidecar next to every CBOR blob in a generated
+# DocBundle so raw vs zstd-compressed IR sizes can be compared with `du`, and
+# so the bundle itself (which is what library maintainers would publish to a
+# hosted service) carries the compressed form. The uncompressed file stays as
+# the source of truth; ingest reads from it. See `_write_with_zst_sidecar`.
+_ZSTD_LEVEL = 3
+_zstd_compressor = zstandard.ZstdCompressor(level=_ZSTD_LEVEL)
+
+
+def _write_with_zst_sidecar(path: Path, data: bytes) -> None:
+    """Write `data` to `path` and a zstd-compressed copy to `path.name + '.zst'`."""
+    path.write_bytes(data)
+    (path.parent / (path.name + ".zst")).write_bytes(_zstd_compressor.compress(data))
+
+
 class Gen:
     """
     Core class to generate a DocBundle for a given library.
@@ -1505,12 +1521,12 @@ class Gen:
         for file, v in self.docs.items():
             subf = where / "docs"
             subf.mkdir(exist_ok=True, parents=True)
-            (subf / file).write_bytes(v)
+            _write_with_zst_sidecar(subf / file, v)
 
     def write_examples(self, where: Path) -> None:
         (where / "examples").mkdir(exist_ok=True)
         for k, v in self.examples.items():
-            (where / "examples" / k).write_bytes(v)
+            _write_with_zst_sidecar(where / "examples" / k, v)
 
     def write_api(self, where: Path):
         """
@@ -1518,7 +1534,7 @@ class Gen:
         """
         (where / "module").mkdir(exist_ok=True)
         for k, v in self.data.items():
-            (where / "module" / (k + ".cbor")).write_bytes(encoder.encode(v))
+            _write_with_zst_sidecar(where / "module" / (k + ".cbor"), encoder.encode(v))
 
     def partial_write(self, where):
         self.write_api(where)

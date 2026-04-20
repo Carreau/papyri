@@ -4,26 +4,12 @@ import sqlite3
 from pathlib import Path as _Path
 
 import cbor2
-import zstandard
 
 log = logging.getLogger("papyri")
 
 # we try to expanduser as early as possible to prevent
 # jupyter_pytest monkeypatch  of setenv_HOME
 GLOBAL_PATH = _Path("~/.papyri/ingest/papyri.db").expanduser()
-
-# Experimental: write a `.zst` sidecar next to each blob so on-disk sizes of
-# raw CBOR vs zstd-compressed CBOR can be compared with `du`. Reads still come
-# from the uncompressed file; the sidecar is write-only for now.
-_ZSTD_LEVEL = 3
-_zstd_compressor = zstandard.ZstdCompressor(level=_ZSTD_LEVEL)
-
-
-def _write_with_zst_sidecar(path: _Path, data: bytes) -> None:
-    """Write `data` to `path` and a zstd-compressed copy to `path.name + '.zst'`."""
-    path.write_bytes(data)
-    sidecar = path.parent / (path.name + ".zst")
-    sidecar.write_bytes(_zstd_compressor.compress(data))
 
 
 class Path:
@@ -375,7 +361,7 @@ class GraphStore:
         mp = self._meta_path(module, version)
         mp.path.parent.mkdir(parents=True, exist_ok=True)
 
-        _write_with_zst_sidecar(mp.path, data)
+        mp.write_bytes(data)
 
     def get_meta(self, key: Key) -> bytes:
         mp = self._meta_path(key.module, key.version)
@@ -400,7 +386,7 @@ class GraphStore:
         else:
             old_refs = set()
 
-        _write_with_zst_sidecar(path.path, bytes_)
+        path.write_bytes(bytes_)
 
         new_refs = set(refs)
         del refs
@@ -433,7 +419,7 @@ class GraphStore:
             res = [
                 self._path_to_key(p)
                 for p in self._root.glob(acc)
-                if not p.name.endswith((".br", ".zst"))
+                if not p.name.endswith(".br")
             ]  # !!
         except Exception as e:
             raise type(e)("Acc:" + acc, pattern) from e

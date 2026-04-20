@@ -374,9 +374,7 @@ def train_dict(
     samples = [p.read_bytes() for p in sample_paths]
     total_raw = sum(len(s) for s in samples)
 
-    print(
-        f"Training on {len(samples)} blobs ({total_raw:,} bytes) from {ingest_dir}…"
-    )
+    print(f"Training on {len(samples)} blobs ({total_raw:,} bytes) from {ingest_dir}…")
     zdict = zstandard.train_dictionary(dict_size, samples)
     dict_bytes = zdict.as_bytes()
     out.parent.mkdir(parents=True, exist_ok=True)

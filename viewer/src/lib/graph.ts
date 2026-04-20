@@ -1,13 +1,14 @@
 // Thin wrapper over the papyri.db SQLite graph store.
 //
-// The ingest step writes three tables (see docs/IR.md):
-//   documents    — one row per blob actually on disk under the ingest tree
-//   destinations — one row per ref target (may be dangling)
-//   links        — directed edges (documents.id -> destinations.id)
+// The ingest step writes two tables:
+//   nodes  — one row per known key; has_blob=1 means the blob is on disk,
+//            has_blob=0 means it is a placeholder for a not-yet-ingested ref
+//            target (may carry wildcard version "*" or "?").
+//   links  — directed edges (nodes.id source -> nodes.id dest)
 //
-// M2 uses this for two things:
-//   1. resolveRef:   pick the best on-disk document matching a given ref tuple.
-//   2. getBackrefs:  for a document target, return the documents linking to it.
+// This module uses the DB for two things:
+//   1. resolveRef:   pick the best on-disk document (has_blob=1) matching a ref.
+//   2. getBackrefs:  return blob-backed documents that link to a given target.
 //
 // better-sqlite3 is a sync API, which matches Astro's SSG build model. We
 // keep a single cached Database connection per process (Astro runs one
@@ -61,8 +62,8 @@ export function resolveRef(ref: RefTuple): RefTuple | null {
   // Exact match first.
   const exact = db
     .prepare(
-      "SELECT package, version, category, identifier FROM documents " +
-        "WHERE package=? AND version=? AND category=? AND identifier=? LIMIT 1",
+      "SELECT package, version, category, identifier FROM nodes " +
+        "WHERE has_blob=1 AND package=? AND version=? AND category=? AND identifier=? LIMIT 1",
     )
     .get(ref.pkg, ref.ver, ref.kind, ref.path) as
     | { package: string; version: string; category: string; identifier: string }
@@ -80,8 +81,8 @@ export function resolveRef(ref: RefTuple): RefTuple | null {
   // SQLite collation is plain text.
   const rows = db
     .prepare(
-      "SELECT package, version, category, identifier FROM documents " +
-        "WHERE package=? AND category=? AND identifier=?",
+      "SELECT package, version, category, identifier FROM nodes " +
+        "WHERE has_blob=1 AND package=? AND category=? AND identifier=?",
     )
     .all(ref.pkg, ref.kind, ref.path) as Array<{
     package: string;
@@ -111,11 +112,12 @@ export function getBackrefs(target: RefTuple): RefTuple[] {
   if (!db) return [];
   const rows = db
     .prepare(
-      "SELECT DISTINCT d.package, d.version, d.category, d.identifier " +
+      "SELECT DISTINCT n_src.package, n_src.version, n_src.category, n_src.identifier " +
         "FROM links l " +
-        "JOIN destinations ds ON ds.id = l.dest " +
-        "JOIN documents d ON d.id = l.source " +
-        "WHERE ds.package=? AND ds.version=? AND ds.category=? AND ds.identifier=?",
+        "JOIN nodes n_src ON n_src.id = l.source " +
+        "JOIN nodes n_dest ON n_dest.id = l.dest " +
+        "WHERE n_src.has_blob=1 " +
+        "AND n_dest.package=? AND n_dest.version=? AND n_dest.category=? AND n_dest.identifier=?",
     )
     .all(target.pkg, target.ver, target.kind, target.path) as Array<{
     package: string;

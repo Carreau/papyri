@@ -37,6 +37,30 @@ jobs:
               - 'pyproject.toml'
               - '.github/workflows/python-package.yml'
 
+  lint:
+    needs: changes
+    if: needs.changes.outputs.python == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      with:
+        persist-credentials: false
+    - name: Set up Python 3.14
+      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+      with:
+        python-version: "3.14"
+        cache: 'pip'
+    - name: Install uv
+      run: pip install uv
+    - name: Install dependencies
+      run: |
+        uv pip install --system -r requirements-dev.txt
+        uv pip install --system -e .
+    - name: Lint with ruff
+      run: python -m ruff check papyri
+    - name: Format check with ruff
+      run: python -m ruff format --check papyri
+
   build:
     needs: changes
     if: needs.changes.outputs.python == 'true' || github.event_name == 'workflow_dispatch'
@@ -51,9 +75,6 @@ jobs:
           - lib: 'IPython'
             python-version: "3.14"
           - lib: 'numpy'
-            python-version: "3.14"
-            flags: '--no-narrative --no-exec'
-          - lib: 'scipy'
             python-version: "3.14"
             flags: '--no-narrative --no-exec'
 
@@ -80,7 +101,7 @@ jobs:
     - name: Gen ${{matrix.lib}}
       run: |
         pip install ${{matrix.lib}}
-        coverage run -a -m papyri gen examples/${{matrix.lib}}.toml  --no-infer ${{matrix.flags}}
+        coverage run -a -m papyri gen examples/${{matrix.lib}}.toml --no-infer ${{matrix.flags}}
         sleep 1 # time for coverage to write its stuff
         papyri pack
         ls ~/.papyri/data
@@ -98,10 +119,58 @@ jobs:
       with:
         fail_ci_if_error: false
         token: ${{ secrets.CODECOV_TOKEN }}
+
+  build-scipy:
+    needs: [changes, lint]
+    if: needs.changes.outputs.python == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      with:
+        persist-credentials: false
+    - name: Set up Python 3.14
+      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+      with:
+        python-version: "3.14"
+        cache: 'pip'
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements-dev.txt
+        flit install --symlink
+    - name: dependency tree
+      run: |
+        pipdeptree
+    - name: dependency tree (reversed)
+      run: |
+        pipdeptree -r
+    - name: Gen scipy
+      run: |
+        pip install scipy
+        coverage run -a -m papyri gen examples/scipy.toml --no-infer --no-narrative --no-exec
+        sleep 1 # time for coverage to write its stuff
+        papyri pack
+        ls ~/.papyri/data
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+      with:
+        name: doc-bundles-scipy
+        path: ~/.papyri/data/*.zip
+    - name: Convert .coverage sql to xml for upload
+      run: |
+        coverage report
+        coverage xml
+        ls -la
+    - name: "Upload coverage to Codecov"
+      uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238  # v4
+      with:
+        fail_ci_if_error: false
+        token: ${{ secrets.CODECOV_TOKEN }}
+
   ingest:
 
     runs-on: ubuntu-latest
-    needs: [changes, build]
+    needs: [changes, build, build-scipy]
     if: needs.changes.outputs.python == 'true' || github.event_name == 'workflow_dispatch'
     strategy:
       matrix:

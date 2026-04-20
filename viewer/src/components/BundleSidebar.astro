@@ -38,7 +38,7 @@ function isTocActive(item: TocItem): boolean {
   // Match the active doc path against the toc ref's href. Cheap check that
   // avoids re-parsing URLs.
   if (!item.href || !activeDocPath) return false;
-  const encoded = activeDocPath.split("/").map(encodeURIComponent).join("/");
+  const encoded = activeDocPath.split(":").map(encodeURIComponent).join("/");
   return item.href.endsWith(`/docs/${encoded}/`);
 }
 ---

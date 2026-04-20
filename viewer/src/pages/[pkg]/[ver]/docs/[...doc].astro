@@ -23,7 +23,9 @@ export async function getStaticPaths() {
     const docs = await listDocs(b.path);
     for (const d of docs) {
       paths.push({
-        params: { pkg: b.pkg, ver: b.version, doc: d },
+        // `:` is the IR path separator; map to URL `/` so
+        // `whatsnew:index` becomes `/docs/whatsnew/index/`.
+        params: { pkg: b.pkg, ver: b.version, doc: d.split(":").join("/") },
         props: { bundlePath: b.path, docPath: d },
       });
     }

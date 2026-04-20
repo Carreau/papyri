@@ -157,7 +157,7 @@ function refToHref(ref: RefInfoNode | null): string | null {
       return `/${module}/${version}/${path.replace(/:/g, "$")}/`;
     case "docs":
       return `/${module}/${version}/docs/${path
-        .split("/")
+        .split(":")
         .map(encodeURIComponent)
         .join("/")}/`;
     case "examples":
@@ -241,7 +241,14 @@ export function isTutorial(docPath: string): boolean {
   return false;
 }
 
-function encodeDocPath(p: string): string {
+// Doc keys in the IR use `:` as path separator (gen.py joins parts with `:`).
+// Map to URL `/` so `whatsnew:index` → `/docs/whatsnew/index/`.
+function encodeDocKey(key: string): string {
+  return key.split(":").map(encodeURIComponent).join("/");
+}
+
+// Example paths are real filesystem paths; they already use `/`.
+function encodeExPath(p: string): string {
   return p.split("/").map(encodeURIComponent).join("/");
 }
 
@@ -253,7 +260,7 @@ function docsToEntries(
   const docs: NavEntry[] = [];
   const tutorials: NavEntry[] = [];
   for (const p of paths) {
-    const href = `/${pkg}/${version}/docs/${encodeDocPath(p)}/`;
+    const href = `/${pkg}/${version}/docs/${encodeDocKey(p)}/`;
     const entry: NavEntry = { name: p, href };
     if (isTutorial(p)) tutorials.push(entry);
     else docs.push(entry);
@@ -268,7 +275,7 @@ function examplesToEntries(
 ): NavEntry[] {
   return paths.map((p) => ({
     name: p,
-    href: `/${pkg}/${version}/examples/${encodeDocPath(p)}/`,
+    href: `/${pkg}/${version}/examples/${encodeExPath(p)}/`,
   }));
 }
 

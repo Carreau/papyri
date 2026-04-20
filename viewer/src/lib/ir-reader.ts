@@ -457,9 +457,9 @@ export function linkForRef(ref: LinkRef): string | null {
     case "module":
       return `/${ref.pkg}/${ref.ver}/${qualnameToSlug(ref.path)}/`;
     case "docs":
-      return `/${ref.pkg}/${ref.ver}/docs/${encodeURIComponent(ref.path)}/`;
+      return `/${ref.pkg}/${ref.ver}/docs/${ref.path.split(":").map(encodeURIComponent).join("/")}/`;
     case "examples":
-      return `/${ref.pkg}/${ref.ver}/examples/${encodeURIComponent(ref.path)}/`;
+      return `/${ref.pkg}/${ref.ver}/examples/${ref.path.split("/").map(encodeURIComponent).join("/")}/`;
     case "assets":
       // Colons are legal on disk but break Astro's URL-based path writer.
       // Same slug rule as qualnames: `:` -> `$`. Kept in sync with the

@@ -338,6 +338,7 @@ for the authoritative list):
 | 4060 | `Comment`          | `nodes.py`   |
 | 4061 | `Target`           | `nodes.py`   |
 | 4062 | `Image`            | `nodes.py`   |
+| 4063 | `CitationReference` | `nodes.py`  |
 | 4444 | `tuple` (built-in) | `nodes.py`   |
 
 Tag `4444` is a special case: `register(tuple)(4444)` at the top of

@@ -150,22 +150,19 @@ def test_parse_citation_reference():
     """
     Inline citation references like ``[CIT2002]_`` used to raise
     VisitCitationReferenceNotImplementedError. They should now parse as
-    an Unimplemented placeholder preserving the original text.
+    a CitationReference node carrying just the label.
     """
-    from papyri.nodes import Unimplemented
+    from papyri.nodes import CitationReference
 
     [section] = parse(
         b"See [CIT2002]_ for more details.", "test_parse_citation_reference"
     )
     [paragraph] = section.children
-    citation_ref = next(
-        (c for c in paragraph.children if isinstance(c, Unimplemented)), None
+    cites = [c for c in paragraph.children if isinstance(c, CitationReference)]
+    assert len(cites) == 1, (
+        f"expected one CitationReference among {paragraph.children!r}"
     )
-    assert citation_ref is not None, (
-        f"expected Unimplemented citation_reference among {paragraph.children!r}"
-    )
-    assert citation_ref.placeholder == "citation_reference"
-    assert citation_ref.value == "[CIT2002]_"
+    assert cites[0].label == "CIT2002"
 
 
 def test_parse_citation_reference_does_not_raise():
@@ -175,3 +172,32 @@ def test_parse_citation_reference_does_not_raise():
     """
     # Should not raise.
     parse(b"See [CIT2002]_ for more.", "test_parse_citation_reference_does_not_raise")
+
+
+def test_parse_citation_reference_multiple():
+    """
+    Multiple citation references in the same paragraph should each produce
+    a CitationReference with the correct label.
+    """
+    from papyri.nodes import CitationReference
+
+    [section] = parse(
+        b"Compare [Smith2020]_ and [Jones1999]_ here.",
+        "test_parse_citation_reference_multiple",
+    )
+    [paragraph] = section.children
+    labels = [c.label for c in paragraph.children if isinstance(c, CitationReference)]
+    assert labels == ["Smith2020", "Jones1999"]
+
+
+def test_citation_reference_roundtrip():
+    """
+    CitationReference should survive a CBOR encode/decode roundtrip via the
+    shared IR encoder, confirming the new CBOR tag (4063) is wired in.
+    """
+    from papyri.nodes import CitationReference, encoder
+
+    original = CitationReference(label="CIT2002")
+    decoded = encoder.decode(encoder.encode(original))
+    assert isinstance(decoded, CitationReference)
+    assert decoded.label == "CIT2002"

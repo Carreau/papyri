@@ -245,6 +245,14 @@ const codeHtml =
     })()
   ) : type === "Target" ? (
     <span id={(node as any).label} class="target" />
+  ) : type === "CitationReference" ? (
+    // RST ``[label]_`` — link to the in-page citation anchor. The matching
+    // citation definition is rendered with id="cite-<label>" (see
+    // Unimplemented "citation" branch above, once citations are fully
+    // parsed). Until then this still produces a visible clickable label.
+    <a class="citation-reference" href={`#cite-${(node as any).label}`}>
+      [{(node as any).label}]
+    </a>
   ) : type === "Comment" ? (
     null
   ) : type === "SubstitutionRef" || type === "SubstitutionDef" ? (

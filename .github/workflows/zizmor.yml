@@ -7,17 +7,24 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
   zizmor:
     runs-on: ubuntu-latest
-    permissions:
-      security-events: write
-      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           persist-credentials: false
+      - name: Install zizmor
+        run: pip install "zizmor==1.24.1"
       - name: Run zizmor
-        uses: woodruffw/zizmor-action@v1
+        run: zizmor --format sarif --output zizmor.sarif .github/workflows/
+        continue-on-error: true
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@865f5f5c36632f18690a3d569fa0a764f2da0c3e  # v3
         with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          sarif_file: zizmor.sarif
+          category: zizmor

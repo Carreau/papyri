@@ -183,6 +183,22 @@ class SubstitutionRef(Leaf):
     value: str
 
 
+@register(4063)
+class CitationReference(Node):
+    """
+    Inline reference to a citation, from RST source like ``[CIT2002]_``.
+
+    ``label`` carries the citation name (the text between the brackets, e.g.
+    ``"CIT2002"``). The target is a same-document citation definition
+    (currently still emitted as ``Unimplemented("citation", ...)``); the
+    renderer anchors this to ``#cite-<label>`` and linkifies the label so
+    references survive even when the matching definition isn't yet parsed.
+    """
+
+    type = "citationReference"
+    label: str
+
+
 @register(4018)
 class Unimplemented(Node):
     placeholder: str
@@ -764,6 +780,7 @@ StaticPhrasingContent: TypeAlias = (
     | InlineMath
     | InlineRole
     | CrossRef
+    | CitationReference
     | SubstitutionRef
     | Unimplemented
 )

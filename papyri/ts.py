@@ -6,13 +6,10 @@ from typing import Any
 from tree_sitter_language_pack import get_parser
 
 from . import errors
-from .errors import (
-    VisitCitationReferenceNotImplementedError,
-    # VisitSubstitutionDefinitionNotImplementedError,
-)
 from .nodes import (
     Blockquote,
     BulletList,
+    CitationReference,
     Code,
     Comment,
     DefList,
@@ -293,9 +290,16 @@ class TSVisitor:
         return [Unimplemented("citation", self.as_text(node))]
 
     def visit_citation_reference(self, node):
-        raise VisitCitationReferenceNotImplementedError()
-        # just hlines, like ------
-        return []
+        # Inline citation reference, RST form ``[LABEL]_``. Extract the label
+        # so the renderer can anchor to a matching citation definition.
+        text = self.as_text(node).strip()
+        if text.startswith("[") and text.endswith("]_"):
+            label = text[1:-2]
+        else:
+            # Defensive fallback for grammar shapes we haven't seen; trim
+            # known wrapping characters rather than dropping the content.
+            label = text.strip("[]_")
+        return [CitationReference(label=label)]
 
     def visit_transition(self, node):
         return [ThematicBreak()]

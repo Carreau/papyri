@@ -144,3 +144,88 @@ def test_parse_reference():
     [text, reference] = paragraph.children
     assert reference.value == "reference <to this>"
     assert text.value == "This is a "
+
+
+def test_parse_citation_reference():
+    """
+    Inline citation references like ``[CIT2002]_`` used to raise
+    VisitCitationReferenceNotImplementedError. They should now parse as
+    a CitationReference node carrying just the label.
+    """
+    from papyri.nodes import CitationReference
+
+    [section] = parse(
+        b"See [CIT2002]_ for more details.", "test_parse_citation_reference"
+    )
+    [paragraph] = section.children
+    cites = [c for c in paragraph.children if isinstance(c, CitationReference)]
+    assert len(cites) == 1, (
+        f"expected one CitationReference among {paragraph.children!r}"
+    )
+    assert cites[0].label == "CIT2002"
+
+
+def test_parse_citation_reference_does_not_raise():
+    """
+    Regression test: parsing a citation reference must not raise
+    VisitCitationReferenceNotImplementedError.
+    """
+    # Should not raise.
+    parse(b"See [CIT2002]_ for more.", "test_parse_citation_reference_does_not_raise")
+
+
+def test_parse_citation_reference_multiple():
+    """
+    Multiple citation references in the same paragraph should each produce
+    a CitationReference with the correct label.
+    """
+    from papyri.nodes import CitationReference
+
+    [section] = parse(
+        b"Compare [Smith2020]_ and [Jones1999]_ here.",
+        "test_parse_citation_reference_multiple",
+    )
+    [paragraph] = section.children
+    labels = [c.label for c in paragraph.children if isinstance(c, CitationReference)]
+    assert labels == ["Smith2020", "Jones1999"]
+
+
+def test_parse_example_with_citations_docstring():
+    """
+    Parse the example_with_citations docstring end-to-end to lock in that
+    the citation references inside a real-shaped numpydoc docstring produce
+    CitationReference leaves rather than raising.
+    """
+    from papyri.examples import example_with_citations
+    from papyri.nodes import CitationReference
+
+    assert example_with_citations.__doc__ is not None
+    sections = parse(
+        dedent(example_with_citations.__doc__).encode(),
+        "papyri.examples:example_with_citations",
+    )
+
+    # Walk the tree and collect every CitationReference label.
+    found: list[str] = []
+    stack: list = list(sections)
+    while stack:
+        node = stack.pop()
+        if isinstance(node, CitationReference):
+            found.append(node.label)
+        elif hasattr(node, "children"):
+            stack.extend(node.children or [])
+
+    assert set(found) >= {"CIT2002", "Nielsen2020", "Smith2020", "Jones1999"}, found
+
+
+def test_citation_reference_roundtrip():
+    """
+    CitationReference should survive a CBOR encode/decode roundtrip via the
+    shared IR encoder, confirming the new CBOR tag (4063) is wired in.
+    """
+    from papyri.nodes import CitationReference, encoder
+
+    original = CitationReference(label="CIT2002")
+    decoded = encoder.decode(encoder.encode(original))
+    assert isinstance(decoded, CitationReference)
+    assert decoded.label == "CIT2002"

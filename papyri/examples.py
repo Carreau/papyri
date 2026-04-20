@@ -129,6 +129,21 @@ In this paragraph: |SubstitutionRef| Should be replaced...
 
 
 
+Citation references
+~~~~~~~~~~~~~~~~~~~
+
+Citation references link inline mentions to a matching bibliographic
+citation defined elsewhere in the document, typically at the bottom of a
+docstring. A reference looks like [CIT2002]_, and multiple references such
+as [Smith2020]_ and [Jones1999]_ can appear in the same paragraph. Labels
+follow the RST "simple reference name" rule (letters, digits, hyphens).
+
+.. [CIT2002] Example citation 2002, authors, title, year.
+.. [Smith2020] Smith, J. 2020, "A study of citations in documentation".
+.. [Jones1999] Jones, K. 1999, "On the nature of footnotes and citations".
+
+
+
 Quotes
 ------
 
@@ -311,6 +326,34 @@ def example_3():
         This directive will be turned into a warning admonition.
 
     """
+
+
+def example_with_citations():
+    """
+    Example with inline citation references.
+
+    The body of this docstring mixes prose with citation references like
+    [CIT2002]_ and [Nielsen2020]_ to exercise the parser path for the
+    ``visit_citation_reference`` visitor. Multiple refs can sit in one
+    paragraph ([Smith2020]_, [Jones1999]_) and be resolved to the same
+    per-docstring citation list below.
+
+    Notes
+    -----
+    Citation definitions use the block-level ``.. [label] text`` form.
+    They currently render as placeholders until the citation block visitor
+    is fully wired; references nevertheless carry the label so the viewer
+    can anchor ``#cite-<label>`` links.
+
+    .. [CIT2002] Example citation 2002, authors, title, year.
+    .. [Nielsen2020] Nielsen, M. 2020, "Quantum computation and quantum
+       information".
+    .. [Smith2020] Smith, J. 2020, "A study of citations in documentation".
+    .. [Jones1999] Jones, K. 1999, "On the nature of footnotes and
+       citations".
+
+    """
+    pass
 
 
 foo = object()

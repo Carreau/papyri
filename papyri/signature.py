@@ -76,9 +76,12 @@ class Signature:
         toexec = f"def {sig}:pass"
         try:
             exec(toexec, {}, glob)
+            return cls(glob[oname])
         except Exception as e:
+            # On 3.14+ annotations are lazy (__annotate__), so unresolved
+            # names in the signature only surface when inspect.signature()
+            # evaluates them inside ``cls(...)``.
             raise TextSignatureParsingFailed(f"Unable to parse {toexec}") from e
-        return cls(glob[oname])
 
     def __init__(self, target_item):
         """

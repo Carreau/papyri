@@ -23,6 +23,7 @@ dependencies = [
     "tree-sitter-language-pack",
     "typer>=0.9",
     "velin",
+    "zstandard",
 ]
 
 [project.scripts]

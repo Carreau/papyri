@@ -59,6 +59,7 @@ from .errors import (
 from .misc import BlockExecutor, DummyP
 from .node_base import Node, register
 from .nodes import (
+    Comment,
     CrossRef,
     DocParam,
     Figure,
@@ -1036,7 +1037,9 @@ def _normalize_see_also(see_also: Section, qa: str):
                 elif raw_description:
                     assert isinstance(raw_description, list)
                     type_ = type_or_description
-                    desc = [paragraph(raw_description, qa)]
+                    parsed = paragraph(raw_description, qa)
+                    # RST `..` with no content parses as a Comment; drop it
+                    desc = [] if isinstance(parsed, Comment) else [parsed]
                 else:
                     type_ = type_or_description
                     desc = []

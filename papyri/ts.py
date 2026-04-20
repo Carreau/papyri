@@ -369,14 +369,40 @@ class TSVisitor:
         inner_value = text_value[1:-1].replace("\n", " ")
 
         if "`" in inner_value:
-            log.info(
+            # Heuristic: "`None`s" — tree-sitter folds the trailing alphanumeric
+            # suffix into the node because RST spec forbids alphanumeric chars
+            # immediately after a closing backtick (the correct form is
+            # "`None`\ s"). Detect "word`suffix" and split into role + text.
+            backtick_pos = inner_value.rfind("`")
+            suffix = inner_value[backtick_pos + 1 :]
+            if suffix.isalpha() and not inner_value[: backtick_pos + 1].count("`") > 1:
+                word = inner_value[:backtick_pos]
+                log.warning(
+                    "Interpreted text %r has alphanumeric suffix %r immediately "
+                    "after closing backtick in (%s). "
+                    "RST-correct form is `%s`\\ %s. "
+                    "Splitting into role+text as a best-effort fix.",
+                    inner_value,
+                    suffix,
+                    self._qa,
+                    word,
+                    suffix,
+                )
+                t = InlineRole(
+                    word,
+                    domain=domain,
+                    role=role_value,
+                    inventory=inventory,
+                )
+                return [t, Text(suffix)]
+
+            log.warning(
                 "Improper backtick found in interpreted text. "
                 "This is usually due to a missing/stray backtick, or "
                 "missing escape (`\\`) on trailing character : %r in (%s)",
                 inner_value,
                 self._qa,
             )
-            log.warning("replacing ` by ' to not crash serialiser")
             inner_value = inner_value.replace("`", "'")
 
         t = InlineRole(

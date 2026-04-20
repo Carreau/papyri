@@ -47,7 +47,10 @@ def test_find_beyond_decorators():
 
 def test_infer():
     scipy = pytest.importorskip("scipy")
-    from scipy._lib._uarray._backend import Dispatchable
+    try:
+        from scipy._lib._uarray._backend import Dispatchable
+    except ImportError:
+        pytest.skip("scipy._lib._uarray removed in scipy 2.0")
 
     from papyri.gen import Config, parse_script
 

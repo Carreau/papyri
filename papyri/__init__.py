@@ -310,6 +310,97 @@ def find(
 
 
 @app.command()
+def train_dict(
+    output: Annotated[
+        Path | None,
+        typer.Option(
+            help="Where to write the trained dictionary. Defaults to <ingest>/papyri.zdict.",
+        ),
+    ] = None,
+    dict_size: Annotated[
+        int,
+        typer.Option(help="Target dictionary size in bytes."),
+    ] = 65536,
+    max_samples: Annotated[
+        int,
+        typer.Option(
+            help="Cap on the number of sample blobs (uniform random subset).",
+        ),
+    ] = 5000,
+    level: Annotated[
+        int,
+        typer.Option(help="zstd compression level used for the comparison numbers."),
+    ] = 3,
+    seed: Annotated[
+        int,
+        typer.Option(help="Seed for the sample selection, for reproducible runs."),
+    ] = 0,
+):
+    """
+    Train a zstd dictionary on already-ingested CBOR blobs and report the
+    resulting size comparison.
+
+    Prints totals for raw bytes, zstd without a dictionary, and zstd with the
+    freshly-trained dictionary, so the per-blob win is easy to see before
+    wiring the dictionary into the store. Run `papyri ingest` on one or more
+    bundles first.
+    """
+    import random
+
+    import zstandard
+
+    from papyri.config import ingest_dir
+
+    out = Path(output) if output else ingest_dir / "papyri.zdict"
+
+    candidates = [
+        p
+        for p in ingest_dir.rglob("*")
+        if p.is_file()
+        and not p.name.endswith((".zst", ".br"))
+        and "assets" not in p.parts
+        and p.name != "papyri.db"
+        and p.suffix != ".zdict"
+    ]
+    if not candidates:
+        sys.exit(f"no ingested blobs under {ingest_dir}; run `papyri ingest` first.")
+
+    rng = random.Random(seed)
+    sample_paths = (
+        rng.sample(candidates, max_samples)
+        if len(candidates) > max_samples
+        else list(candidates)
+    )
+    samples = [p.read_bytes() for p in sample_paths]
+    total_raw = sum(len(s) for s in samples)
+
+    print(
+        f"Training on {len(samples)} blobs ({total_raw:,} bytes) from {ingest_dir}…"
+    )
+    zdict = zstandard.train_dictionary(dict_size, samples)
+    dict_bytes = zdict.as_bytes()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_bytes(dict_bytes)
+    print(f"Wrote {len(dict_bytes):,}-byte dict to {out}")
+
+    no_dict = zstandard.ZstdCompressor(level=level)
+    with_dict = zstandard.ZstdCompressor(level=level, dict_data=zdict)
+    total_nodict = sum(len(no_dict.compress(s)) for s in samples)
+    total_dict = sum(len(with_dict.compress(s)) for s in samples)
+
+    def pct(n):
+        return 100 * n / total_raw if total_raw else 0.0
+
+    print("")
+    print(f"  raw           : {total_raw:>12,} bytes  (100.0%)")
+    print(f"  zstd, no dict : {total_nodict:>12,} bytes  ({pct(total_nodict):5.1f}%)")
+    print(
+        f"  zstd, w/ dict : {total_dict:>12,} bytes  ({pct(total_dict):5.1f}%)"
+        f"  (+{len(dict_bytes):,} bytes for dict itself, amortized across all blobs)"
+    )
+
+
+@app.command()
 def describe(
     qualname: Annotated[
         str,

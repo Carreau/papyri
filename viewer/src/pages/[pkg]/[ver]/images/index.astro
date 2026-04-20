@@ -1,26 +1,15 @@
 ---
-import { join } from "node:path";
 import BundleLayout from "../../../../layouts/BundleLayout.astro";
 import {
-  listIngestedBundles,
   listModules,
   loadModule,
-  loadCbor,
+  loadBundleCbor,
   collectImages,
   type FoundImgNode,
 } from "../../../../lib/ir-reader.ts";
 import { listDocs, listExamples } from "../../../../lib/nav.ts";
 
-export async function getStaticPaths() {
-  const bundles = await listIngestedBundles();
-  return bundles.map((b) => ({
-    params: { pkg: b.pkg, ver: b.version },
-    props: { bundlePath: b.path },
-  }));
-}
-
 const { pkg, ver } = Astro.params;
-const { bundlePath } = Astro.props as { bundlePath: string };
 
 interface PageRef {
   label: string;
@@ -49,12 +38,12 @@ function addHit(found: FoundImgNode, page: PageRef) {
 }
 
 // Modules
-const qualnames = await listModules(bundlePath);
+const qualnames = await listModules(pkg!, ver!);
 await Promise.all(
   qualnames.map(async (qa) => {
     let doc;
     try {
-      doc = await loadModule(bundlePath, qa);
+      doc = await loadModule(pkg!, ver!, qa);
     } catch {
       return;
     }
@@ -64,12 +53,12 @@ await Promise.all(
 );
 
 // Narrative docs
-const docPaths = await listDocs(bundlePath);
+const docPaths = await listDocs(pkg!, ver!);
 await Promise.all(
   docPaths.map(async (docPath) => {
     let section;
     try {
-      section = await loadCbor(join(bundlePath, "docs", docPath));
+      section = await loadBundleCbor(pkg!, ver!, `docs/${docPath}`);
     } catch {
       return;
     }
@@ -79,12 +68,12 @@ await Promise.all(
 );
 
 // Examples
-const exPaths = await listExamples(bundlePath);
+const exPaths = await listExamples(pkg!, ver!);
 await Promise.all(
   exPaths.map(async (exPath) => {
     let section;
     try {
-      section = await loadCbor(join(bundlePath, "examples", exPath));
+      section = await loadBundleCbor(pkg!, ver!, `examples/${exPath}`);
     } catch {
       return;
     }
@@ -101,7 +90,6 @@ const entries = [...imageMap.values()].sort((a, b) =>
 <BundleLayout
   pkg={pkg!}
   ver={ver!}
-  bundlePath={bundlePath}
   title={`Images — ${pkg} ${ver} — Papyri viewer`}
 >
   <p class="crumb"><a href={`/${pkg}/${ver}/`}>&larr; {pkg} {ver}</a></p>

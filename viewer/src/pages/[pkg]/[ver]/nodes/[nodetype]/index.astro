@@ -1,37 +1,17 @@
 ---
-import { join } from "node:path";
 import BundleLayout from "../../../../../layouts/BundleLayout.astro";
 import IrNode from "../../../../../components/IrNode.astro";
 import {
-  listIngestedBundles,
   listModules,
   loadModule,
-  loadCbor,
+  loadBundleCbor,
   collectNodes,
   type IRNode,
 } from "../../../../../lib/ir-reader.ts";
 import { listDocs, listExamples } from "../../../../../lib/nav.ts";
 import { NODE_CONFIGS } from "../../../../../lib/node-configs.ts";
 
-export async function getStaticPaths() {
-  const bundles = await listIngestedBundles();
-  const paths: Array<{
-    params: { pkg: string; ver: string; nodetype: string };
-    props: { bundlePath: string };
-  }> = [];
-  for (const b of bundles) {
-    for (const slug of Object.keys(NODE_CONFIGS)) {
-      paths.push({
-        params: { pkg: b.pkg, ver: b.version, nodetype: slug },
-        props: { bundlePath: b.path },
-      });
-    }
-  }
-  return paths;
-}
-
 const { pkg, ver, nodetype } = Astro.params;
-const { bundlePath } = Astro.props as { bundlePath: string };
 
 const config = NODE_CONFIGS[nodetype!]!;
 
@@ -59,12 +39,12 @@ function addHits(nodes: IRNode[], page: PageRef) {
 }
 
 // Walk modules
-const qualnames = await listModules(bundlePath);
+const qualnames = await listModules(pkg!, ver!);
 await Promise.all(
   qualnames.map(async (qa) => {
     let doc;
     try {
-      doc = await loadModule(bundlePath, qa);
+      doc = await loadModule(pkg!, ver!, qa);
     } catch {
       return;
     }
@@ -76,12 +56,12 @@ await Promise.all(
 );
 
 // Walk narrative docs
-const docPaths = await listDocs(bundlePath);
+const docPaths = await listDocs(pkg!, ver!);
 await Promise.all(
   docPaths.map(async (docPath) => {
     let section;
     try {
-      section = await loadCbor(join(bundlePath, "docs", docPath));
+      section = await loadBundleCbor(pkg!, ver!, `docs/${docPath}`);
     } catch {
       return;
     }
@@ -96,12 +76,12 @@ await Promise.all(
 );
 
 // Walk examples
-const exPaths = await listExamples(bundlePath);
+const exPaths = await listExamples(pkg!, ver!);
 await Promise.all(
   exPaths.map(async (exPath) => {
     let section;
     try {
-      section = await loadCbor(join(bundlePath, "examples", exPath));
+      section = await loadBundleCbor(pkg!, ver!, `examples/${exPath}`);
     } catch {
       return;
     }
@@ -124,7 +104,6 @@ const entries = [...valueMap.values()].sort(
 <BundleLayout
   pkg={pkg!}
   ver={ver!}
-  bundlePath={bundlePath}
   title={`${config.label} — ${pkg} ${ver} — Papyri viewer`}
 >
   <p class="crumb"><a href={`/${pkg}/${ver}/`}>&larr; {pkg} {ver}</a></p>

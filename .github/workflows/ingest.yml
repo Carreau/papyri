@@ -17,6 +17,11 @@ permissions:
 jobs:
   ingest:
     runs-on: ubuntu-latest
+    # Expose inputs as env vars so they are never interpolated into run: scripts
+    # directly (prevents script injection via workflow_dispatch inputs).
+    env:
+      PKG: ${{ inputs.pkg }}
+      VER: ${{ inputs.ver }}
     steps:
       - uses: actions/checkout@v4
 
@@ -55,7 +60,7 @@ jobs:
       - name: Download bundle ZIP from R2
         run: |
           mkdir -p /tmp/bundle-download
-          rclone copy "r2:papyri-bundles/bundles/${{ inputs.pkg }}/${{ inputs.ver }}.zip" \
+          rclone copy "r2:papyri-bundles/bundles/${PKG}/${VER}.zip" \
                       /tmp/bundle-download/ --progress
 
       # ---------------------------------------------------------------------------
@@ -63,13 +68,13 @@ jobs:
       # ---------------------------------------------------------------------------
       - name: Unzip bundle
         run: |
-          DEST=~/.papyri/data/${{ inputs.pkg }}_${{ inputs.ver }}
+          DEST=~/.papyri/data/${PKG}_${VER}
           mkdir -p "$DEST"
-          unzip -q /tmp/bundle-download/${{ inputs.ver }}.zip -d "$DEST"
+          unzip -q "/tmp/bundle-download/${VER}.zip" -d "$DEST"
 
       - name: Run papyri ingest
         run: |
-          papyri ingest ~/.papyri/data/${{ inputs.pkg }}_${{ inputs.ver }}
+          papyri ingest ~/.papyri/data/${PKG}_${VER}
 
       # ---------------------------------------------------------------------------
       # 3. Upload ingested blobs back to R2
@@ -77,8 +82,8 @@ jobs:
       - name: Upload ingested bundle to R2
         run: |
           rclone sync \
-            ~/.papyri/ingest/${{ inputs.pkg }}/${{ inputs.ver }}/ \
-            "r2:papyri-bundles/ingest/${{ inputs.pkg }}/${{ inputs.ver }}/" \
+            ~/.papyri/ingest/${PKG}/${VER}/ \
+            "r2:papyri-bundles/ingest/${PKG}/${VER}/" \
             --progress
 
       # ---------------------------------------------------------------------------

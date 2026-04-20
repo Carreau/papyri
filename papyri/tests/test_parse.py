@@ -190,6 +190,34 @@ def test_parse_citation_reference_multiple():
     assert labels == ["Smith2020", "Jones1999"]
 
 
+def test_parse_example_with_citations_docstring():
+    """
+    Parse the example_with_citations docstring end-to-end to lock in that
+    the citation references inside a real-shaped numpydoc docstring produce
+    CitationReference leaves rather than raising.
+    """
+    from papyri.examples import example_with_citations
+    from papyri.nodes import CitationReference
+
+    assert example_with_citations.__doc__ is not None
+    sections = parse(
+        dedent(example_with_citations.__doc__).encode(),
+        "papyri.examples:example_with_citations",
+    )
+
+    # Walk the tree and collect every CitationReference label.
+    found: list[str] = []
+    stack: list = list(sections)
+    while stack:
+        node = stack.pop()
+        if isinstance(node, CitationReference):
+            found.append(node.label)
+        elif hasattr(node, "children"):
+            stack.extend(node.children or [])
+
+    assert set(found) >= {"CIT2002", "Nielsen2020", "Smith2020", "Jones1999"}, found
+
+
 def test_citation_reference_roundtrip():
     """
     CitationReference should survive a CBOR encode/decode roundtrip via the

@@ -690,13 +690,15 @@ class DFSCollector:
     def visit_ModuleType(self, mod, stack):
         for k in dir(mod):
             # Defensive: modules with a custom __dir__ / __getattr__ can list
-            # names that aren't actually resolvable. Originally added for a
-            # scipy 1.8 quirk; kept because it's generic. Log at DEBUG —
-            # observable under verbose tracing, not end-user noise.
-            if not hasattr(mod, k):
-                self.log.debug("Name not found in module: %s.%s", mod.__name__, k)
+            # names that aren't actually resolvable, or raise non-AttributeError
+            # exceptions (e.g. scipy raises ModuleNotFoundError from __getattr__).
+            # Log at DEBUG — observable under verbose tracing, not end-user noise.
+            try:
+                val = getattr(mod, k)
+            except Exception as e:
+                self.log.debug("Could not access %s.%s: %s", mod.__name__, k, e)
                 continue
-            self._open_list.append((getattr(mod, k), stack + [k]))
+            self._open_list.append((val, stack + [k]))
 
     def visit_ClassType(self, klass, stack):
         for k, v in klass.__dict__.items():

@@ -4,7 +4,14 @@ from pathlib import Path
 
 import pytest
 
-from papyri.gen import APIObjectInfo, BlockExecutor, Config, Gen, NumpyDocString, _normalize_see_also
+from papyri.gen import (
+    APIObjectInfo,
+    BlockExecutor,
+    Config,
+    Gen,
+    NumpyDocString,
+    _normalize_see_also,
+)
 
 
 @lru_cache
@@ -220,8 +227,6 @@ def test_normalize_see_also_rst_comment_description():
     SeeAlsoItem.descriptions field only accepts Paragraph nodes, so Comment
     nodes must be dropped rather than forwarded.
     """
-    from papyri.nodes import Paragraph
-
     # Mirrors what numpydoc produces for:
     #   :func:`minimum_position`, :func:`extrema`
     #       ..
@@ -231,7 +236,7 @@ def test_normalize_see_also_rst_comment_description():
         ([("minimum_position", ""), ("extrema", "")], [".."]),
         ([("standard_deviation", "")], [".."]),
     ]
-    items = _normalize_see_also(see_also, qa="test:func")
+    items = _normalize_see_also(see_also, qa="test:func")  # type: ignore[arg-type]
     assert len(items) == 3  # one SeeAlsoItem per name
     for item in items:
         assert item.descriptions == [], (
@@ -246,7 +251,7 @@ def test_normalize_see_also_real_description():
     see_also = [
         ([("minimum_position", "")], ["Finds the position of the minimum."]),
     ]
-    items = _normalize_see_also(see_also, qa="test:func")
+    items = _normalize_see_also(see_also, qa="test:func")  # type: ignore[arg-type]
     assert len(items) == 1
     assert len(items[0].descriptions) == 1
     assert isinstance(items[0].descriptions[0], Paragraph)

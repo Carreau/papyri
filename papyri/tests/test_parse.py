@@ -144,3 +144,34 @@ def test_parse_reference():
     [text, reference] = paragraph.children
     assert reference.value == "reference <to this>"
     assert text.value == "This is a "
+
+
+def test_parse_citation_reference():
+    """
+    Inline citation references like ``[CIT2002]_`` used to raise
+    VisitCitationReferenceNotImplementedError. They should now parse as
+    an Unimplemented placeholder preserving the original text.
+    """
+    from papyri.nodes import Unimplemented
+
+    [section] = parse(
+        b"See [CIT2002]_ for more details.", "test_parse_citation_reference"
+    )
+    [paragraph] = section.children
+    citation_ref = next(
+        (c for c in paragraph.children if isinstance(c, Unimplemented)), None
+    )
+    assert citation_ref is not None, (
+        f"expected Unimplemented citation_reference among {paragraph.children!r}"
+    )
+    assert citation_ref.placeholder == "citation_reference"
+    assert citation_ref.value == "[CIT2002]_"
+
+
+def test_parse_citation_reference_does_not_raise():
+    """
+    Regression test: parsing a citation reference must not raise
+    VisitCitationReferenceNotImplementedError.
+    """
+    # Should not raise.
+    parse(b"See [CIT2002]_ for more.", "test_parse_citation_reference_does_not_raise")

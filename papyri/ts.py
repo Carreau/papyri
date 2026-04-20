@@ -329,15 +329,28 @@ class TSVisitor:
 
     def visit_interpreted_text(self, node):
         inventory = None
+        domain = None
+        role_value = None
+
         if len(node.children) == 2:
             role, text = node.children
-            assert role.type == "role"
-            assert text.type == "interpreted_text"
+            if role.type != "role" or text.type != "interpreted_text":
+                log.warning(
+                    "interpreted_text has unexpected child types %r in (%s); "
+                    "rendering as plain text.",
+                    [c.type for c in node.children],
+                    self._qa,
+                )
+                return [Text(self.as_text(node))]
             role_value = self.as_text(role)
-            assert role_value.startswith(":")
-            assert role_value.endswith(":")
+            if not (role_value.startswith(":") and role_value.endswith(":")):
+                log.warning(
+                    "Malformed role markup %r in (%s); rendering as plain text.",
+                    role_value,
+                    self._qa,
+                )
+                return [Text(self.as_text(node))]
             role_value = role_value[1:-1]
-            domain = None
             # Sphinx intersphinx: `:external+<inv>:<domain>:<role>:` forces a
             # cross-project lookup in the named inventory. Strip that prefix
             # first, then fall through to the ordinary domain:role handling.
@@ -349,34 +362,94 @@ class TSVisitor:
             if ":" in role_value:
                 # TODO: error for pandas.io.orc:read_orc
                 domain, role_value = role_value.split(":", 1)
-                assert ":" not in role_value
-                assert ":" not in domain
 
         elif len(node.children) == 1:
             [text] = node.children
-            assert text.type == "interpreted_text"
-            domain = None
-            role = None
-            role_value = None
+            if text.type != "interpreted_text":
+                log.warning(
+                    "interpreted_text single child has unexpected type %r in (%s); "
+                    "rendering as plain text.",
+                    text.type,
+                    self._qa,
+                )
+                return [Text(self.as_text(node))]
         else:
-            raise AssertionError
-        if role_value:
-            assert ":" not in role_value
+            log.warning(
+                "interpreted_text has %d children (expected 1 or 2) in (%s); "
+                "rendering as plain text.",
+                len(node.children),
+                self._qa,
+            )
+            return [Text(self.as_text(node))]
+
         text_value = self.as_text(text)
-        assert text_value.startswith("`")
-        assert text_value.endswith("`")
+        if not text_value.startswith("`"):
+            log.warning(
+                "interpreted_text value does not start with '`': %r in (%s); "
+                "rendering as plain text.",
+                text_value,
+                self._qa,
+            )
+            return [Text(self.as_text(node))]
+
+        # Heuristic: tree-sitter RST sometimes folds a trailing alphanumeric
+        # suffix (e.g. the 's' in '`None`s') into the interpreted_text node
+        # because the RST spec forbids alphanumeric chars immediately after a
+        # closing backtick.  When this happens text_value ends with the suffix
+        # character rather than '`', so we strip it before the end-quote check.
+        trailing_suffix = ""
+        if not text_value.endswith("`"):
+            last_backtick = text_value.rfind("`")
+            if last_backtick > 0:
+                trailing_suffix = text_value[last_backtick + 1 :]
+                text_value = text_value[: last_backtick + 1]
+            else:
+                # No closing backtick found beyond the opening one — truly
+                # malformed node.  Use the content as-is rather than crashing.
+                log.warning(
+                    "interpreted_text node has no closing backtick: %r in (%s).",
+                    text_value,
+                    self._qa,
+                )
+                inner_value = text_value[1:].replace("\n", " ").replace("`", "'")
+                return [
+                    InlineRole(
+                        inner_value, domain=domain, role=role_value, inventory=inventory
+                    )
+                ]
 
         inner_value = text_value[1:-1].replace("\n", " ")
 
+        if trailing_suffix:
+            if trailing_suffix.isalpha():
+                log.warning(
+                    "Interpreted text %r has alphanumeric suffix %r immediately "
+                    "after closing backtick in (%s). "
+                    "RST-correct form is `%s`\\ %s. "
+                    "Splitting into role+text as a best-effort fix.",
+                    inner_value,
+                    trailing_suffix,
+                    self._qa,
+                    inner_value,
+                    trailing_suffix,
+                )
+                t = InlineRole(
+                    inner_value,
+                    domain=domain,
+                    role=role_value,
+                    inventory=inventory,
+                )
+                return [t, Text(trailing_suffix)]
+            # Non-alpha trailing char — fall through to existing handling below.
+
         if "`" in inner_value:
-            log.info(
+            log.warning(
                 "Improper backtick found in interpreted text. "
                 "This is usually due to a missing/stray backtick, or "
                 "missing escape (`\\`) on trailing character : %r in (%s)",
                 inner_value,
                 self._qa,
             )
-            log.warning("replacing ` by ' to not crash serialiser")
             inner_value = inner_value.replace("`", "'")
 
         t = InlineRole(

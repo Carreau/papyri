@@ -3,6 +3,7 @@ from textwrap import dedent
 import pytest
 
 from papyri import errors
+from papyri.nodes import InlineRole
 from papyri.ts import Node, TSVisitor, parse, parser
 
 
@@ -136,6 +137,49 @@ def test_parse_no_newline():
     assert directive.value == "this interpreted_text"
     assert "\n" not in reference.value
     assert reference.value == "this reference"
+
+
+def test_backtick_trailing_alpha_suffix():
+    """
+    "`None`s" is invalid RST (alphanumeric char after closing backtick),
+    but common in scipy/numpy docstrings.
+
+    Tree-sitter may handle the split natively or fold multiple backtick
+    patterns into one node; either way no InlineRole value may contain a
+    stray backtick.
+    """
+    data = b"Returns `None`s or `ndarray`s depending on input."
+    [section] = parse(data, "test_backtick_trailing_alpha_suffix")
+
+    para_children = section.children[0].children
+    for node in para_children:
+        if isinstance(node, InlineRole):
+            assert "`" not in node.value
+
+
+def test_backtick_trailing_alpha_no_role():
+    """`:class:`True`s` — if tree-sitter produces a role, value must be uncontaminated."""
+    data = b"Pass :class:`True`s to enable."
+    [section] = parse(data, "test_backtick_trailing_alpha_no_role")
+
+    para_children = section.children[0].children
+    # tree-sitter may or may not recognise :class:`True`s as a roled node
+    # (the trailing `s` can prevent role recognition); either outcome is
+    # acceptable, but if a role IS produced its value must not contain a backtick.
+    class_roles = [
+        c for c in para_children if isinstance(c, InlineRole) and c.role == "class"
+    ]
+    for r in class_roles:
+        assert "`" not in r.value
+
+
+def test_backtick_genuine_stray_backtick():
+    """
+    A genuinely malformed sequence (stray inner backtick, not just a trailing
+    suffix) should fall through to the corruption-prevention path without raising.
+    """
+    data = b"See `x`=``data`` for details."
+    parse(data, "test_backtick_genuine_stray_backtick")
 
 
 def test_parse_reference():

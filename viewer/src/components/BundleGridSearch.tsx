@@ -3,7 +3,7 @@
 // reads them via data-attributes and toggles the `hidden` attribute.
 //
 // Usage in index.astro:
-//   <BundleGridSearch client:load bundles={arr} gridId="bundle-card-grid" />
+//   <BundleGridSearch client:load gridId="bundle-card-grid" />
 //
 // Each card must have:
 //   data-pkg="{pkg}"
@@ -12,17 +12,11 @@
 
 import { useEffect, useRef } from "react";
 
-interface BundleEntry {
-  pkg: string;
-  summary: string;
-}
-
 interface Props {
-  bundles: BundleEntry[];
   gridId: string;
 }
 
-export default function BundleGridSearch({ bundles: _bundles, gridId }: Props) {
+export default function BundleGridSearch({ gridId }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {

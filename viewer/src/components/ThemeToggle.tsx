@@ -10,7 +10,7 @@ import {
 // Tiny React island: reads the theme already applied by the inline head
 // script, flips it on click, writes it back to localStorage.
 //
-// The inline script in Layout.astro has already set document.documentElement
+// The inline script in Head.astro has already set document.documentElement
 // before this component mounts, so we hydrate to whatever it picked and
 // avoid a flash. No external state library.
 export default function ThemeToggle(): ReactElement {

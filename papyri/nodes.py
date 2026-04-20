@@ -59,7 +59,7 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
-from typing import Any, TypeAlias
+from typing import Any
 
 import cbor2
 
@@ -758,7 +758,7 @@ def parse_rst_section(text, qa):
 
 # ---- Union type aliases -----------------------------------------------------
 
-StaticPhrasingContent: TypeAlias = (
+type StaticPhrasingContent = (
     Text
     | InlineCode
     | InlineMath
@@ -768,9 +768,9 @@ StaticPhrasingContent: TypeAlias = (
     | Unimplemented
 )
 
-PhrasingContent: TypeAlias = StaticPhrasingContent | Emphasis | Strong | Link
+type PhrasingContent = StaticPhrasingContent | Emphasis | Strong | Link
 
-FlowContent: TypeAlias = (
+type FlowContent = (
     Code
     | Paragraph
     | UnprocessedDirective
@@ -788,7 +788,7 @@ FlowContent: TypeAlias = (
     | Comment
 )
 
-ListContent: TypeAlias = ListItem
+type ListContent = ListItem
 
 
 class Encoder:

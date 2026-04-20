@@ -98,7 +98,6 @@ def full_qual(obj) -> FullQual | None:
         except Exception:
             pass
         return None
-    return None
 
 
 class TimeElapsedColumn(ProgressColumn):

@@ -64,7 +64,7 @@ class Signature:
     """A wrapper around inspect utilities."""
 
     @classmethod
-    def from_str(cls, sig: str, /) -> "Signature":
+    def from_str(cls, sig: str, /) -> Signature:
         """
         Create signature from a string version.
 

@@ -2056,7 +2056,6 @@ class Gen:
         except (AssertionError, NotImplementedError) as e:
             self.log.error("TS could not parse %s, %s", repr(qa), e)
             raise type(e)(f"from {qa}") from e
-            sections = []
         except Exception as e:
             raise type(e)(f"from {qa}") from e
 

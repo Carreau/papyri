@@ -5,14 +5,6 @@ import BundleCard from "../components/BundleCard.astro";
 import BundleGridSearch from "../components/BundleGridSearch.tsx";
 
 const ingested = await listIngestedBundles();
-
-// Small metadata array passed to the filter island so it can match without
-// reading the DOM: just pkg names and summaries (no logos / big data URIs).
-// The island uses this alongside data-attributes on the card elements.
-const bundlesForFilter = ingested.map((b) => ({
-  pkg: b.pkg,
-  summary: "", // filled server-side in BundleCard; island reads data-summary
-}));
 ---
 
 <BaseLayout title="Papyri viewer">
@@ -32,7 +24,6 @@ const bundlesForFilter = ingested.map((b) => ({
       <>
         <BundleGridSearch
           client:load
-          bundles={bundlesForFilter}
           gridId="bundle-card-grid"
         />
         <div class="bundle-card-grid" id="bundle-card-grid">

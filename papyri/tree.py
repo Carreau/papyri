@@ -582,20 +582,28 @@ class DirectiveVisiter(TreeReplacer):
         return [Code(content)]
 
     def _toctree_handler(self, argument, options, content):
-        assert not argument
+        # argument is ignored (rare cases like ``.. toctree:: My Title``).
         toc = []
-
         lls = []
+
+        glob = options.get("glob") if isinstance(options, dict) else False
 
         for line in content.splitlines():
             line = line.strip()
-            if line == "self":
-                # TODO in toctree one line can refer to self
+            # Skip blank lines, comments, and the special "self" entry.
+            if not line or line.startswith("..") or line == "self":
                 continue
+            # Skip glob patterns — we don't expand them at gen time.
+            if glob and ("*" in line or "?" in line):
+                continue
+
             if "<" in line and line.endswith(">"):
-                title, url = line[:-1].split("<")
-                title = title.strip()
-                assert "<" not in url
+                # "Title Text <path>" form — split on last " <".
+                try:
+                    title, url = line[:-1].rsplit(" <", 1)
+                    title = title.strip()
+                except ValueError:
+                    continue
                 toc.append([title, url])
                 link = CrossRef(
                     title,
@@ -605,8 +613,7 @@ class DirectiveVisiter(TreeReplacer):
                 )
                 RESOLVER.add_reference(link, url)
                 lls.append(link)
-            else:
-                assert "<" not in line
+            elif "<" not in line:
                 toc.append([None, line])
                 link = CrossRef(
                     line,
@@ -616,6 +623,9 @@ class DirectiveVisiter(TreeReplacer):
                 )
                 RESOLVER.add_reference(link, line)
                 lls.append(link)
+            # Lines with "<" but not ending ">" are malformed — skip with a warning.
+            else:
+                log.warning("toctree: skipping malformed entry %r", line)
 
         self._tocs.append(toc)
 

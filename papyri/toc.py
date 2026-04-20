@@ -1,3 +1,8 @@
+import logging
+
+log = logging.getLogger("papyri")
+
+
 def flatten(dct):
     return {k: [s for sub in toc for s in sub] for k, toc in dct.items()}
 
@@ -61,5 +66,18 @@ def make_tree(data):
     data = flatten(data)
     data = {k: [i[1] for i in v] for k, v in data.items()}
     c = {k: 0 for k in data.keys()}
-    my_tree = _tree("index", data, c)
-    return my_tree
+    if not c:
+        return {}
+    # Prefer "index" as the root (standard Sphinx layout), but fall back to
+    # the first key that is not referenced by any other node (i.e. a true
+    # root in the toctree graph). This handles packages whose entry point is
+    # not named "index".
+    root = "index"
+    if root not in c:
+        referenced = {
+            child for children in data.values() for child in children if child
+        }
+        candidates = [k for k in c if k not in referenced]
+        root = candidates[0] if candidates else next(iter(c))
+        log.warning("toc: no 'index' root found; using %r as tree root instead", root)
+    return _tree(root, data, c)

@@ -147,7 +147,7 @@ def test_backtick_trailing_alpha_suffix(caplog):
     into InlineRole("None") + Text("s") rather than corrupting the value.
     """
     data = b"Returns `None`s or `ndarray`s depending on input."
-    with caplog.at_level(logging.WARNING, logger="papyri.ts"):
+    with caplog.at_level(logging.WARNING, logger="papyri"):
         [section] = parse(data, "test_backtick_trailing_alpha_suffix")
 
     para_children = section.children[0].children
@@ -169,7 +169,7 @@ def test_backtick_trailing_alpha_suffix(caplog):
 def test_backtick_trailing_alpha_no_role(caplog):
     """`True`s with an explicit :class: role should also split correctly."""
     data = b"Pass :class:`True`s to enable."
-    with caplog.at_level(logging.WARNING, logger="papyri.ts"):
+    with caplog.at_level(logging.WARNING, logger="papyri"):
         [section] = parse(data, "test_backtick_trailing_alpha_no_role")
 
     para_children = section.children[0].children
@@ -190,7 +190,7 @@ def test_backtick_genuine_stray_backtick(caplog):
     """
     # "`x`=``data`" — tree-sitter gives us "x`=``data" as inner_value
     data = b"See `x`=``data`` for details."
-    with caplog.at_level(logging.WARNING, logger="papyri.ts"):
+    with caplog.at_level(logging.WARNING, logger="papyri"):
         # Should not raise; may emit warnings
         [section] = parse(data, "test_backtick_genuine_stray_backtick")
 

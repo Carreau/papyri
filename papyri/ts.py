@@ -375,7 +375,7 @@ class TSVisitor:
             # "`None`\ s"). Detect "word`suffix" and split into role + text.
             backtick_pos = inner_value.rfind("`")
             suffix = inner_value[backtick_pos + 1 :]
-            if suffix.isalpha() and not inner_value[: backtick_pos + 1].count("`") > 1:
+            if suffix.isalpha() and inner_value[:backtick_pos + 1].count("`") <= 1:
                 word = inner_value[:backtick_pos]
                 log.warning(
                     "Interpreted text %r has alphanumeric suffix %r immediately "

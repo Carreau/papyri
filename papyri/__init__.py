@@ -616,8 +616,7 @@ def upload(
     papyri_json = bundle_dir / "papyri.json"
     if not papyri_json.exists():
         typer.echo(
-            f"papyri.json not found in {bundle_dir}. "
-            "Is this a valid bundle directory?",
+            f"papyri.json not found in {bundle_dir}. Is this a valid bundle directory?",
             err=True,
         )
         raise typer.Exit(code=1)

@@ -59,6 +59,7 @@ from .errors import (
 from .misc import BlockExecutor, DummyP
 from .node_base import Node, register
 from .nodes import (
+    Comment,
     CrossRef,
     DocParam,
     Figure,
@@ -67,7 +68,6 @@ from .nodes import (
     NumpydocExample,
     NumpydocSeeAlso,
     NumpydocSignature,
-    Paragraph,
     Parameters,
     RefInfo,
     Section,
@@ -1036,8 +1036,8 @@ def _normalize_see_also(see_also: Section, qa: str):
                     assert isinstance(raw_description, list)
                     type_ = type_or_description
                     parsed = paragraph(raw_description, qa)
-                    # RST `..` parses as a non-Paragraph node; treat as no description
-                    desc = [parsed] if isinstance(parsed, Paragraph) else []
+                    # RST `..` with no content parses as a Comment; drop it
+                    desc = [] if isinstance(parsed, Comment) else [parsed]
                 else:
                     type_ = type_or_description
                     desc = []

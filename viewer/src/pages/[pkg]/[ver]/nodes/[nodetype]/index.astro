@@ -1,6 +1,7 @@
 ---
 import { join } from "node:path";
 import BundleLayout from "../../../../../layouts/BundleLayout.astro";
+import IrNode from "../../../../../components/IrNode.astro";
 import {
   listIngestedBundles,
   listModules,
@@ -39,8 +40,8 @@ interface PageRef {
   href: string;
 }
 
-// Map from display value → { __type, value, pages[] }.
-const valueMap = new Map<string, { nodeType: string; value: string; pages: PageRef[] }>();
+// Map from display value → one representative node + pages it appears on.
+const valueMap = new Map<string, { node: IRNode; value: string; pages: PageRef[] }>();
 
 function addHits(nodes: IRNode[], page: PageRef) {
   for (const n of nodes) {
@@ -52,7 +53,7 @@ function addHits(nodes: IRNode[], page: PageRef) {
         existing.pages.push(page);
       }
     } else {
-      valueMap.set(val, { nodeType: n.__type, value: val, pages: [page] });
+      valueMap.set(val, { node: n, value: val, pages: [page] });
     }
   }
 }
@@ -140,8 +141,8 @@ const entries = [...valueMap.values()].sort(
         {entries.map((entry) => (
           <div class="node-entry">
             <dt>
-              <span class="node-kind">{entry.nodeType}</span>
-              <pre class="node-value"><code>{entry.value}</code></pre>
+              <span class="node-kind">{entry.node.__type}</span>
+              <div class="node-value"><IrNode node={entry.node} /></div>
             </dt>
             <dd>
               <details class="node-refs">
@@ -194,17 +195,8 @@ const entries = [...valueMap.values()].sort(
     letter-spacing: 0.05em;
   }
   .node-value {
-    margin: 0;
-    white-space: pre-wrap;
-    word-break: break-word;
-    font-size: 0.85rem;
-    font-family: var(--mono);
     max-height: 12rem;
-    overflow-y: auto;
-  }
-  .node-value code {
-    background: transparent;
-    padding: 0;
+    overflow: auto;
   }
   .node-entry dd {
     margin: 0;

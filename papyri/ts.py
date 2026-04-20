@@ -329,15 +329,28 @@ class TSVisitor:
 
     def visit_interpreted_text(self, node):
         inventory = None
+        domain = None
+        role_value = None
+
         if len(node.children) == 2:
             role, text = node.children
-            assert role.type == "role"
-            assert text.type == "interpreted_text"
+            if role.type != "role" or text.type != "interpreted_text":
+                log.warning(
+                    "interpreted_text has unexpected child types %r in (%s); "
+                    "rendering as plain text.",
+                    [c.type for c in node.children],
+                    self._qa,
+                )
+                return [Text(self.as_text(node))]
             role_value = self.as_text(role)
-            assert role_value.startswith(":")
-            assert role_value.endswith(":")
+            if not (role_value.startswith(":") and role_value.endswith(":")):
+                log.warning(
+                    "Malformed role markup %r in (%s); rendering as plain text.",
+                    role_value,
+                    self._qa,
+                )
+                return [Text(self.as_text(node))]
             role_value = role_value[1:-1]
-            domain = None
             # Sphinx intersphinx: `:external+<inv>:<domain>:<role>:` forces a
             # cross-project lookup in the named inventory. Strip that prefix
             # first, then fall through to the ordinary domain:role handling.
@@ -349,21 +362,35 @@ class TSVisitor:
             if ":" in role_value:
                 # TODO: error for pandas.io.orc:read_orc
                 domain, role_value = role_value.split(":", 1)
-                assert ":" not in role_value
-                assert ":" not in domain
 
         elif len(node.children) == 1:
             [text] = node.children
-            assert text.type == "interpreted_text"
-            domain = None
-            role = None
-            role_value = None
+            if text.type != "interpreted_text":
+                log.warning(
+                    "interpreted_text single child has unexpected type %r in (%s); "
+                    "rendering as plain text.",
+                    text.type,
+                    self._qa,
+                )
+                return [Text(self.as_text(node))]
         else:
-            raise AssertionError
-        if role_value:
-            assert ":" not in role_value
+            log.warning(
+                "interpreted_text has %d children (expected 1 or 2) in (%s); "
+                "rendering as plain text.",
+                len(node.children),
+                self._qa,
+            )
+            return [Text(self.as_text(node))]
+
         text_value = self.as_text(text)
-        assert text_value.startswith("`")
+        if not text_value.startswith("`"):
+            log.warning(
+                "interpreted_text value does not start with '`': %r in (%s); "
+                "rendering as plain text.",
+                text_value,
+                self._qa,
+            )
+            return [Text(self.as_text(node))]
 
         # Heuristic: tree-sitter RST sometimes folds a trailing alphanumeric
         # suffix (e.g. the 's' in '`None`s') into the interpreted_text node
@@ -376,8 +403,20 @@ class TSVisitor:
             if last_backtick > 0:
                 trailing_suffix = text_value[last_backtick + 1 :]
                 text_value = text_value[: last_backtick + 1]
-
-        assert text_value.endswith("`")
+            else:
+                # No closing backtick found beyond the opening one — truly
+                # malformed node.  Use the content as-is rather than crashing.
+                log.warning(
+                    "interpreted_text node has no closing backtick: %r in (%s).",
+                    text_value,
+                    self._qa,
+                )
+                inner_value = text_value[1:].replace("\n", " ").replace("`", "'")
+                return [
+                    InlineRole(
+                        inner_value, domain=domain, role=role_value, inventory=inventory
+                    )
+                ]
 
         inner_value = text_value[1:-1].replace("\n", " ")
 

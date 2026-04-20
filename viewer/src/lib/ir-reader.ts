@@ -102,7 +102,10 @@ const FIELD_ORDER: Record<number, { name: string; fields: string[] }> = {
   4000: { name: "RefInfo", fields: ["module", "version", "kind", "path"] },
   4001: { name: "Root", fields: ["children"] },
   4002: { name: "CrossRef", fields: ["value", "reference", "kind", "anchor"] },
-  4003: { name: "InlineRole", fields: ["value", "domain", "role"] },
+  4003: {
+    name: "InlineRole",
+    fields: ["value", "domain", "role", "inventory"],
+  },
   4010: {
     name: "IngestedDoc",
     fields: [

@@ -324,6 +324,7 @@ class TSVisitor:
         return [InlineRole(_text, None, None)]
 
     def visit_interpreted_text(self, node):
+        inventory = None
         if len(node.children) == 2:
             role, text = node.children
             assert role.type == "role"
@@ -333,9 +334,17 @@ class TSVisitor:
             assert role_value.endswith(":")
             role_value = role_value[1:-1]
             domain = None
+            # Sphinx intersphinx: `:external+<inv>:<domain>:<role>:` forces a
+            # cross-project lookup in the named inventory. Strip that prefix
+            # first, then fall through to the ordinary domain:role handling.
+            # See https://www.sphinx-doc.org/en/master/usage/extensions/intersphinx.html#explicit-intersphinx
+            if role_value.startswith("external+") and ":" in role_value:
+                head, _, role_value = role_value.partition(":")
+                inventory = head[len("external+") :]
+                assert inventory, role_value
             if ":" in role_value:
                 # TODO: error for pandas.io.orc:read_orc
-                domain, role_value = role_value.split(":")
+                domain, role_value = role_value.split(":", 1)
                 assert ":" not in role_value
                 assert ":" not in domain
 
@@ -370,6 +379,7 @@ class TSVisitor:
             inner_value,
             domain=domain,
             role=role_value,
+            inventory=inventory,
         )
         return [t]
 

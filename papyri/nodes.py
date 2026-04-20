@@ -76,19 +76,24 @@ class InlineRole(Node):
     value: str
     domain: str | None
     role: str | None
+    # Sphinx intersphinx `:external+<inv>:…:` prefix. When set, names the
+    # inventory the (domain, role) lookup targets in another project; None for
+    # ordinary same-project roles.
+    inventory: str | None
 
-    def __init__(self, value, domain, role):
+    def __init__(self, value, domain, role, inventory=None):
         assert "\n" not in value, f"InlineRole should not contain newline {value}"
-        super().__init__(value, domain, role)
+        super().__init__(value, domain, role, inventory)
 
     def __hash__(self):
-        return hash((tuple(self.value), self.domain, self.role))
+        return hash((tuple(self.value), self.domain, self.role, self.inventory))
 
     def __eq__(self, other):
         return (
             (type(self) == type(other))
             and (self.role == other.role)
             and (other.domain == self.domain)
+            and (self.inventory == other.inventory)
             and (self.value == other.value)
         )
 
@@ -98,6 +103,8 @@ class InlineRole(Node):
     @property
     def prefix(self):
         prefix = ""
+        if self.inventory:
+            prefix += ":external+" + self.inventory
         if self.domain:
             prefix += ":" + self.domain
         if self.role:

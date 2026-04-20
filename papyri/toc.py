@@ -1,3 +1,8 @@
+import logging
+
+log = logging.getLogger("papyri")
+
+
 def flatten(dct):
     return {k: [s for sub in toc for s in sub] for k, toc in dct.items()}
 
@@ -74,4 +79,5 @@ def make_tree(data):
         }
         candidates = [k for k in c if k not in referenced]
         root = candidates[0] if candidates else next(iter(c))
+        log.warning("toc: no 'index' root found; using %r as tree root instead", root)
     return _tree(root, data, c)

@@ -618,7 +618,9 @@ class DirectiveVisiter(TreeReplacer):
                 )
                 RESOLVER.add_reference(link, line)
                 lls.append(link)
-            # Lines with "<" but not ending ">" are malformed — skip silently.
+            # Lines with "<" but not ending ">" are malformed — skip with a warning.
+            else:
+                log.warning("toctree: skipping malformed entry %r", line)
 
         self._tocs.append(toc)
 

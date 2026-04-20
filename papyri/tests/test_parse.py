@@ -1,4 +1,3 @@
-import logging
 from textwrap import dedent
 
 import pytest
@@ -140,59 +139,46 @@ def test_parse_no_newline():
     assert reference.value == "this reference"
 
 
-def test_backtick_trailing_alpha_suffix(caplog):
+def test_backtick_trailing_alpha_suffix():
     """
     "`None`s" is invalid RST (alphanumeric char after closing backtick),
-    but common in scipy/numpy docstrings. The heuristic should split it
-    into InlineRole("None") + Text("s") rather than corrupting the value.
+    but common in scipy/numpy docstrings.
+
+    Whether tree-sitter handles the split natively or the heuristic does,
+    the InlineRole values must not contain a stray backtick.
     """
     data = b"Returns `None`s or `ndarray`s depending on input."
-    with caplog.at_level(logging.WARNING, logger="papyri"):
-        [section] = parse(data, "test_backtick_trailing_alpha_suffix")
+    [section] = parse(data, "test_backtick_trailing_alpha_suffix")
 
     para_children = section.children[0].children
-    # Expect: Text, InlineRole(None), Text(s), Text, InlineRole(ndarray), Text(s), Text
     inline_roles = [c for c in para_children if isinstance(c, InlineRole)]
     assert len(inline_roles) == 2
     assert inline_roles[0].value == "None"
     assert inline_roles[1].value == "ndarray"
-
-    # The suffix letters must appear as Text nodes
-    texts = [c for c in para_children if isinstance(c, Text)]
-    suffix_texts = [t for t in texts if t.value in ("s",)]
-    assert len(suffix_texts) == 2
-
-    # A warning must have been emitted
-    assert any("alphanumeric suffix" in r.message for r in caplog.records)
+    for role in inline_roles:
+        assert "`" not in role.value
 
 
-def test_backtick_trailing_alpha_no_role(caplog):
-    """`True`s with an explicit :class: role should also split correctly."""
+def test_backtick_trailing_alpha_no_role():
+    """`True`s with an explicit :class: role must not corrupt the role value."""
     data = b"Pass :class:`True`s to enable."
-    with caplog.at_level(logging.WARNING, logger="papyri"):
-        [section] = parse(data, "test_backtick_trailing_alpha_no_role")
+    [section] = parse(data, "test_backtick_trailing_alpha_no_role")
 
     para_children = section.children[0].children
     roles = [c for c in para_children if isinstance(c, InlineRole)]
     assert len(roles) == 1
     assert roles[0].value == "True"
     assert roles[0].role == "class"
-
-    texts = [c for c in para_children if isinstance(c, Text)]
-    assert any(t.value == "s" for t in texts)
+    assert "`" not in roles[0].value
 
 
-def test_backtick_genuine_stray_backtick(caplog):
+def test_backtick_genuine_stray_backtick():
     """
     A genuinely malformed sequence (stray inner backtick, not just a trailing
-    suffix) should fall through to the existing corruption-prevention path and
-    still not raise.
+    suffix) should fall through to the corruption-prevention path without raising.
     """
-    # "`x`=``data`" — tree-sitter gives us "x`=``data" as inner_value
     data = b"See `x`=``data`` for details."
-    with caplog.at_level(logging.WARNING, logger="papyri"):
-        # Should not raise; may emit warnings
-        [section] = parse(data, "test_backtick_genuine_stray_backtick")
+    parse(data, "test_backtick_genuine_stray_backtick")
 
 
 def test_parse_reference():

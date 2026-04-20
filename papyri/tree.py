@@ -22,6 +22,7 @@ from .directives import (
 from .node_base import Node
 from .nodes import (
     BulletList,
+    CitationReference,
     Code,
     CrossRef,
     Directive,
@@ -293,7 +294,10 @@ class TreeVisitor:
             if type(node) not in self.skipped:
                 self.skipped.add(type(node))
             return {}
-        elif isinstance(node, (RefInfo, Options, ThematicBreak, SubstitutionDef)):
+        elif isinstance(
+            node,
+            (RefInfo, Options, ThematicBreak, SubstitutionDef, CitationReference),
+        ):
             return {}
         else:
             raise ValueError(f"{node.__class__} has no children, no values {node}")
@@ -355,6 +359,7 @@ class TreeReplacer:
                 "ThematicBreak",
                 "Unimplemented",
                 "CrossRef",
+                "CitationReference",
             ]:
                 return [node]
             else:

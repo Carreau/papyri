@@ -293,7 +293,7 @@ class Ingester:
         version = meta["version"]
         module = None
         for _console, document in self.progress(
-            [p for p in (path / "docs").glob("*") if not p.name.endswith(".zst")],
+            (path / "docs").glob("*"),
             description=f"{path.name} Reading narrative docs ",
         ):
             try:
@@ -350,7 +350,7 @@ class Ingester:
         self, path: Path, gstore: GraphStore, known_refs, aliases, version, root
     ):
         for _, fe in self.progress(
-            [p for p in (path / "examples/").glob("*") if not p.name.endswith(".zst")],
+            (path / "examples/").glob("*"),
             description=f"{path.name} Reading Examples ...   ",
         ):
             s = encoder.decode(fe.read_bytes())
@@ -422,7 +422,7 @@ class Ingester:
             raise
 
         for _, f1 in self.progress(
-            [p for p in (path / "module").glob("*") if not p.name.endswith(".zst")],
+            (path / "module").glob("*"),
             description=f"{path.name} Reading api files ...  ",
         ):
             assert f1.name.endswith(".cbor")

@@ -59,11 +59,11 @@ jobs:
         coverage run -a -m papyri gen examples/${{matrix.lib}}.toml  --no-infer ${{matrix.flags}}
         sleep 1 # time for coverage to write its stuff
         papyri pack
-        ls ~/.papyri/data
+        ls ~/.papyri/data/cbor
     - uses: actions/upload-artifact@v4
       with:
         name: doc-bundles-${{matrix.lib}}
-        path: ~/.papyri/data/*.zip
+        path: ~/.papyri/data/cbor/*.zip
     - name: Convert .coverage sql to xml for upload
       run: |
         coverage report
@@ -102,7 +102,7 @@ jobs:
     - uses: actions/download-artifact@v4
       with:
         pattern: doc-bundles-*
-        path: ~/.papyri/data/
+        path: ~/.papyri/data/cbor/
         merge-multiple: true
 
     - name: Misc cli
@@ -111,7 +111,7 @@ jobs:
         ls -al
     - name: Ingest
       run: |
-        for z in ~/.papyri/data/*.zip; do
+        for z in ~/.papyri/data/cbor/*.zip; do
           d="${z%.zip}"
           mkdir -p "$d"
           unzip -o "$z" -d "$d"

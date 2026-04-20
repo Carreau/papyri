@@ -66,7 +66,7 @@ service *could* be built later without a breaking change to the IR.
    ```
    pip install -e .
    papyri gen examples/papyri.toml --no-infer
-   papyri ingest ~/.papyri/data/papyri_<version>
+   papyri ingest ~/.papyri/data/cbor/papyri_<version>
    python -m pytest -m "not postingest"
    ```
    Run `python -m pytest` (not bare `pytest`) so the editable install's

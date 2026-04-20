@@ -545,21 +545,24 @@ def gen_main(
     if narrative:
         g.collect_narrative_docs()
 
-    p = target_dir / (g.root + "_" + g.version)
-    p.mkdir(exist_ok=True)
+    bundle_name = g.root + "_" + g.version
+    cbor_bundle = target_dir / "cbor" / bundle_name
+    zstd_bundle = target_dir / "zstd" / bundle_name
+    cbor_bundle.mkdir(parents=True, exist_ok=True)
+    zstd_bundle.mkdir(parents=True, exist_ok=True)
 
-    g.log.info("Saving current Doc bundle to %s", p)
+    g.log.info("Saving current Doc bundle to %s and %s", cbor_bundle, zstd_bundle)
     if not limit_to:
-        g.clean(p)
-        g.write(p)
+        g.clean(cbor_bundle, zstd_bundle)
+        g.write(cbor_bundle, zstd_bundle)
     else:
-        g.partial_write(p)
+        g.partial_write(cbor_bundle, zstd_bundle)
     if dry_run:
         temp_dir.cleanup()
 
 
 def pack():
-    target_dir = Path("~/.papyri/data").expanduser()
+    target_dir = Path("~/.papyri/data/cbor").expanduser()
     dirs = [d for d in target_dir.glob("*") if d.is_dir()]
     for d in track(dirs, description=f"packing {len(dirs)} items..."):
         shutil.make_archive(d, "zip", d)
@@ -1191,19 +1194,23 @@ class PapyriDocTestRunner(doctest.DocTestRunner):
         return Section(acc, None)
 
 
-# Experimental: write a `.zst` sidecar next to every CBOR blob in a generated
-# DocBundle so raw vs zstd-compressed IR sizes can be compared with `du`, and
-# so the bundle itself (which is what library maintainers would publish to a
-# hosted service) carries the compressed form. The uncompressed file stays as
-# the source of truth; ingest reads from it. See `_write_with_zst_sidecar`.
+# Experimental: every generated CBOR blob is written twice — once raw into
+# `<data>/cbor/<pkg>_<ver>/…` and once zstd-compressed into `<data>/zstd/
+# <pkg>_<ver>/…` with the same filename, so on-disk sizes can be compared
+# directly (`du -sh ~/.papyri/data/cbor ~/.papyri/data/zstd`) and a future
+# shipper could publish only the compressed tree. The raw tree is the source
+# of truth; ingest reads from it. JSON metadata (`papyri.json`, `toc.json`)
+# and binary assets live only in the cbor tree — they aren't re-compressed.
 _ZSTD_LEVEL = 3
 _zstd_compressor = zstandard.ZstdCompressor(level=_ZSTD_LEVEL)
 
 
-def _write_with_zst_sidecar(path: Path, data: bytes) -> None:
-    """Write `data` to `path` and a zstd-compressed copy to `path.name + '.zst'`."""
-    path.write_bytes(data)
-    (path.parent / (path.name + ".zst")).write_bytes(_zstd_compressor.compress(data))
+def _write_cbor_and_zstd(cbor_path: Path, zstd_path: Path, data: bytes) -> None:
+    """Write `data` raw to `cbor_path` and zstd-compressed to `zstd_path`."""
+    cbor_path.parent.mkdir(parents=True, exist_ok=True)
+    zstd_path.parent.mkdir(parents=True, exist_ok=True)
+    cbor_path.write_bytes(data)
+    zstd_path.write_bytes(_zstd_compressor.compress(data))
 
 
 class Gen:
@@ -1423,24 +1430,27 @@ class Gen:
 
         return processed_example_data(example_section_data), doctest_runner.figs
 
-    def clean(self, where: Path):
+    def clean(self, cbor_where: Path, zstd_where: Path):
         """
-        Erase a doc bundle folder.
+        Erase a doc bundle folder from both the cbor and zstd trees.
         """
-        subdirs = ("module", "assets", "docs", "examples")
-        for i, sub in enumerate(subdirs, start=1):
-            for _, path in progress(
-                (where / sub).glob("*"),
-                description=f"cleaning previous bundle {i}/{len(subdirs)}",
-            ):
-                path.unlink()
-
-        for sub in subdirs:
-            if (where / sub).exists():
-                (where / sub).rmdir()
+        cbor_subdirs = ("module", "assets", "docs", "examples")
+        zstd_subdirs = ("module", "docs", "examples")
+        step = 0
+        total = len(cbor_subdirs) + len(zstd_subdirs)
+        for root, subs in ((cbor_where, cbor_subdirs), (zstd_where, zstd_subdirs)):
+            for sub in subs:
+                step += 1
+                for _, path in progress(
+                    (root / sub).glob("*"),
+                    description=f"cleaning previous bundle {step}/{total}",
+                ):
+                    path.unlink()
+                if (root / sub).exists():
+                    (root / sub).rmdir()
         for f in ("papyri.json", "toc.json"):
-            if (where / f).exists():
-                (where / f).unlink()
+            if (cbor_where / f).exists():
+                (cbor_where / f).unlink()
 
     def collect_narrative_docs(self):
         """
@@ -1515,45 +1525,53 @@ class Gen:
 
         self._doctree = {"tree": make_tree(trees), "titles": title_map}
 
-    def write_narrative(self, where: Path) -> None:
-        (where / "toc.json").write_text(json.dumps(self._doctree, indent=2))
-        (where / "docs").mkdir(exist_ok=True)
+    def write_narrative(self, cbor_where: Path, zstd_where: Path) -> None:
+        # toc.json is JSON metadata — lives only in the cbor tree.
+        (cbor_where / "toc.json").write_text(json.dumps(self._doctree, indent=2))
         for file, v in self.docs.items():
-            subf = where / "docs"
-            subf.mkdir(exist_ok=True, parents=True)
-            _write_with_zst_sidecar(subf / file, v)
+            _write_cbor_and_zstd(
+                cbor_where / "docs" / file, zstd_where / "docs" / file, v
+            )
 
-    def write_examples(self, where: Path) -> None:
-        (where / "examples").mkdir(exist_ok=True)
+    def write_examples(self, cbor_where: Path, zstd_where: Path) -> None:
         for k, v in self.examples.items():
-            _write_with_zst_sidecar(where / "examples" / k, v)
+            _write_cbor_and_zstd(
+                cbor_where / "examples" / k, zstd_where / "examples" / k, v
+            )
 
-    def write_api(self, where: Path):
+    def write_api(self, cbor_where: Path, zstd_where: Path):
         """
         Write the API section of the DocBundle.
         """
-        (where / "module").mkdir(exist_ok=True)
         for k, v in self.data.items():
-            _write_with_zst_sidecar(where / "module" / (k + ".cbor"), encoder.encode(v))
+            _write_cbor_and_zstd(
+                cbor_where / "module" / (k + ".cbor"),
+                zstd_where / "module" / (k + ".cbor"),
+                encoder.encode(v),
+            )
 
-    def partial_write(self, where):
-        self.write_api(where)
+    def partial_write(self, cbor_where: Path, zstd_where: Path):
+        self.write_api(cbor_where, zstd_where)
 
-    def write(self, where: Path):
+    def write(self, cbor_where: Path, zstd_where: Path):
         """
-        Write a DocBundle folder.
+        Write a DocBundle across the cbor/ and zstd/ trees.
         """
-        self.write_api(where)
-        self.write_narrative(where)
-        self.write_examples(where)
-        self.write_assets(where)
-        with (where / "papyri.json").open("w") as f:
+        self.write_api(cbor_where, zstd_where)
+        self.write_narrative(cbor_where, zstd_where)
+        self.write_examples(cbor_where, zstd_where)
+        self.write_assets(cbor_where)
+        with (cbor_where / "papyri.json").open("w") as f:
             assert "version" in self._meta
             f.write(json.dumps(self._meta, indent=2, sort_keys=True))
 
-    def write_assets(self, where: Path) -> None:
-        assets = where / "assets"
-        assets.mkdir()
+    def write_assets(self, cbor_where: Path) -> None:
+        # Binary assets (images, logos) — kept only in the cbor tree; zstd
+        # rarely helps on already-compressed formats, and duplicating into
+        # the zstd tree would skew the size comparison by equal bytes on
+        # both sides without adding signal.
+        assets = cbor_where / "assets"
+        assets.mkdir(parents=True, exist_ok=True)
         for k, v in self.bdata.items():
             (assets / k).write_bytes(v)
 

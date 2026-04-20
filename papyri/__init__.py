@@ -28,11 +28,13 @@ Two stages:
     $ papyri gen <config file>
 
   Example TOML configs live under ``examples/``. Output lands in
-  ``~/.papyri/data/<library>_<version>/``.
+  ``~/.papyri/data/cbor/<library>_<version>/`` (raw CBOR bundle) with a
+  parallel zstd-compressed copy under
+  ``~/.papyri/data/zstd/<library>_<version>/``.
 
 - As a system operator, ingest IR into the local cross-linked graph::
 
-    $ papyri ingest ~/.papyri/data/<library>_<version>/
+    $ papyri ingest ~/.papyri/data/cbor/<library>_<version>/
 
 
 Changes in behavior
@@ -81,11 +83,12 @@ Generating IR:
 
     $ papyri gen examples/numpy.toml
 
-    Will generate in ~/.papyri/data/ the folder `numpy_$numpyversion`.
+    Writes the raw CBOR bundle to ~/.papyri/data/cbor/numpy_$numpyversion
+    and a zstd-compressed mirror to ~/.papyri/data/zstd/numpy_$numpyversion.
 
 Ingesting IR:
 
-    $ papyri ingest ~/.papyri/data/numpy_$numpyversion
+    $ papyri ingest ~/.papyri/data/cbor/numpy_$numpyversion
 
 """,
     pretty_exceptions_enable=False,
@@ -350,7 +353,8 @@ def train_dict(
     Prints totals for raw bytes, zstd without a dictionary, and zstd with the
     freshly-trained dictionary, so the per-blob win is easy to see before
     wiring the dictionary into the bundle writer. Run `papyri gen` on one or
-    more projects first (or pass `--source` to point at an ingest store).
+    more projects first; samples are read from the `cbor/` tree (the zstd/
+    mirror is skipped to avoid sampling already-compressed data).
     """
     import random
 
@@ -365,9 +369,10 @@ def train_dict(
         p
         for p in src.rglob("*")
         if p.is_file()
-        and not p.name.endswith((".zst", ".br"))
+        and "zstd" not in p.parts
         and "assets" not in p.parts
         and p.name not in ("papyri.db", "papyri.json", "toc.json")
+        and not p.name.endswith(".br")
         and p.suffix != ".zdict"
     ]
     if not candidates:

@@ -3,7 +3,7 @@ from textwrap import dedent
 import pytest
 
 from papyri import errors
-from papyri.nodes import InlineRole, Text
+from papyri.nodes import InlineRole
 from papyri.ts import Node, TSVisitor, parse, parser
 
 

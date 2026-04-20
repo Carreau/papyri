@@ -225,7 +225,7 @@ Backtick edge cases
 Interpreted text with a trailing alphabetic suffix is technically invalid RST
 (the spec requires the end-string to be followed by non-alphanumeric characters),
 but it is common in scientific docstrings. The RST-correct form uses a
-backslash-escaped space: ``\`None\`\\ s``. Papyri applies a best-effort heuristic
+backslash-escaped space: ``\\`None\\`\\ s``. Papyri applies a best-effort heuristic
 that splits the node into an ``InlineRole`` plus a plain ``Text`` suffix.
 
 Examples of the pattern (rendered here so the viewer can exercise the fix):
@@ -378,7 +378,7 @@ def example_backtick_suffix():
 
     RST requires the closing backtick to be followed by whitespace or
     punctuation, not alphanumeric characters. Writing ```None`s`` is therefore
-    invalid RST; the spec-correct form is ``\`None\`\\ s`` (backslash-escaped
+    invalid RST; the spec-correct form is ``\\`None\\`\\ s`` (backslash-escaped
     inline whitespace). Sphinx tolerates the invalid form via lenient parsing,
     so it is widespread in scientific docstrings.
 
@@ -399,8 +399,8 @@ def example_backtick_suffix():
 
     Correctly written RST (backslash escape, no heuristic needed):
 
-    - Returns `None`\ s when the input is empty.
-    - A list of `ndarray`\ s with matching shapes.
+    - Returns `None`\\ s when the input is empty.
+    - A list of `ndarray`\\ s with matching shapes.
     """
     pass
 

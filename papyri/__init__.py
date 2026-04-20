@@ -660,7 +660,7 @@ def upload(
     except urllib.error.HTTPError as e:
         body_text = e.read().decode(errors="replace")
         typer.echo(f"Upload failed: HTTP {e.code} — {body_text}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     if result.get("ok"):
         typer.echo(f"Upload accepted (HTTP {status}).")

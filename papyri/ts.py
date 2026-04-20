@@ -364,38 +364,46 @@ class TSVisitor:
             assert ":" not in role_value
         text_value = self.as_text(text)
         assert text_value.startswith("`")
+
+        # Heuristic: tree-sitter RST sometimes folds a trailing alphanumeric
+        # suffix (e.g. the 's' in '`None`s') into the interpreted_text node
+        # because the RST spec forbids alphanumeric chars immediately after a
+        # closing backtick.  When this happens text_value ends with the suffix
+        # character rather than '`', so we strip it before the end-quote check.
+        trailing_suffix = ""
+        if not text_value.endswith("`"):
+            last_backtick = text_value.rfind("`")
+            if last_backtick > 0:
+                trailing_suffix = text_value[last_backtick + 1 :]
+                text_value = text_value[: last_backtick + 1]
+
         assert text_value.endswith("`")
 
         inner_value = text_value[1:-1].replace("\n", " ")
 
-        if "`" in inner_value:
-            # Heuristic: "`None`s" — tree-sitter folds the trailing alphanumeric
-            # suffix into the node because RST spec forbids alphanumeric chars
-            # immediately after a closing backtick (the correct form is
-            # "`None`\ s"). Detect "word`suffix" and split into role + text.
-            backtick_pos = inner_value.rfind("`")
-            suffix = inner_value[backtick_pos + 1 :]
-            if suffix.isalpha() and inner_value[: backtick_pos + 1].count("`") <= 1:
-                word = inner_value[:backtick_pos]
+        if trailing_suffix:
+            if trailing_suffix.isalpha():
                 log.warning(
                     "Interpreted text %r has alphanumeric suffix %r immediately "
                     "after closing backtick in (%s). "
                     "RST-correct form is `%s`\\ %s. "
                     "Splitting into role+text as a best-effort fix.",
                     inner_value,
-                    suffix,
+                    trailing_suffix,
                     self._qa,
-                    word,
-                    suffix,
+                    inner_value,
+                    trailing_suffix,
                 )
                 t = InlineRole(
-                    word,
+                    inner_value,
                     domain=domain,
                     role=role_value,
                     inventory=inventory,
                 )
-                return [t, Text(suffix)]
+                return [t, Text(trailing_suffix)]
+            # Non-alpha trailing char — fall through to existing handling below.
 
+        if "`" in inner_value:
             log.warning(
                 "Improper backtick found in interpreted text. "
                 "This is usually due to a missing/stray backtick, or "

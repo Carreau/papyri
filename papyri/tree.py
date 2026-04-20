@@ -554,9 +554,6 @@ class DirectiveVisiter(TreeReplacer):
         self._targets: set[Any] = set()
         self.version = version
         self._tocs: Any = []
-        # For API docs, the module can be derived from qa (first dotted component).
-        # For narrative docs it must be passed explicitly.
-        self.module: str = module if module is not None else qa.split(".")[0]
 
     def replace_GenCode(self, code):
         """Flatten a GenCode intermediate into a plain Code node."""

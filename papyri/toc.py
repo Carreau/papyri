@@ -69,7 +69,9 @@ def make_tree(data):
     # not named "index".
     root = "index"
     if root not in c:
-        referenced = {child for children in data.values() for child in children if child}
+        referenced = {
+            child for children in data.values() for child in children if child
+        }
         candidates = [k for k in c if k not in referenced]
         root = candidates[0] if candidates else next(iter(c))
     return _tree(root, data, c)

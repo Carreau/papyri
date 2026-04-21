@@ -207,9 +207,8 @@ def test_parse_reference():
 
 def test_parse_citation_reference():
     """
-    Inline citation references like ``[CIT2002]_`` used to raise
-    VisitCitationReferenceNotImplementedError. They should now parse as
-    a CitationReference node carrying just the label.
+    Inline citation references like ``[CIT2002]_`` should parse as a
+    CitationReference node carrying both label and content.
     """
 
     [section] = parse(
@@ -246,10 +245,8 @@ def test_parse_citation_reference_multiple():
     )
     [paragraph_node] = section.children
     assert isinstance(paragraph_node, Paragraph)
-    labels = [
-        c.label for c in paragraph_node.children if isinstance(c, CitationReference)
-    ]
-    assert labels == ["Smith2020", "Jones1999"]
+    cites = [c for c in paragraph_node.children if isinstance(c, CitationReference)]
+    assert [c.label for c in cites] == ["Smith2020", "Jones1999"]
 
 
 def test_parse_example_with_citations_docstring():
@@ -283,7 +280,7 @@ def test_parse_example_with_citations_docstring():
 def test_citation_reference_roundtrip():
     """
     CitationReference should survive a CBOR encode/decode roundtrip via the
-    shared IR encoder, confirming the new CBOR tag (4063) is wired in.
+    shared IR encoder, confirming CBOR tag 4063 is wired in.
     """
     from papyri.nodes import CitationReference, encoder
 
@@ -291,3 +288,42 @@ def test_citation_reference_roundtrip():
     decoded = encoder.decode(encoder.encode(original))
     assert isinstance(decoded, CitationReference)
     assert decoded.label == "CIT2002"
+
+
+def test_parse_citation_block():
+    """
+    Block-level ``.. [label] body`` citation definitions should parse as
+    Citation nodes carrying a label and a body Paragraph.
+    """
+    from papyri.nodes import Citation
+
+    sections = parse(
+        b".. [CIT2002] Book title, Author, Year.\n",
+        "test_parse_citation_block",
+    )
+    citations = []
+    stack: list = list(sections)
+    while stack:
+        node = stack.pop()
+        if isinstance(node, Citation):
+            citations.append(node)
+        elif hasattr(node, "children"):
+            stack.extend(node.children or [])
+
+    assert len(citations) == 1, f"expected one Citation, got {citations!r}"
+    assert citations[0].label == "CIT2002"
+    assert citations[0].children[0].children[0].value == "Book title, Author, Year."  # type: ignore[union-attr]
+
+
+def test_citation_roundtrip():
+    """
+    Citation block node should survive a CBOR encode/decode roundtrip
+    via the shared IR encoder, confirming tag 4064 is wired in.
+    """
+    from papyri.nodes import Citation, Paragraph, Text, encoder
+
+    original = Citation(label="CIT2002", children=[Paragraph([Text("Some ref.")])])
+    decoded = encoder.decode(encoder.encode(original))
+    assert isinstance(decoded, Citation)
+    assert decoded.label == "CIT2002"
+    assert decoded.children[0].children[0].value == "Some ref."  # type: ignore[union-attr]

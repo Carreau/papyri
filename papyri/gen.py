@@ -1216,10 +1216,11 @@ class Gen:
     bdata: dict[str, bytes]
 
     def __init__(self, dummy_progress: bool, config: Config):
+        self.Progress: type[Progress]
         if dummy_progress:
             self.Progress = DummyP
         else:
-            self.Progress = Progress  # type: ignore
+            self.Progress = Progress
 
         self.progress = lambda: self.Progress(
             TextColumn("[progress.description]{task.description}", justify="right"),

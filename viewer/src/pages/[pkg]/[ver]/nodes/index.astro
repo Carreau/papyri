@@ -131,13 +131,11 @@ const entries = [...valueMap.values()].sort((a, b) => {
 });
 
 // Build type list for the filter panel (without counting instances).
-const typeCounts = [...allTypes]
-  .sort()
-  .map((key) => ({
-    key,
-    label: key,
-    count: 0,
-  }));
+const typeCounts = [...allTypes].sort().map((key) => ({
+  key,
+  label: key,
+  count: 0,
+}));
 ---
 
 <BundleLayout

@@ -11,6 +11,9 @@
     "preview": "astro preview",
     "astro": "astro",
     "check": "astro check",
+    "lint": "eslint src --ext .ts,.tsx,.astro",
+    "format": "prettier --write src",
+    "format:check": "prettier --check src",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -25,12 +28,22 @@
     "shiki": "^4.0.2"
   },
   "devDependencies": {
+    "@eslint/js": "^9.18.0",
     "@astrojs/check": "^0.9.8",
+    "typescript-eslint": "^8.17.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/katex": "^0.16.8",
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "astro-eslint-parser": "^1.0.2",
+    "eslint": "^9.18.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-astro": "^1.2.3",
+    "eslint-plugin-react": "^7.37.0",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "prettier": "^3.4.2",
+    "prettier-plugin-astro": "^0.14.1",
     "typescript": "^5.7.0",
     "vitest": "^4.1.4"
   },

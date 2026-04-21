@@ -20,6 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       python: ${{ steps.filter.outputs.python }}
+      typescript: ${{ steps.filter.outputs.typescript }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
@@ -32,6 +33,9 @@ jobs:
               - '**/*.py'
               - 'requirements*.txt'
               - 'pyproject.toml'
+              - '.github/workflows/lint.yml'
+            typescript:
+              - 'viewer/**'
               - '.github/workflows/lint.yml'
 
   build:
@@ -66,3 +70,36 @@ jobs:
       if: always()
       run: |
         python -m mypy papyri
+
+  typescript:
+    needs: changes
+    if: needs.changes.outputs.typescript == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      with:
+        persist-credentials: false
+    - uses: pnpm/action-setup@v2
+      with:
+        version: latest
+    - name: Set up Node.js
+      uses: actions/setup-node@11bd08d0f111e8e37fc6e7a01857e59af1ba51d8  # v4
+      with:
+        node-version: "20"
+        cache: "pnpm"
+        cache-dependency-path: "viewer/pnpm-lock.yaml"
+    - name: Install dependencies
+      working-directory: viewer
+      run: pnpm install --frozen-lockfile
+    - name: Lint with ESLint
+      working-directory: viewer
+      run: pnpm run lint
+    - name: Format check with Prettier
+      if: always()
+      working-directory: viewer
+      run: pnpm run format:check
+    - name: Check TypeScript (Astro)
+      if: always()
+      working-directory: viewer
+      run: pnpm run check

@@ -18,11 +18,9 @@ from .node_base import Node, register
 from .nodes import (
     DocParam,
     Figure,
-    Paragraph,
     RefInfo,
     Section,
     SeeAlsoItem,
-    Text,
     encoder,
 )
 from .signature import SignatureNode
@@ -231,38 +229,9 @@ def load_one_uningested(
     for k in old_data.slots():
         setattr(blob, k, getattr(old_data, k))
 
-    blob.see_also = list(sorted(set(old_data.see_also), key=lambda x: x.name.value))
-
     blob.process(known_refs=known_refs, aliases=aliases, verbose=False, version=version)
 
     return blob
-
-
-def _flatten_text(node: Any, out: list[str]) -> None:
-    if isinstance(node, Text):
-        out.append(node.value)
-        return
-    children = getattr(node, "children", None)
-    if children is None:
-        return
-    for child in children:
-        _flatten_text(child, out)
-
-
-def _first_paragraph_text(section: Section) -> str | None:
-    """Return the plain-text content of the first Paragraph in ``section``.
-
-    Used to pull a bundle-level blurb out of the top-level module docstring's
-    Summary section without dragging the viewer through the full IR tree.
-    """
-    for child in section.children:
-        if isinstance(child, Paragraph):
-            parts: list[str] = []
-            _flatten_text(child, parts)
-            text = "".join(parts).strip()
-            if text:
-                return text
-    return None
 
 
 class Ingester:
@@ -468,20 +437,6 @@ class Ingester:
 
             except Exception as e:
                 raise RuntimeError(f"error writing to {path}") from e
-
-        # Populate a bundle summary from the top-level module's Summary
-        # section so the viewer's landing cards don't need to crack open every
-        # module blob. Keyed on the root module's qa (e.g. ``numpy``).
-        # We read ``_content`` directly rather than ``top.content`` because
-        # ``load_one_uningested`` reseats ``_content`` via ``setattr`` and
-        # leaves the ``_dp`` proxy wrapping the original empty dict.
-        top = nvisited_items.get(root)
-        if top is not None:
-            summary_section = top._content.get("Summary")
-            if summary_section is not None:
-                blurb = _first_paragraph_text(summary_section)
-                if blurb:
-                    meta["summary"] = blurb
 
         gstore.put_meta(root, version, encoder.encode(meta))
 

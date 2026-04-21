@@ -22,9 +22,9 @@ have. Scrub the term everywhere except in one historical note.
 Drop the `myst` prefix from the three offenders; they serialize to a
 string consumed by nothing outside this repo.
 
-- [ ] `nodes.py:274` `Directive.type = "mystDirective"` → `"directive"`
-- [ ] `nodes.py:322` `Comment.type = "mystComment"` → `"comment"`
-- [ ] `nodes.py:346` `Target.type = "mystTarget"` → `"target"`
+- [x] `nodes.py:274` `Directive.type = "mystDirective"` → `"directive"`
+- [x] `nodes.py:322` `Comment.type = "mystComment"` → `"comment"`
+- [x] `nodes.py:346` `Target.type = "mystTarget"` → `"target"`
 
 No viewer code reads these strings — the viewer dispatches on the
 `__type` field (Python class name via the CBOR encoder). Verify by
@@ -32,40 +32,39 @@ grepping `viewer/` for the three literals before merging.
 
 ### 1b. Rename `myst_serialiser.py`
 
-- [ ] Rename module: `papyri/myst_serialiser.py` → `papyri/node_serializer.py`
+- [x] Rename module: `papyri/myst_serialiser.py` → `papyri/node_serializer.py`
       (also drops the British spelling — the rest of the repo is
       American).
-- [ ] Update import in `papyri/common_ast.py:10`.
-- [ ] Rewrite docstring at `papyri/myst_serialiser.py:1-11` to stop
+- [x] Update import in `papyri/common_ast.py:10`.
+- [x] Rewrite docstring at `papyri/myst_serialiser.py:1-11` to stop
       framing the format as "the MyST JSON spec"; document what the
       serializer actually does (internally-tagged Node → dict).
 
 ### 1c. Comments / docstrings referencing MyST
 
-- [ ] `papyri/nodes.py:189-193` — the "MyST-flavored AST nodes" banner
+- [x] `papyri/nodes.py:189-193` — the "MyST-flavored AST nodes" banner
       and the "M prefix remains for historical reasons" note.
-- [ ] `papyri/nodes.py:792` — "Union type aliases (formerly in
+- [x] `papyri/nodes.py:792` — "Union type aliases (formerly in
       myst_ast.py)".
-- [ ] `papyri/ts.py:186` — "convert into Papyri/Myst nodes" → "Papyri
+- [x] `papyri/ts.py:186` — "convert into Papyri/Myst nodes" → "Papyri
       nodes".
-- [ ] `papyri/ts.py:416,424-425,549,553-554` — local var `myst_acc`
+- [x] `papyri/ts.py:416,424-425,549,553-554` — local var `myst_acc`
       → `children_acc` (or similar).
-- [ ] `papyri/tree.py:557` — "Here we'll return MySt Code." docstring.
-- [ ] `papyri/tree.py:645-653,846-851` — method `replace_MMystDirective`
+- [x] `papyri/tree.py:557` — "Here we'll return MySt Code." docstring.
+- [x] `papyri/tree.py:645-653,846-851` — method `replace_MMystDirective`
       (double-M typo!) → `replace_Directive`; rename local variable
       `myst_directive` → `directive`.
-- [ ] `papyri/miniserde.py:208-209` — "MyST-flavored classes carry a
+- [x] `papyri/serde.py:208-209` — "MyST-flavored classes carry a
       `type` attribute..." → just "classes that define a `type`
       string".
 
 ### 1d. Historical mention
 
-- [ ] `PLAN.md:151-152` — keep (it's real history: the
+- [x] `PLAN.md:151-152` — keep (it's real history: the
       `take2.py`/`myst_ast.py` circular import fix). No change.
-- [ ] `CLAUDE.md:50` — same, keep as history.
-- [ ] `tools/vendor_scripts.sh:30` — `papyri/static/myst.js` fetch
-      from `mystjs@0.0.15`. Dead code (`papyri/static/` was deleted in
-      Phase 1); delete the line.
+- [x] `CLAUDE.md:50` — same, keep as history.
+- [x] `tools/vendor_scripts.sh:30` — `papyri/static/myst.js` fetch
+      from `mystjs@0.0.15`. Dead code; line already removed.
 
 ## 2. Storage "kind" vocabulary (highest-impact rename)
 

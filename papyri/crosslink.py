@@ -16,7 +16,6 @@ from .gen import GeneratedDoc, _OrderedDictProxy, normalise_ref
 from .graphstore import GraphStore, Key
 from .node_base import Node, register
 from .nodes import (
-    DocParam,
     Figure,
     RefInfo,
     Section,
@@ -139,7 +138,7 @@ class IngestedDoc(Node):
         """
         assert isinstance(known_refs, frozenset)
         assert self.content is not None
-        _local_refs: list[list[str]] = []
+        assert aliases is not None
         sections_ = [
             "Parameters",
             "Returns",
@@ -160,23 +159,14 @@ class IngestedDoc(Node):
             #'See Also'
             #'Examples'
         ]
-        assert aliases is not None
 
-        aliases = {}
-        for s in sections_:
-            _local_refs = _local_refs + [
-                [u.strip() for u in x[0].split(",")]
-                for x in self.content.get(s, [])
-                if isinstance(x, DocParam)
-            ]
-
-        def flat(l):
-            return [y for x in l for y in x]
-
-        local_refs = frozenset(flat(_local_refs))
-
+        # local_refs (parameter names extracted from the sections above) are
+        # pre-computed by GenVisitor at gen time; IngestVisitor.replace_InlineRole
+        # currently does not resolve inline roles, so we pass an empty set here.
+        # When that is eventually fixed, precompute local_refs in gen and store
+        # them in GeneratedDoc rather than re-extracting here.
         visitor = IngestVisitor(
-            self.qa, known_refs, local_refs, aliases, version=version, config={}
+            self.qa, known_refs, frozenset(), aliases, version=version, config={}
         )
         for section in ["Extended Summary", "Summary", "Notes"] + sections_:
             if section not in self.content:

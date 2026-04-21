@@ -27,7 +27,7 @@ typically appear at the beginning of directive.
 
 :fieldlistitem:
     at least that the name tree sitter rst give it.
-:another: is a another fieldlistItem in this field list
+:another: is another fieldlistItem in this field list
     and it's description
 
 
@@ -114,7 +114,7 @@ This is a Transition:
 
 -----
 
-This is q block quote, to do, we know that Attributions are not supported right now.
+This is a block quote, to do, we know that Attributions are not supported right now.
 
     "We have weaponed the Tab Key"
 

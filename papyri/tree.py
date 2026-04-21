@@ -184,11 +184,11 @@ def resolve_(
     if hk not in _cache:
         _cache[hk] = _build_resolver_cache(known_refs)
 
-    # this is a mappign from the key to the most relevant
+    # this is a mapping from the key to the most relevant
     # Refinfo to a document
     k_path_map: dict[str, RefInfo]
 
-    # hashable for cachign /optimisation.
+    # hashable for caching /optimisation.
     keyset: frozenset[str]
 
     k_path_map, keyset = _cache[hk]

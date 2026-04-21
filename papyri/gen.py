@@ -363,7 +363,7 @@ def normalise_ref(ref):
     inference in examples regularly give us fully qualified names. When visiting
     a ref, this tries to import it and replace it by the normal full-qualified form.
 
-    This is expensive, ad we likely want to move the logic of finding the
+    This is expensive, and we likely want to move the logic of finding the
     correct ref earlier in the process and us this as an assertion the refs are
     normalized.
 

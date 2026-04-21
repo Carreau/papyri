@@ -37,7 +37,7 @@ def full_qual(obj) -> FullQual | None:
     a colon as the separator between the module part and the object's name
     and sub attributes.
 
-    This is to lift an ambiguity when trying to get an object back from the its
+    This is to lift an ambiguity when trying to get an object back from its
     fully qualified name.
 
     Assuming the following files, top level init imports a function from a

@@ -22,7 +22,7 @@ class Base:
 
 class Node(Base):
     def __init__(self, *args, **kwargs):
-        tt = get_type_hints(type(self))
+        tt = get_type_hints(type(self))  # type: ignore[arg-type]
         if type(self).__name__ == "Directive":
             tt = {k: v for k, v in tt.items() if k != "type"}
         for attr, val in zip(tt, args, strict=False):
@@ -35,13 +35,13 @@ class Node(Base):
 
     def cbor(self, encoder):
         tag = TAG_MAP[type(self)]
-        attrs = get_type_hints(type(self))
+        attrs = get_type_hints(type(self))  # type: ignore[arg-type]
         encoder.encode(cbor2.CBORTag(tag, [getattr(self, k) for k in attrs]))
 
     def __eq__(self, other):
         if not (type(self) == type(other)):
             return False
-        tt = get_type_hints(type(self))
+        tt = get_type_hints(type(self))  # type: ignore[arg-type]
         for attr in tt:
             a, b = getattr(self, attr), getattr(other, attr)
             if a != b:
@@ -50,7 +50,7 @@ class Node(Base):
         return True
 
     def __repr__(self):
-        tt = get_type_hints(type(self))
+        tt = get_type_hints(type(self))  # type: ignore[arg-type]
         acc = ""
         for t in tt:
             acc += f"{t}: {getattr(self, t)!r}\n"
@@ -71,7 +71,7 @@ class Node(Base):
     def from_dict(cls, data):
         return deserialize(cls, cls, data)
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(
             tuple(
                 tuple(getattr(self, x))
@@ -118,7 +118,7 @@ def _invalidate(obj, depth=0):
     Recursively validate type anotated classes.
     """
 
-    annotations = get_type_hints(type(obj))
+    annotations = get_type_hints(type(obj))  # type: ignore[arg-type]
     for k, v in annotations.items():
         # FIX: AttributeError: 'Text' object has no attribute 'position'
         item = getattr(obj, k)

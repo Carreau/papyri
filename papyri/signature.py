@@ -68,7 +68,7 @@ class Signature:
         """
         Create signature from a string version.
 
-        Of course this is slightly incorrect as all the isgerator and CO are going to wrong
+        Of course this is slightly incorrect as all the isgenerator and CO are going to wrong
 
         """
         glob: dict[str, Any] = {}

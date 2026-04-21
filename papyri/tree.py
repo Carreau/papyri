@@ -144,7 +144,7 @@ def resolve_(
     References are often relative based on the current context (which object you
     are currently in).
 
-    Given this informations and all the local (same document) and global
+    Given this information and all the local (same document) and global
     (same library/all libraries) references, compute the Reference Info object.
 
     Parameters
@@ -185,11 +185,11 @@ def resolve_(
     if hk not in _cache:
         _cache[hk] = _build_resolver_cache(known_refs)
 
-    # this is a mappign from the key to the most relevant
+    # this is a mapping from the key to the most relevant
     # Refinfo to a document
     k_path_map: dict[str, RefInfo]
 
-    # hashable for cachign /optimisation.
+    # hashable for caching /optimisation.
     keyset: frozenset[str]
 
     k_path_map, keyset = _cache[hk]

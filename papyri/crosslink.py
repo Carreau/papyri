@@ -45,7 +45,7 @@ def find_all_refs(
     o_family = sorted(list(graph_store.glob((None, None, "module", None))))
 
     # here we can't compute just the dictionary and use frozenset(....values())
-    # as we may have multiple version of lisbraries; this is something that will
+    # as we may have multiple version of libraries; this is something that will
     # need to be fixed in the long run
     known_refs = []
     ref_map = {}

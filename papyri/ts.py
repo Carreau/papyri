@@ -183,7 +183,7 @@ class TSVisitor:
         buf: bytes
             bytes buffer of the document  parsed by tree-sitter.
         qa: str
-            fully qualifed name of the object for whcih we are paring the
+            fully qualified name of the object for which we are parsing the
             documentation. This is used only in log messages, and for debugging purpose.
         """
         self._bytes = buf

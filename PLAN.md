@@ -160,21 +160,28 @@ robustness and coverage holes.
 
 **Phase A — make it build** (current focus)
 
-- [ ] Harden `toc.py:make_tree()` to not crash when there is no `index`
+- [x] Harden `toc.py:make_tree()` to not crash when there is no `index`
       root document. Fall back to a flat listing of all collected docs.
       IPython and other packages may root the docs tree at a key other
       than `"index"` or may have an empty toctree graph.
-- [ ] Fix `tree.py:_toctree_handler`: remove `assert not argument` (some
+      Done: falls back to any unreferenced node, or the first key, with
+      a log warning.
+- [x] Fix `tree.py:_toctree_handler`: remove `assert not argument` (some
       builds pass a title); skip empty and comment lines; silently drop
       `:glob:` entries (we don't expand globs at gen time).
-- [ ] Fix `tree.py:GenVisitor.visit_Section`: section target refs are
+      Done: argument is silently ignored; blank/comment lines and glob
+      patterns skipped; malformed entries logged as warnings.
+- [x] Fix `tree.py:GenVisitor.visit_Section`: section target refs are
       currently registered against the hardcoded
       `RefInfo("papyri", "0.0.8", "docs", …)` regardless of which package
       is being built. Pass the real `(module, version)` pair through
       `GenVisitor` and use them here.
-- [ ] Update `examples/IPython.toml`: add `narrative_exclude` patterns
+      Done: replaced with `LocalRef("docs", target)`, which inherits
+      module/version from the bundle context at render time.
+- [x] Update `examples/IPython.toml`: add `narrative_exclude` patterns
       to skip auto-generated API stubs (`api/generated/`) and Sphinx
       build artefacts that are not human-authored prose.
+      Done: `api/generated`, `_build`, `config/api` are excluded.
 
 **Phase B — make it useful in the viewer**
 

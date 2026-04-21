@@ -153,11 +153,19 @@ const typeCounts = [...allTypes]
   <p class="crumb"><a href={`/${pkg}/${ver}/`}>&larr; {pkg} {ver}</a></p>
   <h1>All nodes</h1>
   <p class="lede">
-    {truncated ? (
-      <>Showing {DISPLAY_LIMIT} of {allEntries.length} unique values across {typeCounts.length} node type{typeCounts.length !== 1 ? "s" : ""}. Use the type filter to narrow results.</>
-    ) : (
-      <>{entries.length} unique value{entries.length !== 1 ? "s" : ""} across {typeCounts.length} node type{typeCounts.length !== 1 ? "s" : ""}</>
-    )}
+    {
+      truncated ? (
+        <>
+          Showing {DISPLAY_LIMIT} of {allEntries.length} unique values across {typeCounts.length}{" "}
+          node type{typeCounts.length !== 1 ? "s" : ""}. Use the type filter to narrow results.
+        </>
+      ) : (
+        <>
+          {entries.length} unique value{entries.length !== 1 ? "s" : ""} across {typeCounts.length}{" "}
+          node type{typeCounts.length !== 1 ? "s" : ""}
+        </>
+      )
+    }
   </p>
 
   <NodeTypeFilter client:load listId="node-list" types={typeCounts} defaultChecked={false} />

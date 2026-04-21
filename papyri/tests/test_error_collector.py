@@ -3,13 +3,9 @@ import logging
 import pytest
 
 from papyri.errors import UnseenError
-from papyri.gen import ErrorCollector
+from papyri.gen import Config, ErrorCollector
 
 log = logging.getLogger(__name__)
-
-
-class Config:
-    pass
 
 
 def JustPasses():
@@ -25,10 +21,11 @@ def ShouldValueErrorTypeError():
 
 
 def test_capture_correct():
-    c = Config()
-    c.expected_errors = {"ValueError": ["TestIterm"]}
-    c.early_error = False
-    c.fail_unseen_error = True
+    c = Config(
+        expected_errors={"ValueError": ["TestIterm"]},
+        early_error=False,
+        fail_unseen_error=True,
+    )
     ec = ErrorCollector(c, log)
 
     with ec("TestItem"):
@@ -38,10 +35,11 @@ def test_capture_correct():
 
 
 def test_pass_no_collect():
-    c = Config()
-    c.expected_errors = {}
-    c.early_error = True
-    c.fail_unseen_error = True
+    c = Config(
+        expected_errors={},
+        early_error=True,
+        fail_unseen_error=True,
+    )
     ec = ErrorCollector(c, log)
 
     with ec("TestItem"):
@@ -49,10 +47,11 @@ def test_pass_no_collect():
 
 
 def test_2():
-    c = Config()
-    c.expected_errors = {"ValueError": ["TestItem"]}
-    c.early_error = True
-    c.fail_unseen_error = True
+    c = Config(
+        expected_errors={"ValueError": ["TestItem"]},
+        early_error=True,
+        fail_unseen_error=True,
+    )
     ec = ErrorCollector(c, log)
     with pytest.raises(UnseenError):
         with ec("TestItem"):
@@ -60,10 +59,11 @@ def test_2():
 
 
 def test_4():
-    c = Config()
-    c.expected_errors = {"ValueError": ["TestItem"]}
-    c.early_error = False
-    c.fail_unseen_error = True
+    c = Config(
+        expected_errors={"ValueError": ["TestItem"]},
+        early_error=False,
+        fail_unseen_error=True,
+    )
     ec = ErrorCollector(c, log)
 
     with ec("TestItem"):

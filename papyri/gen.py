@@ -800,6 +800,7 @@ class GeneratedDoc(Node):
         "signature",
         "references",
         "arbitrary",
+        "local_refs",
         "_dp",
     )
 
@@ -857,6 +858,7 @@ class GeneratedDoc(Node):
     signature: SignatureNode | None
     references: list[str] | None
     arbitrary: list[Section]
+    local_refs: list[str]
 
     def __repr__(self):
         return "<GeneratedDoc ...>"
@@ -874,11 +876,12 @@ class GeneratedDoc(Node):
             "see_also",
             "references",
             "arbitrary",
+            "local_refs",
         ]
 
     @classmethod
     def new(cls):
-        return cls({}, None, [], None, None, None, [], [], None, None, [])
+        return cls({}, None, [], None, None, None, [], [], None, None, [], [])
 
 
 def _numpy_data_to_section(data: list[tuple[str, str, list[str]]], title: str, qa):
@@ -2280,6 +2283,7 @@ class Gen:
                 assert isinstance(lr1, str)
             # lr: FrozenSet[str] = frozenset(flat(_local_refs))
             lr: frozenset[str] = frozenset(_local_refs)
+            doc_blob.local_refs = sorted(lr)
             dv = GenVisitor(
                 qa,
                 known_refs,

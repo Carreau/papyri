@@ -19,11 +19,12 @@ interface TypeOption {
 interface Props {
   listId: string;
   types: TypeOption[];
+  defaultChecked?: boolean;
 }
 
-export default function NodeTypeFilter({ listId, types }: Props) {
+export default function NodeTypeFilter({ listId, types, defaultChecked = true }: Props) {
   const [checked, setChecked] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(types.map((t) => [t.key, true]))
+    Object.fromEntries(types.map((t) => [t.key, defaultChecked]))
   );
   const prevChecked = useRef(checked);
 

@@ -205,7 +205,7 @@ class GraphStore:
         assert None not in key, key
         for k in key[:-1]:
             path = path / k
-        return path / key[-1]
+        return path / key[-1]  # type: ignore[no-any-return]
 
     def remove(self, key: Key) -> None:
         path = self._key_to_path(key)
@@ -222,7 +222,7 @@ class GraphStore:
 
     def _get(self, key: Key) -> bytes:
         assert isinstance(key, Key)
-        return self._key_to_path(key).read_bytes()
+        return self._key_to_path(key).read_bytes()  # type: ignore[no-any-return]
 
     def _get_backrefs(self, key: Key) -> set[Key]:
         rows = self.conn.execute(
@@ -285,7 +285,7 @@ class GraphStore:
         ).fetchone()["id"]
         if has_blob:
             self.conn.execute("UPDATE nodes SET has_blob=1 WHERE id=?", (node_id,))
-        return node_id
+        return node_id  # type: ignore[no-any-return]
 
     def _meta_path(self, module: str, version: str):
         assert isinstance(module, str)
@@ -299,7 +299,7 @@ class GraphStore:
         mp.write_bytes(data)
 
     def get_meta(self, key: Key) -> bytes:
-        return self._meta_path(key.module, key.version).read_bytes()
+        return self._meta_path(key.module, key.version).read_bytes()  # type: ignore[no-any-return]
 
     def put(self, key: Key, bytes_: bytes, refs) -> None:
         """

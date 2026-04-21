@@ -6,6 +6,7 @@ import ast
 import io
 import sys
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
+from typing import Any
 
 from rich.progress import Progress
 
@@ -94,7 +95,7 @@ class BlockExecutor:
         except Exception as e:
             raise type(e)(f"{module.body} {text}") from e
         exec(compile(ast.Module(nodes, []), name, "exec"), ns)
-        acc = []
+        acc: list[Any] = []
         with capture_displayhook(acc):
             exec(compile(ast.Interactive([interactive_node]), name, "single"), ns)
         if len(acc) == 1:

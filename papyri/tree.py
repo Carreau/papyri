@@ -265,7 +265,7 @@ class TreeVisitor:
         if method := getattr(self, "visit_" + name, None):
             return method(node)
         elif hasattr(node, "children"):
-            acc = {}
+            acc: dict[Any, list[Any]] = {}
             for c in node.children:
                 if c is None or isinstance(c, (str, bool)):
                     continue

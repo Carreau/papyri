@@ -26,7 +26,7 @@ def _is_union(annotation) -> bool:
 
 
 def _union_args(annotation) -> tuple:
-    return annotation.__args__
+    return annotation.__args__  # type: ignore[no-any-return]
 
 
 def serialize(instance, annotation):

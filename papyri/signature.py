@@ -174,7 +174,7 @@ class Signature:
 
     @property
     def annotations(self) -> bool:
-        return self.target_item.__annotations__
+        return self.target_item.__annotations__  # type: ignore[no-any-return]
 
     @property
     def return_annotation(self) -> Empty | str:
@@ -229,7 +229,7 @@ class Signature:
 
         json_data["returns"] = self.return_annotation
 
-        return json_data
+        return json_data  # type: ignore[no-any-return]
 
     def to_json(self) -> bytes:
         """

@@ -104,14 +104,14 @@ def endswith(end, refs):
 
 
 class DelayedResolver:
-    _targets: dict[str, RefInfo]
+    _targets: dict[str, RefInfo | LocalRef]
     _references: dict[str, list[CrossRef]]
 
     def __init__(self):
         self._targets = dict()
         self._references = dict()
 
-    def add_target(self, target_ref: RefInfo, target: str):
+    def add_target(self, target_ref: RefInfo | LocalRef, target: str):
         assert target is not None
         assert target not in self._targets, "two targets with the same name"
         self._targets[target] = target_ref
@@ -265,7 +265,7 @@ class TreeVisitor:
         if method := getattr(self, "visit_" + name, None):
             return method(node)
         elif hasattr(node, "children"):
-            acc = {}
+            acc: dict[Any, list[Any]] = {}
             for c in node.children:
                 if c is None or isinstance(c, (str, bool)):
                     continue
@@ -374,16 +374,16 @@ class TreeReplacer:
                 new_children = []
                 if not hasattr(node, "children"):
                     raise ValueError(f"{node.__class__} has no children {node}")
-                for c in node.children:  # type: ignore
+                for c in node.children:
                     assert c is not None, f"{node=} has a None child"
                     assert isinstance(c, Node), c
                     replacement = self.generic_visit(c)
                     assert isinstance(replacement, list)
 
                     new_children.extend(replacement)
-                if node.children != new_children:  # type: ignore
+                if node.children != new_children:
                     self._cr += 1
-                node.children = new_children  # type: ignore
+                node.children = new_children
                 new_nodes = [node]
             assert isinstance(new_nodes, list)
             return new_nodes
@@ -504,7 +504,7 @@ def py_pep_hander(value):
 
 
 _MISSING_DIRECTIVES: list[str] = []
-_MISSING_INLINE_DIRECTIVES: list[str] = []
+_MISSING_INLINE_DIRECTIVES: list[tuple[str, str]] = []
 
 
 class DirectiveVisiter(TreeReplacer):

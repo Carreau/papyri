@@ -32,7 +32,7 @@ def test_find_beyond_decorators():
     config = Config(execute_doctests=True, infer=True)
     gen = Gen(dummy_progress=True, config=config)
 
-    api_object = APIObjectInfo("function", "", None, None, qa=None)
+    api_object = APIObjectInfo("function", "", None, "test_example", qa="test")
     doc, figs = gen.prepare_doc_for_one_object(
         ex1,
         NumpyDocString(""),
@@ -42,6 +42,7 @@ def test_find_beyond_decorators():
         api_object=api_object,
     )
 
+    assert doc.item_file is not None
     assert doc.item_file.endswith("test_gen.py")
 
 
@@ -62,6 +63,7 @@ def test_infer():
     if res is None:
         pytest.skip("jedi could not infer types")
 
+    assert res is not None
     results = list(res)
     x_fqns = [fqn for token, fqn in results if token == "x" and fqn]
     assert x_fqns, f"Expected jedi to infer a type for 'x': {results}"
@@ -131,7 +133,7 @@ def test_self():
     c = Config(dry_run=True, dummy_progress=True)
     g = Gen(False, config=c)
     g.collect_package_metadata("papyri", ".", {})
-    g.collect_api_docs("papyri", {"papyri.examples:example1", "papyri"})
+    g.collect_api_docs("papyri", list({"papyri.examples:example1", "papyri"}))
     assert g.data["papyri.examples:example1"].to_dict()["signature"] == {
         "type": "signature",
         "kind": "coroutine function",
@@ -198,7 +200,7 @@ def test_self_2():
     g = Gen(False, config=c)
     g.collect_package_metadata("papyri", ".", {})
     g.collect_api_docs(
-        "papyri", {"papyri.nodes:RefInfo", "papyri.nodes:RefInfo.__eq__"}
+        "papyri", list({"papyri.nodes:RefInfo", "papyri.nodes:RefInfo.__eq__"})
     )
 
     item_file = g.data["papyri.nodes:RefInfo"].to_dict()["item_file"]

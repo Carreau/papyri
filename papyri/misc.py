@@ -6,6 +6,7 @@ import ast
 import io
 import sys
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
+from typing import Any
 
 from rich.progress import Progress
 
@@ -29,13 +30,13 @@ class DummyP(Progress):
     replacement
     """
 
-    def add_task(*args, **kwargs):
+    def add_task(*args, **kwargs):  # type: ignore[override]
         pass
 
-    def advance(*args, **kwargs):
+    def advance(*args, **kwargs):  # type: ignore[override]
         pass
 
-    def update(*args, **kwargs):
+    def update(*args, **kwargs):  # type: ignore[override]
         pass
 
     def __enter__(self, *args, **kwargs):
@@ -94,7 +95,7 @@ class BlockExecutor:
         except Exception as e:
             raise type(e)(f"{module.body} {text}") from e
         exec(compile(ast.Module(nodes, []), name, "exec"), ns)
-        acc = []
+        acc: list[Any] = []
         with capture_displayhook(acc):
             exec(compile(ast.Interactive([interactive_node]), name, "single"), ns)
         if len(acc) == 1:

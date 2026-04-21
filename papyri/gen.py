@@ -1216,6 +1216,7 @@ class Gen:
     bdata: dict[str, bytes]
 
     def __init__(self, dummy_progress: bool, config: Config):
+        self.Progress: type[Progress]
         if dummy_progress:
             self.Progress = DummyP
         else:

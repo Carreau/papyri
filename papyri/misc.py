@@ -30,13 +30,13 @@ class DummyP(Progress):
     replacement
     """
 
-    def add_task(*args, **kwargs):  # type: ignore[override]
+    def add_task(*args, **kwargs):
         pass
 
-    def advance(*args, **kwargs):  # type: ignore[override]
+    def advance(*args, **kwargs):
         pass
 
-    def update(*args, **kwargs):  # type: ignore[override]
+    def update(*args, **kwargs):
         pass
 
     def __enter__(self, *args, **kwargs):

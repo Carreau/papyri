@@ -315,7 +315,7 @@ def test_parse_citation_block():
 
     assert len(citations) == 1, f"expected one Citation, got {citations!r}"
     assert citations[0].label == "CIT2002"
-    assert citations[0].children[0].children[0].value == "Book title, Author, Year."
+    assert citations[0].children[0].children[0].value == "Book title, Author, Year."  # type: ignore[union-attr]
 
 
 def test_citation_roundtrip():
@@ -329,4 +329,4 @@ def test_citation_roundtrip():
     decoded = encoder.decode(encoder.encode(original))
     assert isinstance(decoded, Citation)
     assert decoded.label == "CIT2002"
-    assert decoded.children[0].children[0].value == "Some ref."
+    assert decoded.children[0].children[0].value == "Some ref."  # type: ignore[union-attr]

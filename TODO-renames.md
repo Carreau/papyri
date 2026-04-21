@@ -11,61 +11,6 @@ require schema migration and are destructive to existing
 > consumers" phase. None of these names are part of a stable
 > contract yet — if that changes, re-scope.
 
-## 1. Drop all MyST references
-
-Papyri's IR is MyST-influenced but not MyST. The leaked `myst*` strings
-and the filename `myst_serialiser.py` imply a conformance we don't
-have. Scrub the term everywhere except in one historical note.
-
-### 1a. Node `type` strings (papyri/nodes.py)
-
-Drop the `myst` prefix from the three offenders; they serialize to a
-string consumed by nothing outside this repo.
-
-- [x] `nodes.py:274` `Directive.type = "mystDirective"` → `"directive"`
-- [x] `nodes.py:322` `Comment.type = "mystComment"` → `"comment"`
-- [x] `nodes.py:346` `Target.type = "mystTarget"` → `"target"`
-
-No viewer code reads these strings — the viewer dispatches on the
-`__type` field (Python class name via the CBOR encoder). Verify by
-grepping `viewer/` for the three literals before merging.
-
-### 1b. Rename `myst_serialiser.py`
-
-- [x] Rename module: `papyri/myst_serialiser.py` → `papyri/node_serializer.py`
-      (also drops the British spelling — the rest of the repo is
-      American).
-- [x] Update import in `papyri/common_ast.py:10`.
-- [x] Rewrite docstring at `papyri/myst_serialiser.py:1-11` to stop
-      framing the format as "the MyST JSON spec"; document what the
-      serializer actually does (internally-tagged Node → dict).
-
-### 1c. Comments / docstrings referencing MyST
-
-- [x] `papyri/nodes.py:189-193` — the "MyST-flavored AST nodes" banner
-      and the "M prefix remains for historical reasons" note.
-- [x] `papyri/nodes.py:792` — "Union type aliases (formerly in
-      myst_ast.py)".
-- [x] `papyri/ts.py:186` — "convert into Papyri/Myst nodes" → "Papyri
-      nodes".
-- [x] `papyri/ts.py:416,424-425,549,553-554` — local var `myst_acc`
-      → `children_acc` (or similar).
-- [x] `papyri/tree.py:557` — "Here we'll return MySt Code." docstring.
-- [x] `papyri/tree.py:645-653,846-851` — method `replace_MMystDirective`
-      (double-M typo!) → `replace_Directive`; rename local variable
-      `myst_directive` → `directive`.
-- [x] `papyri/serde.py:208-209` — "MyST-flavored classes carry a
-      `type` attribute..." → just "classes that define a `type`
-      string".
-
-### 1d. Historical mention
-
-- [x] `PLAN.md:151-152` — keep (it's real history: the
-      `take2.py`/`myst_ast.py` circular import fix). No change.
-- [x] `CLAUDE.md:50` — same, keep as history.
-- [x] `tools/vendor_scripts.sh:30` — `papyri/static/myst.js` fetch
-      from `mystjs@0.0.15`. Dead code; line already removed.
-
 ## 2. Storage "kind" vocabulary (highest-impact rename)
 
 `kind` currently takes values `module | docs | examples | meta |
@@ -111,7 +56,7 @@ Python's `Key` and `RefInfo`. Pick one set and use it everywhere.
       `module` → `package` and `path` → `qualname`. Update
       `_t()` tuple order if you keep the positional contract.
 - [ ] `RefInfo` fields (`nodes.py:429-432`): same rename. `RefInfo`
-      and `Key` now have identical shape — see item 6.
+      and `Key` now have identical shape — see item 4.
 - [ ] Update all `.module` / `.path` call sites (~40 uses, mostly in
       `crosslink.py`, `gen.py`, `__init__.py`).
 - [ ] Existing DBs are unreadable after the SQL migration. Document
@@ -155,26 +100,8 @@ Recommendation: fold. All three are near-trivial.
 If a fold is too invasive, the fallback is a rename to format-neutral
 names: `ExamplesSection` / `SeeAlsoSection` / `SignatureSection`.
 
-### 5b. Three "parameter" classes
-
-- [x] `papyri/nodes.py` `Param` → `DocParam` (docstring param entry).
-- [x] `papyri/nodes.py` `Parameters` — kept as the container name.
-- [x] `papyri/signature.py` `ParameterNode` → `SigParam`.
-
-### 5c. Field rename inside renamed `DocParam`
-
-- [x] `DocParam.param` → `DocParam.name`. Updated `__getitem__` and
-      `__repr__`; viewer `IrNode.astro` dispatch updated too.
-- [x] `DocParam.type_` → `DocParam.annotation`. Same rename across
-      the two gen.py constructor sites and the viewer.
-
 ### 5d. Small or abbreviated names
 
-- [x] `Fig` → `Figure`. Done; viewer `FIELD_ORDER[4024]` + `IrNode`
-      dispatch follow.
-- [x] `XRef` → `CrossRef`. Done; viewer `FIELD_ORDER[4002]` + dispatch
-      follow; `XRefShape` / `XRefResolution` helpers renamed to
-      `CrossRefShape` / `CrossRefResolution` for consistency.
 - [ ] `ThematicBreak` (nodes.py:358) → `Rule` (HTML-familiar) or
       leave. Not obviously a win; keeping for now.
 
@@ -243,31 +170,16 @@ fields. The difference is link-processing state.
 
 Not renaming: `gen`, `ingest`, `relink`, `describe`.
 
-## 9. Module filenames
-
-- [x] `papyri/miniserde.py` → `papyri/serde.py` (dropped "mini").
-- [x] `papyri/common_ast.py` → `papyri/node_base.py`. Kept separate
-      from `nodes.py` (folding was an option but `Base`/`Node` are
-      usefully its own import surface for the ~5 sites that only
-      need the base class).
-- [x] `papyri/miscs.py` → `papyri/misc.py` (singular).
-- [x] `papyri/vref.py` → `papyri/numpydoc_compat.py`. It's the
-      NumpyDocString subclass with a more-lenient section alias
-      table; new name says what it is.
-- [x] `papyri/myst_serialiser.py` → `papyri/node_serializer.py`
-      (covered in item 1b).
-
 ## 10. Viewer-side follow-ups
 
-Most of these are downstream of items 1, 2, 3, 5, 7. Listed here so
+Most of these are downstream of items 2, 3, 5, 7. Listed here so
 nothing falls through.
 
 - [ ] `viewer/src/lib/ir-reader.ts` — update `"module"` case (item 2),
-      any references to `RefInfo`/`Key` fields (item 3), `Param`
-      shape (item 5c), `arbitrary` (item 7).
+      any references to `RefInfo`/`Key` fields (item 3), `arbitrary`
+      (item 7).
 - [ ] `viewer/src/components/IrNode.astro` — dispatches on class
-      name; update every rename in item 5 (`Figure`, `CrossRef`,
-      `AdmonitionTitle`, etc.).
+      name; update every rename in item 5.
 - [ ] `viewer/src/pages/[pkg]/[ver]/[...slug].astro` — route param
       and glob patterns reference `module/`.
 - [ ] `viewer/src/pages/[pkg]/[ver]/docs/[...slug].astro` — `"docs"`
@@ -280,24 +192,21 @@ nothing falls through.
 
 Do these in this order — earlier items make later ones smaller.
 
-1. **Item 1 (MyST strip)** — low-risk, touches strings/comments only.
-   Lands first.
-2. **Item 5f (delete dead classes)** — shrinks the surface before
+1. **Item 5f (delete dead classes)** — shrinks the surface before
    anything else touches nodes.py.
-3. **Item 5a (Numpydoc prefix)** — removes three classes, fewer to
+2. **Item 5a (Numpydoc prefix)** — removes three classes, fewer to
    rename in later passes.
-4. **Item 5b/5c/5d/5e (node renames)** — one commit per group.
-5. **Item 7 (field renames)** — mechanical; do after class renames
+3. **Items 5d/5e (remaining node renames)** — one commit per group.
+4. **Item 7 (field renames)** — mechanical; do after class renames
    settle.
-6. **Item 2 (`kind="module"` → `"api"`)** — destructive for existing
+5. **Item 2 (`kind="module"` → `"api"`)** — destructive for existing
    bundles. Coordinate with viewer (item 10).
-7. **Item 3 (SQL column rename)** — destructive for existing DB.
+6. **Item 3 (SQL column rename)** — destructive for existing DB.
    Schema migration commit on its own.
-8. **Item 4 (`RefInfo` / `Key` merge)** — depends on items 3 and 5.
-9. **Item 6 (`GeneratedDoc` / `IngestedDoc` merge)** — largest
+7. **Item 4 (`RefInfo` / `Key` merge)** — depends on items 3 and 5.
+8. **Item 6 (`GeneratedDoc` / `IngestedDoc` merge)** — largest
    structural change; save for last.
-10. **Items 8, 9 (CLI + filenames)** — independent, pick them up
-    whenever convenient.
+9. **Item 8 (CLI commands)** — independent, pick up whenever convenient.
 
 ## Out of scope for this pass
 

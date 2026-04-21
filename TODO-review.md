@@ -5,24 +5,6 @@ Originated as a punch list from the codebase review on branch
 against `PLAN.md` — some items map to phases tracked there; that
 remains authoritative.
 
-## Phase 2 deliverables — all closed
-
-- [x] `docs/IR.md` — written.
-- [x] `papyri describe <qualname>` — implemented; accepts shorthand,
-      kind-prefixed, and full `pkg/ver/kind/id` forms. Fixed on
-      `main` after a colon-parsing bug and a missing CBOR tag import.
-- [x] All four known xfails replaced with real fixes. See
-      `PLAN.md` § Phase 2 for specifics.
-
-## Phase 3 viewer milestones — all closed
-
-- [x] M0 scaffolding, M1 single-page render, M2 crosslinks +
-      backrefs (better-sqlite3), M3 math (KaTeX SSR) + Shiki syntax
-      highlighting, M4 verified against numpy 2.3.5 (zero unhandled
-      nodes), M5 polish (search + 404 + dark mode).
-- [x] `.github/workflows/viewer.yml` runs `pnpm check`, `pnpm test`
-      (vitest, 35 cases), and `pnpm build` on `viewer/**` changes.
-
 ## Remaining code smells
 
 ### Still-open TODOs

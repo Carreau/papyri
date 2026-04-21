@@ -9,6 +9,7 @@ import {
   loadModule,
   loadCbor,
   collectNodes,
+  ALL_NODE_TYPES,
   type IRNode,
 } from "../../../../lib/ir-reader.ts";
 import { listDocs, listExamples } from "../../../../lib/nav.ts";
@@ -25,10 +26,9 @@ export async function getStaticPaths() {
 const { pkg, ver } = Astro.params;
 const { bundlePath } = Astro.props as { bundlePath: string };
 
-// Collect all configured node types across the bundle.
-const allTypes: ReadonlySet<string> = new Set(
-  Object.values(NODE_CONFIGS).flatMap((c) => [...c.types])
-);
+// Collect every known IR node type across the bundle.
+const allTypes: ReadonlySet<string> = ALL_NODE_TYPES;
+const DISPLAY_LIMIT = 1000;
 
 interface PageRef {
   label: string;
@@ -124,14 +124,16 @@ await Promise.all(
 );
 
 // Sort: group by type, then by value length within each type.
-const entries = [...valueMap.values()].sort((a, b) => {
+const allEntries = [...valueMap.values()].sort((a, b) => {
   const ta = (a.node as any).__type as string;
   const tb = (b.node as any).__type as string;
   if (ta !== tb) return ta.localeCompare(tb);
   return a.value.length - b.value.length || a.value.localeCompare(b.value);
 });
+const truncated = allEntries.length > DISPLAY_LIMIT;
+const entries = truncated ? allEntries.slice(0, DISPLAY_LIMIT) : allEntries;
 
-// Build per-type counts for the filter panel.
+// Build per-type counts for the filter panel (based on shown entries).
 const typeCounts = [...allTypes]
   .sort()
   .map((key) => ({
@@ -151,12 +153,14 @@ const typeCounts = [...allTypes]
   <p class="crumb"><a href={`/${pkg}/${ver}/`}>&larr; {pkg} {ver}</a></p>
   <h1>All nodes</h1>
   <p class="lede">
-    {entries.length} unique value{entries.length !== 1 ? "s" : ""} across {typeCounts.length} node type{
-      typeCounts.length !== 1 ? "s" : ""
-    }
+    {truncated ? (
+      <>Showing {DISPLAY_LIMIT} of {allEntries.length} unique values across {typeCounts.length} node type{typeCounts.length !== 1 ? "s" : ""}. Use the type filter to narrow results.</>
+    ) : (
+      <>{entries.length} unique value{entries.length !== 1 ? "s" : ""} across {typeCounts.length} node type{typeCounts.length !== 1 ? "s" : ""}</>
+    )}
   </p>
 
-  <NodeTypeFilter client:load listId="node-list" types={typeCounts} />
+  <NodeTypeFilter client:load listId="node-list" types={typeCounts} defaultChecked={false} />
 
   {
     entries.length === 0 ? (

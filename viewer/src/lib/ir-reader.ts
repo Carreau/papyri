@@ -197,6 +197,11 @@ const FIELD_ORDER: Record<number, { name: string; fields: string[] }> = {
   4063: { name: "CitationReference", fields: ["label"] },
 };
 
+/** All IR node type names known to this decoder. */
+export const ALL_NODE_TYPES: ReadonlySet<string> = new Set(
+  Object.values(FIELD_ORDER).map((s) => s.name)
+);
+
 /** Tag 4444: bare Python tuple; treated as a plain array. */
 const TUPLE_TAG = 4444;
 

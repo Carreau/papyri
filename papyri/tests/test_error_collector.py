@@ -3,13 +3,9 @@ import logging
 import pytest
 
 from papyri.errors import UnseenError
-from papyri.gen import ErrorCollector
+from papyri.gen import Config, ErrorCollector
 
 log = logging.getLogger(__name__)
-
-
-class Config:
-    pass
 
 
 def JustPasses():

@@ -10,10 +10,7 @@
 import { readFile } from "node:fs/promises";
 import { extname, join } from "node:path";
 import type { APIRoute } from "astro";
-import {
-  listIngestedBundles,
-  type IngestedBundle,
-} from "../../../../lib/ir-reader.ts";
+import { listIngestedBundles, type IngestedBundle } from "../../../../lib/ir-reader.ts";
 import { listFilesRecursive } from "../../../../lib/nav.ts";
 
 const MIME: Record<string, string> = {

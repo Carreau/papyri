@@ -44,7 +44,7 @@ void slug;
 const doc = await loadModule(bundlePath, qualname);
 
 function renderAnnotation(
-  ann: SigParamT["annotation"] | SignatureNodeT["return_annotation"],
+  ann: SigParamT["annotation"] | SignatureNodeT["return_annotation"]
 ): string | null {
   if (ann == null) return null;
   if (typeof ann === "string") return ann;
@@ -220,7 +220,9 @@ for (const b of backrefs) {
     doc.signature ? (
       <section class="signature">
         <h2>Signature</h2>
-        <pre><code>{formatSignature(doc.signature)}</code></pre>
+        <pre>
+          <code>{formatSignature(doc.signature)}</code>
+        </pre>
       </section>
     ) : null
   }
@@ -269,7 +271,9 @@ for (const b of backrefs) {
         <h2>Aliases</h2>
         <ul>
           {doc.aliases.map((a) => (
-            <li><code>{a}</code></li>
+            <li>
+              <code>{a}</code>
+            </li>
           ))}
         </ul>
       </section>
@@ -282,7 +286,9 @@ for (const b of backrefs) {
         <h2>Referenced by</h2>
         <ul class="qualnames">
           {backrefRows.map((b) => (
-            <li><a href={b.url}>{b.label}</a></li>
+            <li>
+              <a href={b.url}>{b.label}</a>
+            </li>
           ))}
         </ul>
       </section>

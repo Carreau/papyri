@@ -96,7 +96,7 @@ const LOGO_MIME: Record<string, string> = {
 
 async function logoDataUrl(
   bundlePath: string,
-  logoName: string | undefined,
+  logoName: string | undefined
 ): Promise<string | null> {
   // `meta/logo.*` is what `Ingester._ingest_logo` writes; older ingests
   // didn't do that, so fall back to whatever basename meta.cbor points at
@@ -158,7 +158,7 @@ interface TocTreeNode extends TypedNode {
 function refToHref(
   ref: LocalRefNode | RefInfoNode | null,
   pkg: string,
-  version: string,
+  version: string
 ): string | null {
   if (!ref) return null;
   // LocalRef carries no module/version; they come from the bundle context.
@@ -169,25 +169,15 @@ function refToHref(
     case "module":
       return `/${module}/${ver}/${path.replace(/:/g, "$")}/`;
     case "docs":
-      return `/${module}/${ver}/docs/${path
-        .split(":")
-        .map(encodeURIComponent)
-        .join("/")}/`;
+      return `/${module}/${ver}/docs/${path.split(":").map(encodeURIComponent).join("/")}/`;
     case "examples":
-      return `/${module}/${ver}/examples/${path
-        .split("/")
-        .map(encodeURIComponent)
-        .join("/")}/`;
+      return `/${module}/${ver}/examples/${path.split("/").map(encodeURIComponent).join("/")}/`;
     default:
       return null;
   }
 }
 
-function walkToc(
-  node: TocTreeNode,
-  pkg: string,
-  version: string,
-): TocItem {
+function walkToc(node: TocTreeNode, pkg: string, version: string): TocItem {
   const title = node.title ?? node.ref?.path ?? "(untitled)";
   return {
     title,
@@ -196,11 +186,7 @@ function walkToc(
   };
 }
 
-async function readToc(
-  bundlePath: string,
-  pkg: string,
-  version: string,
-): Promise<TocItem[]> {
+async function readToc(bundlePath: string, pkg: string, version: string): Promise<TocItem[]> {
   try {
     const raw = await loadCbor(join(bundlePath, "meta", "toc.cbor"));
     if (Array.isArray(raw)) {
@@ -276,7 +262,7 @@ function encodeExPath(p: string): string {
 function docsToEntries(
   pkg: string,
   version: string,
-  paths: string[],
+  paths: string[]
 ): { docs: NavEntry[]; tutorials: NavEntry[] } {
   const docs: NavEntry[] = [];
   const tutorials: NavEntry[] = [];
@@ -289,11 +275,7 @@ function docsToEntries(
   return { docs, tutorials };
 }
 
-function examplesToEntries(
-  pkg: string,
-  version: string,
-  paths: string[],
-): NavEntry[] {
+function examplesToEntries(pkg: string, version: string, paths: string[]): NavEntry[] {
   return paths.map((p) => ({
     name: p,
     href: `/${pkg}/${version}/examples/${encodeExPath(p)}/`,
@@ -308,11 +290,7 @@ export async function listExamples(bundlePath: string): Promise<string[]> {
   return listFilesRecursive(join(bundlePath, "examples"));
 }
 
-async function buildNav(
-  pkg: string,
-  version: string,
-  bundlePath: string,
-): Promise<BundleNav> {
+async function buildNav(pkg: string, version: string, bundlePath: string): Promise<BundleNav> {
   const [meta, toc, docPaths, examplePaths, qualnames] = await Promise.all([
     readMetaCbor(bundlePath),
     readToc(bundlePath, pkg, version),
@@ -340,7 +318,7 @@ async function buildNav(
 export async function loadBundleNav(
   pkg: string,
   version: string,
-  bundlePath: string,
+  bundlePath: string
 ): Promise<BundleNav> {
   const cached = _navCache.get(bundlePath);
   if (cached) return cached;

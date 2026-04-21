@@ -14,28 +14,48 @@ pre.code {
   padding: 0.75rem 1rem;
   overflow-x: auto;
 }
-pre.code code { background: transparent; padding: 0; }
+pre.code code {
+  background: transparent;
+  padding: 0;
+}
 
 /* Shiki emits inline styles for color, but we still want our own padding. */
-pre.code .shiki-line { display: block; }
+pre.code .shiki-line {
+  display: block;
+}
 
-dl.params { margin: 0; }
+dl.params {
+  margin: 0;
+}
 dl.params dt {
   margin: 0.5rem 0 0.1rem;
   font-family: var(--mono);
   font-size: 0.9rem;
 }
-dl.params dt .pname { background: transparent; padding: 0; color: var(--accent); }
-dl.params dt .ptype { color: var(--fg-muted); font-style: italic; }
-dl.params dd { margin: 0 0 0.25rem 1.25rem; }
-dl.params dd p { margin: 0.25rem 0; }
+dl.params dt .pname {
+  background: transparent;
+  padding: 0;
+  color: var(--accent);
+}
+dl.params dt .ptype {
+  color: var(--fg-muted);
+  font-style: italic;
+}
+dl.params dd {
+  margin: 0 0 0.25rem 1.25rem;
+}
+dl.params dd p {
+  margin: 0.25rem 0;
+}
 
 a.xref {
   color: var(--accent);
   text-decoration: none;
   border-bottom: 1px dotted var(--accent);
 }
-a.xref:hover { border-bottom-style: solid; }
+a.xref:hover {
+  border-bottom-style: solid;
+}
 .xref.unresolved {
   color: var(--fg-muted);
   border-bottom: 1px dotted var(--fg-muted);
@@ -47,7 +67,10 @@ aside.admonition {
   padding: 0.5rem 0.75rem;
   margin: 1rem 0;
 }
-aside.admonition .admonition-title { font-weight: 600; margin: 0 0 0.25rem; }
+aside.admonition .admonition-title {
+  font-weight: 600;
+  margin: 0 0 0.25rem;
+}
 
 details.fallback {
   background: var(--surface);
@@ -73,7 +96,10 @@ details.fallback pre {
 }
 
 /* KaTeX display math gets its own margin; inline math inherits line-height. */
-div.math { margin: 0.75rem 0; overflow-x: auto; }
+div.math {
+  margin: 0.75rem 0;
+  overflow-x: auto;
+}
 code.math-error {
   color: var(--math-error-fg);
   background: var(--math-error-bg);
@@ -91,15 +117,24 @@ code.role {
 }
 
 /* Definition / field lists from RST: term + description blocks. */
-dl.deflist, dl.fieldlist { margin: 0.75rem 0; }
-dl.deflist > dt, dl.fieldlist > dt {
+dl.deflist,
+dl.fieldlist {
+  margin: 0.75rem 0;
+}
+dl.deflist > dt,
+dl.fieldlist > dt {
   font-family: var(--mono);
   font-weight: 600;
   margin-top: 0.5rem;
 }
-dl.deflist > dd, dl.fieldlist > dd { margin-left: 1.25rem; }
+dl.deflist > dd,
+dl.fieldlist > dd {
+  margin-left: 1.25rem;
+}
 dl.deflist > dd > p:first-child,
-dl.fieldlist > dd > p:first-child { margin-top: 0.15rem; }
+dl.fieldlist > dd > p:first-child {
+  margin-top: 0.15rem;
+}
 
 /* Generic "directive" admonition for block directives we didn't specialise. */
 aside.directive {
@@ -122,8 +157,14 @@ aside.directive .directive-args {
   font-family: var(--mono);
 }
 
-.substitution { font-style: italic; color: var(--fg-muted); }
-.unimplemented { color: var(--fg-muted); font-style: italic; }
+.substitution {
+  font-style: italic;
+  color: var(--fg-muted);
+}
+.unimplemented {
+  color: var(--fg-muted);
+  font-style: italic;
+}
 
 /* Figures rendered from IR Fig nodes. Cap image width to the column so
    large plots don't force horizontal scroll on the main content. */

@@ -69,11 +69,11 @@ await Promise.all(
     } catch {
       return;
     }
-    addHits(
-      collectNodes(doc, config.types),
-      { label: qa, href: `/${pkg}/${ver}/${qa.replace(/:/g, "$")}/` },
-    );
-  }),
+    addHits(collectNodes(doc, config.types), {
+      label: qa,
+      href: `/${pkg}/${ver}/${qa.replace(/:/g, "$")}/`,
+    });
+  })
 );
 
 // Walk narrative docs
@@ -86,14 +86,11 @@ await Promise.all(
     } catch {
       return;
     }
-    addHits(
-      collectNodes(section, config.types),
-      {
-        label: docPath,
-        href: `/${pkg}/${ver}/docs/${docPath.split("/").map(encodeURIComponent).join("/")}/`,
-      },
-    );
-  }),
+    addHits(collectNodes(section, config.types), {
+      label: docPath,
+      href: `/${pkg}/${ver}/docs/${docPath.split("/").map(encodeURIComponent).join("/")}/`,
+    });
+  })
 );
 
 // Walk examples
@@ -106,19 +103,16 @@ await Promise.all(
     } catch {
       return;
     }
-    addHits(
-      collectNodes(section, config.types),
-      {
-        label: exPath,
-        href: `/${pkg}/${ver}/examples/${exPath.split("/").map(encodeURIComponent).join("/")}/`,
-      },
-    );
-  }),
+    addHits(collectNodes(section, config.types), {
+      label: exPath,
+      href: `/${pkg}/${ver}/examples/${exPath.split("/").map(encodeURIComponent).join("/")}/`,
+    });
+  })
 );
 
 // Sort by value length ascending so short formulas appear first
 const entries = [...valueMap.values()].sort(
-  (a, b) => a.value.length - b.value.length || a.value.localeCompare(b.value),
+  (a, b) => a.value.length - b.value.length || a.value.localeCompare(b.value)
 );
 
 // Build per-type counts for the filter panel (only shown when config has > 1 type)
@@ -150,15 +144,7 @@ const typeCounts = typeKeys.map((key) => ({
     {entries.length} unique value{entries.length !== 1 ? "s" : ""}
   </p>
 
-  {
-    showFilter && (
-      <NodeTypeFilter
-        client:load
-        listId="node-list"
-        types={typeCounts}
-      />
-    )
-  }
+  {showFilter && <NodeTypeFilter client:load listId="node-list" types={typeCounts} />}
 
   {
     entries.length === 0 ? (
@@ -169,7 +155,9 @@ const typeCounts = typeKeys.map((key) => ({
           <div class="node-entry" data-nodetype={entry.node.__type}>
             <dt>
               <span class="node-kind">{entry.node.__type}</span>
-              <div class="node-value"><IrNode node={entry.node} /></div>
+              <div class="node-value">
+                <IrNode node={entry.node} />
+              </div>
             </dt>
             <dd>
               <details class="node-refs">
@@ -178,7 +166,9 @@ const typeCounts = typeKeys.map((key) => ({
                 </summary>
                 <ul>
                   {entry.pages.map((p) => (
-                    <li><a href={p.href}>{p.label}</a></li>
+                    <li>
+                      <a href={p.href}>{p.label}</a>
+                    </li>
                   ))}
                 </ul>
               </details>

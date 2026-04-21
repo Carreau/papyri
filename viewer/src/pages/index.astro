@@ -25,23 +25,15 @@ const bundlesForFilter = ingested.map((b) => ({
     ingested.length === 0 ? (
       <div class="empty">
         No ingested bundles found. Generate one with
-        <code>papyri gen examples/papyri.toml --no-infer</code>, then ingest it
-        with <code>papyri ingest ~/.papyri/data/&lt;bundle&gt;</code>.
+        <code>papyri gen examples/papyri.toml --no-infer</code>, then ingest it with{" "}
+        <code>papyri ingest ~/.papyri/data/&lt;bundle&gt;</code>.
       </div>
     ) : (
       <>
-        <BundleGridSearch
-          client:load
-          bundles={bundlesForFilter}
-          gridId="bundle-card-grid"
-        />
+        <BundleGridSearch client:load bundles={bundlesForFilter} gridId="bundle-card-grid" />
         <div class="bundle-card-grid" id="bundle-card-grid">
           {ingested.map((b) => (
-            <BundleCard
-              pkg={b.pkg}
-              version={b.version}
-              bundlePath={b.path}
-            />
+            <BundleCard pkg={b.pkg} version={b.version} bundlePath={b.path} />
           ))}
         </div>
       </>

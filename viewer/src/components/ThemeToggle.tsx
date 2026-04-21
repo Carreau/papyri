@@ -1,11 +1,5 @@
 import { useEffect, useState, type ReactElement } from "react";
-import {
-  THEME_STORAGE_KEY,
-  applyTheme,
-  nextTheme,
-  parseTheme,
-  type Theme,
-} from "../lib/theme.ts";
+import { THEME_STORAGE_KEY, applyTheme, nextTheme, parseTheme, type Theme } from "../lib/theme.ts";
 
 // Tiny React island: reads the theme already applied by the inline head
 // script, flips it on click, writes it back to localStorage.
@@ -23,9 +17,7 @@ export default function ThemeToggle(): ReactElement {
       document.documentElement.getAttribute("data-theme") === "dark"
         ? "dark"
         : parseTheme(
-            typeof localStorage !== "undefined"
-              ? localStorage.getItem(THEME_STORAGE_KEY)
-              : null,
+            typeof localStorage !== "undefined" ? localStorage.getItem(THEME_STORAGE_KEY) : null
           );
     setTheme(current);
   }, []);

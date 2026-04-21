@@ -1,8 +1,8 @@
 ---
 import { join } from "node:path";
-import BundleLayout from "../../../../../layouts/BundleLayout.astro";
-import IrNode from "../../../../../components/IrNode.astro";
-import NodeTypeFilter from "../../../../../components/NodeTypeFilter.tsx";
+import BundleLayout from "../../../../layouts/BundleLayout.astro";
+import IrNode from "../../../../components/IrNode.astro";
+import NodeTypeFilter from "../../../../components/NodeTypeFilter.tsx";
 import {
   listIngestedBundles,
   listModules,
@@ -10,51 +10,64 @@ import {
   loadCbor,
   collectNodes,
   type IRNode,
-} from "../../../../../lib/ir-reader.ts";
-import { listDocs, listExamples } from "../../../../../lib/nav.ts";
-import { NODE_CONFIGS } from "../../../../../lib/node-configs.ts";
+} from "../../../../lib/ir-reader.ts";
+import { listDocs, listExamples } from "../../../../lib/nav.ts";
+import { NODE_CONFIGS } from "../../../../lib/node-configs.ts";
 
 export async function getStaticPaths() {
   const bundles = await listIngestedBundles();
-  const paths: Array<{
-    params: { pkg: string; ver: string; nodetype: string };
-    props: { bundlePath: string };
-  }> = [];
-  for (const b of bundles) {
-    for (const slug of Object.keys(NODE_CONFIGS)) {
-      paths.push({
-        params: { pkg: b.pkg, ver: b.version, nodetype: slug },
-        props: { bundlePath: b.path },
-      });
-    }
-  }
-  return paths;
+  return bundles.map((b) => ({
+    params: { pkg: b.pkg, ver: b.version },
+    props: { bundlePath: b.path },
+  }));
 }
 
-const { pkg, ver, nodetype } = Astro.params;
+const { pkg, ver } = Astro.params;
 const { bundlePath } = Astro.props as { bundlePath: string };
 
-const config = NODE_CONFIGS[nodetype!]!;
+// Collect all configured node types across the bundle.
+const allTypes: ReadonlySet<string> = new Set(
+  Object.values(NODE_CONFIGS).flatMap((c) => [...c.types]),
+);
 
 interface PageRef {
   label: string;
   href: string;
 }
 
-// Map from display value → one representative node + pages it appears on.
-const valueMap = new Map<string, { node: IRNode; value: string; pages: PageRef[] }>();
+interface NodeEntry {
+  node: IRNode;
+  value: string;
+  pages: PageRef[];
+}
+
+// Key: "<type>|<displayValue>" so same text under different types stays separate.
+const valueMap = new Map<string, NodeEntry>();
+
+function entryKey(type: string, val: string): string {
+  return `${type}\0${val}`;
+}
+
+function displayValue(n: IRNode): string | null {
+  // Delegate to the matching config's displayValue, fallback to JSON.
+  for (const cfg of Object.values(NODE_CONFIGS)) {
+    if (cfg.types.has((n as any).__type)) return cfg.displayValue(n);
+  }
+  return JSON.stringify(n).slice(0, 120);
+}
 
 function addHits(nodes: IRNode[], page: PageRef) {
   for (const n of nodes) {
-    const val = config.displayValue(n);
+    const val = displayValue(n);
     if (val === null) continue;
-    const existing = valueMap.get(val);
+    const k = entryKey((n as any).__type, val);
+    const existing = valueMap.get(k);
     if (existing) {
       if (!existing.pages.some((p) => p.href === page.href)) {
         existing.pages.push(page);
       }
     } else {
-      valueMap.set(val, { node: n, value: val, pages: [page] });
+      valueMap.set(k, { node: n, value: val, pages: [page] });
     }
   }
 }
@@ -70,7 +83,7 @@ await Promise.all(
       return;
     }
     addHits(
-      collectNodes(doc, config.types),
+      collectNodes(doc, allTypes),
       { label: qa, href: `/${pkg}/${ver}/${qa.replace(/:/g, "$")}/` },
     );
   }),
@@ -87,7 +100,7 @@ await Promise.all(
       return;
     }
     addHits(
-      collectNodes(section, config.types),
+      collectNodes(section, allTypes),
       {
         label: docPath,
         href: `/${pkg}/${ver}/docs/${docPath.split("/").map(encodeURIComponent).join("/")}/`,
@@ -107,7 +120,7 @@ await Promise.all(
       return;
     }
     addHits(
-      collectNodes(section, config.types),
+      collectNodes(section, allTypes),
       {
         label: exPath,
         href: `/${pkg}/${ver}/examples/${exPath.split("/").map(encodeURIComponent).join("/")}/`,
@@ -116,59 +129,52 @@ await Promise.all(
   }),
 );
 
-// Sort by value length ascending so short formulas appear first
-const entries = [...valueMap.values()].sort(
-  (a, b) => a.value.length - b.value.length || a.value.localeCompare(b.value),
-);
+// Sort: group by type, then by value length within each type.
+const entries = [...valueMap.values()].sort((a, b) => {
+  const ta = (a.node as any).__type as string;
+  const tb = (b.node as any).__type as string;
+  if (ta !== tb) return ta.localeCompare(tb);
+  return a.value.length - b.value.length || a.value.localeCompare(b.value);
+});
 
-// Build per-type counts for the filter panel (only shown when config has > 1 type)
-const typeKeys = [...config.types];
-const showFilter = typeKeys.length > 1;
-
-// Human-readable label for each sub-type: prefix "Inline" types accordingly
-function subtypeLabel(t: string): string {
-  if (t.startsWith("Inline")) return `Inline ${t.slice(6)}`;
-  return `Block ${t}`;
-}
-
-const typeCounts = typeKeys.map((key) => ({
-  key,
-  label: subtypeLabel(key),
-  count: entries.filter((e) => e.node.__type === key).length,
-}));
+// Build per-type counts for the filter panel.
+const typeCounts = [...allTypes]
+  .sort()
+  .map((key) => ({
+    key,
+    label: key,
+    count: entries.filter((e) => (e.node as any).__type === key).length,
+  }))
+  .filter((t) => t.count > 0);
 ---
 
 <BundleLayout
   pkg={pkg!}
   ver={ver!}
   bundlePath={bundlePath}
-  title={`${config.label} — ${pkg} ${ver} — Papyri viewer`}
+  title={`All nodes — ${pkg} ${ver} — Papyri viewer`}
 >
   <p class="crumb"><a href={`/${pkg}/${ver}/`}>&larr; {pkg} {ver}</a></p>
-  <h1>{config.label}</h1>
+  <h1>All nodes</h1>
   <p class="lede">
-    {entries.length} unique value{entries.length !== 1 ? "s" : ""}
+    {entries.length} unique value{entries.length !== 1 ? "s" : ""} across {typeCounts.length} node type{typeCounts.length !== 1 ? "s" : ""}
   </p>
 
-  {
-    showFilter && (
-      <NodeTypeFilter
-        client:load
-        listId="node-list"
-        types={typeCounts}
-      />
-    )
-  }
+  <NodeTypeFilter
+    client:load
+    listId="node-list"
+    types={typeCounts}
+  />
 
   {
     entries.length === 0 ? (
-      <p class="no-nodes">No {config.label.toLowerCase()} nodes in this bundle.</p>
+      <p class="no-nodes">No nodes found in this bundle.</p>
     ) : (
       <dl id="node-list" class="node-list">
         {entries.map((entry) => (
-          <div class="node-entry" data-nodetype={entry.node.__type}>
+          <div class="node-entry" data-nodetype={(entry.node as any).__type}>
             <dt>
-              <span class="node-kind">{entry.node.__type}</span>
+              <span class="node-kind">{(entry.node as any).__type}</span>
               <div class="node-value"><IrNode node={entry.node} /></div>
             </dt>
             <dd>

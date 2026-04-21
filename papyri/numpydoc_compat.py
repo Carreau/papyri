@@ -10,7 +10,7 @@ class NumpyDocString(nds.NumpyDocString):
     subclass a littel bit more lenient on parsing
     """
 
-    __slots__ = ()
+    __slots__ = ("ordered_sections",)
 
     aliases = {
         "Parameters": (

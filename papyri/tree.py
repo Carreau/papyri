@@ -104,14 +104,14 @@ def endswith(end, refs):
 
 
 class DelayedResolver:
-    _targets: dict[str, RefInfo]
+    _targets: dict[str, RefInfo | LocalRef]
     _references: dict[str, list[CrossRef]]
 
     def __init__(self):
         self._targets = dict()
         self._references = dict()
 
-    def add_target(self, target_ref: RefInfo, target: str):
+    def add_target(self, target_ref: RefInfo | LocalRef, target: str):
         assert target is not None
         assert target not in self._targets, "two targets with the same name"
         self._targets[target] = target_ref
@@ -504,7 +504,7 @@ def py_pep_hander(value):
 
 
 _MISSING_DIRECTIVES: list[str] = []
-_MISSING_INLINE_DIRECTIVES: list[str] = []
+_MISSING_INLINE_DIRECTIVES: list[tuple[str, str]] = []
 
 
 class DirectiveVisiter(TreeReplacer):

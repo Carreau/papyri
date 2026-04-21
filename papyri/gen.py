@@ -292,12 +292,11 @@ class ExecutionStatus(Enum):
 
 def _execute_inout(item):
     script = "\n".join(item.in_)
-    ce_status = ExecutionStatus.none
+    ce_status = ExecutionStatus.success
     try:
         compile(script, "<>", "exec")
-        ce_status = ExecutionStatus.compiled
     except SyntaxError:
-        ce_status = ExecutionStatus.syntax_error
+        ce_status = ExecutionStatus.failure
 
     return script, item.out, ce_status.value
 
@@ -565,7 +564,7 @@ def pack():
     target_dir = Path("~/.papyri/data").expanduser()
     dirs = [d for d in target_dir.glob("*") if d.is_dir()]
     for d in track(dirs, description=f"packing {len(dirs)} items..."):
-        shutil.make_archive(d, "zip", d)
+        shutil.make_archive(str(d), "zip", str(d))
 
 
 class DFSCollector:
@@ -651,12 +650,12 @@ class DFSCollector:
         try:
             qa = full_qual(obj)
         except Exception as e:
-            raise RuntimeError(f"error visiting {'.'.join(self.stack)}") from e
+            raise RuntimeError(f"error visiting {'.'.join(stack)}") from e
         if not qa:
             if (
                 "__doc__" not in stack
                 and hasattr(obj, "__doc__")
-                and not full_qual(type(obj)).startswith("builtins.")
+                and not full_qual(type(obj)).startswith("builtins.")  # type: ignore[union-attr]
             ):
                 # might be worth looking into like np.exp.
                 pass
@@ -813,11 +812,11 @@ class GeneratedDoc(Node):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         assert not isinstance(self._content, str)
-        self._dp = _OrderedDictProxy(self._ordered_sections, self._content)
+        self._dp = _OrderedDictProxy(self._ordered_sections, self._content)  # type: ignore[arg-type]
 
     @property
     def ordered_sections(self):
-        return tuple(self._ordered_sections)
+        return tuple(self._ordered_sections)  # type: ignore[arg-type]
 
     @property
     def content(self):
@@ -1470,7 +1469,7 @@ class Gen:
                 try:
                     dv = GenVisitor(
                         key,
-                        set(),
+                        frozenset(),
                         local_refs=set(),
                         aliases={},
                         version=self._meta["version"],
@@ -1519,7 +1518,7 @@ class Gen:
                 )
             return result
 
-        self._toc_nodes: list[TocTree] = _build_toc(raw_tree)
+        self._toc_nodes = _build_toc(raw_tree)
 
     def write_narrative(self, where: Path) -> None:
         if self._toc_nodes:
@@ -1993,9 +1992,9 @@ class Gen:
         examples_folder = self.config.examples_folder
         self.log.debug("Example Folder: %s", examples_folder)
         if examples_folder is not None:
-            examples_folder = Path(examples_folder).expanduser()
+            examples_path = Path(examples_folder).expanduser()
             examples_data = self.collect_examples(
-                examples_folder,
+                examples_path,
                 config=self.config,
             )
             for edoc, figs in examples_data:

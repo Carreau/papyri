@@ -137,7 +137,7 @@ def serialize(instance, annotation):
             if hasattr(instance, "_validate"):
                 instance._validate()
             data = {}
-            for k, v in get_type_hints(type(instance)).items():
+            for k, v in get_type_hints(type(instance)).items():  # type: ignore[arg-type]
                 try:
                     data[k] = serialize(getattr(instance, k), v)
                 except Exception as e:

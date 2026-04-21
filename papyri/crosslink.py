@@ -118,9 +118,9 @@ class IngestedDoc(Node):
         res: dict[Any, list[Any]] = {}
         for sec in (
             list(self.content.values())
-            + [self.example_section_data]  # type: ignore
-            + self.arbitrary  # type: ignore
-            + self.see_also  # type: ignore
+            + [self.example_section_data]
+            + self.arbitrary
+            + self.see_also
         ):
             for k, v in visitor.generic_visit(sec).items():
                 res.setdefault(k, []).extend(v)
@@ -445,7 +445,7 @@ class Ingester:
         known_refs, _ = find_all_refs(gstore)
         aliases: dict[str, str] = {}
         for key in gstore.glob((None, None, "meta", "aliases.cbor")):
-            aliases.update(cbor2.loads(gstore.get(key)))  # type: ignore [call-overload]
+            aliases.update(cbor2.loads(gstore.get(key)))
 
         rev_aliases = {Cannonical(v): FullQual(k) for k, v in aliases.items()}
 

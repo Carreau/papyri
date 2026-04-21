@@ -1092,7 +1092,7 @@ class PapyriDocTestRunner(doctest.DocTestRunner):
         if entries is None:
             entries = [("jedi failed", "jedi failed")]
         entries = _add_classes(entries)
-        tok_entries = [GenToken(*x) for x in entries]  # type: ignore
+        tok_entries = [GenToken(*x) for x in entries]
         return tok_entries
 
     def _next_figure_name(self):
@@ -1723,7 +1723,7 @@ class Gen:
                     del blob.content["Signature"]
                 else:
                     ss = None
-                sig = ObjectSignature.from_str(ss)  # type: ignore
+                sig = ObjectSignature.from_str(ss)
                 if sig is not None:
                     blob.signature = sig.to_node()
             except TextSignatureParsingFailed:

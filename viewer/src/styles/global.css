@@ -261,6 +261,8 @@ section.signature,
 section.doc-section,
 section.aliases {
   margin: 1.5rem 0;
+  /* Keep fixed header from obscuring anchor targets. */
+  scroll-margin-top: 1rem;
 }
 section h2 {
   font-size: 0.95rem;
@@ -270,6 +272,36 @@ section h2 {
   border-bottom: 1px solid var(--border);
   padding-bottom: 0.25rem;
   margin: 0 0 0.75rem;
+}
+
+/* Within-page mini-TOC on narrative doc pages. */
+nav.doc-toc {
+  border-left: 3px solid var(--border);
+  padding: 0.4rem 0 0.4rem 1rem;
+  margin: 0 0 1.5rem;
+}
+nav.doc-toc .doc-toc-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-muted);
+  margin: 0 0 0.35rem;
+}
+nav.doc-toc ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+nav.doc-toc li {
+  margin: 0.15rem 0;
+}
+nav.doc-toc a {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 0.875rem;
+}
+nav.doc-toc a:hover {
+  text-decoration: underline;
 }
 
 section.signature pre {

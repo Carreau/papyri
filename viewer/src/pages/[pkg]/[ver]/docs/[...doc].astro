@@ -49,6 +49,24 @@ function sectionChildren(s: SectionNode): IRNode[] {
   return Array.isArray(s.children) ? s.children : [];
 }
 
+// Produce a stable HTML id from a heading string.
+function slugify(title: string): string {
+  return (
+    title
+      .toLowerCase()
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9-]/g, "")
+      .replace(/^-+|-+$/g, "") || "section"
+  );
+}
+
+// Section anchor: prefer the RST target label (explicit ``.. _label:``),
+// fall back to the slugified title. Returns undefined when there is no title.
+function sectionId(s: SectionNode): string | undefined {
+  if (!s.title) return undefined;
+  return s.target ?? slugify(s.title);
+}
+
 // Mirror the qualname page's resolveXref: close over the cached DB handle
 // so XRefs become resolved links at render time.
 interface XRefShape {
@@ -81,7 +99,18 @@ function resolveXref(raw: unknown): { url: string; label: string } | null {
   return { url, label };
 }
 
+// Use the first section's RST title as the visible <h1>. Narrative docs
+// store their document-level heading in arbitrary[0].title; falling back to
+// doc.qa avoids showing raw IR keys like "config:details".
+const displayTitle = sections[0]?.title || doc.qa || docPath;
 const pageTitle = doc.qa || docPath;
+
+// If the first section's title became the page <h1>, suppress its <h2>
+// inside the body so the heading isn't rendered twice.
+const firstTitleIsH1 = sections.length > 0 && sections[0].title === displayTitle;
+
+// TOC: sections with titles, skipping the first when its title is the <h1>.
+const tocEntries = sections.filter((s, i) => s.title && !(i === 0 && firstTitleIsH1));
 ---
 
 <BundleLayout
@@ -98,22 +127,41 @@ const pageTitle = doc.qa || docPath;
 
   <header class="qa-header">
     <p class="kind">Doc</p>
-    <h1>{pageTitle}</h1>
+    <h1>{displayTitle}</h1>
     <p class="source"><code>docs/{docPath}</code></p>
   </header>
+
+  {
+    tocEntries.length >= 2 && (
+      <nav class="doc-toc" aria-label="On this page">
+        <p class="doc-toc-label">On this page</p>
+        <ul>
+          {tocEntries.map((s) => (
+            <li>
+              <a href={`#${sectionId(s)}`}>{s.title}</a>
+            </li>
+          ))}
+        </ul>
+      </nav>
+    )
+  }
 
   {
     sections.length === 0 ? (
       <p class="lede">This doc is empty.</p>
     ) : (
-      sections.map((s) => (
-        <section class="doc-section">
-          {s.title ? <h2>{s.title}</h2> : null}
-          {sectionChildren(s).map((c) => (
-            <IrNode node={c} resolveXref={resolveXref} />
-          ))}
-        </section>
-      ))
+      sections.map((s, i) => {
+        const id = sectionId(s);
+        const showH2 = s.title && !(i === 0 && firstTitleIsH1);
+        return (
+          <section class="doc-section" id={id}>
+            {showH2 ? <h2>{s.title}</h2> : null}
+            {sectionChildren(s).map((c) => (
+              <IrNode node={c} resolveXref={resolveXref} />
+            ))}
+          </section>
+        );
+      })
     )
   }
 </BundleLayout>

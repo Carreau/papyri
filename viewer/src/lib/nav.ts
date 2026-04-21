@@ -140,28 +140,41 @@ interface RefInfoNode extends TypedNode {
   path: string;
 }
 
+interface LocalRefNode extends TypedNode {
+  __type: "LocalRef";
+  kind: string;
+  path: string;
+}
+
 interface TocTreeNode extends TypedNode {
   __type: "TocTree";
   children: TocTreeNode[];
   title: string | null;
-  ref: RefInfoNode | null;
+  ref: LocalRefNode | null;
   open: boolean;
   current: boolean;
 }
 
-function refToHref(ref: RefInfoNode | null): string | null {
+function refToHref(
+  ref: LocalRefNode | RefInfoNode | null,
+  pkg: string,
+  version: string,
+): string | null {
   if (!ref) return null;
-  const { module, version, kind, path } = ref;
+  // LocalRef carries no module/version; they come from the bundle context.
+  const module = ref.__type === "RefInfo" ? ref.module : pkg;
+  const ver = ref.__type === "RefInfo" ? ref.version : version;
+  const { kind, path } = ref;
   switch (kind) {
     case "module":
-      return `/${module}/${version}/${path.replace(/:/g, "$")}/`;
+      return `/${module}/${ver}/${path.replace(/:/g, "$")}/`;
     case "docs":
-      return `/${module}/${version}/docs/${path
+      return `/${module}/${ver}/docs/${path
         .split(":")
         .map(encodeURIComponent)
         .join("/")}/`;
     case "examples":
-      return `/${module}/${version}/examples/${path
+      return `/${module}/${ver}/examples/${path
         .split("/")
         .map(encodeURIComponent)
         .join("/")}/`;
@@ -170,25 +183,33 @@ function refToHref(ref: RefInfoNode | null): string | null {
   }
 }
 
-function walkToc(node: TocTreeNode): TocItem {
+function walkToc(
+  node: TocTreeNode,
+  pkg: string,
+  version: string,
+): TocItem {
   const title = node.title ?? node.ref?.path ?? "(untitled)";
   return {
     title,
-    href: refToHref(node.ref ?? null),
-    children: (node.children ?? []).map(walkToc),
+    href: refToHref(node.ref ?? null, pkg, version),
+    children: (node.children ?? []).map((n) => walkToc(n, pkg, version)),
   };
 }
 
-async function readToc(bundlePath: string): Promise<TocItem[]> {
+async function readToc(
+  bundlePath: string,
+  pkg: string,
+  version: string,
+): Promise<TocItem[]> {
   try {
     const raw = await loadCbor(join(bundlePath, "meta", "toc.cbor"));
     if (Array.isArray(raw)) {
-      return raw.map((n) => walkToc(n as TocTreeNode));
+      return raw.map((n) => walkToc(n as TocTreeNode, pkg, version));
     }
     if (raw && (raw as TocTreeNode).__type === "TocTree") {
       // Single-root case: unwrap so the sidebar isn't wrapped in an extra
       // layer (unless the root itself carries a title + no children).
-      const t = walkToc(raw as TocTreeNode);
+      const t = walkToc(raw as TocTreeNode, pkg, version);
       return t.children.length > 0 ? t.children : [t];
     }
   } catch {
@@ -294,7 +315,7 @@ async function buildNav(
 ): Promise<BundleNav> {
   const [meta, toc, docPaths, examplePaths, qualnames] = await Promise.all([
     readMetaCbor(bundlePath),
-    readToc(bundlePath),
+    readToc(bundlePath, pkg, version),
     listDocs(bundlePath),
     listExamples(bundlePath),
     listModules(bundlePath),

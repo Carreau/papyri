@@ -23,7 +23,6 @@ from .nodes import (
     Section,
     SeeAlsoItem,
     Text,
-    TocTree,
     encoder,
 )
 from .signature import SignatureNode
@@ -317,32 +316,13 @@ class Ingester:
                 encoder.encode(doc),
                 [],
             )
-        tocfile = path / "toc.json"
+        tocfile = path / "toc.cbor"
         if module is None:
             return
         if tocfile.exists():
-            toc = json.loads((path / "toc.json").read_text())
-            if not toc.keys():
-                log.debug("No narrative.")
-                return
-            titles = toc["titles"]
-            tree = toc["tree"]
-
-            def make_toc(tree, titles, module, version):
-                tk = []
-                for k, v in tree.items():
-                    children = make_toc(v, titles, module, version)
-                    tk.append(
-                        TocTree(
-                            children, titles[k], RefInfo(module, version, "docs", k)
-                        )
-                    )
-                return tk
-
-            data = encoder.encode(make_toc(tree, titles, module, version))
             gstore.put(
                 Key(module, version, "meta", "toc.cbor"),
-                data,
+                tocfile.read_bytes(),
                 [],
             )
 

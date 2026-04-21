@@ -31,6 +31,7 @@ from .nodes import (
     InlineRole,
     Link,
     ListItem,
+    LocalRef,
     Paragraph,
     RefInfo,
     SubstitutionDef,
@@ -296,7 +297,7 @@ class TreeVisitor:
             return {}
         elif isinstance(
             node,
-            (RefInfo, Options, ThematicBreak, SubstitutionDef, CitationReference),
+            (LocalRef, RefInfo, Options, ThematicBreak, SubstitutionDef, CitationReference),
         ):
             return {}
         else:
@@ -822,9 +823,7 @@ def _obj_from_path(parts):
 class GenVisitor(DirectiveVisiter):
     def visit_Section(self, node):
         if node.target:
-            RESOLVER.add_target(
-                RefInfo(self.module, self.version, "docs", node.target), node.target
-            )
+            RESOLVER.add_target(LocalRef("docs", node.target), node.target)
 
     def replace_Fig(self, fig):
         # todo: add version number here

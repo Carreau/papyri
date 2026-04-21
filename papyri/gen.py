@@ -1268,7 +1268,7 @@ class Gen:
 
         self.data = {}
         self.bdata = {}
-        self._meta: dict[str, dict[FullQual, Cannonical]] = {}
+        self._meta: dict[str, Any] = {}
         self.examples = {}
         self.docs = {}
         self._toc_nodes: list[TocTree] = []

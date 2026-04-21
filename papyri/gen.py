@@ -288,15 +288,19 @@ class ExecutionStatus(Enum):
     success = "success"
     failure = "failure"
     unexpected_exception = "unexpected_exception"
+    none = "none"
+    compiled = "compiled"
+    syntax_error = "syntax_error"
 
 
 def _execute_inout(item):
     script = "\n".join(item.in_)
-    ce_status = ExecutionStatus.success
+    ce_status = ExecutionStatus.none
     try:
         compile(script, "<>", "exec")
+        ce_status = ExecutionStatus.compiled
     except SyntaxError:
-        ce_status = ExecutionStatus.failure
+        ce_status = ExecutionStatus.syntax_error
 
     return script, item.out, ce_status.value
 

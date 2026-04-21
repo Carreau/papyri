@@ -84,7 +84,7 @@ jobs:
       with:
         version: latest
     - name: Set up Node.js
-      uses: actions/setup-node@11bd08d0f111e8e37fc6e7a01857e59af1ba51d8  # v4
+      uses: actions/setup-node@v4  # v4
       with:
         node-version: "20"
         cache: "pnpm"

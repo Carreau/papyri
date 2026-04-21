@@ -189,15 +189,12 @@ class CitationReference(Node):
     """
     Inline reference to a citation, from RST source like ``[CIT2002]_``.
 
-    ``label`` carries the citation name (the text between the brackets, e.g.
-    ``"CIT2002"``). ``content`` is the displayed text (e.g. ``"[CIT2002]"``).
-    The renderer anchors this to ``#cite-<label>`` and uses ``content`` as the
-    link text.
+    ``label`` carries the citation name (e.g. ``"CIT2002"``). The renderer
+    displays it as ``[label]`` and anchors it to ``#cite-<label>``.
     """
 
     type = "citationReference"
     label: str
-    content: str = ""
 
 
 @register(4064)

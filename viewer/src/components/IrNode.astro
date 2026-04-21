@@ -245,7 +245,7 @@ const codeHtml =
   ) : type === "CitationReference" ? (
     // RST ``[label]_`` — link to the in-page Citation block with id="cite-<label>".
     <a class="citation-reference" href={`#cite-${(node as any).label}`}>
-      {(node as any).content || `[${(node as any).label}]`}
+      [{(node as any).label}]
     </a>
   ) : type === "Citation" ? (
     // RST ``.. [label] body`` — block-level citation definition rendered with

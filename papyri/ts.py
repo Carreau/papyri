@@ -310,8 +310,7 @@ class TSVisitor:
         else:
             # Defensive fallback for grammar shapes we haven't seen.
             label = text.strip("[]_")
-        content = f"[{label}]"
-        return [CitationReference(label=label, content=content)]
+        return [CitationReference(label=label)]
 
     def visit_transition(self, node):
         return [ThematicBreak()]

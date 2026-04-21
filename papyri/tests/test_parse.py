@@ -221,7 +221,6 @@ def test_parse_citation_reference():
         f"expected one CitationReference among {paragraph_node.children!r}"
     )
     assert cites[0].label == "CIT2002"
-    assert cites[0].content == "[CIT2002]"
 
 
 def test_parse_citation_reference_does_not_raise():
@@ -236,7 +235,7 @@ def test_parse_citation_reference_does_not_raise():
 def test_parse_citation_reference_multiple():
     """
     Multiple citation references in the same paragraph should each produce
-    a CitationReference with the correct label and content.
+    a CitationReference with the correct label.
     """
     from papyri.nodes import CitationReference
 
@@ -248,7 +247,6 @@ def test_parse_citation_reference_multiple():
     assert isinstance(paragraph_node, Paragraph)
     cites = [c for c in paragraph_node.children if isinstance(c, CitationReference)]
     assert [c.label for c in cites] == ["Smith2020", "Jones1999"]
-    assert [c.content for c in cites] == ["[Smith2020]", "[Jones1999]"]
 
 
 def test_parse_example_with_citations_docstring():
@@ -282,15 +280,14 @@ def test_parse_example_with_citations_docstring():
 def test_citation_reference_roundtrip():
     """
     CitationReference should survive a CBOR encode/decode roundtrip via the
-    shared IR encoder, confirming tag 4063 carries both label and content.
+    shared IR encoder, confirming CBOR tag 4063 is wired in.
     """
     from papyri.nodes import CitationReference, encoder
 
-    original = CitationReference(label="CIT2002", content="[CIT2002]")
+    original = CitationReference(label="CIT2002")
     decoded = encoder.decode(encoder.encode(original))
     assert isinstance(decoded, CitationReference)
     assert decoded.label == "CIT2002"
-    assert decoded.content == "[CIT2002]"
 
 
 def test_parse_citation_block():

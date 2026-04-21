@@ -306,25 +306,37 @@ class TSVisitor:
 
     def visit_reference(self, node):
         """
-        TODO:
+        RST hyperlink references: `text <target>`_ or `text <target>`__
 
-        Currently we parse that as a directive, but actually it should be a reference
-        and according to https://docutils.sourceforge.io/docs/ref/rst/restructuredtext.html#hyperlink-references,
-        there might be one or two trailing underscore, which we should pay attention to.
-
+        Single underscore (_) = named reference to a target definition.
+        Double underscore (__) = anonymous reference to an implicit target.
         """
         full_text = self.as_text(node)
         if "`" not in full_text:
-            # TODO reference do not need to be in backticks,
-            # though it conflict with some things like numpy
-            # direct references to np.bool_, np.complex64_ (see pandas docs for example)
-            # we should likely have a way to handle that.
+            # Reference without backticks: plain text or identifier like np.bool_
             _text = full_text
         else:
-            _text, trailing = (
-                self.as_text(node)[1:].replace("\n", " ").rsplit("`", maxsplit=1)
-            )
-            assert trailing in ("_", "__")
+            try:
+                _text, trailing = (
+                    self.as_text(node)[1:].replace("\n", " ").rsplit("`", maxsplit=1)
+                )
+                if trailing not in ("_", "__"):
+                    log.warning(
+                        "Hyperlink reference has unexpected trailing %r "
+                        "(expected '_' or '__') in (%s); rendering as plain text.",
+                        trailing,
+                        self._qa,
+                    )
+                    return [Text(self.as_text(node))]
+            except (ValueError, IndexError) as e:
+                log.warning(
+                    "Failed to parse hyperlink reference %r in (%s): %s; "
+                    "rendering as plain text.",
+                    full_text,
+                    self._qa,
+                    e,
+                )
+                return [Text(full_text)]
         return [InlineRole(_text, None, None)]
 
     def visit_interpreted_text(self, node):
@@ -465,7 +477,12 @@ class TSVisitor:
 
     def visit_text(self, node):
         text = self.as_text(node)
-        assert not text.startswith(":func:")
+        if text.startswith(":func:"):
+            log.warning(
+                "Text node unexpectedly starts with ':func:' in (%s); "
+                "this may indicate a parsing issue with roles.",
+                self._qa,
+            )
         t = Text(text)
         return [t]
 

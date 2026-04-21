@@ -285,6 +285,9 @@ from enum import Enum
 
 
 class ExecutionStatus(Enum):
+    none = "none"
+    compiled = "compiled"
+    syntax_error = "syntax_error"
     success = "success"
     failure = "failure"
     unexpected_exception = "unexpected_exception"
@@ -651,12 +654,13 @@ class DFSCollector:
         try:
             qa = full_qual(obj)
         except Exception as e:
-            raise RuntimeError(f"error visiting {'.'.join(self.stack)}") from e
+            raise RuntimeError(f"error visiting {'.'.join(stack)}") from e
         if not qa:
             if (
                 "__doc__" not in stack
                 and hasattr(obj, "__doc__")
-                and not full_qual(type(obj)).startswith("builtins.")
+                and (type_qual := full_qual(type(obj)))
+                and not type_qual.startswith("builtins.")
             ):
                 # might be worth looking into like np.exp.
                 pass
@@ -813,6 +817,7 @@ class GeneratedDoc(Node):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         assert not isinstance(self._content, str)
+        assert self._ordered_sections is not None
         self._dp = _OrderedDictProxy(self._ordered_sections, self._content)
 
     @property
@@ -1470,8 +1475,8 @@ class Gen:
                 try:
                     dv = GenVisitor(
                         key,
-                        set(),
-                        local_refs=set(),
+                        frozenset(),
+                        local_refs=frozenset(),
                         aliases={},
                         version=self._meta["version"],
                         config=self.config.directives,
@@ -1519,7 +1524,7 @@ class Gen:
                 )
             return result
 
-        self._toc_nodes: list[TocTree] = _build_toc(raw_tree)
+        self._toc_nodes = _build_toc(raw_tree)
 
     def write_narrative(self, where: Path) -> None:
         if self._toc_nodes:
@@ -1993,9 +1998,9 @@ class Gen:
         examples_folder = self.config.examples_folder
         self.log.debug("Example Folder: %s", examples_folder)
         if examples_folder is not None:
-            examples_folder = Path(examples_folder).expanduser()
+            examples_folder_path = Path(examples_folder).expanduser()
             examples_data = self.collect_examples(
-                examples_folder,
+                examples_folder_path,
                 config=self.config,
             )
             for edoc, figs in examples_data:

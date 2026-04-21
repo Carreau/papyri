@@ -71,7 +71,7 @@ class Node(Base):
     def from_dict(cls, data):
         return deserialize(cls, cls, data)
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(
             tuple(
                 tuple(getattr(self, x))

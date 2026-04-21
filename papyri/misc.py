@@ -94,7 +94,7 @@ class BlockExecutor:
         except Exception as e:
             raise type(e)(f"{module.body} {text}") from e
         exec(compile(ast.Module(nodes, []), name, "exec"), ns)
-        acc = []
+        acc: list[object] = []
         with capture_displayhook(acc):
             exec(compile(ast.Interactive([interactive_node]), name, "single"), ns)
         if len(acc) == 1:

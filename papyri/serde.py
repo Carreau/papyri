@@ -66,7 +66,7 @@ either 2 Authors or 2 Reviewers.
 
 import types
 from functools import lru_cache
-from typing import Union
+from typing import Union, cast, Hashable
 from typing import get_type_hints as gth
 
 base_types = {int, str, bool, type(None)}
@@ -84,9 +84,9 @@ def _union_args(annotation) -> tuple:
     return annotation.__args__
 
 
-@lru_cache(150)
-def get_type_hints(type_):
-    return gth(type_)
+@lru_cache(150)  # type: ignore[misc]
+def get_type_hints(type_: Hashable) -> dict:
+    return gth(type_)  # type: ignore[arg-type]
 
 
 def serialize(instance, annotation):

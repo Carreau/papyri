@@ -22,7 +22,7 @@ class FullQual(str):
         return self._qa.split(":")
 
     def root(self):
-        return self.module.split(".")[0]
+        return self.module()[0].split(".")[0]
 
 
 Cannonical = NewType("Cannonical", str)

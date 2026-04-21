@@ -104,14 +104,14 @@ def endswith(end, refs):
 
 
 class DelayedResolver:
-    _targets: dict[str, RefInfo]
+    _targets: dict[str, RefInfo | LocalRef]
     _references: dict[str, list[CrossRef]]
 
     def __init__(self):
         self._targets = dict()
         self._references = dict()
 
-    def add_target(self, target_ref: RefInfo, target: str):
+    def add_target(self, target_ref: RefInfo | LocalRef, target: str):
         assert target is not None
         assert target not in self._targets, "two targets with the same name"
         self._targets[target] = target_ref
@@ -265,7 +265,7 @@ class TreeVisitor:
         if method := getattr(self, "visit_" + name, None):
             return method(node)
         elif hasattr(node, "children"):
-            acc = {}
+            acc: dict[type, list[Node]] = {}
             for c in node.children:
                 if c is None or isinstance(c, (str, bool)):
                     continue
@@ -504,7 +504,7 @@ def py_pep_hander(value):
 
 
 _MISSING_DIRECTIVES: list[str] = []
-_MISSING_INLINE_DIRECTIVES: list[str] = []
+_MISSING_INLINE_DIRECTIVES: list[tuple[str | None, str | None]] = []
 
 
 class DirectiveVisiter(TreeReplacer):

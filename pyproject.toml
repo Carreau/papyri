@@ -38,6 +38,7 @@ Home = "https://github.com/carreau/papyri"
 [tool.mypy]
 python_version = '3.14'
 ignore_missing_imports = true
+check_untyped_defs = true
 
 [tool.ruff]
 # Pin below 3.14 so ruff's formatter doesn't auto-apply PEP 758

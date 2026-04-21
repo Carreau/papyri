@@ -66,7 +66,7 @@ class Node:
         current_byte = self.start_byte
         current_point = self.start_point
 
-        new_nodes = []
+        new_nodes: list[Node] = []
         if self.node.children:
             for n in self.node.children:
                 if n.start_byte != current_byte:
@@ -254,7 +254,7 @@ class TSVisitor:
         return nacc
 
     def visit(self, node):
-        acc = []
+        acc: list[Any] = []
         # Tree-sitter produces ERROR nodes when it can't reconcile a run of
         # tokens with any grammar rule. Dropping the whole node loses
         # content; instead, surface the raw text as a Text node so the
@@ -465,7 +465,7 @@ class TSVisitor:
 
     def visit_text(self, node):
         text = self.as_text(node)
-        assert not text.startswith(":func:"), breakpoint()
+        assert not text.startswith(":func:")
         t = Text(text)
         return [t]
 
@@ -545,7 +545,7 @@ class TSVisitor:
             # blah blah reference and new line with parenthesis
             # (like a year here)
             # ```
-            assert len(set_post_a) == 1, breakpoint()
+            assert len(set_post_a) == 1
             post_a = next(iter(set_post_a))
             # TODO: fails with pandas.compat._constants
             assert len(post_text) >= len(self.as_text(tc)), self.as_text(tc)
@@ -727,8 +727,7 @@ class TSVisitor:
 
         role = self.as_text(_role)
 
-        groups = itertools.groupby(body_children, lambda x: x.type)
-        groups = [(k, list(v)) for k, v in groups]
+        groups: list[tuple[Any, list[Any]]] = [(k, list(v)) for k, v in itertools.groupby(body_children, lambda x: x.type)]
         for k, _ in groups:
             assert k in {"arguments", "content", "options"}, k
 
@@ -751,7 +750,7 @@ class TSVisitor:
             padding = (content_node[0].start_point[1] - _1.start_point[1]) * " "
             content = dedent(padding + content).lstrip(" ")
             argument = ""
-            options = []
+            options: list[tuple[str, str]] = []
             groups = []
             children = []
 

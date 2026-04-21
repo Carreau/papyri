@@ -115,7 +115,7 @@ def test_parse_space():
         "test_parse_space",
     )
     assert (
-        section.children[0].children[0].value
+        section.children[0].children[0].value  # type: ignore[union-attr]
         == "Element-wise maximum of two arrays, propagating any NaNs."
     )
 
@@ -132,11 +132,11 @@ def test_parse_no_newline():
     reference`_ does not either.""").encode()
 
     [section] = parse(data, "test_parse_space")
-    text0, directive, text1, reference, text2 = section.children[0].children
-    assert "\n" not in directive.value
-    assert directive.value == "this interpreted_text"
-    assert "\n" not in reference.value
-    assert reference.value == "this reference"
+    text0, directive, text1, reference, text2 = section.children[0].children  # type: ignore[union-attr]
+    assert "\n" not in directive.value  # type: ignore
+    assert directive.value == "this interpreted_text"  # type: ignore[union-attr]
+    assert "\n" not in reference.value  # type: ignore
+    assert reference.value == "this reference"  # type: ignore[union-attr]
 
 
 def test_backtick_trailing_alpha_suffix():
@@ -151,7 +151,7 @@ def test_backtick_trailing_alpha_suffix():
     data = b"Returns `None`s or `ndarray`s depending on input."
     [section] = parse(data, "test_backtick_trailing_alpha_suffix")
 
-    para_children = section.children[0].children
+    para_children = section.children[0].children  # type: ignore[union-attr]
     for node in para_children:
         if isinstance(node, InlineRole):
             assert "`" not in node.value
@@ -162,7 +162,7 @@ def test_backtick_trailing_alpha_no_role():
     data = b"Pass :class:`True`s to enable."
     [section] = parse(data, "test_backtick_trailing_alpha_no_role")
 
-    para_children = section.children[0].children
+    para_children = section.children[0].children  # type: ignore[union-attr]
     # tree-sitter may or may not recognise :class:`True`s as a roled node
     # (the trailing `s` can prevent role recognition); either outcome is
     # acceptable, but if a role IS produced its value must not contain a backtick.
@@ -185,9 +185,9 @@ def test_backtick_genuine_stray_backtick():
 def test_parse_reference():
     [section] = parse(b"This is a `reference <to this>`_", "test_parse_reference")
     [paragraph] = section.children
-    [text, reference] = paragraph.children
-    assert reference.value == "reference <to this>"
-    assert text.value == "This is a "
+    [text, reference] = paragraph.children  # type: ignore[union-attr]
+    assert reference.value == "reference <to this>"  # type: ignore[union-attr]
+    assert text.value == "This is a "  # type: ignore[union-attr]
 
 
 def test_parse_citation_reference():
@@ -202,9 +202,9 @@ def test_parse_citation_reference():
         b"See [CIT2002]_ for more details.", "test_parse_citation_reference"
     )
     [paragraph] = section.children
-    cites = [c for c in paragraph.children if isinstance(c, CitationReference)]
+    cites = [c for c in paragraph.children if isinstance(c, CitationReference)]  # type: ignore[union-attr]
     assert len(cites) == 1, (
-        f"expected one CitationReference among {paragraph.children!r}"
+        f"expected one CitationReference among {paragraph.children!r}"  # type: ignore[union-attr]
     )
     assert cites[0].label == "CIT2002"
 
@@ -230,7 +230,7 @@ def test_parse_citation_reference_multiple():
         "test_parse_citation_reference_multiple",
     )
     [paragraph] = section.children
-    labels = [c.label for c in paragraph.children if isinstance(c, CitationReference)]
+    labels = [c.label for c in paragraph.children if isinstance(c, CitationReference)]  # type: ignore[union-attr]
     assert labels == ["Smith2020", "Jones1999"]
 
 

@@ -185,12 +185,20 @@ robustness and coverage holes.
 
 **Phase B — make it useful in the viewer**
 
-- [ ] Fix narrative page `<h1>`: extract the first heading from
+- [x] Fix narrative page `<h1>`: extract the first heading from
       `doc.arbitrary[0].title` instead of displaying the raw key
       (`config:details`).
-- [ ] Add `id=` anchors to headings so within-doc navigation works.
-- [ ] Add a within-doc mini-TOC (sidebar or top-of-page) listing `<h2>`
+      Done: `displayTitle = sections[0]?.title || doc.qa || docPath`.
+      First section's h2 is suppressed when its title became the h1 to
+      avoid duplication.
+- [x] Add `id=` anchors to headings so within-doc navigation works.
+      Done: `<section id={sectionId(s)}>` where `sectionId` prefers the
+      RST target label and falls back to a slugified title. Added
+      `scroll-margin-top` so fixed headers don't obscure jump targets.
+- [x] Add a within-doc mini-TOC (sidebar or top-of-page) listing `<h2>`
       headings for long narrative pages.
+      Done: `<nav class="doc-toc">` rendered above sections when ≥ 2
+      titled sections remain after the h1 section.
 
 **Phase C — `:doc:` cross-links**
 

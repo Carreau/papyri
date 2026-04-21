@@ -437,7 +437,6 @@ for role in (
     "const",
     "data",
     "keyword",
-    "doc",
     "exc",
     "file",
     "func",
@@ -503,8 +502,33 @@ def py_pep_hander(value):
     ]
 
 
+@directive_handler("py", "doc")
+def py_doc_handler(value):
+    text = value
+    path = value
+    if " <" in value and value.endswith(">"):
+        text, path = value.split(" <", 1)
+        text = text.rstrip()
+        path = path.rstrip(">")
+    return [CrossRef(text, LocalRef("docs", path), "docs")]
+
+
 _MISSING_DIRECTIVES: list[str] = []
 _MISSING_INLINE_DIRECTIVES: list[tuple[str, str]] = []
+
+_SPHINX_ONLY_DIRECTIVES: frozenset[str] = frozenset(
+    {
+        "autofunction",
+        "autoclass",
+        "automodule",
+        "automethod",
+        "autoattribute",
+        "autodata",
+        "autoexception",
+        "ipython",
+        "ipython3",
+    }
+)
 
 
 class DirectiveVisiter(TreeReplacer):
@@ -660,6 +684,14 @@ class DirectiveVisiter(TreeReplacer):
                 tr = self.generic_visit(a)
                 acc.extend(tr)
             return acc
+
+        if directive.name in _SPHINX_ONLY_DIRECTIVES:
+            log.warning(
+                "skipping Sphinx-only directive %r in %s (not meaningful outside a Sphinx build)",
+                directive.name,
+                self.qa,
+            )
+            return []
 
         if directive.name not in _MISSING_DIRECTIVES:
             _MISSING_DIRECTIVES.append(directive.name)
@@ -852,6 +884,13 @@ class IngestVisitor(DirectiveVisiter):
     def replace_RefInfo(self, refinfo):
         log.debug("RefInfo: %r", refinfo)
         return [refinfo]
+
+    def replace_CrossRef(self, ref):
+        if isinstance(ref.reference, LocalRef) and ref.reference.kind == "docs":
+            ri = RefInfo(self.module, self.version, "docs", ref.reference.path)
+            self._targets.add(ri)
+            return [CrossRef(ref.value, ri, ref.kind)]
+        return [ref]
 
     def replace_BlockDirective(self, block_directive: Directive):
         raise AssertionError("should be unreachable")

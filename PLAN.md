@@ -202,13 +202,14 @@ robustness and coverage holes.
 
 **Phase C — `:doc:` cross-links**
 
-- [ ] Handle the `:doc:` Sphinx role in `GenVisitor`: emit a `CrossRef`
+- [x] Handle the `:doc:` Sphinx role in `GenVisitor`: emit a `CrossRef`
       with `kind="docs"` instead of verbatim text.
-- [ ] Resolve those refs in `IngestVisitor` (map to `Key(pkg, ver,
+- [x] Resolve those refs in `IngestVisitor` (map to `Key(pkg, ver,
       "docs", path)`).
-- [ ] Gracefully skip Sphinx-only directives that are not meaningful
+- [x] Warn and skip Sphinx-only directives that are not meaningful
       outside the Sphinx build environment: `.. autofunction::`,
       `.. autoclass::`, `.. automodule::`, `.. ipython::`.
+      Emits `log.warning` and returns `[]` (no output node).
 
 ## Open questions
 

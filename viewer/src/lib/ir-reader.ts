@@ -20,9 +20,7 @@ export interface IngestedBundle {
   path: string;
 }
 
-export async function listIngestedBundles(
-  root: string = ingestDir(),
-): Promise<IngestedBundle[]> {
+export async function listIngestedBundles(root: string = ingestDir()): Promise<IngestedBundle[]> {
   let pkgs;
   try {
     pkgs = await readdir(root, { withFileTypes: true });
@@ -314,10 +312,7 @@ export interface IngestedDoc {
 }
 
 /** Read one module blob from an ingest bundle dir and decode it. */
-export async function loadModule(
-  bundlePath: string,
-  qualname: string,
-): Promise<IngestedDoc> {
+export async function loadModule(bundlePath: string, qualname: string): Promise<IngestedDoc> {
   ensureExtensions();
   const primary = join(bundlePath, "module", qualname);
   let raw: Buffer;
@@ -334,9 +329,7 @@ export async function loadModule(
   // Some encoders hand back a raw Tag if our extension wasn't applied — this
   // shouldn't happen in practice, but provide a clear error.
   if (obj instanceof Tag) {
-    throw new Error(
-      `expected IngestedDoc (tag 4010), got raw tag ${obj.tag} for ${qualname}`,
-    );
+    throw new Error(`expected IngestedDoc (tag 4010), got raw tag ${obj.tag} for ${qualname}`);
   }
   throw new Error(`unexpected decode result for ${qualname}: ${typeof obj}`);
 }
@@ -404,7 +397,7 @@ export interface LinkRef {
 export function collectNodes(
   node: unknown,
   types: ReadonlySet<string>,
-  out: IRNode[] = [],
+  out: IRNode[] = []
 ): IRNode[] {
   if (!node || typeof node !== "object") return out;
   if (Array.isArray(node)) {

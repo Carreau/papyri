@@ -18,7 +18,7 @@ export interface SearchHit {
 export function filterQualnames(
   qualnames: readonly string[],
   query: string,
-  limit = 50,
+  limit = 50
 ): SearchHit[] {
   const q = query.trim().toLowerCase();
   if (q === "") return [];

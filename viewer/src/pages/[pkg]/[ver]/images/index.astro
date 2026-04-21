@@ -60,7 +60,7 @@ await Promise.all(
     }
     const href = `/${pkg}/${ver}/${qa.replace(/:/g, "$")}/`;
     for (const found of collectImages(doc)) addHit(found, { label: qa, href });
-  }),
+  })
 );
 
 // Narrative docs
@@ -75,7 +75,7 @@ await Promise.all(
     }
     const href = `/${pkg}/${ver}/docs/${docPath.split("/").map(encodeURIComponent).join("/")}/`;
     for (const found of collectImages(section)) addHit(found, { label: docPath, href });
-  }),
+  })
 );
 
 // Examples
@@ -90,12 +90,10 @@ await Promise.all(
     }
     const href = `/${pkg}/${ver}/examples/${exPath.split("/").map(encodeURIComponent).join("/")}/`;
     for (const found of collectImages(section)) addHit(found, { label: exPath, href });
-  }),
+  })
 );
 
-const entries = [...imageMap.values()].sort((a, b) =>
-  a.img.src.localeCompare(b.img.src),
-);
+const entries = [...imageMap.values()].sort((a, b) => a.img.src.localeCompare(b.img.src));
 ---
 
 <BundleLayout
@@ -132,9 +130,7 @@ const entries = [...imageMap.values()].sort((a, b) =>
             </a>
             <div class="image-meta">
               <code class="image-filename">
-                {entry.img.kind === "Figure"
-                  ? entry.img.assetPath
-                  : entry.img.src}
+                {entry.img.kind === "Figure" ? entry.img.assetPath : entry.img.src}
               </code>
               {entry.pages.length > 0 ? (
                 <details class="image-refs">

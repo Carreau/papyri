@@ -27,7 +27,7 @@ const { bundlePath } = Astro.props as { bundlePath: string };
 
 // Collect all configured node types across the bundle.
 const allTypes: ReadonlySet<string> = new Set(
-  Object.values(NODE_CONFIGS).flatMap((c) => [...c.types]),
+  Object.values(NODE_CONFIGS).flatMap((c) => [...c.types])
 );
 
 interface PageRef {
@@ -82,11 +82,11 @@ await Promise.all(
     } catch {
       return;
     }
-    addHits(
-      collectNodes(doc, allTypes),
-      { label: qa, href: `/${pkg}/${ver}/${qa.replace(/:/g, "$")}/` },
-    );
-  }),
+    addHits(collectNodes(doc, allTypes), {
+      label: qa,
+      href: `/${pkg}/${ver}/${qa.replace(/:/g, "$")}/`,
+    });
+  })
 );
 
 // Walk narrative docs
@@ -99,14 +99,11 @@ await Promise.all(
     } catch {
       return;
     }
-    addHits(
-      collectNodes(section, allTypes),
-      {
-        label: docPath,
-        href: `/${pkg}/${ver}/docs/${docPath.split("/").map(encodeURIComponent).join("/")}/`,
-      },
-    );
-  }),
+    addHits(collectNodes(section, allTypes), {
+      label: docPath,
+      href: `/${pkg}/${ver}/docs/${docPath.split("/").map(encodeURIComponent).join("/")}/`,
+    });
+  })
 );
 
 // Walk examples
@@ -119,14 +116,11 @@ await Promise.all(
     } catch {
       return;
     }
-    addHits(
-      collectNodes(section, allTypes),
-      {
-        label: exPath,
-        href: `/${pkg}/${ver}/examples/${exPath.split("/").map(encodeURIComponent).join("/")}/`,
-      },
-    );
-  }),
+    addHits(collectNodes(section, allTypes), {
+      label: exPath,
+      href: `/${pkg}/${ver}/examples/${exPath.split("/").map(encodeURIComponent).join("/")}/`,
+    });
+  })
 );
 
 // Sort: group by type, then by value length within each type.
@@ -157,14 +151,12 @@ const typeCounts = [...allTypes]
   <p class="crumb"><a href={`/${pkg}/${ver}/`}>&larr; {pkg} {ver}</a></p>
   <h1>All nodes</h1>
   <p class="lede">
-    {entries.length} unique value{entries.length !== 1 ? "s" : ""} across {typeCounts.length} node type{typeCounts.length !== 1 ? "s" : ""}
+    {entries.length} unique value{entries.length !== 1 ? "s" : ""} across {typeCounts.length} node type{
+      typeCounts.length !== 1 ? "s" : ""
+    }
   </p>
 
-  <NodeTypeFilter
-    client:load
-    listId="node-list"
-    types={typeCounts}
-  />
+  <NodeTypeFilter client:load listId="node-list" types={typeCounts} />
 
   {
     entries.length === 0 ? (
@@ -175,7 +167,9 @@ const typeCounts = [...allTypes]
           <div class="node-entry" data-nodetype={(entry.node as any).__type}>
             <dt>
               <span class="node-kind">{(entry.node as any).__type}</span>
-              <div class="node-value"><IrNode node={entry.node} /></div>
+              <div class="node-value">
+                <IrNode node={entry.node} />
+              </div>
             </dt>
             <dd>
               <details class="node-refs">
@@ -184,7 +178,9 @@ const typeCounts = [...allTypes]
                 </summary>
                 <ul>
                   {entry.pages.map((p) => (
-                    <li><a href={p.href}>{p.label}</a></li>
+                    <li>
+                      <a href={p.href}>{p.label}</a>
+                    </li>
                   ))}
                 </ul>
               </details>

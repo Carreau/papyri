@@ -32,8 +32,7 @@ function asArray(x: unknown): IRNode[] {
 // Flatten CrossRef description: SeeAlsoItem descriptions contain Paragraphs.
 const type = node && (node as { __type?: string }).__type;
 
-const xrefResolved =
-  type === "CrossRef" && resolveXref ? resolveXref(node) : null;
+const xrefResolved = type === "CrossRef" && resolveXref ? resolveXref(node) : null;
 
 // Pre-render KaTeX / Shiki output here so the template below can use
 // `set:html`. Astro frontmatter is async, so top-level await is legal.
@@ -47,9 +46,7 @@ const mathHtml =
 // IR Code nodes don't carry a language tag (see papyri/nodes.py:228), so
 // default to python. The `highlight` helper handles its own errors.
 const codeHtml =
-  type === "Code"
-    ? await highlight(String((node as any).value ?? ""), "python")
-    : null;
+  type === "Code" ? await highlight(String((node as any).value ?? ""), "python") : null;
 ---
 
 {
@@ -76,7 +73,7 @@ const codeHtml =
   ) : type === "InlineCode" ? (
     <code>{(node as any).value}</code>
   ) : type === "Code" ? (
-    <pre class="code" set:html={codeHtml ?? ""}></pre>
+    <pre class="code" set:html={codeHtml ?? ""} />
   ) : type === "Link" ? (
     <a href={(node as any).url} title={(node as any).title}>
       {asArray((node as any).children).map((c) => (
@@ -110,9 +107,9 @@ const codeHtml =
       ))}
     </h3>
   ) : type === "Math" ? (
-    <div class="math" set:html={mathHtml ?? ""}></div>
+    <div class="math" set:html={mathHtml ?? ""} />
   ) : type === "InlineMath" ? (
-    <span class="math" set:html={mathHtml ?? ""}></span>
+    <span class="math" set:html={mathHtml ?? ""} />
   ) : type === "Parameters" ? (
     <dl class="params">
       {asArray((node as any).children).map((p) => (
@@ -123,9 +120,7 @@ const codeHtml =
     <Fragment>
       <dt>
         <code class="pname">{(node as any).name}</code>
-        {(node as any).annotation ? (
-          <span class="ptype"> : {(node as any).annotation}</span>
-        ) : null}
+        {(node as any).annotation ? <span class="ptype"> : {(node as any).annotation}</span> : null}
       </dt>
       <dd>
         {asArray((node as any).desc).map((c) => (
@@ -135,7 +130,9 @@ const codeHtml =
     </Fragment>
   ) : type === "CrossRef" ? (
     xrefResolved ? (
-      <a class="xref" href={xrefResolved.url}>{xrefResolved.label}</a>
+      <a class="xref" href={xrefResolved.url}>
+        {xrefResolved.label}
+      </a>
     ) : (
       <span class="xref unresolved">{(node as any).value}</span>
     )
@@ -253,14 +250,10 @@ const codeHtml =
     <a class="citation-reference" href={`#cite-${(node as any).label}`}>
       [{(node as any).label}]
     </a>
-  ) : type === "Comment" ? (
-    null
-  ) : type === "SubstitutionRef" || type === "SubstitutionDef" ? (
+  ) : type === "Comment" ? null : type === "SubstitutionRef" || type === "SubstitutionDef" ? (
     // Substitutions aren't resolved yet — render the substitution body if any
     // so the reader sees something. Tracked in viewer/PLAN.md follow-ups.
-    <span class="substitution">
-      {(node as any).value ?? ""}
-    </span>
+    <span class="substitution">{(node as any).value ?? ""}</span>
   ) : type === "UnimplementedInline" ? (
     <span class="unimplemented">
       {asArray((node as any).children).map((c) => (

@@ -37,13 +37,9 @@ const { bundlePath, examplePath } = Astro.props as {
 };
 
 // Example blobs are Section (tag 4015) — the decoder hands us a typed node.
-const section = (await loadCbor(
-  join(bundlePath, "examples", examplePath),
-)) as SectionNode;
+const section = (await loadCbor(join(bundlePath, "examples", examplePath))) as SectionNode;
 
-const children: IRNode[] = Array.isArray(section.children)
-  ? section.children
-  : [];
+const children: IRNode[] = Array.isArray(section.children) ? section.children : [];
 
 interface XRefShape {
   value?: string;

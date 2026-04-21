@@ -63,7 +63,7 @@ export function resolveRef(ref: RefTuple): RefTuple | null {
   const exact = db
     .prepare(
       "SELECT package, version, category, identifier FROM nodes " +
-        "WHERE has_blob=1 AND package=? AND version=? AND category=? AND identifier=? LIMIT 1",
+        "WHERE has_blob=1 AND package=? AND version=? AND category=? AND identifier=? LIMIT 1"
     )
     .get(ref.pkg, ref.ver, ref.kind, ref.path) as
     | { package: string; version: string; category: string; identifier: string }
@@ -82,7 +82,7 @@ export function resolveRef(ref: RefTuple): RefTuple | null {
   const rows = db
     .prepare(
       "SELECT package, version, category, identifier FROM nodes " +
-        "WHERE has_blob=1 AND package=? AND category=? AND identifier=?",
+        "WHERE has_blob=1 AND package=? AND category=? AND identifier=?"
     )
     .all(ref.pkg, ref.kind, ref.path) as Array<{
     package: string;
@@ -117,7 +117,7 @@ export function getBackrefs(target: RefTuple): RefTuple[] {
         "JOIN nodes n_src ON n_src.id = l.source " +
         "JOIN nodes n_dest ON n_dest.id = l.dest " +
         "WHERE n_src.has_blob=1 " +
-        "AND n_dest.package=? AND n_dest.version=? AND n_dest.category=? AND n_dest.identifier=?",
+        "AND n_dest.package=? AND n_dest.version=? AND n_dest.category=? AND n_dest.identifier=?"
     )
     .all(target.pkg, target.ver, target.kind, target.path) as Array<{
     package: string;
@@ -132,9 +132,7 @@ export function getBackrefs(target: RefTuple): RefTuple[] {
     path: r.identifier,
   }));
   out.sort((a, b) =>
-    `${a.pkg}/${a.ver}/${a.kind}/${a.path}`.localeCompare(
-      `${b.pkg}/${b.ver}/${b.kind}/${b.path}`,
-    ),
+    `${a.pkg}/${a.ver}/${a.kind}/${a.path}`.localeCompare(`${b.pkg}/${b.ver}/${b.kind}/${b.path}`)
   );
   return out;
 }

@@ -18,15 +18,8 @@ interface Props {
   activeExamplePath?: string;
 }
 
-const {
-  pkg,
-  ver,
-  bundlePath,
-  title,
-  activeQualname,
-  activeDocPath,
-  activeExamplePath,
-} = Astro.props;
+const { pkg, ver, bundlePath, title, activeQualname, activeDocPath, activeExamplePath } =
+  Astro.props;
 const nav = await loadBundleNav(pkg, ver, bundlePath);
 ---
 
@@ -37,12 +30,7 @@ const nav = await loadBundleNav(pkg, ver, bundlePath);
   <body>
     <SiteHeader />
     <div class="bundle-layout">
-      <input
-        type="checkbox"
-        id="sidebar-toggle"
-        class="sidebar-toggle-cb"
-        aria-hidden="true"
-      />
+      <input type="checkbox" id="sidebar-toggle" class="sidebar-toggle-cb" aria-hidden="true" />
       <label for="sidebar-toggle" class="sidebar-toggle-label">
         <span class="sidebar-toggle-open" aria-hidden="true">&#9776;</span>
         <span class="sidebar-toggle-close" aria-hidden="true">&times;</span>

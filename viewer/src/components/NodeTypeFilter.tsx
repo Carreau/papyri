@@ -23,7 +23,7 @@ interface Props {
 
 export default function NodeTypeFilter({ listId, types }: Props) {
   const [checked, setChecked] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(types.map((t) => [t.key, true])),
+    Object.fromEntries(types.map((t) => [t.key, true]))
   );
   const prevChecked = useRef(checked);
 

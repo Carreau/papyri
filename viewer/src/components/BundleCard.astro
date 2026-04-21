@@ -31,25 +31,15 @@ const [docCount, exampleCount] = await Promise.all([
   countDir(join(bundlePath, "examples")),
 ]);
 
-const summary =
-  typeof nav.meta.summary === "string" ? nav.meta.summary : null;
+const summary = typeof nav.meta.summary === "string" ? nav.meta.summary : null;
 const href = `/${pkg}/${version}/`;
 ---
 
-<a
-  class="bundle-card"
-  href={href}
-  data-pkg={pkg}
-  data-summary={summary ?? ""}
->
+<a class="bundle-card" href={href} data-pkg={pkg} data-summary={summary ?? ""}>
   <div class="bundle-card-header">
     {
       nav.logoDataUrl ? (
-        <img
-          class="bundle-card-logo"
-          src={nav.logoDataUrl}
-          alt={`${pkg} logo`}
-        />
+        <img class="bundle-card-logo" src={nav.logoDataUrl} alt={`${pkg} logo`} />
       ) : (
         <span class="bundle-card-logo-empty" aria-hidden="true">
           {pkg.slice(0, 2).toUpperCase()}

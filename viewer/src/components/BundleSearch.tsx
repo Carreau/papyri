@@ -53,9 +53,7 @@ export default function BundleSearch({ pkg, ver }: Props): ReactElement {
       <input
         type="search"
         placeholder={
-          ready
-            ? `Search ${qualnames.length} qualnames in ${pkg}`
-            : "Loading search index..."
+          ready ? `Search ${qualnames.length} qualnames in ${pkg}` : "Loading search index..."
         }
         value={query}
         onChange={(e) => setQuery(e.target.value)}
@@ -63,11 +61,7 @@ export default function BundleSearch({ pkg, ver }: Props): ReactElement {
         disabled={!ready}
         className="bundle-search-input"
       />
-      {error ? (
-        <p className="bundle-search-error">
-          Failed to load search index: {error}
-        </p>
-      ) : null}
+      {error ? <p className="bundle-search-error">Failed to load search index: {error}</p> : null}
       {query.trim() !== "" ? (
         <ul className="bundle-search-results">
           {hits.length === 0 ? (

@@ -70,11 +70,7 @@ function isTocActive(item: TocItem): boolean {
           <ul class="sidebar-toc">
             {nav.toc.map((item) => (
               <li class={isTocActive(item) ? "is-active" : undefined}>
-                {item.href ? (
-                  <a href={item.href}>{item.title}</a>
-                ) : (
-                  <span>{item.title}</span>
-                )}
+                {item.href ? <a href={item.href}>{item.title}</a> : <span>{item.title}</span>}
                 {item.children.length > 0 ? (
                   <ul class="sidebar-toc">
                     {item.children.map((child) => (
@@ -151,9 +147,7 @@ function isTocActive(item: TocItem): boolean {
       {
         nav.qualnames.map((qa) => (
           <li class={qa === activeQualname ? "is-active" : undefined}>
-            <a href={`/${nav.pkg}/${nav.version}/${qualnameToSlug(qa)}/`}>
-              {qa}
-            </a>
+            <a href={`/${nav.pkg}/${nav.version}/${qualnameToSlug(qa)}/`}>{qa}</a>
           </li>
         ))
       }

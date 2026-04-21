@@ -675,3 +675,89 @@ section.backrefs ul.qualnames { columns: 2; }
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
+
+/* ---------------------------------------------------------------------------
+   NodeTypeFilter island — checkbox panel above node listing pages.
+--------------------------------------------------------------------------- */
+.nt-filter {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.6rem 0.75rem;
+  margin-bottom: 1.25rem;
+  background: var(--surface);
+}
+
+.nt-filter-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--fg-muted);
+  margin-bottom: 0.5rem;
+}
+
+.nt-filter-actions {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.nt-filter-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.7rem;
+  color: var(--accent);
+  cursor: pointer;
+  font-family: var(--sans);
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: normal;
+}
+.nt-filter-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--surface-alt);
+}
+.nt-filter-btn:disabled {
+  color: var(--fg-muted);
+  cursor: default;
+  opacity: 0.5;
+}
+
+.nt-filter-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+}
+
+.nt-filter-label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  cursor: pointer;
+  user-select: none;
+}
+.nt-filter-label input[type="checkbox"] {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.nt-filter-name {
+  font-family: var(--mono);
+}
+
+.nt-filter-count {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--fg-muted);
+  background: var(--surface-alt);
+  border-radius: 3px;
+  padding: 0 0.3em;
+}

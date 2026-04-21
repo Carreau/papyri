@@ -297,7 +297,14 @@ class TreeVisitor:
             return {}
         elif isinstance(
             node,
-            (LocalRef, RefInfo, Options, ThematicBreak, SubstitutionDef, CitationReference),
+            (
+                LocalRef,
+                RefInfo,
+                Options,
+                ThematicBreak,
+                SubstitutionDef,
+                CitationReference,
+            ),
         ):
             return {}
         else:

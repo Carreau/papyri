@@ -231,7 +231,7 @@ def load_one_uningested(
 
     blob.process(known_refs=known_refs, aliases=aliases, verbose=False, version=version)
 
-    return blob
+    return blob  # type: ignore[no-any-return]
 
 
 class Ingester:

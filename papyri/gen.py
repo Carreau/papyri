@@ -236,7 +236,7 @@ def parse_script(
     full_text = prev + "\n" + script
     k = _jedi_get_cache(full_text)
     if k is not None:
-        return k
+        return k  # type: ignore[no-any-return]
     jeds.append(jedi.Script(full_text))
     P = PythonLexer()
 

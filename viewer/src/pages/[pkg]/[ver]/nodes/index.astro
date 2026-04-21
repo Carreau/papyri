@@ -140,8 +140,7 @@ const typeCounts = [...allTypes]
     key,
     label: key,
     count: entries.filter((e) => (e.node as any).__type === key).length,
-  }))
-  .filter((t) => t.count > 0);
+  }));
 ---
 
 <BundleLayout

@@ -83,7 +83,6 @@ export default function NodeTypeFilter({ listId, types, defaultChecked = true }:
                 onChange={() => toggle(t.key)}
               />
               <span className="nt-filter-name">{t.label}</span>
-              <span className="nt-filter-count">{t.count}</span>
             </label>
           </li>
         ))}

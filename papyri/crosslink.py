@@ -249,7 +249,7 @@ class Ingester:
     def _ingest_narrative(self, path, gstore: GraphStore) -> None:
         meta = json.loads((path / "papyri.json").read_text())
         version = meta["version"]
-        module = None
+        module = meta.get("module") or path.name.split("_")[0]
         for _console, document in self.progress(
             (path / "docs").glob("*"),
             description=f"{path.name} Reading narrative docs ",
@@ -260,24 +260,30 @@ class Ingester:
                     qa=document.name,
                     known_refs=frozenset(),
                     aliases={},
-                    version=None,
+                    version=version,
                 )
             except Exception as e:
                 e.add_note(f"at path: {document}")
                 raise
             ref = document.name
 
-            module, version = path.name.split("_")
             key = Key(module, version, "docs", ref)
             doc.validate()
+
+            # Resolve LocalRef("docs", path) CrossRef nodes → RefInfo so
+            # the graph store can track doc-to-doc forward references.
+            visitor = IngestVisitor(
+                ref, frozenset(), frozenset(), {}, version=version, module=module
+            )
+            doc.arbitrary = [visitor.visit(s) for s in doc.arbitrary]
+            forward_refs = [Key(*t) for t in visitor._targets]
+
             gstore.put(
                 key,
                 encoder.encode(doc),
-                [],
+                forward_refs,
             )
         tocfile = path / "toc.cbor"
-        if module is None:
-            return
         if tocfile.exists():
             gstore.put(
                 Key(module, version, "meta", "toc.cbor"),

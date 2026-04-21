@@ -822,7 +822,7 @@ class GeneratedDoc(Node):
 
     @property
     def ordered_sections(self):
-        return tuple(self._ordered_sections)
+        return tuple(self._ordered_sections)  # type: ignore[arg-type]
 
     @property
     def content(self):

@@ -138,7 +138,7 @@ def serialize(instance, annotation):
             if hasattr(instance, "_validate"):
                 instance._validate()
             data = {}
-            for k, v in get_type_hints(type(instance)).items():
+            for k, v in get_type_hints(type(instance)).items():  # type: ignore[arg-type]
                 try:
                     data[k] = serialize(getattr(instance, k), v)
                 except Exception as e:
@@ -239,7 +239,7 @@ def deserialize(type_, annotation, data):
             "typing",
         ):
             loc = {}
-            new_ann = get_type_hints(annotation).items()
+            new_ann = get_type_hints(annotation).items()  # type: ignore[arg-type]
             # assert new_ann
             for k, v in new_ann:
                 # assert k in data.keys(), f"{k} not int {data.keys()}"

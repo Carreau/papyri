@@ -215,3 +215,23 @@ robustness and coverage holes.
 - Cross-package ingest correctness: `papyri/crosslink.py` still has
   TODOs around version resolution for `Figure`/`RefInfo` across packages.
   See `TODO-review.md`.
+- **Narrative doc cross-ref resolution never fires.**
+  `_ingest_narrative()` calls `load_one_uningested()` with
+  `known_refs=frozenset()`, so `IngestVisitor` sees no candidates and
+  resolves nothing.  `relink()` skips `docs` keys entirely (it only
+  revisits `module` and `examples` keys).  Net effect: `:py:func:` and
+  similar roles inside RST narrative pages are never converted to
+  `CrossRef` nodes.  Fix: run `IngestVisitor` over `docs` keys in
+  `relink()` (or in the initial `ingest()` pass once `known_refs` is
+  populated) — same pattern as the existing `examples` loop.
+- **`normalise_ref` validation could move to gen.**
+  `ingest()` silently drops files whose `qa` fails `normalise_ref()`
+  when `--check` is passed (`crosslink.py` ~line 379).  Since
+  `normalise_ref` depends only on the qa string (no cross-package data),
+  the check could be enforced at gen time so the bundle is
+  self-consistent before it leaves the maintainer's machine.
+- **`mod_root == root` assertion could move to gen.**
+  `ingest()` asserts that every API item's root module matches the
+  bundle's declared root (`crosslink.py` ~line 412).  Gen already knows
+  both values; moving the check there makes the contract explicit and
+  surfaces mistakes earlier.

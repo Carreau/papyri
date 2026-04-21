@@ -1,9 +1,10 @@
 from textwrap import dedent
+from typing import Any, cast
 
 import pytest
 
 from papyri import errors
-from papyri.nodes import InlineRole
+from papyri.nodes import CitationReference, InlineRole, Paragraph
 from papyri.ts import Node, TSVisitor, parse, parser
 
 
@@ -114,8 +115,15 @@ def test_parse_space():
         b"Element-wise maximum of two arrays, propagating any NaNs.",
         "test_parse_space",
     )
+    assert len(section.children) > 0
+    first_child = section.children[0]
+    assert isinstance(first_child, Paragraph)
+    assert len(first_child.children) > 0
+    text_node = first_child.children[0]
+    assert hasattr(text_node, "value")
+    text_node_with_value = cast(Any, text_node)
     assert (
-        section.children[0].children[0].value
+        text_node_with_value.value
         == "Element-wise maximum of two arrays, propagating any NaNs."
     )
 
@@ -132,11 +140,13 @@ def test_parse_no_newline():
     reference`_ does not either.""").encode()
 
     [section] = parse(data, "test_parse_space")
-    text0, directive, text1, reference, text2 = section.children[0].children
-    assert "\n" not in directive.value
-    assert directive.value == "this interpreted_text"
-    assert "\n" not in reference.value
-    assert reference.value == "this reference"
+    first_child = section.children[0]
+    assert isinstance(first_child, Paragraph)
+    text0, directive, text1, reference, text2 = first_child.children
+    assert "\n" not in directive.value  # type: ignore[union-attr]
+    assert directive.value == "this interpreted_text"  # type: ignore[union-attr]
+    assert "\n" not in reference.value  # type: ignore[union-attr]
+    assert reference.value == "this reference"  # type: ignore[union-attr]
 
 
 def test_backtick_trailing_alpha_suffix():
@@ -151,7 +161,9 @@ def test_backtick_trailing_alpha_suffix():
     data = b"Returns `None`s or `ndarray`s depending on input."
     [section] = parse(data, "test_backtick_trailing_alpha_suffix")
 
-    para_children = section.children[0].children
+    para_node = section.children[0]
+    assert isinstance(para_node, Paragraph)
+    para_children = para_node.children
     for node in para_children:
         if isinstance(node, InlineRole):
             assert "`" not in node.value
@@ -162,7 +174,9 @@ def test_backtick_trailing_alpha_no_role():
     data = b"Pass :class:`True`s to enable."
     [section] = parse(data, "test_backtick_trailing_alpha_no_role")
 
-    para_children = section.children[0].children
+    para_node = section.children[0]
+    assert isinstance(para_node, Paragraph)
+    para_children = para_node.children
     # tree-sitter may or may not recognise :class:`True`s as a roled node
     # (the trailing `s` can prevent role recognition); either outcome is
     # acceptable, but if a role IS produced its value must not contain a backtick.
@@ -184,10 +198,11 @@ def test_backtick_genuine_stray_backtick():
 
 def test_parse_reference():
     [section] = parse(b"This is a `reference <to this>`_", "test_parse_reference")
-    [paragraph] = section.children
-    [text, reference] = paragraph.children
-    assert reference.value == "reference <to this>"
-    assert text.value == "This is a "
+    [paragraph_node] = section.children
+    assert isinstance(paragraph_node, Paragraph)
+    [text, reference] = paragraph_node.children
+    assert reference.value == "reference <to this>"  # type: ignore[union-attr]
+    assert text.value == "This is a "  # type: ignore[union-attr]
 
 
 def test_parse_citation_reference():
@@ -196,15 +211,15 @@ def test_parse_citation_reference():
     VisitCitationReferenceNotImplementedError. They should now parse as
     a CitationReference node carrying just the label.
     """
-    from papyri.nodes import CitationReference
 
     [section] = parse(
         b"See [CIT2002]_ for more details.", "test_parse_citation_reference"
     )
-    [paragraph] = section.children
-    cites = [c for c in paragraph.children if isinstance(c, CitationReference)]
+    [paragraph_node] = section.children
+    assert isinstance(paragraph_node, Paragraph)
+    cites = [c for c in paragraph_node.children if isinstance(c, CitationReference)]
     assert len(cites) == 1, (
-        f"expected one CitationReference among {paragraph.children!r}"
+        f"expected one CitationReference among {paragraph_node.children!r}"
     )
     assert cites[0].label == "CIT2002"
 
@@ -229,8 +244,11 @@ def test_parse_citation_reference_multiple():
         b"Compare [Smith2020]_ and [Jones1999]_ here.",
         "test_parse_citation_reference_multiple",
     )
-    [paragraph] = section.children
-    labels = [c.label for c in paragraph.children if isinstance(c, CitationReference)]
+    [paragraph_node] = section.children
+    assert isinstance(paragraph_node, Paragraph)
+    labels = [
+        c.label for c in paragraph_node.children if isinstance(c, CitationReference)
+    ]
     assert labels == ["Smith2020", "Jones1999"]
 
 

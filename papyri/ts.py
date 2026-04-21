@@ -66,7 +66,7 @@ class Node:
         current_byte = self.start_byte
         current_point = self.start_point
 
-        new_nodes = []
+        new_nodes: list[Whitespace | Node] = []
         if self.node.children:
             for n in self.node.children:
                 if n.start_byte != current_byte:
@@ -254,7 +254,7 @@ class TSVisitor:
         return nacc
 
     def visit(self, node):
-        acc = []
+        acc: list[Any] = []
         # Tree-sitter produces ERROR nodes when it can't reconcile a run of
         # tokens with any grammar rule. Dropping the whole node loses
         # content; instead, surface the raw text as a Text node so the
@@ -465,7 +465,7 @@ class TSVisitor:
 
     def visit_text(self, node):
         text = self.as_text(node)
-        assert not text.startswith(":func:"), breakpoint()
+        assert not text.startswith(":func:")
         t = Text(text)
         return [t]
 
@@ -488,7 +488,7 @@ class TSVisitor:
         t = InlineCode(text.replace("\n", " "))
         return [t]
 
-    def visit_literal_block(self, node):
+    def visit_literal_block(self, node) -> list[Code]:
         datas = self.as_text(node)
         first_offset = node.start_point[1]
         datas = " " * first_offset + datas
@@ -545,7 +545,7 @@ class TSVisitor:
             # blah blah reference and new line with parenthesis
             # (like a year here)
             # ```
-            assert len(set_post_a) == 1, breakpoint()
+            assert len(set_post_a) == 1
             post_a = next(iter(set_post_a))
             # TODO: fails with pandas.compat._constants
             assert len(post_text) >= len(self.as_text(tc)), self.as_text(tc)
@@ -728,8 +728,8 @@ class TSVisitor:
         role = self.as_text(_role)
 
         groups = itertools.groupby(body_children, lambda x: x.type)
-        groups = [(k, list(v)) for k, v in groups]
-        for k, _ in groups:
+        groups_list: list[tuple[Any, list[Any]]] = [(k, list(v)) for k, v in groups]
+        for k, _ in groups_list:
             assert k in {"arguments", "content", "options"}, k
 
         if role == "warning":
@@ -737,11 +737,11 @@ class TSVisitor:
             # however, the contents for the directive may be defined inline
             # with the directive name, or as a separate block.
             # See https://docutils.sourceforge.io/docs/ref/doctree.html#warning
-            if len(groups) == 1:
-                content_node = list(groups[0][1])
+            if len(groups_list) == 1:
+                content_node = list(groups_list[0][1])
                 content = self.as_text(content_node[0])
-            elif len(groups) == 2:
-                content_node = [groups[0][1][0], groups[1][1][0]]
+            elif len(groups_list) == 2:
+                content_node = [groups_list[0][1][0], groups_list[1][1][0]]
                 content = (
                     self.as_text(content_node[0]) + " " + self.as_text(content_node[1])
                 )
@@ -751,21 +751,21 @@ class TSVisitor:
             padding = (content_node[0].start_point[1] - _1.start_point[1]) * " "
             content = dedent(padding + content).lstrip(" ")
             argument = ""
-            options = []
-            groups = []
+            options: list[tuple[str, str]] = []
+            groups_list = []
             children = []
 
         else:
-            if groups and groups[0][0] == "arguments":
-                arg = list(groups.pop(0)[1])
+            if groups_list and groups_list[0][0] == "arguments":
+                arg = list(groups_list.pop(0)[1])
                 assert len(arg) == 1
                 argument = self.as_text(arg[0])
             else:
                 argument = ""
 
-            if groups and groups[0][0] == "options":
+            if groups_list and groups_list[0][0] == "options":
                 # to parse
-                p0 = groups.pop(0)
+                p0 = groups_list.pop(0)
                 options = []
                 assert len(p0[1]) == 1
                 opt_node = p0[1][0]
@@ -782,9 +782,9 @@ class TSVisitor:
             else:
                 options = []
 
-            if groups and groups[0][0] == "content":
+            if groups_list and groups_list[0][0] == "content":
                 # to parse
-                content_node = list(groups.pop(0)[1])
+                content_node = list(groups_list.pop(0)[1])
                 assert len(content_node) == 1
                 content = self.as_text(content_node[0])
                 padding = (content_node[0].start_point[1] - _1.start_point[1]) * " "
@@ -794,7 +794,7 @@ class TSVisitor:
                 content = ""
                 children = []
 
-        assert not groups
+        assert not groups_list
         # todo , we may want to see about the indentation of the content.
 
         directive = UnprocessedDirective(

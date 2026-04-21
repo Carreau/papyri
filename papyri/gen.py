@@ -65,6 +65,7 @@ from .nodes import (
     Figure,
     GenCode,
     GenToken,
+    LocalRef,
     NumpydocExample,
     NumpydocSeeAlso,
     NumpydocSignature,
@@ -73,6 +74,7 @@ from .nodes import (
     Section,
     SeeAlsoItem,
     Text,
+    TocTree,
     encoder,
     parse_rst_section,
 )
@@ -1268,7 +1270,7 @@ class Gen:
         self._meta: dict[str, dict[FullQual, Cannonical]] = {}
         self.examples = {}
         self.docs = {}
-        self._doctree: dict[str, str] = {}
+        self._toc_nodes: list[TocTree] = []
 
     def get_example_data(
         self, example_section, *, obj: Any, qa: str, config: Config, log: logging.Logger
@@ -1427,7 +1429,7 @@ class Gen:
         for sub in subdirs:
             if (where / sub).exists():
                 (where / sub).rmdir()
-        for f in ("papyri.json", "toc.json"):
+        for f in ("papyri.json", "toc.cbor"):
             if (where / f).exists():
                 (where / f).unlink()
 
@@ -1502,10 +1504,25 @@ class Gen:
         for k, b in blbs.items():
             self.docs[k] = encoder.encode(b)
 
-        self._doctree = {"tree": make_tree(trees), "titles": title_map}
+        raw_tree = make_tree(trees)
+
+        def _build_toc(tree: dict) -> list[TocTree]:
+            result = []
+            for k, children in tree.items():
+                result.append(
+                    TocTree(
+                        children=_build_toc(children),
+                        title=title_map.get(k, k),
+                        ref=LocalRef("docs", k),
+                    )
+                )
+            return result
+
+        self._toc_nodes: list[TocTree] = _build_toc(raw_tree)
 
     def write_narrative(self, where: Path) -> None:
-        (where / "toc.json").write_text(json.dumps(self._doctree, indent=2))
+        if self._toc_nodes:
+            (where / "toc.cbor").write_bytes(encoder.encode(self._toc_nodes))
         (where / "docs").mkdir(exist_ok=True)
         for file, v in self.docs.items():
             subf = where / "docs"

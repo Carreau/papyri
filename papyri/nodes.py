@@ -136,7 +136,7 @@ class CrossRef(Node):
     """
 
     value: str
-    reference: RefInfo
+    reference: RefInfo | LocalRef
     # `kind` is a classification hint carried alongside the reference (e.g. the
     # directive role at the call site). It's not a redundant copy of
     # `reference.kind`; see tree.py's toctree handler for an example where the
@@ -146,10 +146,11 @@ class CrossRef(Node):
 
     @property
     def exists(self) -> bool:
-        return self.reference is not None and self.reference.kind not in (
-            "to-resolve",
-            "missing",
-        )
+        if self.reference is None:
+            return False
+        if isinstance(self.reference, LocalRef):
+            return True
+        return self.reference.kind not in ("to-resolve", "missing")
 
     def __repr__(self):
         return f"<CrossRef: {self.value=} {self.reference=} {self.kind=}>"
@@ -405,6 +406,34 @@ class IntermediateNode(Node):
     pass
 
 
+@register(4022)
+@dataclass(frozen=True)
+class LocalRef(Node):
+    """
+    A reference to a document within the same bundle (same package + version).
+
+    Unlike ``RefInfo``, ``LocalRef`` omits module and version because they are
+    always inherited from the bundle context.  The renderer can construct the
+    full URL by combining the bundle's (module, version) with (kind, path).
+
+    The link is guaranteed to exist: gen validates that the target is present
+    before writing it.
+
+    Parameters
+    ----------
+    kind : str
+        Document kind: ``"docs"``, ``"module"``, ``"examples"``, etc.
+    path : str
+        Path within the bundle (e.g. ``"numpy.linspace"`` or ``"tutorial:index"``).
+    """
+
+    kind: str
+    path: str
+
+    def __iter__(self):
+        return iter([self.kind, self.path])
+
+
 @register(4024)
 class Figure(Node):
     value: RefInfo
@@ -640,7 +669,7 @@ inline_nodes = tuple(
 class TocTree(Node):
     children: list[TocTree]
     title: str
-    ref: RefInfo
+    ref: LocalRef
     open: bool = False
     current: bool = False
 

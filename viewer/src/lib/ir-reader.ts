@@ -152,6 +152,7 @@ const FIELD_ORDER: Record<number, { name: string; fields: string[] }> = {
     name: "TocTree",
     fields: ["children", "title", "ref", "open", "current"],
   },
+  4022: { name: "LocalRef", fields: ["kind", "path"] },
   4024: { name: "Figure", fields: ["value"] },
   4026: { name: "Parameters", fields: ["children"] },
   4027: { name: "SubstitutionDef", fields: ["value", "children"] },

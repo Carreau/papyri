@@ -143,7 +143,7 @@ def resolve_(
     References are often relative based on the current context (which object you
     are currently in).
 
-    Given this informations and all the local (same document) and global
+    Given this information and all the local (same document) and global
     (same library/all libraries) references, compute the Reference Info object.
 
     Parameters

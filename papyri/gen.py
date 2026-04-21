@@ -364,7 +364,7 @@ def normalise_ref(ref):
     a ref, this tries to import it and replace it by the normal full-qualified form.
 
     This is expensive, and we likely want to move the logic of finding the
-    correct ref earlier in the process and us this as an assertion the refs are
+    correct ref earlier in the process and use this as an assertion the refs are
     normalized.
 
     It is critical to normalize in order to have the correct information when
@@ -1554,7 +1554,7 @@ class Gen:
 
     def put_raw(self, path: str, data: bytes):
         """
-        put some rbinary data at the given path.
+        put some binary data at the given path.
         """
         self.bdata[path] = data
 
@@ -1861,7 +1861,7 @@ class Gen:
         # this is of course if we have configuration file.
         #        assert (
         #            len(examples) > 0
-        #        ), "we havent' found any examples, it is likely that the path is incorrect."
+        #        ), "we haven't found any examples, it is likely that the path is incorrect."
 
         with self.progress() as p2:
             failed = []

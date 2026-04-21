@@ -190,14 +190,31 @@ class CitationReference(Node):
     Inline reference to a citation, from RST source like ``[CIT2002]_``.
 
     ``label`` carries the citation name (the text between the brackets, e.g.
-    ``"CIT2002"``). The target is a same-document citation definition
-    (currently still emitted as ``Unimplemented("citation", ...)``); the
-    renderer anchors this to ``#cite-<label>`` and linkifies the label so
-    references survive even when the matching definition isn't yet parsed.
+    ``"CIT2002"``). ``content`` is the displayed text (e.g. ``"[CIT2002]"``).
+    The renderer anchors this to ``#cite-<label>`` and uses ``content`` as the
+    link text.
     """
 
     type = "citationReference"
     label: str
+    content: str = ""
+
+
+@register(4064)
+class Citation(Node):
+    """
+    Block-level citation definition, from RST source like
+    ``.. [CIT2002] Book title, Author, Year.``
+
+    ``label`` matches the identifier used in ``CitationReference`` nodes.
+    ``children`` holds the body paragraphs of the citation.  The renderer
+    emits this with ``id="cite-<label>"`` so ``CitationReference`` anchors
+    scroll to it.
+    """
+
+    type = "citation"
+    label: str
+    children: list[Paragraph]
 
 
 @register(4018)
@@ -832,6 +849,7 @@ FlowContent: TypeAlias = (
     | DefListItem
     | FieldList
     | Comment
+    | Citation
 )
 
 ListContent: TypeAlias = ListItem

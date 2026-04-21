@@ -9,6 +9,7 @@ from . import errors
 from .nodes import (
     Blockquote,
     BulletList,
+    Citation,
     CitationReference,
     Code,
     Comment,
@@ -285,21 +286,32 @@ class TSVisitor:
         return acc
 
     def visit_citation(self, node):
-        # raise VisitCitationNotImplementedError()
-        # just hlines, like ------
-        return [Unimplemented("citation", self.as_text(node))]
+        # RST block citation: ``.. [LABEL] body text``.
+        # Extract the label and body via simple string parsing on the raw text
+        # (tree-sitter exposes the bracketed label and body as a flat string
+        # rather than separate child nodes in the RST grammar).
+        text = self.as_text(node).strip()
+        if text.startswith(".. ["):
+            rest = text[3:]  # "[LABEL] body..."
+            try:
+                close = rest.index("]")
+                label = rest[1:close]
+                body = " ".join(rest[close + 1 :].split()).strip()
+                return [Citation(label=label, children=[Paragraph([Text(body)])])]
+            except ValueError:
+                pass
+        return [Unimplemented("citation", text)]
 
     def visit_citation_reference(self, node):
-        # Inline citation reference, RST form ``[LABEL]_``. Extract the label
-        # so the renderer can anchor to a matching citation definition.
+        # Inline citation reference, RST form ``[LABEL]_``.
         text = self.as_text(node).strip()
         if text.startswith("[") and text.endswith("]_"):
             label = text[1:-2]
         else:
-            # Defensive fallback for grammar shapes we haven't seen; trim
-            # known wrapping characters rather than dropping the content.
+            # Defensive fallback for grammar shapes we haven't seen.
             label = text.strip("[]_")
-        return [CitationReference(label=label)]
+        content = f"[{label}]"
+        return [CitationReference(label=label, content=content)]
 
     def visit_transition(self, node):
         return [ThematicBreak()]

@@ -243,13 +243,19 @@ const codeHtml =
   ) : type === "Target" ? (
     <span id={(node as any).label} class="target" />
   ) : type === "CitationReference" ? (
-    // RST ``[label]_`` — link to the in-page citation anchor. The matching
-    // citation definition is rendered with id="cite-<label>" (see
-    // Unimplemented "citation" branch above, once citations are fully
-    // parsed). Until then this still produces a visible clickable label.
+    // RST ``[label]_`` — link to the in-page Citation block with id="cite-<label>".
     <a class="citation-reference" href={`#cite-${(node as any).label}`}>
-      [{(node as any).label}]
+      {(node as any).content || `[${(node as any).label}]`}
     </a>
+  ) : type === "Citation" ? (
+    // RST ``.. [label] body`` — block-level citation definition rendered with
+    // an id anchor so CitationReference links scroll here.
+    <div id={`cite-${(node as any).label}`} class="citation">
+      <span class="citation-label">[{(node as any).label}]</span>
+      {asArray((node as any).children).map((c) => (
+        <Astro.self node={c} resolveXref={resolveXref} />
+      ))}
+    </div>
   ) : type === "Comment" ? null : type === "SubstitutionRef" || type === "SubstitutionDef" ? (
     // Substitutions aren't resolved yet — render the substitution body if any
     // so the reader sees something. Tracked in viewer/PLAN.md follow-ups.

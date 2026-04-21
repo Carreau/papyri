@@ -69,6 +69,7 @@ from .nodes import (
     NumpydocExample,
     NumpydocSeeAlso,
     NumpydocSignature,
+    Paragraph,
     Parameters,
     RefInfo,
     Section,
@@ -1267,7 +1268,7 @@ class Gen:
 
         self.data = {}
         self.bdata = {}
-        self._meta: dict[str, dict[FullQual, Cannonical]] = {}
+        self._meta: dict[str, Any] = {}
         self.examples = {}
         self.docs = {}
         self._toc_nodes: list[TocTree] = []
@@ -2291,6 +2292,10 @@ class Gen:
                 if section in doc_blob.content:
                     doc_blob.content[section] = dv.visit(doc_blob.content[section])
 
+            doc_blob.see_also = list(
+                sorted(set(doc_blob.see_also), key=lambda sa: sa.name.value)
+            )
+
             for sa in doc_blob.see_also:
                 from .tree import resolve_
 
@@ -2350,6 +2355,37 @@ class Gen:
                 "aliases": aliases,
             }
         )
+
+        top = self.data.get(self.root)
+        if top is not None:
+            summary_section = top._content.get("Summary")
+            if summary_section is not None:
+                blurb = _first_paragraph_text(summary_section)
+                if blurb:
+                    self._meta["summary"] = blurb
+
+
+def _flatten_text(node: Any, out: list[str]) -> None:
+    if isinstance(node, Text):
+        out.append(node.value)
+        return
+    children = getattr(node, "children", None)
+    if children is None:
+        return
+    for child in children:
+        _flatten_text(child, out)
+
+
+def _first_paragraph_text(section: Section) -> str | None:
+    """Return the plain-text content of the first Paragraph in ``section``."""
+    for child in section.children:
+        if isinstance(child, Paragraph):
+            parts: list[str] = []
+            _flatten_text(child, parts)
+            text = "".join(parts).strip()
+            if text:
+                return text
+    return None
 
 
 def is_private(path):

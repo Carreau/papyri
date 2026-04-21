@@ -65,8 +65,9 @@ either 2 Authors or 2 Reviewers.
 """
 
 import types
+from collections.abc import Hashable
 from functools import lru_cache
-from typing import Union, cast, Hashable
+from typing import Union
 from typing import get_type_hints as gth
 
 base_types = {int, str, bool, type(None)}

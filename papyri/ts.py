@@ -727,7 +727,9 @@ class TSVisitor:
 
         role = self.as_text(_role)
 
-        groups: list[tuple[Any, list[Any]]] = [(k, list(v)) for k, v in itertools.groupby(body_children, lambda x: x.type)]
+        groups: list[tuple[Any, list[Any]]] = [
+            (k, list(v)) for k, v in itertools.groupby(body_children, lambda x: x.type)
+        ]
         for k, _ in groups:
             assert k in {"arguments", "content", "options"}, k
 

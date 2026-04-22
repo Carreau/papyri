@@ -425,35 +425,39 @@ def _x_any_unimplemented_to_verbatim(domain, role, value):
     return [InlineCode(value)]
 
 
+# C-domain roles: we don't index C symbols, so resolve can never succeed —
+# emit verbatim InlineCode directly.
 for role in ("type", "expr", "member", "macro", "enumerator", "func", "data"):
     directive_handler("c", role)(
         lambda value, _role=role: _x_any_unimplemented_to_verbatim("c", _role, value)
     )
-for role in (
-    "any",
-    "attr",
-    "class",
+
+# Formatting-only roles: these are not cross-references, they just affect
+# visual rendering (sub/superscript, keyboard keys, filenames, literals, ...).
+# Emit verbatim InlineCode so they never enter the resolve path — it would
+# always fail and pollute the "missing" diagnostics.
+_PY_VERBATIM_ROLES = (
     "command",
-    "const",
-    "data",
-    "keyword",
-    "exc",
-    "file",
-    "func",
-    "method",
     "enabled",
+    "file",
     "kbd",
-    "meth",
-    "mod",
-    "obj",
+    "keyword",
     "program",
-    "ref",
+    "rc",  # matplotlib
+    "samp",  # networkx, ipython
     "sub",
     "sup",
     "term",
-    "samp",  # networkx, ipython
-    "rc",  # matplotlib
-):
+)
+
+# Cross-reference roles (any/attr/class/const/data/exc/func/meth/method/mod/obj
+# and the C-domain equivalents) are handled by the resolve path in
+# ``DirectiveVisiter.replace_InlineRole``; registering a verbatim handler here
+# would short-circuit that path and prevent crosslinks from ever being
+# generated.  ``ref`` (section-label refs) also falls through: if resolve can't
+# find the target the original ``InlineRole`` is returned and rendered as
+# styled code, matching the previous verbatim appearance.
+for role in _PY_VERBATIM_ROLES:
     directive_handler("py", role)(
         lambda value, _role=role: _x_any_unimplemented_to_verbatim("py", _role, value)
     )

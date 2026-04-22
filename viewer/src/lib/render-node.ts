@@ -33,6 +33,40 @@ async function renderChildren(children: IRNode[], opts: RenderOptions): Promise<
   return parts.join("");
 }
 
+function execStatusIcon(status: string): string {
+  switch (status) {
+    case "success":
+      return "✓";
+    case "failure":
+      return "✗";
+    case "unexpected_exception":
+      return "⚠";
+    case "syntax_error":
+      return "✗";
+    case "compiled":
+      return "○";
+    default:
+      return "?";
+  }
+}
+
+function execStatusTitle(status: string): string {
+  switch (status) {
+    case "success":
+      return "Example executed successfully";
+    case "failure":
+      return "Example produced unexpected output";
+    case "unexpected_exception":
+      return "Example raised an unexpected exception";
+    case "syntax_error":
+      return "Example has a syntax error";
+    case "compiled":
+      return "Example compiled but was not executed";
+    default:
+      return `Execution status: ${status}`;
+  }
+}
+
 export async function renderNode(node: IRNode, opts: RenderOptions = {}): Promise<string> {
   const { resolveXref } = opts;
   const n = node as Record<string, unknown>;
@@ -62,6 +96,12 @@ export async function renderNode(node: IRNode, opts: RenderOptions = {}): Promis
 
     case "Code": {
       const inner = await highlight(String(n.value ?? ""), "python");
+      const status = n.execution_status != null ? String(n.execution_status) : null;
+      if (status && status !== "none") {
+        const icon = execStatusIcon(status);
+        const title = execStatusTitle(status);
+        return `<div class="code-block-wrap" data-exec-status="${escapeHtml(status)}"><pre class="code">${inner}</pre><span class="exec-status exec-status--${escapeHtml(status)}" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}">${icon}</span></div>`;
+      }
       return `<pre class="code">${inner}</pre>`;
     }
 

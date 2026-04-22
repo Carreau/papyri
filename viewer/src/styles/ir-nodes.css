@@ -24,6 +24,71 @@ pre.code .shiki-line {
   display: block;
 }
 
+/* Execution status wrapper: positions the status badge relative to the block. */
+.code-block-wrap {
+  position: relative;
+}
+.code-block-wrap pre.code {
+  padding-right: 2.5rem; /* make room for the badge */
+}
+
+/* Execution status badge: floated to the top-right corner of the code block. */
+.exec-status {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.4rem;
+  font-size: 0.75rem;
+  line-height: 1;
+  padding: 0.2em 0.35em;
+  border-radius: 3px;
+  font-family: var(--sans);
+  font-weight: 700;
+  cursor: default;
+  user-select: none;
+}
+
+.exec-status--success {
+  color: #276749;
+  background: #c6f6d5;
+}
+.exec-status--failure {
+  color: #9b2c2c;
+  background: #fed7d7;
+}
+.exec-status--unexpected_exception {
+  color: #7b341e;
+  background: #feebc8;
+}
+.exec-status--syntax_error {
+  color: #9b2c2c;
+  background: #fed7d7;
+}
+.exec-status--compiled {
+  color: var(--fg-muted);
+  background: var(--surface-alt);
+}
+
+html[data-theme="dark"] .exec-status--success {
+  color: #9ae6b4;
+  background: #1a3a2a;
+}
+html[data-theme="dark"] .exec-status--failure {
+  color: #fc8181;
+  background: #2d1515;
+}
+html[data-theme="dark"] .exec-status--unexpected_exception {
+  color: #f6ad55;
+  background: #2d1e0d;
+}
+html[data-theme="dark"] .exec-status--syntax_error {
+  color: #fc8181;
+  background: #2d1515;
+}
+html[data-theme="dark"] .exec-status--compiled {
+  color: var(--fg-muted);
+  background: var(--surface-alt);
+}
+
 dl.params {
   margin: 0;
 }

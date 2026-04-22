@@ -1,10 +1,10 @@
 ---
 import {
+  ingestDir,
   linkForRef,
-  listIngestedBundles,
-  listModules,
   loadModule,
-  qualnameToSlug,
+  slugToQualname,
+  type IngestedDoc,
   type IRNode,
   type SectionNode,
   type SignatureNodeT,
@@ -13,35 +13,25 @@ import {
 import { getBackrefs, resolveRef } from "../../../lib/graph.ts";
 import IrNode from "../../../components/IrNode.astro";
 import BundleLayout from "../../../layouts/BundleLayout.astro";
+import { join } from "node:path";
 
-export async function getStaticPaths() {
-  const bundles = await listIngestedBundles();
-  const paths: Array<{
-    params: { pkg: string; ver: string; slug: string };
-    props: { bundlePath: string; qualname: string };
-  }> = [];
-  for (const b of bundles) {
-    const qualnames = await listModules(b.path);
-    for (const qa of qualnames) {
-      paths.push({
-        params: { pkg: b.pkg, ver: b.version, slug: qualnameToSlug(qa) },
-        props: { bundlePath: b.path, qualname: qa },
-      });
-    }
-  }
-  return paths;
-}
+export const prerender = false;
 
 const { pkg, ver, slug } = Astro.params;
-const { bundlePath, qualname } = Astro.props as {
-  bundlePath: string;
-  qualname: string;
-};
 
-// Defensive: in theory qualname === slugToQualname(slug).
-void slug;
+if (!pkg || !ver || slug === undefined) {
+  return new Response("Not found", { status: 404 });
+}
 
-const doc = await loadModule(bundlePath, qualname);
+const qualname = slugToQualname(slug);
+const bundlePath = join(ingestDir(), pkg, ver);
+
+let doc: IngestedDoc;
+try {
+  doc = await loadModule(bundlePath, qualname);
+} catch {
+  return new Response(`Module ${qualname} not found`, { status: 404 });
+}
 
 function renderAnnotation(
   ann: SigParamT["annotation"] | SignatureNodeT["return_annotation"]

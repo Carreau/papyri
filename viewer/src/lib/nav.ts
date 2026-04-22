@@ -198,11 +198,7 @@ interface ReadTocResult {
   rootHref: string | null;
 }
 
-async function readToc(
-  bundlePath: string,
-  pkg: string,
-  version: string
-): Promise<ReadTocResult> {
+async function readToc(bundlePath: string, pkg: string, version: string): Promise<ReadTocResult> {
   try {
     const raw = await loadCbor(join(bundlePath, "meta", "toc.cbor"));
     if (Array.isArray(raw)) {
@@ -327,8 +323,7 @@ async function buildNav(pkg: string, version: string, bundlePath: string): Promi
   const examples = examplesToEntries(pkg, version, examplePaths);
   // Prefer the TOC root's href (index doc from meta/toc.cbor); fall back to a
   // bare `index` file in the flat docs listing for bundles without a TOC.
-  const docsIndexHref =
-    tocResult.rootHref ?? docs.find((e) => e.name === "index")?.href ?? null;
+  const docsIndexHref = tocResult.rootHref ?? docs.find((e) => e.name === "index")?.href ?? null;
   return {
     pkg,
     version,

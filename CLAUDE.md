@@ -72,15 +72,30 @@ service *could* be built later without a breaking change to the IR.
    Run `python -m pytest` (not bare `pytest`) so the editable install's
    interpreter is used. If `papyri.db` complains about schema, `rm -rf
    ~/.papyri/ingest/` and re-ingest.
-6. **Run linters and formatters before every commit.** Both must pass
-   cleanly with no changes:
+6. **Run linters and formatters before every commit — before pushing.**
+   Waiting for CI to report a formatting or lint failure is wasteful.
+   Run all of these locally and fix any issues first:
+
+   **Python** (always, even for viewer-only changes):
    ```
    ruff format papyri/
    ruff check papyri/
+   mypy papyri/
    ```
    `ruff format` rewrites files in place; re-stage any files it touches.
-   CI enforces both via `.github/workflows/lint.yml` — a failing commit
-   will break the build.
+
+   **Viewer** (when `viewer/` files changed):
+   ```
+   cd viewer
+   pnpm install --frozen-lockfile   # only needed once / after lockfile changes
+   pnpm run format                  # Prettier — rewrites files in place
+   pnpm run lint                    # ESLint — fix any errors (warnings are OK)
+   pnpm run check                   # Astro/TS type check — must report 0 errors
+   ```
+   Re-stage any files Prettier rewrites before committing.
+
+   CI enforces all of the above via `.github/workflows/lint.yml` — a
+   failing commit blocks the PR.
 7. **Do not commit anything under `~/.papyri/`.** That's user data, not
    repo content.
 7. **Viewer design should anticipate the hosted service.** When working on

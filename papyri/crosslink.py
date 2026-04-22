@@ -71,6 +71,7 @@ class IngestedDoc(Node):
         "references",
         "qa",
         "arbitrary",
+        "local_refs",
     )
 
     _content: dict[str, Section]
@@ -85,6 +86,7 @@ class IngestedDoc(Node):
     references: list[str] | None
     qa: str
     arbitrary: list[Section]
+    local_refs: list[str]
 
     __isfrozen = False
 
@@ -102,7 +104,7 @@ class IngestedDoc(Node):
 
     @classmethod
     def new(cls):
-        return cls({}, [], None, None, None, [], None, None, None, None, None, None)
+        return cls({}, [], None, None, None, [], None, None, None, None, None, None, [])
 
     def __setattr__(self, key, value):
         if self.__isfrozen and not hasattr(self, key):
@@ -160,13 +162,13 @@ class IngestedDoc(Node):
             #'Examples'
         ]
 
-        # local_refs (parameter names extracted from the sections above) are
-        # pre-computed by GenVisitor at gen time; IngestVisitor.replace_InlineRole
-        # currently does not resolve inline roles, so we pass an empty set here.
-        # When that is eventually fixed, precompute local_refs in gen and store
-        # them in GeneratedDoc rather than re-extracting here.
         visitor = IngestVisitor(
-            self.qa, known_refs, frozenset(), aliases, version=version, config={}
+            self.qa,
+            known_refs,
+            frozenset(self.local_refs),
+            aliases,
+            version=version,
+            config={},
         )
         for section in ["Extended Summary", "Summary", "Notes"] + sections_:
             if section not in self.content:
@@ -218,6 +220,8 @@ def load_one_uningested(
 
     for k in old_data.slots():
         setattr(blob, k, getattr(old_data, k))
+    # local_refs may be absent in bundles generated before this field was added
+    blob.local_refs = list(getattr(old_data, "local_refs", []))
 
     blob.process(known_refs=known_refs, aliases=aliases, verbose=False, version=version)
 

@@ -51,8 +51,8 @@ the page — the IR and SQLite store are read at request time.
 pnpm build
 ```
 
-Writes a fully static site to `viewer/dist/` with one HTML page per
-ingested qualname. Pages are self-contained: KaTeX math is
+Writes a fully static site to `viewer/dist/client/` with one HTML page
+per ingested qualname. Pages are self-contained: KaTeX math is
 server-rendered, Shiki highlights code at build time, and crosslinks
 resolve to real `<a href>`s via the SQLite graph.
 
@@ -62,6 +62,33 @@ Preview the built output:
 pnpm preview
 ```
 
+## SSR mode
+
+The build now also emits a Node server bundle at `viewer/dist/server/`.
+It serves the static pages for every prerendered route and handles a
+small set of `prerender = false` routes at request time. The SSG deploy
+path (Cloudflare Pages) is unchanged — those routes simply aren't
+called — but the same build works under a long-running Node process.
+
+Run the server locally after `pnpm build`:
+
+```sh
+pnpm serve
+```
+
+SSR endpoints currently exposed:
+
+| Route                        | What it returns                                      |
+| ---------------------------- | ---------------------------------------------------- |
+| `/api/bundles.json`          | Live list of ingested bundles, read per request.     |
+| `/api/search.json?q=<term>`  | Cross-bundle substring search over qualnames.        |
+
+These are the designated shock absorber for future dynamic behaviour
+(global search, on-the-fly bundle swaps, the hosted multi-tenant
+service). Existing pages keep their SSG contract via the default
+`output: "static"` — only routes that explicitly `export const
+prerender = false;` are rendered at runtime.
+
 ## Other scripts
 
 | Script               | What it does                                  |
@@ -69,6 +96,7 @@ pnpm preview
 | `pnpm check`         | Astro + TypeScript type-check.                |
 | `pnpm test`          | Run the vitest unit suite once.               |
 | `pnpm test:watch`    | Vitest in watch mode.                         |
+| `pnpm serve`         | Run the built Node server (SSG + SSR routes). |
 
 ## Environment variables
 

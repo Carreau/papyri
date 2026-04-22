@@ -148,6 +148,16 @@ Data flow per request/page:
    layout with a sidebar, card-based landing, narrative doc / example
    routes, Fig rendering, and a static asset endpoint. Tracked phase
    by phase in `viewer/TODO.md`.
+8. [ ] **M7 — SSR adapter + first dynamic routes.** Attach
+   `@astrojs/node` and keep `output: "static"` so every existing page
+   stays prerendered. New `prerender = false` endpoints
+   (`/api/bundles.json`, `/api/search.json`) exercise the server
+   bundle. This is scaffolding — the Cloudflare Pages deploy still
+   works as pure SSG because the SSR routes are never called. Next
+   slices: promote per-bundle client-side search to a cross-bundle
+   SSR index, add a `/api/resolve` endpoint for graph queries, then
+   evaluate `@astrojs/cloudflare` (Workers + D1 + R2) once the set of
+   dynamic routes is stable.
 
 ### M3 notes
 

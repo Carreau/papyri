@@ -60,6 +60,12 @@ export interface BundleNav {
   tutorials: NavEntry[];
   examples: NavEntry[];
   qualnames: string[];
+  /**
+   * Viewer URL for the top-level narrative docs index, or null if none exists.
+   * Sourced from the single-root TocTree's own ref (which `readToc` previously
+   * discarded when unwrapping children) or from a bare `index` doc file.
+   */
+  docsIndexHref: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -186,22 +192,40 @@ function walkToc(node: TocTreeNode, pkg: string, version: string): TocItem {
   };
 }
 
-async function readToc(bundlePath: string, pkg: string, version: string): Promise<TocItem[]> {
+interface ReadTocResult {
+  toc: TocItem[];
+  /** Href of the root TocTree node itself (the index doc), if present. */
+  rootHref: string | null;
+}
+
+async function readToc(
+  bundlePath: string,
+  pkg: string,
+  version: string
+): Promise<ReadTocResult> {
   try {
     const raw = await loadCbor(join(bundlePath, "meta", "toc.cbor"));
     if (Array.isArray(raw)) {
-      return raw.map((n) => walkToc(n as TocTreeNode, pkg, version));
+      return {
+        toc: raw.map((n) => walkToc(n as TocTreeNode, pkg, version)),
+        rootHref: null,
+      };
     }
     if (raw && (raw as TocTreeNode).__type === "TocTree") {
-      // Single-root case: unwrap so the sidebar isn't wrapped in an extra
-      // layer (unless the root itself carries a title + no children).
       const t = walkToc(raw as TocTreeNode, pkg, version);
-      return t.children.length > 0 ? t.children : [t];
+      // Preserve the root's own href (the index doc URL). Previously this was
+      // silently discarded when the root had children, making the index page
+      // unreachable from the sidebar.
+      const rootHref = t.href;
+      return {
+        toc: t.children.length > 0 ? t.children : [t],
+        rootHref,
+      };
     }
   } catch {
     // No toc → empty nav.
   }
-  return [];
+  return { toc: [], rootHref: null };
 }
 
 // ---------------------------------------------------------------------------
@@ -291,7 +315,7 @@ export async function listExamples(bundlePath: string): Promise<string[]> {
 }
 
 async function buildNav(pkg: string, version: string, bundlePath: string): Promise<BundleNav> {
-  const [meta, toc, docPaths, examplePaths, qualnames] = await Promise.all([
+  const [meta, tocResult, docPaths, examplePaths, qualnames] = await Promise.all([
     readMetaCbor(bundlePath),
     readToc(bundlePath, pkg, version),
     listDocs(bundlePath),
@@ -301,17 +325,22 @@ async function buildNav(pkg: string, version: string, bundlePath: string): Promi
   const url = await logoDataUrl(bundlePath, meta.logo);
   const { docs, tutorials } = docsToEntries(pkg, version, docPaths);
   const examples = examplesToEntries(pkg, version, examplePaths);
+  // Prefer the TOC root's href (index doc from meta/toc.cbor); fall back to a
+  // bare `index` file in the flat docs listing for bundles without a TOC.
+  const docsIndexHref =
+    tocResult.rootHref ?? docs.find((e) => e.name === "index")?.href ?? null;
   return {
     pkg,
     version,
     bundlePath,
     meta,
     logoDataUrl: url,
-    toc,
+    toc: tocResult.toc,
     docs,
     tutorials,
     examples,
     qualnames,
+    docsIndexHref,
   };
 }
 

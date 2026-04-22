@@ -4,13 +4,13 @@ export const prerender = false;
 import BundleLayout from "../../../../../layouts/BundleLayout.astro";
 import NodesPanel from "../../../../../components/NodesPanel.tsx";
 import { listIngestedBundles } from "../../../../../lib/ir-reader.ts";
-import { NODE_CONFIGS } from "../../../../../lib/node-configs.ts";
+import { typeFromSlug } from "../../../../../lib/ir-types.ts";
 
 const { pkg, ver, nodetype } = Astro.params;
 if (!pkg || !ver || !nodetype) return new Response(null, { status: 404 });
 
-const config = NODE_CONFIGS[nodetype];
-if (!config) return new Response(null, { status: 404 });
+const typeName = typeFromSlug(nodetype);
+if (!typeName) return new Response(null, { status: 404 });
 
 const bundles = await listIngestedBundles();
 const bundle = bundles.find((b) => b.pkg === pkg && b.version === ver);
@@ -21,10 +21,10 @@ if (!bundle) return new Response(null, { status: 404 });
   pkg={pkg}
   ver={ver}
   bundlePath={bundle.path}
-  title={`${config.label} — ${pkg} ${ver} — Papyri viewer`}
+  title={`${typeName} — ${pkg} ${ver} — Papyri viewer`}
 >
   <p class="crumb"><a href={`/${pkg}/${ver}/`}>&larr; {pkg} {ver}</a></p>
-  <h1>{config.label}</h1>
+  <h1>{typeName}</h1>
 
   <NodesPanel client:load pkg={pkg} ver={ver} nodetype={nodetype} />
 </BundleLayout>

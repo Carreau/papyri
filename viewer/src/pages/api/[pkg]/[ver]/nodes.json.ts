@@ -5,13 +5,13 @@
 // soon as the limit is reached so large bundles are cheap to query.
 //
 // Query params:
-//   nodetype  — optional slug from NODE_CONFIGS ("math" | "code").
+//   nodetype  — optional lowercase slug of an IR type name (e.g. "paragraph").
 //               Omit to collect all known node types.
 //   limit     — optional integer, default 100, capped at 100.
 //
 // Response:
 //   { total: number, limit: number,
-//     entries: Array<{ type: string, value: string,
+//     entries: Array<{ type: string, value: string, html?: string,
 //                      pages: Array<{ label: string, href: string }> }> }
 
 import type { APIRoute } from "astro";
@@ -27,7 +27,7 @@ import {
   type TypedNode,
 } from "../../../../lib/ir-reader.ts";
 import { listDocs, listExamples } from "../../../../lib/nav.ts";
-import { NODE_CONFIGS } from "../../../../lib/node-configs.ts";
+import { typeFromSlug } from "../../../../lib/ir-types.ts";
 import { renderNode } from "../../../../lib/render-node.ts";
 
 export const prerender = false;
@@ -51,10 +51,11 @@ export interface NodesResponse {
   entries: NodeEntry[];
 }
 
-function displayValueFor(n: IRNode): string | null {
-  for (const cfg of Object.values(NODE_CONFIGS)) {
-    if (cfg.types.has((n as TypedNode).__type)) return cfg.displayValue(n);
-  }
+// Deduplication key: use the raw .value string for nodes that carry one
+// (covers all the common leaf types), fall back to truncated JSON otherwise.
+function displayValueFor(n: IRNode): string {
+  const v = (n as Record<string, unknown>).value;
+  if (typeof v === "string") return v;
   return JSON.stringify(n).slice(0, 120);
 }
 
@@ -78,7 +79,6 @@ export async function collectBundleNodes(
     for (const n of nodes) {
       if (valueMap.size >= limit) return;
       const val = displayValueFor(n);
-      if (val === null) continue;
       const type = (n as TypedNode).__type;
       const k = entryKey(type, val);
       const existing = valueMap.get(k);
@@ -175,8 +175,17 @@ export const GET: APIRoute = async ({ params, url }) => {
     });
   }
 
-  const cfg = nodetypeSlug ? NODE_CONFIGS[nodetypeSlug] : undefined;
-  const types = cfg?.types ?? ALL_NODE_TYPES;
+  let types: ReadonlySet<string> = ALL_NODE_TYPES;
+  if (nodetypeSlug) {
+    const typeName = typeFromSlug(nodetypeSlug);
+    if (!typeName) {
+      return new Response(JSON.stringify({ error: "Unknown node type" }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    types = new Set([typeName]);
+  }
 
   const result = await collectBundleNodes(bundle.path, pkg!, ver!, types, limit);
 

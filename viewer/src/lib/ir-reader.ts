@@ -2,6 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { Decoder, Tag, addExtension } from "cbor-x";
+import { IR_TYPE_NAMES } from "./ir-types.ts";
 
 // ---------------------------------------------------------------------------
 // Ingest store. Structure: ~/.papyri/ingest/<pkg>/<ver>/{module,docs,...}.
@@ -199,9 +200,7 @@ const FIELD_ORDER: Record<number, { name: string; fields: string[] }> = {
 };
 
 /** All IR node type names known to this decoder. */
-export const ALL_NODE_TYPES: ReadonlySet<string> = new Set(
-  Object.values(FIELD_ORDER).map((s) => s.name)
-);
+export const ALL_NODE_TYPES: ReadonlySet<string> = new Set(IR_TYPE_NAMES);
 
 /** Tag 4444: bare Python tuple; treated as a plain array. */
 const TUPLE_TAG = 4444;

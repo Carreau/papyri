@@ -304,18 +304,50 @@ nav.doc-toc a:hover {
   text-decoration: underline;
 }
 
-section.signature pre {
+/* Structured signature: each parameter and annotation lives in its own
+   element so the renderer can style, link, or otherwise enrich them without
+   re-parsing a flat string. */
+section.signature .sig {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 0.75rem 1rem;
   overflow-x: auto;
-  margin: 0;
 }
-section.signature pre code {
+section.signature .sig-code {
   background: transparent;
   padding: 0;
+  font-family: var(--mono);
   font-size: 0.9rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+section.signature .sig-name {
+  color: var(--fg);
+  font-weight: 600;
+}
+section.signature .sig-param {
+  /* Keep a parameter's name/annotation/default together when wrapping. */
+  display: inline;
+}
+section.signature .sig-param-name {
+  color: var(--fg);
+}
+section.signature .sig-annotation,
+section.signature .sig-return {
+  color: var(--accent);
+}
+section.signature .sig-default {
+  color: var(--fg-muted);
+}
+section.signature .sig-marker,
+section.signature .sig-stars {
+  color: var(--fg-muted);
+}
+section.signature .sig-punct,
+section.signature .sig-arrow {
+  color: var(--fg-muted);
 }
 
 /* Page chrome only — IR-node styles live in ir-nodes.css (imported at top). */

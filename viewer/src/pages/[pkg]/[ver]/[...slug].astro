@@ -7,11 +7,10 @@ import {
   type IngestedDoc,
   type IRNode,
   type SectionNode,
-  type SignatureNodeT,
-  type SigParamT,
 } from "../../../lib/ir-reader.ts";
 import { getBackrefs, resolveRef } from "../../../lib/graph.ts";
 import IrNode from "../../../components/IrNode.astro";
+import Signature from "../../../components/Signature.astro";
 import BundleLayout from "../../../layouts/BundleLayout.astro";
 import { join } from "node:path";
 
@@ -31,53 +30,6 @@ try {
   doc = await loadModule(bundlePath, qualname);
 } catch {
   return new Response(`Module ${qualname} not found`, { status: 404 });
-}
-
-function renderAnnotation(
-  ann: SigParamT["annotation"] | SignatureNodeT["return_annotation"]
-): string | null {
-  if (ann == null) return null;
-  if (typeof ann === "string") return ann;
-  if (typeof ann === "object" && "__type" in ann && ann.__type === "Empty") {
-    return null;
-  }
-  return null;
-}
-
-function renderDefault(def: SigParamT["default"]): string | null {
-  if (def == null) return null;
-  if (typeof def === "string") return def;
-  if (typeof def === "object" && "__type" in def && def.__type === "Empty") {
-    return null;
-  }
-  return null;
-}
-
-function formatParam(p: SigParamT): string {
-  const parts: string[] = [];
-  if (p.kind === "VAR_POSITIONAL") parts.push("*");
-  else if (p.kind === "VAR_KEYWORD") parts.push("**");
-  parts.push(p.name);
-  const ann = renderAnnotation(p.annotation);
-  if (ann) parts.push(`: ${ann}`);
-  const def = renderDefault(p.default);
-  if (def != null) parts.push(` = ${def}`);
-  return parts.join("");
-}
-
-function formatSignature(sig: SignatureNodeT): string {
-  const pieces: string[] = [];
-  let lastKind: string | null = null;
-  for (const p of sig.parameters) {
-    if (p.kind === "KEYWORD_ONLY" && lastKind !== "KEYWORD_ONLY" && lastKind !== "VAR_POSITIONAL") {
-      pieces.push("*");
-    }
-    pieces.push(formatParam(p));
-    lastKind = p.kind;
-  }
-  const ret = renderAnnotation(sig.return_annotation);
-  const retStr = ret ? ` -> ${ret}` : "";
-  return `${sig.target_name}(${pieces.join(", ")})${retStr}`;
 }
 
 // Iteration order of sections: prefer _ordered_sections, fall back to
@@ -217,9 +169,7 @@ for (const b of backrefs) {
     doc.signature ? (
       <section class="signature">
         <h2>Signature</h2>
-        <pre>
-          <code>{formatSignature(doc.signature)}</code>
-        </pre>
+        <Signature signature={doc.signature} />
       </section>
     ) : null
   }

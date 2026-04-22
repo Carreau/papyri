@@ -595,7 +595,10 @@ class DirectiveVisiter(TreeReplacer):
     def replace_GenCode(self, code):
         """Flatten a GenCode intermediate into a plain Code node."""
         code_ = "".join([entry.value for entry in code.entries])
-        return [Code(code_)]
+        status = (
+            code.ce_status.value if hasattr(code.ce_status, "value") else code.ce_status
+        )
+        return [Code(code_, status)]
 
     def _block_verbatim_helper(self, name: str, argument: str, options: dict, content):
         data = f".. {name}:: {argument}\n"

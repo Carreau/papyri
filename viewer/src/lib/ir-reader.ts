@@ -176,7 +176,7 @@ const FIELD_ORDER: Record<number, { name: string; fields: string[] }> = {
   4047: { name: "Emphasis", fields: ["children"] },
   4048: { name: "Strong", fields: ["children"] },
   4049: { name: "Link", fields: ["children", "url", "title"] },
-  4050: { name: "Code", fields: ["value"] },
+  4050: { name: "Code", fields: ["value", "execution_status"] },
   4051: { name: "InlineCode", fields: ["value"] },
   4052: {
     name: "Directive",

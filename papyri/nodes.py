@@ -267,6 +267,10 @@ class Link(Node):
 class Code(Node):
     type = "code"
     value: str
+    execution_status: str | None
+
+    def __init__(self, value, execution_status=None):
+        super().__init__(value, execution_status)
 
 
 @register(4051)

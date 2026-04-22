@@ -69,13 +69,13 @@ const returnAnn = annText(signature.return_annotation);
             <span class="sig-param-name">{e.param.name}</span>
             {annText(e.param.annotation) ? (
               <>
-                <span class="sig-punct">:</span>
+                <span class="sig-punct">: </span>
                 <span class="sig-annotation">{annText(e.param.annotation)}</span>
               </>
             ) : null}
             {defaultText(e.param.default) != null ? (
               <>
-                <span class="sig-punct">=</span>
+                <span class="sig-punct"> = </span>
                 <span class="sig-default">{defaultText(e.param.default)}</span>
               </>
             ) : null}
@@ -96,7 +96,7 @@ const returnAnn = annText(signature.return_annotation);
     {
       returnAnn ? (
         <>
-          <span class="sig-arrow">→</span>
+          <span class="sig-arrow"> → </span>
           <span class="sig-return">{returnAnn}</span>
         </>
       ) : null

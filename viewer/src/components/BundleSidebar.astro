@@ -15,7 +15,8 @@ interface Props {
 }
 
 const { nav, activeQualname, activeDocPath, activeExamplePath } = Astro.props;
-const bundleHref = `/${nav.pkg}/${nav.version}/`;
+const encVer = encodeURIComponent(nav.version);
+const bundleHref = `/${nav.pkg}/${encVer}/`;
 const summary = typeof nav.meta.summary === "string" ? nav.meta.summary : null;
 
 // The toc comes from meta/toc.cbor. When it's empty we still show the flat
@@ -141,10 +142,10 @@ function isTocSectionExpanded(item: TocItem): boolean {
   <nav class="sidebar-section">
     <h3 class="sidebar-heading">Browse</h3>
     <ul class="sidebar-flat">
-      <li><a href={`/${nav.pkg}/${nav.version}/images/`}>Images</a></li>
-      <li><a href={`/${nav.pkg}/${nav.version}/nodes/math/`}>Math</a></li>
-      <li><a href={`/${nav.pkg}/${nav.version}/nodes/code/`}>Code</a></li>
-      <li><a href={`/${nav.pkg}/${nav.version}/nodes/`}>All nodes</a></li>
+      <li><a href={`/${nav.pkg}/${encVer}/images/`}>Images</a></li>
+      <li><a href={`/${nav.pkg}/${encVer}/nodes/math/`}>Math</a></li>
+      <li><a href={`/${nav.pkg}/${encVer}/nodes/code/`}>Code</a></li>
+      <li><a href={`/${nav.pkg}/${encVer}/nodes/`}>All nodes</a></li>
     </ul>
   </nav>
 
@@ -155,7 +156,7 @@ function isTocSectionExpanded(item: TocItem): boolean {
       {
         nav.qualnames.map((qa) => (
           <li class={qa === activeQualname ? "is-active" : undefined}>
-            <a href={`/${nav.pkg}/${nav.version}/${qualnameToSlug(qa)}/`}>{qa}</a>
+            <a href={`/${nav.pkg}/${encVer}/${qualnameToSlug(qa)}/`}>{qa}</a>
           </li>
         ))
       }

@@ -171,13 +171,14 @@ function refToHref(
   const module = ref.__type === "RefInfo" ? ref.module : pkg;
   const ver = ref.__type === "RefInfo" ? ref.version : version;
   const { kind, path } = ref;
+  const encVer = encodeURIComponent(ver);
   switch (kind) {
     case "module":
-      return `/${module}/${ver}/${path.replace(/:/g, "$")}/`;
+      return `/${module}/${encVer}/${path.replace(/:/g, "$")}/`;
     case "docs":
-      return `/${module}/${ver}/docs/${path.split(":").map(encodeURIComponent).join("/")}/`;
+      return `/${module}/${encVer}/docs/${path.split(":").map(encodeURIComponent).join("/")}/`;
     case "examples":
-      return `/${module}/${ver}/examples/${path.split("/").map(encodeURIComponent).join("/")}/`;
+      return `/${module}/${encVer}/examples/${path.split("/").map(encodeURIComponent).join("/")}/`;
     default:
       return null;
   }
@@ -287,7 +288,7 @@ function docsToEntries(
   const docs: NavEntry[] = [];
   const tutorials: NavEntry[] = [];
   for (const p of paths) {
-    const href = `/${pkg}/${version}/docs/${encodeDocKey(p)}/`;
+    const href = `/${pkg}/${encodeURIComponent(version)}/docs/${encodeDocKey(p)}/`;
     const entry: NavEntry = { name: p, href };
     if (isTutorial(p)) tutorials.push(entry);
     else docs.push(entry);
@@ -298,7 +299,7 @@ function docsToEntries(
 function examplesToEntries(pkg: string, version: string, paths: string[]): NavEntry[] {
   return paths.map((p) => ({
     name: p,
-    href: `/${pkg}/${version}/examples/${encodeExPath(p)}/`,
+    href: `/${pkg}/${encodeURIComponent(version)}/examples/${encodeExPath(p)}/`,
   }));
 }
 

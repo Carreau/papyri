@@ -207,7 +207,7 @@ for (const b of backrefs) {
   activeQualname={qualname}
 >
   <p class="crumb">
-    <a href="/">bundles</a> / <a href={`/${pkg}/${ver}/`}>{pkg} {ver}</a>
+    <a href="/">bundles</a> / <a href={`/${pkg}/${encodeURIComponent(ver!)}/`}>{pkg} {ver}</a>
   </p>
 
   <header class="qa-header">

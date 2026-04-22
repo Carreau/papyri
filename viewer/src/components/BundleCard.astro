@@ -32,7 +32,7 @@ const [docCount, exampleCount] = await Promise.all([
 ]);
 
 const summary = typeof nav.meta.summary === "string" ? nav.meta.summary : null;
-const href = `/${pkg}/${version}/`;
+const href = `/${pkg}/${encodeURIComponent(version)}/`;
 ---
 
 <a class="bundle-card" href={href} data-pkg={pkg} data-summary={summary ?? ""}>

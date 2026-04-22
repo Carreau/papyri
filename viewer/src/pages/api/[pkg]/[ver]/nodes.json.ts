@@ -105,7 +105,7 @@ export async function collectBundleNodes(
     }
     addHits(collectNodes(doc, types), {
       label: qa,
-      href: `/${pkg}/${ver}/${qa.replace(/:/g, "$")}/`,
+      href: `/${pkg}/${encodeURIComponent(ver)}/${qa.replace(/:/g, "$")}/`,
     });
   }
 
@@ -121,7 +121,7 @@ export async function collectBundleNodes(
     }
     addHits(collectNodes(section, types), {
       label: docPath,
-      href: `/${pkg}/${ver}/docs/${docPath.split("/").map(encodeURIComponent).join("/")}/`,
+      href: `/${pkg}/${encodeURIComponent(ver)}/docs/${docPath.split("/").map(encodeURIComponent).join("/")}/`,
     });
   }
 
@@ -137,7 +137,7 @@ export async function collectBundleNodes(
     }
     addHits(collectNodes(section, types), {
       label: exPath,
-      href: `/${pkg}/${ver}/examples/${exPath.split("/").map(encodeURIComponent).join("/")}/`,
+      href: `/${pkg}/${encodeURIComponent(ver)}/examples/${exPath.split("/").map(encodeURIComponent).join("/")}/`,
     });
   }
 

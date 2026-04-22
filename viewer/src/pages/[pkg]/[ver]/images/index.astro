@@ -58,7 +58,7 @@ await Promise.all(
     } catch {
       return;
     }
-    const href = `/${pkg}/${ver}/${qa.replace(/:/g, "$")}/`;
+    const href = `/${pkg}/${encodeURIComponent(ver!)}/${qa.replace(/:/g, "$")}/`;
     for (const found of collectImages(doc)) addHit(found, { label: qa, href });
   })
 );
@@ -73,7 +73,7 @@ await Promise.all(
     } catch {
       return;
     }
-    const href = `/${pkg}/${ver}/docs/${docPath.split("/").map(encodeURIComponent).join("/")}/`;
+    const href = `/${pkg}/${encodeURIComponent(ver!)}/docs/${docPath.split("/").map(encodeURIComponent).join("/")}/`;
     for (const found of collectImages(section)) addHit(found, { label: docPath, href });
   })
 );
@@ -88,7 +88,7 @@ await Promise.all(
     } catch {
       return;
     }
-    const href = `/${pkg}/${ver}/examples/${exPath.split("/").map(encodeURIComponent).join("/")}/`;
+    const href = `/${pkg}/${encodeURIComponent(ver!)}/examples/${exPath.split("/").map(encodeURIComponent).join("/")}/`;
     for (const found of collectImages(section)) addHit(found, { label: exPath, href });
   })
 );
@@ -102,7 +102,7 @@ const entries = [...imageMap.values()].sort((a, b) => a.img.src.localeCompare(b.
   bundlePath={bundlePath}
   title={`Images — ${pkg} ${ver} — Papyri viewer`}
 >
-  <p class="crumb"><a href={`/${pkg}/${ver}/`}>&larr; {pkg} {ver}</a></p>
+  <p class="crumb"><a href={`/${pkg}/${encodeURIComponent(ver!)}/`}>&larr; {pkg} {ver}</a></p>
   <h1>Images</h1>
   <p class="lede">
     {entries.length} image{entries.length !== 1 ? "s" : ""}

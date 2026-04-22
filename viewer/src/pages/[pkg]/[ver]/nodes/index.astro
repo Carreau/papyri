@@ -19,7 +19,7 @@ if (!bundle) return new Response(null, { status: 404 });
   bundlePath={bundle.path}
   title={`All nodes — ${pkg} ${ver} — Papyri viewer`}
 >
-  <p class="crumb"><a href={`/${pkg}/${ver}/`}>&larr; {pkg} {ver}</a></p>
+  <p class="crumb"><a href={`/${pkg}/${encodeURIComponent(ver)}/`}>&larr; {pkg} {ver}</a></p>
   <h1>All nodes</h1>
 
   <NodesPanel client:load pkg={pkg} ver={ver} />

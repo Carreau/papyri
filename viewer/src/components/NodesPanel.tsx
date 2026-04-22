@@ -42,7 +42,7 @@ export default function NodesPanel({ pkg, ver, nodetype }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const u = new URL(`/api/${pkg}/${ver}/nodes.json`, window.location.origin);
+    const u = new URL(`/api/${pkg}/${encodeURIComponent(ver)}/nodes.json`, window.location.origin);
     if (nodetype) u.searchParams.set("nodetype", nodetype);
 
     fetch(u.toString())
@@ -65,7 +65,7 @@ export default function NodesPanel({ pkg, ver, nodetype }: Props) {
     <div>
       <nav className="node-type-nav" aria-label="Filter by node type">
         <a
-          href={`/${pkg}/${ver}/nodes/`}
+          href={`/${pkg}/${encodeURIComponent(ver)}/nodes/`}
           className={"node-type-nav-item" + (!nodetype ? " active" : "")}
           aria-current={!nodetype ? "page" : undefined}
         >
@@ -76,7 +76,7 @@ export default function NodesPanel({ pkg, ver, nodetype }: Props) {
           return (
             <a
               key={slug}
-              href={`/${pkg}/${ver}/nodes/${slug}/`}
+              href={`/${pkg}/${encodeURIComponent(ver)}/nodes/${slug}/`}
               className={"node-type-nav-item" + (nodetype === slug ? " active" : "")}
               aria-current={nodetype === slug ? "page" : undefined}
             >

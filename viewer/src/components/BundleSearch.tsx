@@ -22,7 +22,7 @@ export default function BundleSearch({ pkg, ver }: Props): ReactElement {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`/${pkg}/${ver}/search.json`);
+        const res = await fetch(`/${pkg}/${encodeURIComponent(ver)}/search.json`);
         if (!res.ok) {
           throw new Error(`HTTP ${res.status}`);
         }
@@ -69,7 +69,7 @@ export default function BundleSearch({ pkg, ver }: Props): ReactElement {
           ) : (
             hits.map((h) => (
               <li key={h.qualname}>
-                <a href={`/${pkg}/${ver}/${slug(h.qualname)}/`}>{h.qualname}</a>
+                <a href={`/${pkg}/${encodeURIComponent(ver)}/${slug(h.qualname)}/`}>{h.qualname}</a>
               </li>
             ))
           )}

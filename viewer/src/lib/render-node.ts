@@ -189,7 +189,9 @@ export async function renderNode(node: IRNode, opts: RenderOptions = {}): Promis
       const ref = n.value as { module?: string; version?: string; path?: string } | undefined;
       if (ref && ref.module && ref.version && ref.path) {
         const safe = String(ref.path).replace(/:/g, "$");
-        const src = escapeHtml(`/assets/${String(ref.module)}/${String(ref.version)}/${safe}`);
+        const src = escapeHtml(
+          `/assets/${String(ref.module)}/${encodeURIComponent(String(ref.version))}/${safe}`
+        );
         const alt = escapeHtml(String(ref.path));
         return `<figure class="fig"><img src="${src}" alt="${alt}" loading="lazy" /></figure>`;
       }

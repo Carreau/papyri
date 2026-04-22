@@ -80,7 +80,7 @@ function resolveXref(raw: unknown): { url: string; label: string } | null {
   activeExamplePath={examplePath}
 >
   <p class="crumb">
-    <a href="/">bundles</a> / <a href={`/${pkg}/${ver}/`}>{pkg} {ver}</a> /
+    <a href="/">bundles</a> / <a href={`/${pkg}/${encodeURIComponent(ver!)}/`}>{pkg} {ver}</a> /
     <span>examples</span>
   </p>
 

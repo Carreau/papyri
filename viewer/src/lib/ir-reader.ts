@@ -439,7 +439,7 @@ export function collectImages(node: unknown): FoundImgNode[] {
         const assetPath = String(ref.path);
         out.push({
           kind: "Figure",
-          src: `/assets/${ref.module}/${ref.version}/${assetPath.replace(/:/g, "$")}`,
+          src: `/assets/${ref.module}/${encodeURIComponent(String(ref.version))}/${assetPath.replace(/:/g, "$")}`,
           assetPath,
         });
       }
@@ -452,18 +452,19 @@ export function collectImages(node: unknown): FoundImgNode[] {
 }
 
 export function linkForRef(ref: LinkRef): string | null {
+  const ver = encodeURIComponent(ref.ver);
   switch (ref.kind) {
     case "module":
-      return `/${ref.pkg}/${ref.ver}/${qualnameToSlug(ref.path)}/`;
+      return `/${ref.pkg}/${ver}/${qualnameToSlug(ref.path)}/`;
     case "docs":
-      return `/${ref.pkg}/${ref.ver}/docs/${ref.path.split(":").map(encodeURIComponent).join("/")}/`;
+      return `/${ref.pkg}/${ver}/docs/${ref.path.split(":").map(encodeURIComponent).join("/")}/`;
     case "examples":
-      return `/${ref.pkg}/${ref.ver}/examples/${ref.path.split("/").map(encodeURIComponent).join("/")}/`;
+      return `/${ref.pkg}/${ver}/examples/${ref.path.split("/").map(encodeURIComponent).join("/")}/`;
     case "assets":
       // Colons are legal on disk but break Astro's URL-based path writer.
       // Same slug rule as qualnames: `:` -> `$`. Kept in sync with the
       // asset endpoint's `slugifyAssetPath`.
-      return `/assets/${ref.pkg}/${ref.ver}/${ref.path.replace(/:/g, "$")}`;
+      return `/assets/${ref.pkg}/${ver}/${ref.path.replace(/:/g, "$")}`;
     default:
       return null;
   }

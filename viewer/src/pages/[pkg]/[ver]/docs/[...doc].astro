@@ -121,7 +121,7 @@ const tocEntries = sections.filter((s, i) => s.title && !(i === 0 && firstTitleI
   activeDocPath={docPath}
 >
   <p class="crumb">
-    <a href="/">bundles</a> / <a href={`/${pkg}/${ver}/`}>{pkg} {ver}</a> /
+    <a href="/">bundles</a> / <a href={`/${pkg}/${encodeURIComponent(ver!)}/`}>{pkg} {ver}</a> /
     <span>docs</span>
   </p>
 

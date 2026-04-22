@@ -327,3 +327,85 @@ def test_citation_roundtrip():
     assert isinstance(decoded, Citation)
     assert decoded.label == "CIT2002"
     assert decoded.children[0].children[0].value == "Some ref."  # type: ignore[union-attr]
+
+
+@pytest.mark.parametrize(
+    "role",
+    ["class", "func", "meth", "method", "obj", "attr", "any", "mod", "data", "exc"],
+)
+def test_inline_role_resolves_to_crossref(role):
+    """
+    Explicit Python-domain reference roles (`:class:`, `:func:`, ...) must
+    produce a ``CrossRef`` when the target is in ``known_refs``. Regression
+    test: they used to short-circuit to verbatim ``InlineCode`` and never
+    crosslink.
+    """
+    from papyri.nodes import CrossRef, InlineRole, RefInfo
+    from papyri.tree import DirectiveVisiter
+
+    target = RefInfo("numpy", "1.0", "api", "numpy.ndarray")
+    visitor = DirectiveVisiter(
+        "numpy.cos",
+        frozenset({target}),
+        frozenset(),
+        {},
+        "1.0",
+        module="numpy",
+    )
+    out = visitor.replace_InlineRole(
+        InlineRole("numpy.ndarray", domain=None, role=role)
+    )
+    assert len(out) == 1
+    assert isinstance(out[0], CrossRef), (role, out)
+    assert out[0].reference == target, (role, out)
+
+
+@pytest.mark.parametrize(
+    "role",
+    ["kbd", "sub", "sup", "term", "samp", "program", "file", "keyword"],
+)
+def test_inline_role_formatting_stays_verbatim(role):
+    """
+    Formatting-only roles (`:kbd:`, `:sub:`, ...) are not cross-references;
+    they should continue to render as verbatim ``InlineCode``.
+    """
+    from papyri.nodes import InlineCode, InlineRole, RefInfo
+    from papyri.tree import DirectiveVisiter
+
+    target = RefInfo("numpy", "1.0", "api", "Ctrl")
+    visitor = DirectiveVisiter(
+        "numpy.cos",
+        frozenset({target}),
+        frozenset(),
+        {},
+        "1.0",
+        module="numpy",
+    )
+    out = visitor.replace_InlineRole(InlineRole("Ctrl", domain=None, role=role))
+    assert len(out) == 1
+    assert isinstance(out[0], InlineCode), (role, out)
+
+
+def test_inline_role_unresolved_falls_back_to_inline_role():
+    """
+    When a cross-reference role can't be resolved (target not in ``known_refs``
+    and not importable), the original ``InlineRole`` is preserved so the
+    viewer can still display it as styled code.
+    """
+    from papyri.nodes import InlineRole
+    from papyri.tree import DirectiveVisiter
+
+    visitor = DirectiveVisiter(
+        "numpy.cos",
+        frozenset(),
+        frozenset(),
+        {},
+        "1.0",
+        module="numpy",
+    )
+    directive = InlineRole("not.a.real.symbol", domain=None, role="class")
+    out = visitor.replace_InlineRole(directive)
+    assert len(out) == 1
+    assert isinstance(out[0], InlineRole)
+    assert out[0].role == "class"
+    assert out[0].value == "not.a.real.symbol"

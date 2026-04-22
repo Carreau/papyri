@@ -872,3 +872,75 @@ section.backrefs ul.qualnames {
   border-radius: 3px;
   padding: 0 0.3em;
 }
+
+/* ---------------------------------------------------------------------------
+   Node browser pages — rendered by the NodesPanel React island.
+--------------------------------------------------------------------------- */
+.nodes-loading,
+.nodes-error {
+  margin-top: 1rem;
+  color: var(--fg-muted);
+}
+.nodes-error {
+  color: var(--color-danger, #c0392b);
+}
+
+.node-list {
+  margin-top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.node-entry {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.node-entry dt {
+  background: var(--surface-alt);
+  padding: 0.5rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.node-kind {
+  font-size: 0.72rem;
+  font-family: var(--mono);
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.node-value {
+  max-height: 12rem;
+  overflow: auto;
+}
+.math-raw,
+.code-raw,
+.node-raw {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.code-raw {
+  margin: 0;
+}
+.node-entry dd {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+}
+.node-refs summary {
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: var(--accent);
+}
+.node-refs ul {
+  margin: 0.3rem 0 0 1rem;
+  padding: 0;
+  list-style: disc;
+  font-size: 0.82rem;
+}
+.node-refs li {
+  margin: 0.15rem 0;
+}

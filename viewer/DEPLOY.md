@@ -1,20 +1,30 @@
 # Deploying the viewer to Cloudflare Pages
 
-The viewer is a pure static site (`astro build` → `viewer/dist/`), so it
-deploys to Cloudflare Pages with no runtime adapter, no Workers, and no
-database at request time. This document sketches the intended GitHub
-Actions setup; the workflow is **not yet committed** — once we're ready
-to turn it on, drop the YAML below into
+The viewer deploys to Cloudflare Pages as a pure static site — only the
+prerendered HTML under `viewer/dist/client/` is uploaded. This document
+sketches the intended GitHub Actions setup; the workflow is **not yet
+committed** — once we're ready to turn it on, drop the YAML below into
 `.github/workflows/cloudflare-pages.yml`.
+
+> **Note on SSR.** `astro.config.mjs` now attaches `@astrojs/node` so
+> individual routes can opt into server rendering (`export const
+> prerender = false`). `pnpm build` therefore produces two output
+> trees: `dist/client/` (static HTML + assets) and `dist/server/` (a
+> standalone Node entry). The Cloudflare Pages deploy below uploads
+> `dist/client/` only — the SSR endpoints under `/api/*` are not
+> reachable from that deploy and are exercised via `pnpm serve`
+> locally. When we eventually move the dynamic routes to the edge,
+> the migration is `@astrojs/node` → `@astrojs/cloudflare`; everything
+> else in this doc stays the same.
 
 ## Architecture
 
 ```
   GitHub Actions
-  ├─ papyri gen examples/papyri.toml   → ~/.papyri/data/<pkg>_<ver>/
-  ├─ papyri ingest ~/.papyri/data/...  → ~/.papyri/ingest/papyri.db
-  ├─ pnpm build (Astro SSG)            → viewer/dist/
-  └─ wrangler pages deploy viewer/dist → Cloudflare Pages
+  ├─ papyri gen examples/papyri.toml          → ~/.papyri/data/<pkg>_<ver>/
+  ├─ papyri ingest ~/.papyri/data/...         → ~/.papyri/ingest/papyri.db
+  ├─ pnpm build (Astro SSG + unused SSR)      → viewer/dist/{client,server}/
+  └─ wrangler pages deploy viewer/dist/client → Cloudflare Pages
 ```
 
 At build time Astro walks the graph DB and the ingest tree, pre-renders
@@ -30,8 +40,9 @@ no per-request DB access.
 | Per-bundle IR (JSON + CBOR blobs)      | `~/.papyri/data/<pkg>_<ver>/`  | Consumed at build; not shipped                    |
 | Ingest store (decoded CBOR per qualname) | `~/.papyri/ingest/<pkg>/<ver>/` | Consumed at build; not shipped                    |
 | Graph DB (`papyri.db`, SQLite)         | `~/.papyri/ingest/papyri.db`   | Consumed at build; not shipped                    |
-| Rendered HTML + assets                 | `viewer/dist/`                 | Cloudflare Pages edge (global, immutable per deploy) |
-| Example assets (plots, captured HTML)  | `viewer/dist/assets/...`       | Cloudflare Pages edge                             |
+| Rendered HTML + assets                 | `viewer/dist/client/`          | Cloudflare Pages edge (global, immutable per deploy) |
+| Example assets (plots, captured HTML)  | `viewer/dist/client/assets/...` | Cloudflare Pages edge                             |
+| SSR server bundle                      | `viewer/dist/server/`          | **Not uploaded.** Built for `pnpm serve` only.    |
 
 In other words: all papyri-side state is a **build input**, not a
 runtime dependency. The Pages deploy contains nothing but pre-rendered
@@ -171,7 +182,7 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: >-
-            pages deploy viewer/dist
+            pages deploy viewer/dist/client
             --project-name=${{ secrets.CLOUDFLARE_PAGES_PROJECT }}
             --branch=${{ github.head_ref || github.ref_name }}
 ```

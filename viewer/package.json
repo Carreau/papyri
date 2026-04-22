@@ -9,6 +9,7 @@
     "start": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
+    "serve": "node ./dist/server/entry.mjs",
     "astro": "astro",
     "check": "astro check",
     "lint": "eslint src --ext .ts,.tsx,.astro",
@@ -18,6 +19,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@astrojs/node": "^10.0.5",
     "@astrojs/react": "^5.0.0",
     "astro": "^6.1.6",
     "better-sqlite3": "^12.9.0",
@@ -28,9 +30,8 @@
     "shiki": "^4.0.2"
   },
   "devDependencies": {
-    "@eslint/js": "^9.18.0",
     "@astrojs/check": "^0.9.8",
-    "typescript-eslint": "^8.17.0",
+    "@eslint/js": "^9.18.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/katex": "^0.16.8",
     "@types/node": "^22.10.0",
@@ -45,6 +46,7 @@
     "prettier": "^3.4.2",
     "prettier-plugin-astro": "^0.14.1",
     "typescript": "^5.7.0",
+    "typescript-eslint": "^8.17.0",
     "vitest": "^4.1.4"
   },
   "engines": {

@@ -114,11 +114,7 @@ export default function NodesPanel({ pkg, ver, nodetype }: Props) {
             {typeCounts.map(({ t, count }) => (
               <li key={t}>
                 <label className="nt-filter-label">
-                  <input
-                    type="checkbox"
-                    checked={visible[t] ?? true}
-                    onChange={() => toggle(t)}
-                  />
+                  <input type="checkbox" checked={visible[t] ?? true} onChange={() => toggle(t)} />
                   <span className="nt-filter-name">{t}</span>
                   <span className="nt-filter-count">{count}</span>
                 </label>

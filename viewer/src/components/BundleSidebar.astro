@@ -71,7 +71,9 @@ function isTocSectionExpanded(item: TocItem): boolean {
   {
     hasToc || nav.docs.length > 0 ? (
       <nav class="sidebar-section">
-        <h3 class="sidebar-heading">Docs</h3>
+        <h3 class="sidebar-heading">
+          {nav.docsIndexHref ? <a href={nav.docsIndexHref}>Docs</a> : "Docs"}
+        </h3>
         {hasToc ? (
           <ul class="sidebar-toc">
             {nav.toc.map((item) => (

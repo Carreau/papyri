@@ -60,7 +60,7 @@ const returnAnn = annText(signature.return_annotation);
           {e.marker ? (
             <>
               <span class="sig-marker">{e.marker}</span>
-              <span class="sig-punct">, </span>
+              <span class="sig-punct">,&nbsp;</span>
             </>
           ) : null}
           <span class={`sig-param sig-kind-${e.param.kind.toLowerCase()}`}>
@@ -80,14 +80,14 @@ const returnAnn = annText(signature.return_annotation);
               </>
             ) : null}
           </span>
-          {i < entries.length - 1 ? <span class="sig-punct">, </span> : null}
+          {i < entries.length - 1 ? <span class="sig-punct">,&nbsp;</span> : null}
         </>
       ))
     }
     {
       trailingSlash ? (
         <>
-          <span class="sig-punct">, </span>
+        <span class="sig-punct">,&nbsp;</span>
           <span class="sig-marker">/</span>
         </>
       ) : null
@@ -96,7 +96,7 @@ const returnAnn = annText(signature.return_annotation);
     {
       returnAnn ? (
         <>
-          <span class="sig-arrow"> → </span>
+        <span class="sig-arrow">&nbsp;→&nbsp;</span>
           <span class="sig-return">{returnAnn}</span>
         </>
       ) : null

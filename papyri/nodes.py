@@ -538,6 +538,7 @@ class Section(Node):
         | SubstitutionRef
         | Unimplemented
         | UnimplementedInline
+        | Citation
     ]
     # might need to be more complicated like verbatim.
     title: str | None

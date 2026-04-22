@@ -41,6 +41,12 @@ function isTocActive(item: TocItem): boolean {
   const encoded = activeDocPath.split(":").map(encodeURIComponent).join("/");
   return item.href.endsWith(`/docs/${encoded}/`);
 }
+
+function isTocSectionExpanded(item: TocItem): boolean {
+  // Expand children only when we're inside this section (the item itself or
+  // one of its direct children is the active page).
+  return isTocActive(item) || item.children.some((child) => isTocActive(child));
+}
 ---
 
 <aside class="bundle-sidebar" aria-label="Bundle navigation">
@@ -71,7 +77,7 @@ function isTocActive(item: TocItem): boolean {
             {nav.toc.map((item) => (
               <li class={isTocActive(item) ? "is-active" : undefined}>
                 {item.href ? <a href={item.href}>{item.title}</a> : <span>{item.title}</span>}
-                {item.children.length > 0 ? (
+                {item.children.length > 0 && isTocSectionExpanded(item) ? (
                   <ul class="sidebar-toc">
                     {item.children.map((child) => (
                       <li class={isTocActive(child) ? "is-active" : undefined}>

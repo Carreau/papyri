@@ -152,12 +152,13 @@ Data flow per request/page:
    `@astrojs/node` and keep `output: "static"` so every existing page
    stays prerendered. New `prerender = false` endpoints
    (`/api/bundles.json`, `/api/search.json`) exercise the server
-   bundle. This is scaffolding — the Cloudflare Pages deploy still
-   works as pure SSG because the SSR routes are never called. Next
-   slices: promote per-bundle client-side search to a cross-bundle
-   SSR index, add a `/api/resolve` endpoint for graph queries, then
-   evaluate `@astrojs/cloudflare` (Workers + D1 + R2) once the set of
-   dynamic routes is stable.
+   bundle. This is scaffolding — any static-host deploy still works as
+   pure SSG because the SSR routes are never called. Next slices:
+   promote per-bundle client-side search to a cross-bundle SSR index,
+   add a `/api/resolve` endpoint for graph queries, then pick a
+   production host and swap to its Astro adapter (`@astrojs/cloudflare`,
+   `@astrojs/netlify`, `@astrojs/vercel`, or keep `@astrojs/node` for a
+   self-hosted Node server) once the set of dynamic routes is stable.
 
 ### M3 notes
 
@@ -321,12 +322,13 @@ Data flow per request/page:
   it handles both.
 - Do we vendor a tiny IR schema doc inside `viewer/` or wait for
   `docs/IR.md` (Phase 2) and consume that?
-- Publishing target: resolved — **Cloudflare Pages**, driven from
-  `.github/workflows/cloudflare-pages.yml`. The static export is
-  deployed as-is; all papyri-side state (bundles, ingest store, graph
-  DB) is a build input, never a runtime dependency. See
-  [`DEPLOY.md`](DEPLOY.md) for the Cloudflare setup, secrets, and the
-  upgrade path to D1 + R2 if we ever outgrow SSG.
+- Publishing target: **not yet locked in.** `viewer/dist/client/` is a
+  plain static site that works on GitHub Pages, Cloudflare Pages,
+  Netlify, Vercel, or any static host. All papyri-side state (bundles,
+  ingest store, graph DB) is a build input, never a runtime dependency.
+  See [`DEPLOY.md`](DEPLOY.md) for ready-to-use GitHub Actions workflows
+  for GitHub Pages and Cloudflare Pages, plus the SSR upgrade paths for
+  each major host.
 - Should the viewer have its own CI workflow, or piggyback on the
   existing Python CI? Probably separate, filtered on `viewer/**`.
 - IR-drift policy: do we pin a "known-good" IR commit hash in

@@ -220,8 +220,9 @@ robustness and coverage holes.
 ## Follow-ups (not yet scheduled)
 
 - Static export hardening for `viewer/dist/` deployment (the current
-  build works, but a documented "publish this dir to GitHub Pages" story
-  is missing).
+  build works; `viewer/DEPLOY.md` documents ready-to-use GitHub Actions
+  workflows for GitHub Pages and Cloudflare Pages, plus SSR upgrade paths
+  for other hosts — no hosting platform is locked in yet).
 - Dark-adapted Shiki theme + dark-mode-aware KaTeX glyphs. The current
   M5 dark mode keeps the `github-light` Shiki palette on a dark
   surface, which is readable but not ideal.

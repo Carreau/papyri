@@ -1,21 +1,21 @@
-# Deploying the viewer to Cloudflare Pages
+# Deploying the viewer (static site)
 
-The viewer deploys to Cloudflare Pages as a pure static site — only the
-prerendered HTML under `viewer/dist/client/` is uploaded. This document
-sketches the intended GitHub Actions setup; the workflow is **not yet
-committed** — once we're ready to turn it on, drop the YAML below into
-`.github/workflows/cloudflare-pages.yml`.
+`pnpm build` produces a fully self-contained static site under
+`viewer/dist/client/`. That directory contains nothing but HTML, CSS, JS, and
+assets — it can be served from **any static host** (GitHub Pages, Cloudflare
+Pages, Netlify, Vercel, Fly.io static volumes, a bare Nginx/Caddy box, an S3
+bucket with static website hosting, etc.).
 
 > **Note on SSR.** `astro.config.mjs` now attaches `@astrojs/node` so
 > individual routes can opt into server rendering (`export const
 > prerender = false`). `pnpm build` therefore produces two output
 > trees: `dist/client/` (static HTML + assets) and `dist/server/` (a
-> standalone Node entry). The Cloudflare Pages deploy below uploads
+> standalone Node entry). The static-host deploys below upload
 > `dist/client/` only — the SSR endpoints under `/api/*` are not
-> reachable from that deploy and are exercised via `pnpm serve`
-> locally. When we eventually move the dynamic routes to the edge,
-> the migration is `@astrojs/node` → `@astrojs/cloudflare`; everything
-> else in this doc stays the same.
+> reachable from those deploys and are exercised via `pnpm serve`
+> locally. Once we commit to a hosting platform, `@astrojs/node` is
+> swapped for the matching adapter (`@astrojs/cloudflare`,
+> `@astrojs/netlify`, `@astrojs/vercel`, etc.).
 
 ## Architecture
 
@@ -24,54 +24,26 @@ committed** — once we're ready to turn it on, drop the YAML below into
   ├─ papyri gen examples/papyri.toml          → ~/.papyri/data/<pkg>_<ver>/
   ├─ papyri ingest ~/.papyri/data/...         → ~/.papyri/ingest/papyri.db
   ├─ pnpm build (Astro SSG + unused SSR)      → viewer/dist/{client,server}/
-  └─ wrangler pages deploy viewer/dist/client → Cloudflare Pages
+  └─ upload viewer/dist/client                → static host
 ```
 
 At build time Astro walks the graph DB and the ingest tree, pre-renders
 every qualname page, inlines KaTeX math, highlights code with Shiki,
-and emits one `index.html` per URL. Cloudflare Pages then serves those
-files straight from its global edge cache — no origin, no cold starts,
-no per-request DB access.
+and emits one `index.html` per URL. The static host then serves those
+files from cache — no origin, no cold starts, no per-request DB access.
 
 ## Storage model
 
-| Artifact                               | Where it lives at build time   | Where it lives at runtime                         |
-| -------------------------------------- | ------------------------------ | ------------------------------------------------- |
-| Per-bundle IR (JSON + CBOR blobs)      | `~/.papyri/data/<pkg>_<ver>/`  | Consumed at build; not shipped                    |
-| Ingest store (decoded CBOR per qualname) | `~/.papyri/ingest/<pkg>/<ver>/` | Consumed at build; not shipped                    |
-| Graph DB (`papyri.db`, SQLite)         | `~/.papyri/ingest/papyri.db`   | Consumed at build; not shipped                    |
-| Rendered HTML + assets                 | `viewer/dist/client/`          | Cloudflare Pages edge (global, immutable per deploy) |
-| Example assets (plots, captured HTML)  | `viewer/dist/client/assets/...` | Cloudflare Pages edge                             |
-| SSR server bundle                      | `viewer/dist/server/`          | **Not uploaded.** Built for `pnpm serve` only.    |
+| Artifact                                    | Where it lives at build time    | Where it lives at runtime              |
+| ------------------------------------------- | ------------------------------- | -------------------------------------- |
+| Per-bundle IR (JSON + CBOR blobs)           | `~/.papyri/data/<pkg>_<ver>/`   | Consumed at build; not shipped         |
+| Ingest store (decoded CBOR per qualname)    | `~/.papyri/ingest/<pkg>/<ver>/` | Consumed at build; not shipped         |
+| Graph DB (`papyri.db`, SQLite)              | `~/.papyri/ingest/papyri.db`    | Consumed at build; not shipped         |
+| Rendered HTML + assets                      | `viewer/dist/client/`           | Static host edge (immutable per deploy)|
+| Example assets (plots, captured HTML)       | `viewer/dist/client/assets/...` | Static host edge                       |
+| SSR server bundle                           | `viewer/dist/server/`           | **Not uploaded.** Built for local use. |
 
-In other words: all papyri-side state is a **build input**, not a
-runtime dependency. The Pages deploy contains nothing but pre-rendered
-HTML and static assets.
-
-## One-time Cloudflare setup
-
-1. In the Cloudflare dashboard, create a Pages project. Pick
-   **"Direct Upload"** (not the Git integration — we drive deploys
-   from GitHub Actions so we can run papyri first). Name it something
-   stable, e.g. `papyri-viewer`.
-2. Create an API token with the `Pages:Edit` permission scoped to the
-   account that owns the project. Copy the token.
-3. Note the Cloudflare **Account ID** from the dashboard sidebar.
-
-## GitHub secrets
-
-Add three repo-level secrets under *Settings → Secrets and variables →
-Actions*:
-
-| Secret                      | Value                                  |
-| --------------------------- | -------------------------------------- |
-| `CLOUDFLARE_API_TOKEN`      | The Pages:Edit token from step 2 above |
-| `CLOUDFLARE_ACCOUNT_ID`     | Your Cloudflare account ID             |
-| `CLOUDFLARE_PAGES_PROJECT`  | The project name (e.g. `papyri-viewer`) |
-
-With those three set, the workflow below will run on every push to
-`main` (production deploy) and on every pull request against `main`
-(preview deploy on a branch subdomain).
+All papyri-side state is a **build input**, not a runtime dependency.
 
 ## Scaling the content set
 
@@ -80,39 +52,140 @@ examples/papyri.toml` and ingesting the result. To publish additional
 libraries, either:
 
 - add more TOMLs to the `Generate + ingest bundles` step, or
-- generate bundles in a separate job (mirroring
-  `python-package.yml`'s matrix), upload them as artifacts, and
+- generate bundles in a separate job, upload them as artifacts, and
   download + ingest them from the deploy job.
 
-Watch the Pages project's asset count and build time as the set grows.
-Cloudflare Pages allows up to 20,000 files per deploy and a 25 MiB
-per-file limit as of writing; papyri emits one HTML per qualname plus
-assets, which adds up fast across large libraries. If we hit either
-limit the next step is to either prune to module-level pages with
-client-side rendering of qualnames, or move to the SSR-on-Workers
-path (see below).
+Watch asset counts and build time as the content set grows. Most static
+hosts impose per-file or total-size limits; papyri emits one HTML per
+qualname plus assets, which adds up fast for large libraries. If limits
+are hit, options include pruning to module-level pages with client-side
+qualname rendering, or moving to an SSR-on-serverless path.
 
 ## If we ever outgrow SSG
 
 `viewer/PLAN.md` already flags the `ir-reader` / `graph` modules as the
-designated shock absorbers. To switch to edge rendering:
+designated shock absorbers. The SSR migration path depends on the chosen host:
 
-- Replace `better-sqlite3` with the Cloudflare **D1** binding behind
-  `src/lib/graph.ts`. Papyri's SQLite schema (`papyri/graphstore.py`)
-  is pure SQL and should port with minor tweaks.
-- Push the ingest store's CBOR blobs to **Cloudflare R2** (keyed by
-  `<pkg>/<ver>/module/<qualname>`), and have the Worker fetch + decode
-  them with `cbor-x` on demand. `cbor-x` runs unmodified in Workers.
-- Swap the Astro build output to `@astrojs/cloudflare` so pages run as
-  Worker routes.
+- **Cloudflare Workers**: replace `better-sqlite3` with the D1 binding in
+  `src/lib/graph.ts`; push CBOR blobs to R2 and fetch + decode with `cbor-x`
+  on demand; swap to `@astrojs/cloudflare`. Pure-SQL schema in
+  `papyri/graphstore.py` ports with minor tweaks; `cbor-x` runs in Workers.
+- **Netlify / Vercel Edge Functions**: similar pattern — managed Postgres or
+  Turso instead of D1, object storage instead of R2, matching Astro adapter.
+- **Node server (Fly.io, Railway, VPS)**: keep `better-sqlite3` and the SQLite
+  file; swap `@astrojs/node` from `mode: "middleware"` to `mode: "standalone"`;
+  serve with a reverse proxy. Simplest migration, no vendor lock-in.
 
-None of this is needed today — flagged only so future-us knows the
-ramp is clean.
+The choice should be driven by concrete cost / latency / ops data once we have
+a real content set — no commitment needed today.
 
-## Proposed workflow YAML
+## Proposed GitHub Pages workflow
 
-Save as `.github/workflows/cloudflare-pages.yml` when you're ready to
-turn the automated deploy on.
+A minimal deployment that uses the built-in `github-pages` action — no
+third-party tokens needed. Save as
+`.github/workflows/pages.yml` when ready to turn on.
+
+```yaml
+name: Deploy viewer to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Install papyri
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Generate + ingest bundles
+        run: |
+          papyri gen examples/papyri.toml --no-infer
+          for d in ~/.papyri/data/*/; do
+            papyri ingest "$d"
+          done
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: viewer/pnpm-lock.yaml
+
+      - name: Install viewer deps
+        working-directory: viewer
+        run: pnpm install --frozen-lockfile
+
+      - name: Build static site
+        working-directory: viewer
+        run: pnpm build
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: viewer/dist/client
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
+```
+
+Enable *Settings → Pages → Source → GitHub Actions* in the repo before
+the first run.
+
+## Alternative: Cloudflare Pages
+
+If Cloudflare Pages is preferred (global edge CDN, preview deploys per PR),
+save as `.github/workflows/cloudflare-pages.yml`.
+
+### One-time Cloudflare setup
+
+1. In the Cloudflare dashboard, create a Pages project. Pick
+   **"Direct Upload"** (not the Git integration — we drive deploys from
+   GitHub Actions). Name it something stable, e.g. `papyri-viewer`.
+2. Create an API token with the `Pages:Edit` permission scoped to the
+   account. Copy the token.
+3. Note the **Account ID** from the dashboard sidebar.
+
+### GitHub secrets
+
+Add three repo-level secrets under *Settings → Secrets and variables →
+Actions*:
+
+| Secret                      | Value                                  |
+| --------------------------- | -------------------------------------- |
+| `CLOUDFLARE_API_TOKEN`      | The Pages:Edit token from step 2       |
+| `CLOUDFLARE_ACCOUNT_ID`     | Your Cloudflare account ID             |
+| `CLOUDFLARE_PAGES_PROJECT`  | The project name (e.g. `papyri-viewer`)|
+
+### Workflow YAML
 
 ```yaml
 name: Deploy viewer to Cloudflare Pages

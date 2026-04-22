@@ -156,10 +156,8 @@ export const GET: APIRoute = async ({ params, url }) => {
     });
   }
 
-  const types =
-    nodetypeSlug && NODE_CONFIGS[nodetypeSlug]
-      ? NODE_CONFIGS[nodetypeSlug].types
-      : ALL_NODE_TYPES;
+  const cfg = nodetypeSlug ? NODE_CONFIGS[nodetypeSlug] : undefined;
+  const types = cfg?.types ?? ALL_NODE_TYPES;
 
   const result = await collectBundleNodes(bundle.path, pkg!, ver!, types, limit);
 

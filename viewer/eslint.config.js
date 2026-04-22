@@ -63,6 +63,9 @@ export default [
     },
     rules: {
       ...astroeslint.configs.recommended.rules,
+      // TypeScript / astro check handles undefined-variable checks for .astro
+      // frontmatter (same reason tseslint.configs.recommended disables it for .ts).
+      "no-undef": "off",
       "@typescript-eslint/no-explicit-any": "warn",
       "@typescript-eslint/no-unused-vars": "warn",
     },

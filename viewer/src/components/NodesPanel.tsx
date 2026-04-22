@@ -14,6 +14,7 @@ interface PageRef {
 interface NodeEntry {
   type: string;
   value: string;
+  html?: string;
   pages: PageRef[];
 }
 
@@ -133,7 +134,7 @@ export default function NodesPanel({ pkg, ver, nodetype }: Props) {
               <dt>
                 <span className="node-kind">{entry.type}</span>
                 <div className="node-value">
-                  <NodeValue type={entry.type} value={entry.value} />
+                  <NodeValue type={entry.type} value={entry.value} html={entry.html} />
                 </div>
               </dt>
               <dd>
@@ -158,7 +159,12 @@ export default function NodesPanel({ pkg, ver, nodetype }: Props) {
   );
 }
 
-function NodeValue({ type, value }: { type: string; value: string }) {
+function NodeValue({ html, type, value }: { html?: string; type: string; value: string }) {
+  if (html) {
+    // html is produced server-side by renderNode, which escapes all text
+    // values and only uses output from trusted libraries (KaTeX, Shiki).
+    return <div className="node-rendered" dangerouslySetInnerHTML={{ __html: html }} />;
+  }
   if (type === "Math" || type === "InlineMath") {
     return <code className="math-raw">{value}</code>;
   }

@@ -28,6 +28,7 @@ import {
 } from "../../../../lib/ir-reader.ts";
 import { listDocs, listExamples } from "../../../../lib/nav.ts";
 import { NODE_CONFIGS } from "../../../../lib/node-configs.ts";
+import { renderNode } from "../../../../lib/render-node.ts";
 
 export const prerender = false;
 
@@ -39,6 +40,8 @@ interface PageRef {
 export interface NodeEntry {
   type: string;
   value: string;
+  /** Pre-rendered HTML from renderNode; always present in API responses. */
+  html?: string;
   pages: PageRef[];
 }
 
@@ -63,6 +66,9 @@ export async function collectBundleNodes(
   limit: number
 ): Promise<NodesResponse> {
   const valueMap = new Map<string, NodeEntry>();
+  // Parallel map keyed identically to valueMap; stores the first IRNode seen
+  // for each unique (type, value) pair so we can render HTML after collection.
+  const nodeMap = new Map<string, IRNode>();
 
   function entryKey(type: string, val: string): string {
     return `${type}\0${val}`;
@@ -82,6 +88,7 @@ export async function collectBundleNodes(
         }
       } else {
         valueMap.set(k, { type, value: val, pages: [page] });
+        nodeMap.set(k, n);
       }
     }
   }
@@ -138,6 +145,18 @@ export async function collectBundleNodes(
     if (a.type !== b.type) return a.type.localeCompare(b.type);
     return a.value.length - b.value.length || a.value.localeCompare(b.value);
   });
+
+  // Render HTML for each entry using the original node (no resolveXref: the
+  // node browser shows nodes out of context, so CrossRefs render as unresolved).
+  await Promise.all(
+    entries.map(async (entry) => {
+      const k = entryKey(entry.type, entry.value);
+      const originalNode = nodeMap.get(k);
+      if (originalNode) {
+        entry.html = await renderNode(originalNode);
+      }
+    })
+  );
 
   return { total: valueMap.size, limit, entries };
 }

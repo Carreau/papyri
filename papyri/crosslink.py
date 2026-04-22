@@ -39,20 +39,20 @@ log = logging.getLogger("papyri")
 
 def find_all_refs(
     graph_store: GraphStore,
-) -> tuple[frozenset[RefInfo], dict[str, RefInfo]]:
+) -> frozenset[RefInfo]:
+    """
+    Given a graph store, return a (frozenset of all RefInfo)
+
+    """
     assert isinstance(graph_store, GraphStore)
     o_family = sorted(list(graph_store.glob((None, None, "module", None))))
 
-    # here we can't compute just the dictionary and use frozenset(....values())
-    # as we may have multiple version of libraries; this is something that will
-    # need to be fixed in the long run
-    known_refs = []
-    ref_map = {}
+    known_refs: set[RefInfo] = set()
     for item in o_family:
-        r = RefInfo(item.module, item.version, "module", item.path)
-        known_refs.append(r)
-        ref_map[r.path] = r
-    return frozenset(known_refs), ref_map
+        known_refs = known_refs | {
+            RefInfo(item.module, item.version, "module", item.path)
+        }
+    return frozenset(known_refs)
 
 
 @register(4010)
@@ -86,8 +86,6 @@ class IngestedDoc(Node):
     qa: str
     arbitrary: list[Section]
 
-    __isfrozen = False
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._dp = _OrderedDictProxy(self._ordered_sections, self._content)
@@ -98,19 +96,14 @@ class IngestedDoc(Node):
 
     @property
     def content(self):
+        """
+        A property to the dict proxy
+        """
         return self._dp
 
     @classmethod
     def new(cls):
         return cls({}, [], None, None, None, [], None, None, None, None, None, None)
-
-    def __setattr__(self, key, value):
-        if self.__isfrozen and not hasattr(self, key):
-            raise TypeError(f"{self!r} is a frozen class")
-        object.__setattr__(self, key, value)
-
-    def _freeze(self):
-        self.__isfrozen = True
 
     def all_forward_refs(self) -> list[Key]:
         visitor = TreeVisitor({RefInfo, Figure})
@@ -336,7 +329,7 @@ class Ingester:
     def ingest(self, path: Path, check: bool) -> None:
         gstore = self.gstore
 
-        known_refs, _ = find_all_refs(gstore)
+        known_refs = find_all_refs(gstore)
 
         nvisited_items = {}
 
@@ -438,7 +431,7 @@ class Ingester:
 
     def relink(self) -> None:
         gstore = self.gstore
-        known_refs, _ = find_all_refs(gstore)
+        known_refs = find_all_refs(gstore)
         aliases: dict[str, str] = {}
         for key in gstore.glob((None, None, "meta", "aliases.cbor")):
             aliases.update(cbor2.loads(gstore.get(key)))

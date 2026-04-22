@@ -173,14 +173,17 @@ function resolveXref(raw: unknown): { url: string; label: string } | null {
   return { url, label };
 }
 
-// Backrefs for this document.
+// Backrefs for this document, split into same-package and cross-package.
 const backrefs = getBackrefs({ pkg, ver, kind: "module", path: qualname });
 interface BackrefRow {
   url: string;
   label: string;
   key: string;
+  // For external refs, include the package name as context.
+  pkg?: string;
 }
-const backrefRows: BackrefRow[] = [];
+const internalBackrefRows: BackrefRow[] = [];
+const externalBackrefRows: BackrefRow[] = [];
 const _seen = new Set<string>();
 for (const b of backrefs) {
   const url = linkForRef(b);
@@ -188,7 +191,11 @@ for (const b of backrefs) {
   const key = `${b.pkg}/${b.ver}/${b.kind}/${b.path}`;
   if (_seen.has(key)) continue;
   _seen.add(key);
-  backrefRows.push({ url, label: b.path, key });
+  if (b.pkg === pkg) {
+    internalBackrefRows.push({ url, label: b.path, key });
+  } else {
+    externalBackrefRows.push({ url, label: b.path, key, pkg: b.pkg });
+  }
 }
 ---
 
@@ -281,16 +288,34 @@ for (const b of backrefs) {
   }
 
   {
-    backrefRows.length > 0 ? (
+    internalBackrefRows.length > 0 || externalBackrefRows.length > 0 ? (
       <section class="backrefs">
         <h2>Referenced by</h2>
-        <ul class="qualnames">
-          {backrefRows.map((b) => (
-            <li>
-              <a href={b.url}>{b.label}</a>
-            </li>
-          ))}
-        </ul>
+        {internalBackrefRows.length > 0 ? (
+          <div class="backref-group">
+            <h3>This package</h3>
+            <ul class="qualnames">
+              {internalBackrefRows.map((b) => (
+                <li>
+                  <a href={b.url}>{b.label}</a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {externalBackrefRows.length > 0 ? (
+          <div class="backref-group">
+            <h3>Other packages</h3>
+            <ul class="qualnames qualnames-external">
+              {externalBackrefRows.map((b) => (
+                <li>
+                  <span class="backref-pkg">{b.pkg}</span>
+                  <a href={b.url}>{b.label}</a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </section>
     ) : null
   }

@@ -325,6 +325,26 @@ section.backrefs {
 section.backrefs ul.qualnames {
   columns: 2;
 }
+.backref-group {
+  margin-top: 0.75rem;
+}
+.backref-group h3 {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-muted);
+  margin: 0 0 0.4rem;
+  font-weight: 500;
+}
+.backref-pkg {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  margin-right: 0.35em;
+}
+.backref-pkg::after {
+  content: ":";
+}
 
 /* ---------------------------------------------------------------------------
    Site header. Capped at the content max-width; wordmark on the left, tools

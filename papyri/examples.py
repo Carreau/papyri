@@ -10,6 +10,8 @@ should have any effects when called. Paragraphs should be able to contain plain
 Heading 2
 ---------
 
+link to :ref:`numpy.sin` , `numpy:sin` `numpy.linspace`
+
 Heading 3
 ~~~~~~~~~
 

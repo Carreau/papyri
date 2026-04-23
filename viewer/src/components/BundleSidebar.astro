@@ -18,6 +18,11 @@ const { nav, activeQualname, activeDocPath, activeExamplePath } = Astro.props;
 const bundleHref = `/${nav.pkg}/${nav.version}/`;
 const summary = typeof nav.meta.summary === "string" ? nav.meta.summary : null;
 
+// Show only top-level module entries in the sidebar: no `:` (not a class
+// member) and at most one dot (one level below the root package).
+const sidebarModules = nav.qualnames.filter((qa) => !qa.includes(":") && qa.split(".").length <= 2);
+const hiddenCount = nav.qualnames.length - sidebarModules.length;
+
 // The toc comes from meta/toc.cbor. When it's empty we still show the flat
 // `docs` list below so the section isn't an awkward empty stub.
 const hasToc = nav.toc.length > 0;
@@ -153,12 +158,13 @@ function isTocSectionExpanded(item: TocItem): boolean {
     <BundleSearch client:load pkg={nav.pkg} ver={nav.version} />
     <ul class="sidebar-qualnames">
       {
-        nav.qualnames.map((qa) => (
+        sidebarModules.map((qa) => (
           <li class={qa === activeQualname ? "is-active" : undefined}>
             <a href={`/${nav.pkg}/${nav.version}/${qualnameToSlug(qa)}/`}>{qa}</a>
           </li>
         ))
       }
     </ul>
+    {hiddenCount > 0 ? <p class="sidebar-api-more">{hiddenCount} more — use search above</p> : null}
   </nav>
 </aside>

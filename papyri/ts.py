@@ -242,18 +242,22 @@ class TSVisitor:
         """
         nacc = []
         for i, a in enumerate(acc):
-            if isinstance(a, Unimplemented) and a.placeholder == "untarget":
-                if len(acc) > i and isinstance(acc[i + 1], Section):
-                    target_name = a.value[1:-1]
-                    sec = acc[i + 1]
-                    acc[i + 1] = Section(
-                        children=sec.children,
-                        title=sec.title,
-                        level=sec.level,
-                        target=target_name,
-                    )
-                    self._targets.append(target_name)
-                    continue
+            if (
+                isinstance(a, Unimplemented)
+                and a.placeholder == "untarget"
+                and len(acc) > i
+                and isinstance(acc[i + 1], Section)
+            ):
+                target_name = a.value[1:-1]
+                sec = acc[i + 1]
+                acc[i + 1] = Section(
+                    children=sec.children,
+                    title=sec.title,
+                    level=sec.level,
+                    target=target_name,
+                )
+                self._targets.append(target_name)
+                continue
 
             nacc.append(a)
 
@@ -448,26 +452,25 @@ class TSVisitor:
 
         inner_value = text_value[1:-1].replace("\n", " ")
 
-        if trailing_suffix:
-            if trailing_suffix.isalpha():
-                log.warning(
-                    "Interpreted text %r has alphanumeric suffix %r immediately "
-                    "after closing backtick in (%s). "
-                    "RST-correct form is `%s`\\ %s. "
-                    "Splitting into role+text as a best-effort fix.",
-                    inner_value,
-                    trailing_suffix,
-                    self._qa,
-                    inner_value,
-                    trailing_suffix,
-                )
-                t = InlineRole(
-                    inner_value,
-                    domain=domain,
-                    role=role_value,
-                    inventory=inventory,
-                )
-                return [t, Text(trailing_suffix)]
+        if trailing_suffix and trailing_suffix.isalpha():
+            log.warning(
+                "Interpreted text %r has alphanumeric suffix %r immediately "
+                "after closing backtick in (%s). "
+                "RST-correct form is `%s`\\ %s. "
+                "Splitting into role+text as a best-effort fix.",
+                inner_value,
+                trailing_suffix,
+                self._qa,
+                inner_value,
+                trailing_suffix,
+            )
+            t = InlineRole(
+                inner_value,
+                domain=domain,
+                role=role_value,
+                inventory=inventory,
+            )
+            return [t, Text(trailing_suffix)]
             # Non-alpha trailing char — fall through to existing handling below.
 
         if "`" in inner_value:

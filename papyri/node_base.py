@@ -164,7 +164,7 @@ def not_type_check(item, annotation):
         if not isinstance(item, dict):
             return f"got  {type(item)}, Yexpecting list"
         inner_type = annotation.__args__[0]
-        a = [not_type_check(i, inner_type) for i in item.keys()]
+        a = [not_type_check(i, inner_type) for i in item]
         ax = [x for x in a if x is not None]
         inner_type = annotation.__args__[1]
         b = [not_type_check(i, inner_type) for i in item.values()]

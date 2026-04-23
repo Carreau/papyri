@@ -150,7 +150,7 @@ def test_subtree_fixture(fixture_path: Path) -> None:
 
     Each JSON file in ``papyri/tests/postingest/`` drives one assertion.
     """
-    from papyri.crosslink import IngestedDoc  # noqa: F401 — registers CBOR tag 4010
+    from papyri.crosslink import IngestedDoc as IngestedDoc
     from papyri.nodes import encoder
 
     spec = json.loads(fixture_path.read_text())

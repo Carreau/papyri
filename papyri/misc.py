@@ -109,9 +109,12 @@ class BlockExecutor:
 
         stdout = io.StringIO()
         stderr = io.StringIO()
-        with cbook._setattr_cm(FigureManagerBase, show=lambda self: None):
-            with redirect_stdout(stdout), redirect_stderr(stderr):
-                res = self._exec(text, self.ns, name)
+        with (
+            cbook._setattr_cm(FigureManagerBase, show=lambda self: None),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            res = self._exec(text, self.ns, name)
 
         fig_managers = _pylab_helpers.Gcf.get_all_fig_managers()
 

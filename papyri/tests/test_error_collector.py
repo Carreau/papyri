@@ -50,9 +50,8 @@ def test_2():
     c.early_error = True
     c.fail_unseen_error = True
     ec = ErrorCollector(c, log)
-    with pytest.raises(UnseenError):
-        with ec("TestItem"):
-            JustPasses()
+    with pytest.raises(UnseenError), ec("TestItem"):
+        JustPasses()
 
 
 def test_4():

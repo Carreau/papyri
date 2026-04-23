@@ -19,12 +19,8 @@ def test_parse_space_in_directive_section():
         It may depends on the tree-sitter rst version.
 
     """)
-    pytest.raises(
-        errors.SpaceAfterBlockDirectiveError,
-        parse,
-        data.encode(),
-        "test_parse_space_in_directive_section",
-    )
+    with pytest.raises(errors.SpaceAfterBlockDirectiveError):
+        parse(data.encode(), "test_parse_space_in_directive_section")
 
 
 def test_parse_directive_body():
@@ -142,7 +138,7 @@ def test_parse_no_newline():
     [section] = parse(data, "test_parse_space")
     first_child = section.children[0]
     assert isinstance(first_child, Paragraph)
-    text0, directive, text1, reference, text2 = first_child.children
+    _text0, directive, _text1, reference, _text2 = first_child.children
     assert "\n" not in directive.value  # type: ignore[union-attr]
     assert directive.value == "this interpreted_text"  # type: ignore[union-attr]
     assert "\n" not in reference.value  # type: ignore[union-attr]

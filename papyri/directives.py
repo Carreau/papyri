@@ -42,7 +42,7 @@ def admonition_helper(name, argument, options, content):
 
         return [
             Admonition(
-                [AdmonitionTitle([Text(f"{name} {argument}")])] + inner[0].children,
+                [AdmonitionTitle([Text(f"{name} {argument}")]), *inner[0].children],
                 kind=name,
             )
         ]

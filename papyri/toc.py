@@ -65,7 +65,7 @@ def make_tree(data):
     data = {k: v for k, v in data.items()}
     data = flatten(data)
     data = {k: [i[1] for i in v] for k, v in data.items()}
-    c = {k: 0 for k in data.keys()}
+    c = {k: 0 for k in data}
     if not c:
         return {}
     # Prefer "index" as the root (standard Sphinx layout), but fall back to

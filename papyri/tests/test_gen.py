@@ -33,7 +33,7 @@ def test_find_beyond_decorators():
     gen = Gen(dummy_progress=True, config=config)
 
     api_object = APIObjectInfo("function", "", None, "test_example", qa="test")
-    doc, figs = gen.prepare_doc_for_one_object(
+    doc, _figs = gen.prepare_doc_for_one_object(
         ex1,
         NumpyDocString(""),
         qa="irrelevant",

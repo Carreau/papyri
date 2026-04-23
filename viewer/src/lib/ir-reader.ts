@@ -3,6 +3,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { Decoder, Tag, addExtension } from "cbor-x";
 import { IR_TYPE_NAMES } from "./ir-types.ts";
+import { qualnameToSlug, slugToQualname } from "./slugs.ts";
+export { qualnameToSlug, slugToQualname };
 
 // ---------------------------------------------------------------------------
 // Ingest store. Structure: ~/.papyri/ingest/<pkg>/<ver>/{module,docs,...}.
@@ -276,6 +278,11 @@ export interface SectionNode {
   target: string | null;
 }
 
+/** Safely return the children of a SectionNode, guarding against malformed CBOR. */
+export function sectionChildren(s: SectionNode): IRNode[] {
+  return Array.isArray(s.children) ? s.children : [];
+}
+
 export interface SigParamT {
   __type: "SigParam";
   __tag: 4030;
@@ -349,23 +356,6 @@ export async function loadCbor<T = unknown>(path: string): Promise<T> {
   const raw = await readFile(path);
   const dec = new Decoder({ mapsAsObjects: true });
   return dec.decode(raw) as T;
-}
-
-// ---------------------------------------------------------------------------
-// URL slug encoding. Qualnames contain ':' (e.g. "papyri.gen:Config.__init__"),
-// which is illegal on some filesystems and awkward in URLs. We encode to/from
-// using a single "$" separator: "pkg.mod:Class.method" <-> "pkg.mod$Class.method".
-// Dots are preserved, so the slug reads naturally in browser URL bars.
-// If a qualname itself contained '$' that would collide, but Python qualnames
-// never do.
-// ---------------------------------------------------------------------------
-
-export function qualnameToSlug(qa: string): string {
-  return qa.replace(/:/g, "$");
-}
-
-export function slugToQualname(slug: string): string {
-  return slug.replace(/\$/g, ":");
 }
 
 // ---------------------------------------------------------------------------

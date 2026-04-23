@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactElement } from "react";
 import { filterQualnames, type SearchHit } from "../lib/search.ts";
+import { qualnameToSlug } from "../lib/slugs.ts";
 
 interface Props {
   pkg: string;
@@ -43,11 +44,6 @@ export default function BundleSearch({ pkg, ver }: Props): ReactElement {
 
   const hits: SearchHit[] = filterQualnames(qualnames, query, 50);
 
-  // Slug mirrors ir-reader#qualnameToSlug. We reimplement the trivial `:`→`$`
-  // swap here rather than importing a Node-specific module into the client
-  // bundle.
-  const slug = (qa: string): string => qa.replace(/:/g, "$");
-
   return (
     <div className="bundle-search">
       <input
@@ -69,7 +65,7 @@ export default function BundleSearch({ pkg, ver }: Props): ReactElement {
           ) : (
             hits.map((h) => (
               <li key={h.qualname}>
-                <a href={`/${pkg}/${ver}/${slug(h.qualname)}/`}>{h.qualname}</a>
+                <a href={`/${pkg}/${ver}/${qualnameToSlug(h.qualname)}/`}>{h.qualname}</a>
               </li>
             ))
           )}

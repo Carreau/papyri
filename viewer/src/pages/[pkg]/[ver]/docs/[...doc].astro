@@ -1,14 +1,13 @@
 ---
 import {
-  linkForRef,
   listIngestedBundles,
   loadCbor,
+  sectionChildren,
   type IngestedDoc,
-  type IRNode,
   type SectionNode,
 } from "../../../../lib/ir-reader.ts";
 import { listDocs } from "../../../../lib/nav.ts";
-import { resolveRef } from "../../../../lib/graph.ts";
+import { resolveXref } from "../../../../lib/xref.ts";
 import IrNode from "../../../../components/IrNode.astro";
 import BundleLayout from "../../../../layouts/BundleLayout.astro";
 import { join } from "node:path";
@@ -45,10 +44,6 @@ const doc = (await loadCbor(join(bundlePath, "docs", docPath))) as IngestedDoc;
 
 const sections: SectionNode[] = Array.isArray(doc.arbitrary) ? doc.arbitrary : [];
 
-function sectionChildren(s: SectionNode): IRNode[] {
-  return Array.isArray(s.children) ? s.children : [];
-}
-
 // Produce a stable HTML id from a heading string.
 function slugify(title: string): string {
   return (
@@ -65,38 +60,6 @@ function slugify(title: string): string {
 function sectionId(s: SectionNode): string | undefined {
   if (!s.title) return undefined;
   return s.target ?? slugify(s.title);
-}
-
-// Mirror the qualname page's resolveXref: close over the cached DB handle
-// so XRefs become resolved links at render time.
-interface XRefShape {
-  value?: string;
-  reference?: {
-    module?: string;
-    version?: string;
-    kind?: string;
-    path?: string;
-  } | null;
-  kind?: string;
-}
-
-function resolveXref(raw: unknown): { url: string; label: string } | null {
-  const n = raw as XRefShape | null;
-  if (!n) return null;
-  const label = n.value ?? "";
-  const ref = n.reference;
-  if (!ref || !ref.module || !ref.path || !ref.kind) return null;
-  if (ref.module === "current-module" || ref.kind === "to-resolve") return null;
-  const resolved = resolveRef({
-    pkg: ref.module,
-    ver: ref.version ?? "?",
-    kind: ref.kind,
-    path: ref.path,
-  });
-  if (!resolved) return null;
-  const url = linkForRef(resolved);
-  if (!url) return null;
-  return { url, label };
 }
 
 // Use the first section's RST title as the visible <h1>. Narrative docs

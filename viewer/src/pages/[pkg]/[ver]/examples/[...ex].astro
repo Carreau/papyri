@@ -1,13 +1,12 @@
 ---
 import {
-  linkForRef,
   listIngestedBundles,
   loadCbor,
-  type IRNode,
+  sectionChildren,
   type SectionNode,
 } from "../../../../lib/ir-reader.ts";
 import { listExamples } from "../../../../lib/nav.ts";
-import { resolveRef } from "../../../../lib/graph.ts";
+import { resolveXref } from "../../../../lib/xref.ts";
 import IrNode from "../../../../components/IrNode.astro";
 import BundleLayout from "../../../../layouts/BundleLayout.astro";
 import { join } from "node:path";
@@ -39,37 +38,7 @@ const { bundlePath, examplePath } = Astro.props as {
 // Example blobs are Section (tag 4015) — the decoder hands us a typed node.
 const section = (await loadCbor(join(bundlePath, "examples", examplePath))) as SectionNode;
 
-const children: IRNode[] = Array.isArray(section.children) ? section.children : [];
-
-interface XRefShape {
-  value?: string;
-  reference?: {
-    module?: string;
-    version?: string;
-    kind?: string;
-    path?: string;
-  } | null;
-  kind?: string;
-}
-
-function resolveXref(raw: unknown): { url: string; label: string } | null {
-  const n = raw as XRefShape | null;
-  if (!n) return null;
-  const label = n.value ?? "";
-  const ref = n.reference;
-  if (!ref || !ref.module || !ref.path || !ref.kind) return null;
-  if (ref.module === "current-module" || ref.kind === "to-resolve") return null;
-  const resolved = resolveRef({
-    pkg: ref.module,
-    ver: ref.version ?? "?",
-    kind: ref.kind,
-    path: ref.path,
-  });
-  if (!resolved) return null;
-  const url = linkForRef(resolved);
-  if (!url) return null;
-  return { url, label };
-}
+const children = sectionChildren(section);
 ---
 
 <BundleLayout

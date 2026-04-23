@@ -96,9 +96,13 @@ converging on a single encoding is part of Phase 2.
       per file type, CBOR-encoded fields, `graphstore` SQLite schema.
       Followup: JSON-Schema fragments per node + an `IR-CHANGELOG.md`.
 - [x] Decide whether to move everything to a single encoding (all JSON, or
-      all CBOR) vs documenting the hybrid. Done: CBOR everywhere for IR
-      (gen bundle + ingest store); `papyri.json` / `toc.json` remain JSON
-      because they're small configuration metadata, not IR.
+      all CBOR) vs documenting the hybrid. Done: gen-side bundles use CBOR
+      for IR blobs; `papyri.json` / `toc.json` remain JSON as small
+      configuration metadata.  **Ingest-side storage format is not
+      mandated** — CBOR is used today as a space-saving measure before
+      uploading to a central service, but the graphstore must not assume
+      CBOR.  A future implementation (e.g. TypeScript) may use a different
+      encoding.
 - [x] Add a `papyri describe <qualname>` (or reuse `find`) as a
       maintainer-side debug command that prints an IR entry without a
       renderer. Implemented in `papyri/cli/describe.py` (registered
@@ -292,3 +296,18 @@ ordering before it's worth wiring up.
   bundle's declared root (`crosslink.py` ~line 412).  Gen already knows
   both values; moving the check there makes the contract explicit and
   surfaces mistakes earlier.
+- **Builtin ref resolution belongs at gen time, not ingest.**
+  `resolve_()` currently has a special-case branch that recognises Python
+  builtins (`int`, `str`, `list`, …) and returns a `missing` RefInfo for
+  them.  This is gen-specific knowledge that does not belong in the
+  ingest resolver.  The correct model: ship a **Python-builtins bundle
+  shim** — a minimal DocBundle (generated once, checked in or published)
+  that registers every builtin as a proper `RefInfo`.  `papyri gen` emits
+  references to builtins as ordinary cross-refs; ingest resolves them
+  against the shim bundle exactly like any other package.  No special
+  casing in `resolve_()` at ingest time.
+- **RST substitutions are gen-time-only (done).**
+  `SubstitutionDef` and `SubstitutionRef` nodes are resolved inside
+  `ts.parse()` before any IR is written.  The IR must never contain
+  either node type.  Non-`replace::` substitution types (image, unicode)
+  are warned and dropped; support can be added per demand.

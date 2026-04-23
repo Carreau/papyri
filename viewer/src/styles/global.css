@@ -732,7 +732,9 @@ section.backrefs ul.qualnames {
   margin-left: 0.75rem;
 }
 
-/* Dense qualname list */
+/* Tree-style qualname list. Depth is communicated via --tree-depth (set
+   inline on li elements). Depth-1 items have no variable → default indent of
+   0.25rem. Each additional level adds 0.75rem. */
 .sidebar-qualnames {
   list-style: none;
   padding: 0;
@@ -744,13 +746,17 @@ section.backrefs ul.qualnames {
 }
 .sidebar-qualnames li {
   padding: 0.1rem 0.25rem;
+  padding-left: calc((var(--tree-depth, 1) - 1) * 0.75rem + 0.25rem);
   border-radius: 3px;
 }
 .sidebar-qualnames li.is-active {
   border-left: 2px solid var(--accent);
-  padding-left: 0.35rem;
+  padding-left: calc((var(--tree-depth, 1) - 1) * 0.75rem + 0.1rem);
   font-weight: 600;
   background: var(--surface-alt);
+}
+.sidebar-qualnames li.is-ancestor {
+  font-weight: 500;
 }
 .sidebar-qualnames a {
   color: var(--accent);
@@ -804,14 +810,6 @@ section.backrefs ul.qualnames {
   font-size: 0.85rem;
   color: var(--fg-muted);
   margin-top: 0.25rem;
-}
-
-/* Sidebar API overflow note */
-.sidebar-api-more {
-  font-size: 0.72rem;
-  color: var(--fg-muted);
-  margin: 0.4rem 0 0;
-  padding: 0 0.25rem;
 }
 
 /* ---------------------------------------------------------------------------

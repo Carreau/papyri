@@ -18,10 +18,50 @@ const { nav, activeQualname, activeDocPath, activeExamplePath } = Astro.props;
 const bundleHref = `/${nav.pkg}/${nav.version}/`;
 const summary = typeof nav.meta.summary === "string" ? nav.meta.summary : null;
 
-// Show only top-level module entries in the sidebar: no `:` (not a class
-// member) and at most one dot (one level below the root package).
-const sidebarModules = nav.qualnames.filter((qa) => !qa.includes(":") && qa.split(".").length <= 2);
-const hiddenCount = nav.qualnames.length - sidebarModules.length;
+// Build a tree-style flat list for the API section. Always shows depth-1
+// modules; when a module at depth n is active, expands its ancestors and
+// shows the active module's children (depth n+1). Items with `:` are class
+// members, not modules — they're excluded here and only reachable via search.
+interface ApiTreeItem {
+  qualname: string;
+  label: string;
+  depth: number;
+  isActive: boolean;
+  isAncestor: boolean;
+}
+
+function buildApiTreeItems(qualnames: string[], active: string | undefined): ApiTreeItem[] {
+  const modules = qualnames.filter((qa) => !qa.includes(":"));
+
+  // Ancestors of the active module — the set of qualnames that prefix it.
+  const activePath = new Set<string>();
+  if (active) {
+    const parts = active.split(".");
+    for (let i = 1; i <= parts.length; i++) {
+      activePath.add(parts.slice(0, i).join("."));
+    }
+  }
+
+  const items: ApiTreeItem[] = [];
+  for (const qa of modules) {
+    const parts = qa.split(".");
+    const depth = parts.length;
+    // Depth-1 entries are always shown. Deeper entries are shown only when
+    // their direct parent is on the active path (ancestor or active itself).
+    const show = depth === 1 || activePath.has(parts.slice(0, -1).join("."));
+    if (!show) continue;
+    items.push({
+      qualname: qa,
+      label: parts[parts.length - 1],
+      depth,
+      isActive: qa === active,
+      isAncestor: activePath.has(qa) && qa !== active,
+    });
+  }
+  return items;
+}
+
+const apiTreeItems = buildApiTreeItems(nav.qualnames, activeQualname);
 
 // The toc comes from meta/toc.cbor. When it's empty we still show the flat
 // `docs` list below so the section isn't an awkward empty stub.
@@ -158,13 +198,20 @@ function isTocSectionExpanded(item: TocItem): boolean {
     <BundleSearch client:load pkg={nav.pkg} ver={nav.version} />
     <ul class="sidebar-qualnames">
       {
-        sidebarModules.map((qa) => (
-          <li class={qa === activeQualname ? "is-active" : undefined}>
-            <a href={`/${nav.pkg}/${nav.version}/${qualnameToSlug(qa)}/`}>{qa}</a>
+        apiTreeItems.map((item) => (
+          <li
+            class={item.isActive ? "is-active" : item.isAncestor ? "is-ancestor" : undefined}
+            style={item.depth > 1 ? `--tree-depth: ${item.depth}` : undefined}
+          >
+            <a
+              href={`/${nav.pkg}/${nav.version}/${qualnameToSlug(item.qualname)}/`}
+              title={item.qualname}
+            >
+              {item.label}
+            </a>
           </li>
         ))
       }
     </ul>
-    {hiddenCount > 0 ? <p class="sidebar-api-more">{hiddenCount} more — use search above</p> : null}
   </nav>
 </aside>

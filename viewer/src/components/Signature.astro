@@ -1,52 +1,13 @@
 ---
-import type { SignatureNodeT, SigParamT } from "../lib/ir-reader.ts";
+import type { SignatureNodeT } from "../lib/ir-reader.ts";
+import { annText, buildSignatureEntries, defaultText } from "../lib/signature.ts";
 
 interface Props {
   signature: SignatureNodeT;
 }
 
 const { signature } = Astro.props;
-
-function annText(
-  ann: SigParamT["annotation"] | SignatureNodeT["return_annotation"]
-): string | null {
-  if (ann == null) return null;
-  if (typeof ann === "string") return ann;
-  return null;
-}
-
-function defaultText(def: SigParamT["default"]): string | null {
-  if (def == null) return null;
-  if (typeof def === "string") return def;
-  return null;
-}
-
-// Split parameters into (marker, param) pairs so we can emit the `/` and `*`
-// grouping separators at structural boundaries instead of inline in a string.
-//   POSITIONAL_ONLY → followed by `/` on the next non-positional-only param
-//   KEYWORD_ONLY    → preceded by `*` if no VAR_POSITIONAL already provided one
-type Kind = SigParamT["kind"];
-interface Entry {
-  marker: "/" | "*" | null;
-  param: SigParamT;
-}
-const entries: Entry[] = [];
-let prevKind: Kind | null = null;
-let sawVarPositional = false;
-for (const p of signature.parameters) {
-  let marker: Entry["marker"] = null;
-  if (prevKind === "POSITIONAL_ONLY" && p.kind !== "POSITIONAL_ONLY") {
-    marker = "/";
-  } else if (p.kind === "KEYWORD_ONLY" && prevKind !== "KEYWORD_ONLY" && !sawVarPositional) {
-    marker = "*";
-  }
-  entries.push({ marker, param: p });
-  if (p.kind === "VAR_POSITIONAL") sawVarPositional = true;
-  prevKind = p.kind;
-}
-// Trailing `/` if the last parameter was positional-only.
-const trailingSlash = prevKind === "POSITIONAL_ONLY";
-
+const { entries, trailingSlash } = buildSignatureEntries(signature);
 const returnAnn = annText(signature.return_annotation);
 ---
 

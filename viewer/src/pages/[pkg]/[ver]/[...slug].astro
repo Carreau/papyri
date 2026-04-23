@@ -3,12 +3,13 @@ import {
   ingestDir,
   linkForRef,
   loadModule,
+  sectionChildren,
   slugToQualname,
   type IngestedDoc,
-  type IRNode,
   type SectionNode,
 } from "../../../lib/ir-reader.ts";
-import { getBackrefs, resolveRef } from "../../../lib/graph.ts";
+import { getBackrefs } from "../../../lib/graph.ts";
+import { resolveXref } from "../../../lib/xref.ts";
 import IrNode from "../../../components/IrNode.astro";
 import Signature from "../../../components/Signature.astro";
 import BundleLayout from "../../../layouts/BundleLayout.astro";
@@ -65,55 +66,6 @@ const exampleSection = (() => {
   if (kids.length === 0) return null;
   return { title: es.title ?? "Examples", children: kids };
 })();
-
-// Section children sometimes contain node types the renderer doesn't handle.
-// IrNode.astro already falls back to a JSON dump per-node; we don't dump the
-// whole section just because one child is unhandled.
-function sectionChildren(s: SectionNode): IRNode[] {
-  return Array.isArray(s.children) ? s.children : [];
-}
-
-// ---------------------------------------------------------------------------
-// M2 crosslinks.
-// resolveXref is handed to <IrNode> and called per CrossRef node at render time.
-// It closes over the cached DB handle (openGraphDb caches) so we don't open
-// the file per node. The CrossRef IR shape:
-//   { __type: "CrossRef", value: label, reference: RefInfo, kind, anchor }
-// where `reference` is a RefInfo tag node with fields (module, version, kind,
-// path). We prefer that resolved reference, falling back to the top-level
-// CrossRef.kind / value pair.
-// ---------------------------------------------------------------------------
-interface CrossRefShape {
-  value?: string;
-  reference?: {
-    __type?: string;
-    module?: string;
-    version?: string;
-    kind?: string;
-    path?: string;
-  } | null;
-  kind?: string;
-}
-
-function resolveXref(raw: unknown): { url: string; label: string } | null {
-  const n = raw as CrossRefShape | null;
-  if (!n) return null;
-  const label = n.value ?? "";
-  const ref = n.reference;
-  if (!ref || !ref.module || !ref.path || !ref.kind) return null;
-  // Skip papyri's sentinel "unresolved" placeholder.
-  if (ref.module === "current-module" || ref.kind === "to-resolve") return null;
-  const resolved = resolveRef({
-    pkg: ref.module,
-    ver: ref.version ?? "?",
-    kind: ref.kind,
-    path: ref.path,
-  });
-  if (!resolved) return null;
-  const url = linkForRef(resolved);
-  if (!url) return null;
-  return { url, label };
-}
 
 // Backrefs for this document, split into same-package and cross-package.
 const backrefs = getBackrefs({ pkg, ver, kind: "module", path: qualname });

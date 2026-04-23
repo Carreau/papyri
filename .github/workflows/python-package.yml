@@ -98,6 +98,9 @@ jobs:
       with:
         fail_ci_if_error: false
         token: ${{ secrets.CODECOV_TOKEN }}
+        flags: gen
+        name: gen-${{ matrix.lib }}
+        files: ./coverage.xml
   gen-ipython-main:
     # Extended gen test: clone IPython main into ~/dev/IPython so the default
     # docs_path in examples/IPython.toml (~/dev/IPython/docs/source) resolves,
@@ -160,6 +163,9 @@ jobs:
       with:
         fail_ci_if_error: false
         token: ${{ secrets.CODECOV_TOKEN }}
+        flags: gen
+        name: gen-IPython-main
+        files: ./coverage.xml
 
   ingest:
 
@@ -224,3 +230,6 @@ jobs:
       with:
         fail_ci_if_error: false
         token: ${{ secrets.CODECOV_TOKEN }}
+        flags: ingest
+        name: ingest
+        files: ./coverage.xml

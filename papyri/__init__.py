@@ -1,5 +1,5 @@
 """
-Papyri – Python IR producer + local graph store.
+Papyri - Python IR producer + local graph store.
 
 Papyri parses Python library docstrings into an intermediate representation
 (IR) and ingests many libraries' IR into a local cross-linked SQLite graph.
@@ -59,7 +59,7 @@ from typing import Annotated
 import tomli_w
 import typer
 
-from . import examples  # noqa
+from . import examples as examples
 
 __version__ = "0.0.8"
 
@@ -346,7 +346,7 @@ def describe(
     from papyri.config import ingest_dir
     from papyri.graphstore import GraphStore
 
-    from .crosslink import IngestedDoc  # noqa: F401 — registers tag 4010
+    from .crosslink import IngestedDoc as IngestedDoc
     from .nodes import encoder
 
     path_part = qualname
@@ -428,7 +428,7 @@ def debug(
     from papyri.config import ingest_dir
     from papyri.graphstore import GraphStore, Key
 
-    from .crosslink import IngestedDoc  # noqa: F401 — registers tag 4010
+    from .crosslink import IngestedDoc as IngestedDoc
     from .nodes import encoder
 
     raw = path.read_bytes()

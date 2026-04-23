@@ -2,6 +2,8 @@
 vestigial things from velin.
 """
 
+from typing import ClassVar
+
 import numpydoc.docscrape as nds
 
 
@@ -12,7 +14,7 @@ class NumpyDocString(nds.NumpyDocString):
 
     __slots__ = ("ordered_sections",)
 
-    aliases = {
+    aliases: ClassVar[dict[str, tuple[str, ...]]] = {
         "Parameters": (
             "options",
             "parameter",

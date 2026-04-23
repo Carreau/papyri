@@ -714,9 +714,7 @@ class DirectiveVisiter(TreeReplacer):
 
         self._tocs.append(toc)
 
-        acc = []
-        for line in lls:
-            acc.append(ListItem(False, [Paragraph([line])]))
+        acc = [ListItem(False, [Paragraph([line])]) for line in lls]
         return [BulletList(ordered=False, start=1, spread=False, children=acc)]
 
     def replace_UnprocessedDirective(self, directive: UnprocessedDirective):
@@ -788,10 +786,7 @@ class DirectiveVisiter(TreeReplacer):
                 return res
 
         loc: frozenset[str]
-        if directive.role not in ["any", None]:
-            loc = frozenset()
-        else:
-            loc = self.local_refs
+        loc = frozenset() if directive.role not in ["any", None] else self.local_refs
         text = directive.value
         assert "`" not in text
         text = text.replace("\n", " ")
@@ -804,15 +799,9 @@ class DirectiveVisiter(TreeReplacer):
             and "\n<" not in text
         ):
             pass  # assert False, ("error space-< in", self.qa, directive)
-        if (" <" in text) and text.endswith(">"):
-            try:
-                text, to_resolve = text.split(" <")
-                text = text.rstrip()
-            except ValueError as e:
-                raise AssertionError(directive.value) from e
-            assert to_resolve.endswith(">"), (text, to_resolve)
-            to_resolve = to_resolve.rstrip(">")
-        elif ("\n <" in text) and text.endswith(">"):
+        if ((" <" in text) and text.endswith(">")) or (
+            ("\n <" in text) and text.endswith(">")
+        ):
             try:
                 text, to_resolve = text.split(" <")
                 text = text.rstrip()

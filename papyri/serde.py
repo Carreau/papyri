@@ -109,7 +109,7 @@ def serialize(instance, annotation):
             return [serialize(x, inner_annotation[0]) for x in instance]
         elif getattr(annotation, "__origin__", None) is dict:
             # assert type(instance) == dict
-            key_annotation, value_annotation = annotation.__args__
+            _key_annotation, value_annotation = annotation.__args__
             # assert key_annotation == str, key_annotation
             return {k: serialize(v, value_annotation) for k, v in instance.items()}
 
@@ -132,8 +132,7 @@ def serialize(instance, annotation):
             (type(annotation) is type)
             and type.__module__ not in ("builtins", "typing")
             and (instance.__class__.__name__ == getattr(annotation, "_name", None))
-            or type(instance) == annotation
-        ):
+        ) or type(instance) == annotation:
             if hasattr(instance, "_validate"):
                 instance._validate()
             data = {}

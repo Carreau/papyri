@@ -61,17 +61,17 @@ class IngestedDoc(Node):
     __slots__ = (
         "_content",
         "_ordered_sections",
+        "aliases",
+        "arbitrary",
+        "example_section_data",
         "item_file",
         "item_line",
         "item_type",
-        "aliases",
-        "example_section_data",
+        "local_refs",
+        "qa",
+        "references",
         "see_also",
         "signature",
-        "references",
-        "qa",
-        "arbitrary",
-        "local_refs",
     )
 
     _content: dict[str, Section]
@@ -110,12 +110,12 @@ class IngestedDoc(Node):
     def all_forward_refs(self) -> list[Key]:
         visitor = TreeVisitor({RefInfo, Figure})
         res: dict[Any, list[Any]] = {}
-        for sec in (
-            list(self.content.values())
-            + [self.example_section_data]
-            + self.arbitrary
-            + self.see_also
-        ):
+        for sec in [
+            *list(self.content.values()),
+            self.example_section_data,
+            *self.arbitrary,
+            *self.see_also,
+        ]:
             for k, v in visitor.generic_visit(sec).items():
                 res.setdefault(k, []).extend(v)
 
@@ -163,7 +163,7 @@ class IngestedDoc(Node):
             version=version,
             config={},
         )
-        for section in ["Extended Summary", "Summary", "Notes"] + sections_:
+        for section in ["Extended Summary", "Summary", "Notes", *sections_]:
             if section not in self.content:
                 continue
             assert section in self.content
@@ -182,10 +182,7 @@ class IngestedDoc(Node):
         self.arbitrary = [visitor.visit(s) for s in self.arbitrary]
 
         for d in self.see_also:
-            new_desc = []
-            for dsc in d.descriptions:
-                new_desc.append(visitor.visit(dsc))
-            d.descriptions = new_desc
+            d.descriptions = [visitor.visit(dsc) for dsc in d.descriptions]
         for r in visitor._targets:
             assert None not in r, r
 
@@ -449,7 +446,7 @@ class Ingester:
             gstore.glob((None, None, "module", None)), description="Relinking..."
         ):
             try:
-                data, back, forward = gstore.get_all(key)
+                data, _back, forward = gstore.get_all(key)
             except Exception as e:
                 raise ValueError(str(key)) from e
             try:

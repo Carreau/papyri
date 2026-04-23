@@ -34,6 +34,7 @@ from pathlib import Path
 from types import FunctionType, ModuleType
 from typing import (
     Any,
+    ClassVar,
 )
 
 import jedi
@@ -321,7 +322,7 @@ def _get_implied_imports(obj):
                     obj.__qualname__,
                 )
                 return {}
-            cname, oname = c_o
+            cname, _oname = c_o
             mod_name = obj.__module__
             import importlib
 
@@ -346,7 +347,7 @@ def _add_classes(entries):
     assert set(len(x) for x in entries) == {2}
     text = "".join([x for x, y in entries])
     classes = get_classes(text)
-    return [ii + (cc,) for ii, cc in zip(entries, classes, strict=True)]
+    return [(*ii, cc) for ii, cc in zip(entries, classes, strict=True)]
 
 
 def processed_example_data(example_section_data) -> Section:
@@ -670,10 +671,7 @@ class DFSCollector:
         else:
             omod = qa
 
-        if "." in omod:
-            oroot = omod.split(".")[0]
-        else:
-            oroot = omod
+        oroot = omod.split(".")[0] if "." in omod else omod
 
         if oroot != self.root:
             return
@@ -705,11 +703,11 @@ class DFSCollector:
             except Exception as e:
                 self.log.debug("Could not access %s.%s: %s", mod.__name__, k, e)
                 continue
-            self._open_list.append((val, stack + [k]))
+            self._open_list.append((val, [*stack, k]))
 
     def visit_ClassType(self, klass, stack):
         for k, v in klass.__dict__.items():
-            self._open_list.append((v, stack + [k]))
+            self._open_list.append((v, [*stack, k]))
 
     def visit_FunctionType(self, fun, stack):
         pass
@@ -790,18 +788,18 @@ class GeneratedDoc(Node):
 
     __slots__ = (
         "_content",
-        "example_section_data",
+        "_dp",
         "_ordered_sections",
+        "aliases",
+        "arbitrary",
+        "example_section_data",
         "item_file",
         "item_line",
         "item_type",
-        "aliases",
+        "local_refs",
+        "references",
         "see_also",
         "signature",
-        "references",
-        "arbitrary",
-        "local_refs",
-        "_dp",
     )
 
     @classmethod
@@ -827,7 +825,7 @@ class GeneratedDoc(Node):
     def content(self):
         return self._dp
 
-    sections = [
+    sections: ClassVar[list[str]] = [
         "Signature",
         "Summary",
         "Extended Summary",
@@ -936,7 +934,7 @@ class APIObjectInfo:
     name: str
 
     def __repr__(self):
-        return f"<APIObject {self.kind=} {self.docstring=} self.signature={str(self.signature)} {self.name=}>"
+        return f"<APIObject {self.kind=} {self.docstring=} self.signature={self.signature!s} {self.name=}>"
 
     def __init__(
         self,
@@ -1462,7 +1460,7 @@ class Gen:
                 p2.advance(task)
 
                 if any([k in str(p) for k in self.config.narrative_exclude]):
-                    log.debug("Skipping %s – excluded in config file", p)
+                    log.debug("Skipping %s - excluded in config file", p)
                     continue
 
                 assert p.is_file()
@@ -1501,10 +1499,7 @@ class Gen:
                 blob.signature = None
                 blob.validate()
                 titles = [s.title for s in blob.arbitrary if s.title]
-                if not titles:
-                    title = f"<No Title {key}>"
-                else:
-                    title = titles[0]
+                title = f"<No Title {key}>" if not titles else titles[0]
                 title_map[key] = title
                 if "generated" not in key and title_map[key] is None:
                     log.debug("%s %s", key, title)
@@ -1591,7 +1586,7 @@ class Gen:
         """
         for k, v in ndoc._parsed_data.items():
             blob.content[k] = v
-        for _k, v in blob.content.items():
+        for v in blob.content.values():
             assert isinstance(v, (str, list, dict)), type(v)
         return blob
 
@@ -1609,7 +1604,8 @@ class Gen:
         if item_file is not None:
             # TODO: find a better way to get a relative path with respect to the
             # root of the package ?
-            for s in SITE_PACKAGE + [
+            for s in [
+                *SITE_PACKAGE,
                 os.path.expanduser(f"~/dev/{r}/"),
                 os.path.expanduser("~"),
                 os.getcwd(),
@@ -1778,8 +1774,9 @@ class Gen:
                 for ref, _type in rt:
                     refs_I.append(ref)
         if api_object.special("See Also"):
-            for sa in api_object.special("See Also").value:
-                refs_Ib.append(sa.name.value)
+            refs_Ib.extend(
+                [sa.name.value for sa in api_object.special("See Also").value]
+            )
 
         if api_object.kind != "module":
             # TODO: most module docstring are not properly parsed by numpydoc.
@@ -1817,10 +1814,7 @@ class Gen:
                 else:
                     tsc = ts.parse("\n".join(data).encode(), qa)
                     assert len(tsc) in (0, 1), (tsc, data)
-                    if tsc:
-                        tssc = tsc[0]
-                    else:
-                        tssc = Section([], None)
+                    tssc = tsc[0] if tsc else Section([], None)
                     assert isinstance(tssc, Section)
                     blob.content[section] = tssc
             except Exception:
@@ -2171,13 +2165,13 @@ class Gen:
                 self.log.info(f"    {k}:{v}")
 
         aliases: dict[FullQual, Cannonical]
-        aliases, not_found = collector.compute_aliases()
+        aliases, _not_found = collector.compute_aliases()
         rev_aliases: dict[Cannonical, FullQual] = {v: k for k, v in aliases.items()}
 
         known_refs = frozenset(
             {
                 RefInfo.from_untrusted(root, self.version, "module", qa)
-                for qa in collected.keys()
+                for qa in collected
             }
         )
 
@@ -2225,14 +2219,14 @@ class Gen:
             except Exception as e:
                 if not isinstance(target_item, ModuleType):
                     self.log.exception(
-                        "Unexpected error parsing %s – %s",
+                        "Unexpected error parsing %s - %s",
                         qa,
                         target_item.__name__,
                     )
                     failure_collection["NumpydocError-" + str(type(e))].append(qa)
                 if isinstance(target_item, ModuleType):
                     # TODO: ndoc-placeholder : remove placeholder here
-                    ndoc = NumpyDocString(f"To remove in the future –– {qa}")
+                    ndoc = NumpyDocString(f"To remove in the future -- {qa}")
                 else:
                     continue
             if not isinstance(target_item, ModuleType):
@@ -2299,7 +2293,7 @@ class Gen:
                 *doc_blob._content.values(),
                 *[
                     doc_blob.content[s]
-                    for s in ["Extended Summary", "Summary", "Notes"] + sections_
+                    for s in ["Extended Summary", "Summary", "Notes", *sections_]
                     if s in doc_blob.content
                 ],
             )
@@ -2307,7 +2301,7 @@ class Gen:
             doc_blob.example_section_data = dv.visit(doc_blob.example_section_data)
             doc_blob._content = {k: dv.visit(v) for (k, v) in doc_blob._content.items()}
 
-            for section in ["Extended Summary", "Summary", "Notes"] + sections_:
+            for section in ["Extended Summary", "Summary", "Notes", *sections_]:
                 if section in doc_blob.content:
                     doc_blob.content[section] = dv.visit(doc_blob.content[section])
 

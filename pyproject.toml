@@ -59,7 +59,7 @@ line-length = 88
 extend-exclude = ["node_modules", "jupyter_server_test_config.py"]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "B", "I", "UP"]
+select = ["E", "F", "W", "B", "I", "UP", "SIM", "RUF", "PERF"]
 ignore = [
     "E201",   # Whitespace after '('
     "E202",   # Whitespace before ')'

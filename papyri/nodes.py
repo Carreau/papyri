@@ -58,12 +58,12 @@ Unless your use case is widely adopted it is likely not worse the complexity
 from __future__ import annotations
 
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, TypeAlias
 
 import cbor2
 
-from . import signature  # noqa: F401 -- referenced in Root's forward-string annotation
+from . import signature
 from .node_base import REV_TAG_MAP, Node, UnserializableNode, register
 from .serde import get_type_hints
 from .utils import dedent_but_first
@@ -312,7 +312,7 @@ class Directive(Node):
     args: str | None
     options: dict[str, str]
     value: str | None
-    children: list[FlowContent | PhrasingContent | None] = []
+    children: list[FlowContent | PhrasingContent | None] = field(default_factory=list)
 
     @classmethod
     def from_unprocessed(cls, up):
@@ -336,14 +336,16 @@ class UnprocessedDirective(UnserializableNode):
 @register(4055)
 class AdmonitionTitle(Node):
     type = "admonitionTitle"
-    children: list[PhrasingContent | None] = []
+    children: list[PhrasingContent | None] = field(default_factory=list)
 
 
 @register(4056)
 class Admonition(Node):
     type = "admonition"
-    children: list[FlowContent | AdmonitionTitle | Unimplemented | DefList] = []
     kind: str = "note"
+    children: list[FlowContent | AdmonitionTitle | Unimplemented | DefList] = field(
+        default_factory=list
+    )
 
 
 @register(4060)
@@ -367,7 +369,7 @@ class InlineMath(Node):
 @register(4059)
 class Blockquote(Node):
     type = "blockquote"
-    children: list[FlowContent] = []
+    children: list[FlowContent] = field(default_factory=list)
 
 
 @register(4061)
@@ -887,10 +889,7 @@ encoder = Encoder(REV_TAG_MAP)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        what = sys.argv[1]
-    else:
-        what = "numpy"
+    what = sys.argv[1] if len(sys.argv) > 1 else "numpy"
     ex = get_object(what).__doc__
     ex = dedent_but_first(ex)
     doc = parse_rst_section(ex, "test")

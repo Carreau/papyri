@@ -44,7 +44,7 @@ def serialize(instance, annotation):
             return [serialize(x, inner_annotation[0]) for x in instance]
         if origin is dict:
             assert isinstance(instance, origin)
-            key_annotation, value_annotation = annotation.__args__
+            _key_annotation, value_annotation = annotation.__args__
             # assert key_annotation == str, key_annotation
             return {k: serialize(v, value_annotation) for k, v in instance.items()}
         if _is_union(annotation):
@@ -73,8 +73,7 @@ def serialize(instance, annotation):
             (type(annotation) is type)
             and type.__module__ not in ("builtins", "typing")
             and (instance.__class__.__name__ == getattr(annotation, "__name__", None))
-            or type(instance) == annotation
-        ):
+        ) or type(instance) == annotation:
             data = {}
             type_ = type(instance).__name__
             if hasattr(instance, "type"):

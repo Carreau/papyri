@@ -1,3 +1,4 @@
+import annotationlib
 import inspect
 import json
 import re
@@ -78,9 +79,6 @@ class Signature:
             exec(toexec, {}, glob)
             return cls(glob[oname])
         except Exception as e:
-            # On 3.14+ annotations are lazy (__annotate__), so unresolved
-            # names in the signature only surface when inspect.signature()
-            # evaluates them inside ``cls(...)``.
             raise TextSignatureParsingFailed(f"Unable to parse {toexec}") from e
 
     def __init__(self, target_item):
@@ -94,7 +92,9 @@ class Signature:
 
         """
         self.target_item = target_item
-        self._sig = inspect.signature(target_item)
+        self._sig = inspect.signature(
+            target_item, annotation_format=annotationlib.Format.STRING
+        )
 
     def to_node(self) -> SignatureNode:
         kind = ""

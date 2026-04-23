@@ -282,34 +282,74 @@ section h2 {
   margin: 0 0 0.75rem;
 }
 
-/* Within-page mini-TOC on narrative doc pages. */
-nav.doc-toc {
-  border-left: 3px solid var(--border);
-  padding: 0.4rem 0 0.4rem 1rem;
-  margin: 0 0 1.5rem;
+/* ---------------------------------------------------------------------------
+   Floating "On this page" TOC — right column on wide viewports.
+   The .bundle-layout.has-page-toc grid adds a third column; .page-toc-panel
+   is sticky within it. Links get .is-active applied by the scroll-tracking
+   script in [...doc].astro.
+--------------------------------------------------------------------------- */
+.bundle-layout.has-page-toc {
+  grid-template-columns: 18rem 1fr 15rem;
+  grid-template-areas: "sidebar main toc";
 }
-nav.doc-toc .doc-toc-label {
-  font-size: 0.75rem;
+
+.page-toc-panel {
+  grid-area: toc;
+  position: sticky;
+  top: 0;
+  align-self: start;
+  max-height: 100vh;
+  overflow-y: auto;
+  padding: 1.5rem 0.75rem 1.5rem 1rem;
+  border-left: 1px solid var(--border);
+}
+
+/* Collapse to 2-column below 1100 px — TOC panel is a pure enhancement. */
+@media (max-width: 1100px) {
+  .bundle-layout.has-page-toc {
+    grid-template-columns: 18rem 1fr;
+    grid-template-areas: "sidebar main";
+  }
+  .page-toc-panel {
+    display: none;
+  }
+}
+
+nav.page-toc .page-toc-label {
+  font-size: 0.7rem;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--fg-muted);
-  margin: 0 0 0.35rem;
+  margin: 0 0 0.5rem;
 }
-nav.doc-toc ul {
-  margin: 0;
-  padding: 0;
+nav.page-toc ul {
   list-style: none;
+  padding: 0;
+  margin: 0;
 }
-nav.doc-toc li {
-  margin: 0.15rem 0;
+nav.page-toc li {
+  margin: 0.1rem 0;
 }
-nav.doc-toc a {
-  color: var(--accent);
+.page-toc-link {
+  display: block;
+  padding: 0.2rem 0 0.2rem 0.6rem;
+  border-left: 2px solid transparent;
+  color: var(--fg-muted);
   text-decoration: none;
-  font-size: 0.875rem;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  transition:
+    color 0.1s,
+    border-color 0.1s;
 }
-nav.doc-toc a:hover {
-  text-decoration: underline;
+.page-toc-link:hover {
+  color: var(--accent);
+}
+.page-toc-link.is-active {
+  color: var(--accent);
+  border-left-color: var(--accent);
+  font-weight: 500;
 }
 
 /* Structured signature: each parameter and annotation lives in its own

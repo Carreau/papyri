@@ -69,7 +69,7 @@ Admonitions
 
     An admonition note !
 
-This is a link to `Jupyter website <jupyter.org>`__
+This is a link to `Jupyter website <https://jupyter.org>`__
 
 Code (title 2)
 --------------
@@ -260,6 +260,7 @@ Examples of the pattern (rendered here so the viewer can exercise the fix):
 
 from collections.abc import AsyncIterator, Callable, Iterator
 from typing import Any
+from .tree import Code
 
 
 async def example1(
@@ -817,8 +818,10 @@ class Patti:
 
 
 def _mydirective_handler(args: str, options: dict[str, str], value: str):
-    from .nodes import Paragraph, Text
+    from .nodes import Paragraph, Text, ThematicBreak
     from .ts import parse
+    from textwrap import indent
+    import json
 
     parsed_arguments = parse(args.encode(), qa="custom directive")
 
@@ -827,15 +830,16 @@ def _mydirective_handler(args: str, options: dict[str, str], value: str):
         acc.extend(p.children)
 
     return [
-        *acc,
-        Paragraph(
-            [
-                Text(
-                    f".. custom_directive:\n    This is custom directive handler that received: \n"
-                    f"    {args=}, \n"
-                    f"    {options=}, \n"
-                    f"    {value=}\n"
-                ),
-            ]
+        ThematicBreak(),
+        Code(
+            ".. directive:: "
+            + args
+            + "\n"
+            + indent(json.dumps(options, indent=2), "   ")
+            + "\n"
+            + indent(value, "   "),
         ),
+        *acc,
+        Code(f"_mydirective_handler(\n" f"{args=},\n{options=}, \n{value=}\n"),
+        ThematicBreak(),
     ]

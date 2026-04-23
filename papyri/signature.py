@@ -1,9 +1,10 @@
-import annotationlib
 import inspect
 import json
 import re
 from dataclasses import dataclass
 from typing import Any
+
+import annotationlib
 
 from .errors import TextSignatureParsingFailed
 from .node_base import Node, register

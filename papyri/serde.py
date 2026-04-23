@@ -66,7 +66,7 @@ either 2 Authors or 2 Reviewers.
 
 import types
 from functools import lru_cache
-from typing import Union
+from typing import ClassVar, Union, get_origin
 from typing import get_type_hints as gth
 
 base_types = {int, str, bool, type(None)}
@@ -86,7 +86,7 @@ def _union_args(annotation) -> tuple:
 
 @lru_cache(150)
 def get_type_hints(type_):
-    return gth(type_)
+    return {k: v for k, v in gth(type_).items() if get_origin(v) is not ClassVar}
 
 
 def serialize(instance, annotation):

@@ -42,12 +42,20 @@ def admonition_helper(name, argument, options, content):
 
         return [
             Admonition(
-                [AdmonitionTitle([Text(f"{name} {argument}")]), *inner[0].children],
                 kind=name,
+                children=[
+                    AdmonitionTitle([Text(f"{name} {argument}")]),
+                    *inner[0].children,
+                ],
             )
         ]
     else:
-        return [Admonition([AdmonitionTitle([Text(f"{name} {argument}")])], kind=name)]
+        return [
+            Admonition(
+                kind=name,
+                children=[AdmonitionTitle([Text(f"{name} {argument}")])],
+            )
+        ]
 
 
 def warning_handler(argument, options, content):

@@ -498,3 +498,26 @@ def test_ingest_visitor_inline_role_resolves(role):
     assert len(out) == 1, (role, out)
     assert isinstance(out[0], CrossRef), (role, out)
     assert out[0].reference == target, (role, out)
+
+
+@pytest.mark.parametrize(
+    "kind", ["note", "warning", "deprecated", "versionadded", "versionchanged"]
+)
+def test_admonition_helper_children_is_list(kind):
+    """Admonition children must be a list, not a dataclasses.Field sentinel.
+
+    Regression: admonition_helper passed children as the first positional arg
+    but Admonition has `kind` as the first annotation, so children was never
+    set on the instance and fell back to the class-level Field object.
+    """
+    import dataclasses
+
+    from papyri.directives import admonition_helper
+
+    result = admonition_helper(kind, None, {}, None)
+    assert len(result) == 1
+    admonition = result[0]
+    assert not isinstance(admonition.children, dataclasses.Field), (
+        f"Admonition.children is a Field sentinel: {admonition.children!r}"
+    )
+    assert isinstance(admonition.children, list)

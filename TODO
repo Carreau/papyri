@@ -1,93 +1,102 @@
-- check parsing of IPython.lib.display.audio to make sure bullet list in parameters are ok.
-- numpy.core.shape_base._concatenate_shapes might not be complete.
-- numpy.errstate seem to have fields alternating between "numpy._ErrDict" and "numpy.dict",
-- numpy.histogram_bin_edges has a block math in _content.Notes.children.2.children.0.dd
-- numpy.histogram_bin_edges has math not rendered.
-- `numpy.core.shape_base._concatenate_shapes` improperly parse
-- Issues with `scipy.sparse.data._create_method.<locals>.method` that likely get conflicting canonical name with another
-  function tan/float
+# Papyri TODO
 
-## Findings from running `papyri gen` on IPython 9.12.0 and numpy 2.4.4 (Py 3.14, 2026-04-19)
+Catch-all for bugs found in the wild and the ops/lint queue. Rename passes
+live in [`TODO-renames.md`](TODO-renames.md); post-review follow-ups live
+in [`TODO-review.md`](TODO-review.md); milestones in [`PLAN.md`](PLAN.md).
 
-### Papyri bugs
+## Known docstring bugs (recorded pre-Phase 1 — verify before filing)
 
-- PEP 649 / lazy-annotations compat in `papyri/signature.py`.
-  `ObjectSignature.from_str` does `exec(f"def {sig}:pass", {}, glob)` then
+- `IPython.lib.display.audio`: check parsing of bullet list in parameters.
+- `numpy.core.shape_base._concatenate_shapes`: may not be complete /
+  improperly parsed.
+- `numpy.errstate`: fields alternate between `numpy._ErrDict` and
+  `numpy.dict`.
+- `numpy.histogram_bin_edges`: block math in
+  `_content.Notes.children.2.children.0.dd` and math not rendered.
+- `scipy.sparse.data._create_method.<locals>.method`: likely gets a
+  conflicting canonical name with another function (`tan`/`float`).
+
+## Papyri bugs (from `papyri gen` on IPython 9.12.0 + numpy 2.4.4, Py 3.14)
+
+- **PEP 649 / lazy-annotations compat in `papyri/signature.py:67`.**
+  `Signature.from_str` does `exec(f"def {sig}:pass", {}, glob)` then
   `cls(glob[oname])`, which calls `inspect.signature(target_item)`. On
   Python 3.14, annotations are evaluated lazily in the empty globals
-  passed to exec, so any name referenced in the signature string
-  (`Any`, `collections`, `t_total`, ...) raises `NameError` when
-  `inspect.signature()` resolves them. Reproduces on:
-    - IPython.core.oinspect:OInfo             (`Any` not defined)
-    - IPython.terminal.shortcuts:Binding,
-      BaseBinding, RuntimeBinding              (`collections` not defined)
-    - IPython.utils.timing:clock2              (`t_user` not defined)
-    - IPython.utils.timing:timings,
-      timings_out                              (`t_total` not defined)
+  passed to `exec`, so any name referenced in the signature string
+  (`Any`, `collections`, `t_total`, …) raises `NameError` when
+  `inspect.signature()` resolves them. The current code catches the
+  error and re-raises as `TextSignatureParsingFailed`; it does not yet
+  implement the fix. Reproduces on:
+    - `IPython.core.oinspect:OInfo`              (`Any` not defined)
+    - `IPython.terminal.shortcuts:Binding`,
+      `BaseBinding`, `RuntimeBinding`            (`collections` not defined)
+    - `IPython.utils.timing:clock2`              (`t_user` not defined)
+    - `IPython.utils.timing:timings`,
+      `timings_out`                              (`t_total` not defined)
   Fix sketch: on Py 3.14+, call
   `inspect.signature(target_item, annotation_format=annotationlib.Format.STRING)`
-  (or FORWARDREF) so names stay unresolved, or pass a richer globals
-  dict (e.g. `{"Any": typing.Any, "Optional": typing.Optional, ...}`)
-  into the `exec`, or catch `NameError` and fall back to stringified
+  (or `FORWARDREF`) so names stay unresolved, or pass a richer globals
+  dict (e.g. `{"Any": typing.Any, "Optional": typing.Optional, …}`) into
+  the `exec`, or catch `NameError` and fall back to stringified
   annotations.
 
-- `AssertionError` in `papyri/ts.py:468`
+- **`AssertionError` in `papyri/ts.py:579`**
   (`assert len(post_text) >= len(self.as_text(tc))`). Fires on numpy
   dtype classes whose docstring starts with a short signature line
   followed by a `--` underline shorter than the title, which
   tree-sitter-rst parses as a section header. Affects ~25 entries:
   `numpy:dtype`, `numpy.fft:fft`, and all of `numpy.dtypes:*DType`
-  (BoolDType, Int8/16/32/64DType, UInt8/16/32/64DType,
-  LongLongDType, ULongLongDType, BytesDType, StrDType, StringDType,
-  CLongDoubleDType, Complex64/128DType, Float16/32/64DType,
-  DateTime64DType, TimeDelta64DType, ObjectDType, VoidDType,
-  LongDoubleDType). Either loosen the assert to a soft-fail / log, or
-  detect the "too-short adornment" case earlier and treat the first
-  line as a signature instead of a title.
+  (`BoolDType`, `Int8/16/32/64DType`, `UInt8/16/32/64DType`,
+  `LongLongDType`, `ULongLongDType`, `BytesDType`, `StrDType`,
+  `StringDType`, `CLongDoubleDType`, `Complex64/128DType`,
+  `Float16/32/64DType`, `DateTime64DType`, `TimeDelta64DType`,
+  `ObjectDType`, `VoidDType`, `LongDoubleDType`). Either loosen the
+  assert to a soft-fail / log, or detect the "too-short adornment" case
+  earlier and treat the first line as a signature instead of a title.
 
-- Typos fixed on `claude/test-papyri-codebases-rFFwR`:
-    - papyri/numpydoc_compat.py:52  "Cound" -> "Could" (raised by
-      numpy.polynomial._polybase:ABCPolyBase).
-    - papyri/ts.py:366   "charter" -> "character" (backtick warning,
-      e.g. numpy.random._mt19937:MT19937._legacy_seeding).
+## Upstream docstring issues worth reporting
 
-### Upstream docstring issues worth reporting
-
-- numpy.random._mt19937:MT19937._legacy_seeding has a malformed
+- `numpy.random._mt19937:MT19937._legacy_seeding` has a malformed
   backtick sequence in its docstring:
-    `SeedSequence, or ``None`
+    `` `SeedSequence, or ``None` ``
   The backticks are unbalanced. Intended:
-    `SeedSequence`, or ``None``
+    `` `SeedSequence`, or ``None`` ``
   Lives in `_mt19937.pyx` in the numpy repo. Triggers the
   "Improper backtick" warning in papyri's tree-sitter RST parser
   three times.
 
-- numpy.polynomial._polybase:ABCPolyBase uses a `Class Attributes`
+- `numpy.polynomial._polybase:ABCPolyBase` uses a `Class Attributes`
   section name that numpydoc (and therefore papyri's
-  `numpydoc_compat.NumpyDocString._guess_header`) does not recognise. Either
-  add `Class Attributes` to papyri's alias table or rename the
+  `numpydoc_compat.NumpyDocString._guess_header`) does not recognise.
+  Either add `Class Attributes` to papyri's alias table or rename the
   section in numpy to one of the canonical numpydoc section names.
 
 - Non-signature first line in docstrings for
   `IPython.utils.timing:{clock2,timings,timings_out}` is not a real
   Python signature — it uses tuple-literal return annotations like
-  `-> (t_user, t_system)`. This is fine as human-readable text but
-  the names break papyri's exec-based signature parser on 3.14. Not
-  really an IPython bug; the right fix is on papyri's side (see
-  first bullet), but if IPython wanted to be friendly it could drop
-  the first "synopsis" line now that real annotations exist on
-  these functions.
+  `-> (t_user, t_system)`. Fine as human-readable text but the names
+  break papyri's exec-based signature parser on 3.14. Not really an
+  IPython bug; the right fix is on papyri's side (see PEP 649 bullet
+  above), but if IPython wanted to be friendly it could drop the first
+  "synopsis" line now that real annotations exist on these functions.
 
-## Linting / stability tooling (branch: claude/add-linting-tools-WkE1K)
+## Linting / stability tooling (branch: `claude/add-linting-tools-WkE1K`)
 
-Suggestions queued for the linting-tools branch. Extra type checkers
-(`ty`, `pyrefly`) intentionally excluded.
+Already landed (for context — not actionable):
+
+- Ruff `select = ["E", "F", "W", "B", "I", "UP"]` in `pyproject.toml`.
+- Mypy tightening: `warn_unused_ignores`, `warn_redundant_casts`,
+  `no_implicit_optional`, `check_untyped_defs`.
+- Per-workflow `permissions:` block on all four workflows (least
+  privilege).
+- Dependabot config at `.github/dependabot.yml`.
+- `zizmor` workflow at `.github/workflows/zizmor.yml`.
 
 ### Ruff rule expansion
-- [ ] Expand `[tool.ruff.lint] select`: add `B` (bugbear), `UP`
-      (pyupgrade), `I` (isort), `SIM` (simplify), `RUF` (ruff-native),
-      `PERF`. Consider `PIE`, `PL` (pylint subset), `RET` once the
-      baseline lands.
+- [ ] Extend `[tool.ruff.lint] select` with `SIM` (simplify), `RUF`
+      (ruff-native), `PERF`. Consider `PIE`, `PL` (pylint subset),
+      `RET` once those settle. Extra type checkers (`ty`, `pyrefly`)
+      remain intentionally excluded.
 - [ ] Land autofixes from the new rules as a separate commit so review
       stays tractable.
 
@@ -107,22 +116,11 @@ Suggestions queued for the linting-tools branch. Extra type checkers
 - [ ] Add `pip-audit` step to CI for CVE scanning of runtime deps.
 - [ ] Add `bandit` scan scoped to `papyri/gen.py` (which execs
       examples); accept that it will be noisy and tune rules.
-- [ ] Add Dependabot (or Renovate) config for GitHub Actions pins.
-
-### Mypy
-- [ ] Tighten `[tool.mypy]`: `warn_unused_ignores`,
-      `warn_redundant_casts`, `no_implicit_optional`,
-      `check_untyped_defs`. Full `strict` is too invasive for the IR
-      code.
 
 ### Pre-commit
 - [ ] Add `.pre-commit-config.yaml`: `ruff check --fix`, `ruff
       format`, `mypy`, `check-added-large-files`.
 
 ### CI hygiene
-- [ ] Add `permissions: contents: read` to each GitHub workflow
-      (least-privilege).
 - [ ] Add `concurrency:` with `cancel-in-progress: true` to PR
-      workflows.
-- [ ] Add `zizmor` to lint GitHub Actions YAML for injection-prone
-      `${{ }}` usage.
+      workflows (none of the four workflows set it today).

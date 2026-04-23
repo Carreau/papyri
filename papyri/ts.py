@@ -634,7 +634,7 @@ class TSVisitor:
     def visit_field(self, node):
         return []
 
-    def visit_field_list(self, node) -> list[FieldList]:
+    def visit_field_list(self, node) -> list[FieldList | Options]:
         acc: list[str] = []
 
         lens = {len(f.children) for f in node.children}

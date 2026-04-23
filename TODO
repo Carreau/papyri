@@ -93,11 +93,11 @@ Already landed (for context — not actionable):
 - `zizmor` workflow at `.github/workflows/zizmor.yml`.
 
 ### Ruff rule expansion
-- [ ] Extend `[tool.ruff.lint] select` with `SIM` (simplify), `RUF`
+- [x] Extend `[tool.ruff.lint] select` with `SIM` (simplify), `RUF`
       (ruff-native), `PERF`. Consider `PIE`, `PL` (pylint subset),
       `RET` once those settle. Extra type checkers (`ty`, `pyrefly`)
       remain intentionally excluded.
-- [ ] Land autofixes from the new rules as a separate commit so review
+- [x] Land autofixes from the new rules as a separate commit so review
       stays tractable.
 
 ### Test stability

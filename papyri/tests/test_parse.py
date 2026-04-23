@@ -415,6 +415,67 @@ def test_inline_role_unresolved_falls_back_to_inline_role():
     "role",
     ["class", "func", "meth", "any", None],
 )
+def test_tilde_prefix_sets_short_display_text(role):
+    """
+    A tilde-prefixed reference like ``~numpy.char.chararray`` must resolve to a
+    ``CrossRef`` whose ``value`` is only the last dotted component (``chararray``),
+    while ``reference.path`` keeps the full qualified name.
+    """
+    from papyri.nodes import CrossRef, InlineRole, RefInfo
+    from papyri.tree import DirectiveVisiter
+
+    target = RefInfo("numpy", "1.0", "api", "numpy.char.chararray")
+    visitor = DirectiveVisiter(
+        "numpy.cos",
+        frozenset({target}),
+        frozenset(),
+        {},
+        "1.0",
+        module="numpy",
+    )
+    out = visitor.replace_InlineRole(
+        InlineRole("~numpy.char.chararray", domain=None, role=role)
+    )
+    assert len(out) == 1, (role, out)
+    assert isinstance(out[0], CrossRef), (role, out)
+    assert out[0].value == "chararray", (role, out)
+    assert out[0].reference == target, (role, out)
+
+
+@pytest.mark.parametrize(
+    "role",
+    ["class", "func", "meth", "any", None],
+)
+def test_tilde_prefix_explicit_text_unchanged(role):
+    """
+    When explicit display text is given with a tilde target, e.g.
+    ``mytext <~numpy.char.chararray>``, the explicit text must be preserved.
+    """
+    from papyri.nodes import CrossRef, InlineRole, RefInfo
+    from papyri.tree import DirectiveVisiter
+
+    target = RefInfo("numpy", "1.0", "api", "numpy.char.chararray")
+    visitor = DirectiveVisiter(
+        "numpy.cos",
+        frozenset({target}),
+        frozenset(),
+        {},
+        "1.0",
+        module="numpy",
+    )
+    out = visitor.replace_InlineRole(
+        InlineRole("mytext <~numpy.char.chararray>", domain=None, role=role)
+    )
+    assert len(out) == 1, (role, out)
+    assert isinstance(out[0], CrossRef), (role, out)
+    assert out[0].value == "mytext", (role, out)
+    assert out[0].reference == target, (role, out)
+
+
+@pytest.mark.parametrize(
+    "role",
+    ["class", "func", "meth", "any", None],
+)
 def test_ingest_visitor_inline_role_resolves(role):
     """
     ``IngestVisitor.replace_InlineRole`` must delegate to the parent class

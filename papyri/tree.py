@@ -821,6 +821,12 @@ class DirectiveVisiter(TreeReplacer):
             assert to_resolve.endswith(">"), (text, to_resolve)
             to_resolve = to_resolve.rstrip(">")
 
+        if to_resolve.startswith("~"):
+            stripped = to_resolve[1:]
+            if text == to_resolve:
+                text = stripped.split(".")[-1]
+            to_resolve = stripped
+
         if to_resolve.startswith(("https://", "http://", "mailto://")):
             to_resolve = to_resolve.replace(" ", "")
             return [

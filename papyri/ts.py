@@ -634,21 +634,18 @@ class TSVisitor:
     def visit_field(self, node):
         return []
 
-    def visit_field_list(self, node) -> list[FieldList]:
+    def visit_field_list(self, node) -> list[FieldList | Options]:
         acc: list[str] = []
 
         lens = {len(f.children) for f in node.children}
-        if lens == {3}:  # need test here don't know why it was here.
-            # we likely have an option list
+        if lens == {3}:
+            # option list: each field item is [:, name, :] with no body
             for list_item in node.children:
                 assert list_item.type == "field"
                 col1, name, col2 = list_item.children
-                # TODO, assert _ and _ are `:`
                 assert self.as_text(col1) == ":", col1
                 assert self.as_text(col2) == ":", col2
                 acc.append(self.as_text(name))
-            return []
-            # TODO: why do we have unreachable here
             return [Options(acc)]
         acc2: list[FieldListItem] = []
         if lens == {4}:

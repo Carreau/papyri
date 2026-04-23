@@ -506,6 +506,28 @@ class Ingester:
                 refs,
             )
 
+        for _, key in progress(
+            gstore.glob((None, None, "docs", None)),
+            description="Relinking Narrative Docs...",
+        ):
+            doc = encoder.decode(gstore.get(key))
+            assert isinstance(doc, IngestedDoc), (doc, key)
+            dvr = IngestVisitor(
+                key.path,
+                known_refs,
+                frozenset(),
+                aliases,
+                version=key.version,
+                module=key.module,
+            )
+            doc.arbitrary = [dvr.visit(s) for s in doc.arbitrary]
+            refs = [Key(*x) for x in dvr._targets]
+            gstore.put(
+                key,
+                encoder.encode(doc),
+                refs,
+            )
+
 
 def drop():
     """remove all ingested files and db"""

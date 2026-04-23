@@ -31,6 +31,9 @@ papyri = "papyri:app"
 [tool.pytest.ini_options]
 addopts = "--durations=10"
 filterwarnings = "ignore:The module numpy.dual.*:DeprecationWarning"
+markers = [
+    "postingest: requires a fully-ingested store at ~/.papyri/ingest/ (run papyri ingest + relink first)",
+]
 
 [project.urls]
 Home = "https://github.com/carreau/papyri"

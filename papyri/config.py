@@ -12,12 +12,3 @@ ingest_dir.mkdir(parents=True, exist_ok=True)
 
 data_dir = base_dir / "data"
 data_dir.mkdir(parents=True, exist_ok=True)
-
-
-logo = r"""
-  ___                    _
- | _ \__ _ _ __ _  _ _ _(_)
- |  _/ _` | '_ \ || | '_| |
- |_| \__,_| .__/\_, |_| |_|
-          |_|   |__/
-"""

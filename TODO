@@ -18,12 +18,6 @@ in [`TODO-review.md`](TODO-review.md); milestones in [`PLAN.md`](PLAN.md).
 
 ## Papyri bugs (from `papyri gen` on IPython 9.12.0 + numpy 2.4.4, Py 3.14)
 
-- ~~**PEP 649 / lazy-annotations compat in `papyri/signature.py:67`.**~~ ✓ FIXED
-  Used `annotation_format=annotationlib.Format.STRING` in `inspect.signature()`
-  to keep annotations as strings without resolving them, avoiding NameError
-  when annotation names are not defined in the function's scope. This fixes
-  issues with IPython functions like OInfo, Binding, and others.
-
 - **`AssertionError` in `papyri/ts.py:579`**
   (`assert len(post_text) >= len(self.as_text(tc))`). Fires on numpy
   dtype classes whose docstring starts with a short signature line

@@ -14,6 +14,10 @@
   --math-error-fg: #b33;
   --math-error-bg: #fff4f4;
   --role-bg: #eef2fa;
+  --warn-border: #b45309;
+  --warn-bg: #fffbeb;
+  --error-border: #b91c1c;
+  --error-bg: #fef2f2;
   --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
@@ -36,6 +40,10 @@ html[data-theme="dark"] {
   --math-error-fg: #ff8b8b;
   --math-error-bg: #2a1818;
   --role-bg: #1f2a3a;
+  --warn-border: #fbbf24;
+  --warn-bg: #2a1f00;
+  --error-border: #f87171;
+  --error-bg: #2d0f0f;
 }
 
 * {

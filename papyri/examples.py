@@ -221,6 +221,25 @@ contain a literal with a new line ``here->|
 without the line break,
 but a space.
 
+Signature gallery
+-----------------
+
+In addition to :func:`example1`, this module exposes a small gallery of
+callables covering the main kinds of Python signatures papyri has to
+handle:
+
+- :func:`simple_generator`, :func:`fibonacci` — plain synchronous generators.
+- :func:`async_fetch` — an ``async def`` coroutine function.
+- :func:`async_counter` — an ``async def`` *generator* (asynchronous iterator).
+- :func:`positional_only`, :func:`keyword_only`, :func:`mixed_signature` —
+  parameter-kind coverage (positional-only, keyword-only, all-kinds).
+- :func:`higher_order` — a :class:`~collections.abc.Callable` annotation.
+- :class:`Patti` — a class whose methods cross-link to the functions above.
+
+Their docstrings reference each other with ``:func:``, ``:meth:`` and
+``:class:`` roles so the cross-linker has a self-contained, fully
+resolvable graph to exercise.
+
 Backtick edge cases
 -------------------
 
@@ -239,6 +258,7 @@ Examples of the pattern (rendered here so the viewer can exercise the fix):
 
 """
 
+from collections.abc import AsyncIterator, Callable, Iterator
 from typing import Any
 
 
@@ -417,6 +437,383 @@ def annotation_with_hex_addresses(x: foo = lambda x: x):  # type: ignore [valid-
     It is included to show that the hex address should be normalized.
     """
     pass
+
+
+def simple_generator(n: int = 5) -> Iterator[int]:
+    """
+    Yield integers ``0, 1, ..., n - 1``.
+
+    A minimal synchronous generator used to exercise papyri's handling of
+    ``generator function`` signatures (see :func:`inspect.isgeneratorfunction`).
+
+    Parameters
+    ----------
+    n : int, optional
+        Upper bound, exclusive. Defaults to ``5``.
+
+    Yields
+    ------
+    int
+        Successive integers starting at ``0``.
+
+    See Also
+    --------
+    fibonacci : A stateful generator over the same element type.
+    async_counter : The ``async def`` equivalent.
+    Patti.iter_items : A generator method on :class:`Patti`.
+
+    Examples
+    --------
+    >>> list(simple_generator(3))
+    [0, 1, 2]
+
+    """
+    yield from range(n)
+
+
+def fibonacci(limit: int) -> Iterator[int]:
+    """
+    Yield Fibonacci numbers strictly below ``limit``.
+
+    Like :func:`simple_generator`, this is a plain synchronous generator;
+    the state lives in local variables between ``yield`` points.
+
+    Parameters
+    ----------
+    limit : int
+        Stop yielding once the next term would be ``>= limit``.
+
+    Yields
+    ------
+    int
+        The next Fibonacci number.
+
+    See Also
+    --------
+    simple_generator : A simpler counting generator.
+    async_counter : An async generator yielding integers.
+    higher_order : Consume the output via a :class:`~collections.abc.Callable`.
+
+    Examples
+    --------
+    >>> list(fibonacci(20))
+    [0, 1, 1, 2, 3, 5, 8, 13]
+
+    """
+    a, b = 0, 1
+    while a < limit:
+        yield a
+        a, b = b, a + b
+
+
+async def async_fetch(url: str, *, timeout: float = 10.0) -> bytes:
+    """
+    Pretend to fetch ``url`` and return its body.
+
+    A minimal ``async def`` coroutine function used to exercise papyri's
+    handling of ``coroutine function`` signatures. The body does no I/O so
+    the example stays side-effect free at import time.
+
+    Parameters
+    ----------
+    url : str
+        Target URL. The value is ignored in this example.
+    timeout : float, keyword-only, optional
+        Deadline in seconds. Defaults to ``10.0``.
+
+    Returns
+    -------
+    bytes
+        A fixed, deterministic response body.
+
+    See Also
+    --------
+    async_counter : An ``async def`` generator function (has ``yield``).
+    simple_generator : The synchronous generator counterpart.
+    example1 : Another async example, with a more elaborate signature.
+
+    """
+    del url, timeout
+    return b"OK"
+
+
+async def async_counter(n: int = 3) -> AsyncIterator[int]:
+    """
+    Async generator yielding ``0, 1, ..., n - 1``.
+
+    This is an ``async def`` with a ``yield`` inside its body, which makes
+    it an :func:`inspect.isasyncgenfunction`. Compare with
+    :func:`simple_generator` (plain generator) and :func:`async_fetch`
+    (plain coroutine function without ``yield``).
+
+    Parameters
+    ----------
+    n : int, optional
+        Upper bound, exclusive. Defaults to ``3``.
+
+    Yields
+    ------
+    int
+        Successive integers starting at ``0``.
+
+    See Also
+    --------
+    simple_generator : Synchronous generator equivalent.
+    async_fetch : Plain async coroutine (no ``yield``).
+    Patti.aiter_items : Async generator method on :class:`Patti`.
+
+    """
+    for i in range(n):
+        yield i
+
+
+def positional_only(a: int, b: int, /) -> int:
+    """
+    Sum ``a`` and ``b``; both parameters are positional-only.
+
+    Parameters
+    ----------
+    a, b : int
+        Operands; cannot be passed by keyword.
+
+    Returns
+    -------
+    int
+        ``a + b``.
+
+    See Also
+    --------
+    keyword_only : The keyword-only mirror image of this signature.
+    mixed_signature : A signature that touches every ``Parameter.kind``.
+
+    """
+    return a + b
+
+
+def keyword_only(*, name: str, count: int = 1) -> str:
+    """
+    Repeat ``name`` ``count`` times; both parameters are keyword-only.
+
+    Parameters
+    ----------
+    name : str
+        Value to repeat. Must be passed by keyword.
+    count : int, optional
+        Repetition count. Defaults to ``1``.
+
+    Returns
+    -------
+    str
+        ``name`` concatenated ``count`` times.
+
+    See Also
+    --------
+    positional_only : Positional-only mirror of this signature.
+    mixed_signature : Combined variant touching every parameter kind.
+
+    """
+    return name * count
+
+
+def mixed_signature(
+    a: int,
+    b: int = 2,
+    /,
+    c: int = 3,
+    *args: int,
+    d: int = 4,
+    **kwargs: int,
+) -> int:
+    """
+    Sum of inputs; hits every :class:`inspect.Parameter.kind`.
+
+    ``a, b`` are ``POSITIONAL_ONLY``; ``c`` is ``POSITIONAL_OR_KEYWORD``;
+    ``args`` is ``VAR_POSITIONAL``; ``d`` is ``KEYWORD_ONLY``; ``kwargs``
+    is ``VAR_KEYWORD``. Pair with :func:`positional_only` and
+    :func:`keyword_only` to compare the simpler shapes.
+
+    Parameters
+    ----------
+    a : int
+        Positional-only, required.
+    b : int, optional
+        Positional-only with default.
+    c : int, optional
+        Positional-or-keyword with default.
+    *args : int
+        Extra positionals, summed.
+    d : int, optional, keyword-only
+        Keyword-only with default.
+    **kwargs : int
+        Extra keyword values, summed.
+
+    Returns
+    -------
+    int
+        The total.
+
+    See Also
+    --------
+    positional_only : Simpler positional-only shape.
+    keyword_only : Simpler keyword-only shape.
+    example1 : The original exhaustive-signature example.
+
+    """
+    return a + b + c + sum(args) + d + sum(kwargs.values())
+
+
+def higher_order(
+    fn: Callable[[int], int],
+    items: list[int],
+) -> list[int]:
+    """
+    Apply ``fn`` to every element of ``items``.
+
+    Demonstrates a :class:`~collections.abc.Callable` annotation. If you
+    would rather consume an iterator, :func:`simple_generator` and
+    :func:`fibonacci` produce the kind of stream this function maps over.
+
+    Parameters
+    ----------
+    fn : Callable[[int], int]
+        Unary function from ``int`` to ``int``.
+    items : list of int
+        Input values.
+
+    Returns
+    -------
+    list of int
+        ``[fn(x) for x in items]``.
+
+    See Also
+    --------
+    simple_generator : A generator-based alternative input.
+    fibonacci : Another integer-producing generator.
+
+    Examples
+    --------
+    >>> higher_order(lambda x: x * x, [1, 2, 3])
+    [1, 4, 9]
+
+    """
+    return [fn(x) for x in items]
+
+
+class Patti:
+    """
+    Small class used to demonstrate cross-linked method docstrings.
+
+    :class:`Patti` exposes an initialiser, an instance method, a
+    generator method, an async generator method, a classmethod and a
+    staticmethod. Method docstrings reference free functions such as
+    :func:`simple_generator` and :func:`async_fetch` so the viewer can
+    exercise ``:meth:`` ↔ ``:func:`` cross-links in both directions.
+
+    Parameters
+    ----------
+    name : str
+        Display name.
+    items : list of int, optional
+        Payload values. Defaults to an empty list.
+
+    Attributes
+    ----------
+    name : str
+        The value passed at construction.
+    items : list of int
+        The stored payload.
+
+    See Also
+    --------
+    simple_generator : Standalone generator.
+    higher_order : Standalone function taking a :class:`~collections.abc.Callable`.
+
+    Examples
+    --------
+    >>> p = Patti("demo", items=[1, 2, 3])
+    >>> p.total()
+    6
+
+    """
+
+    def __init__(self, name: str, items: list[int] | None = None) -> None:
+        self.name = name
+        self.items: list[int] = list(items) if items is not None else []
+
+    def total(self) -> int:
+        """
+        Return the sum of :attr:`items`.
+
+        See Also
+        --------
+        Patti.iter_items : Iterate over items instead of summing.
+        higher_order : Apply an arbitrary transform to each item.
+
+        """
+        return sum(self.items)
+
+    def iter_items(self) -> Iterator[int]:
+        """
+        Yield each stored item in order.
+
+        This is the method counterpart of :func:`simple_generator`.
+
+        Yields
+        ------
+        int
+            The next item in :attr:`items`.
+
+        See Also
+        --------
+        simple_generator : The free-function equivalent.
+        Patti.aiter_items : Async variant of this method.
+
+        """
+        yield from self.items
+
+    async def aiter_items(self) -> AsyncIterator[int]:
+        """
+        Async version of :meth:`iter_items`.
+
+        An ``async def`` with ``yield`` — i.e. an async generator method.
+
+        Yields
+        ------
+        int
+            The next item in :attr:`items`.
+
+        See Also
+        --------
+        Patti.iter_items : Synchronous version.
+        async_counter : Free-function async generator.
+
+        """
+        for x in self.items:
+            yield x
+
+    @classmethod
+    def empty(cls, name: str = "anon") -> "Patti":
+        """
+        Build an empty :class:`Patti` instance.
+
+        See Also
+        --------
+        Patti.__init__ : The full initialiser.
+
+        """
+        return cls(name, items=[])
+
+    @staticmethod
+    def describe() -> str:
+        """
+        Return a one-line description of the class.
+
+        See Also
+        --------
+        Patti : The owning class.
+
+        """
+        return "Patti is a toy class for papyri examples."
 
 
 def _mydirective_handler(args: str, options: dict[str, str], value: str):

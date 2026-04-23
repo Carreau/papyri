@@ -1484,6 +1484,7 @@ class Gen:
                         config=self.config.directives,
                         module=self._meta.get("module"),
                     )
+                    dv.collect_substitutions(*data)
                     blob.arbitrary = [dv.visit(s) for s in data]
                 except Exception as e:
                     e.add_note(f"Error in {p!r}")
@@ -1958,6 +1959,7 @@ class Gen:
                     config=self.config.directives,
                     module=self.root,
                 )
+                dv.collect_substitutions(s)
                 s2 = dv.visit(s)
 
                 acc.append(
@@ -2291,6 +2293,15 @@ class Gen:
                 aliases={},
                 version=self.version,
                 config=self.config.directives,
+            )
+            dv.collect_substitutions(
+                *arbitrary,
+                *doc_blob._content.values(),
+                *[
+                    doc_blob.content[s]
+                    for s in ["Extended Summary", "Summary", "Notes"] + sections_
+                    if s in doc_blob.content
+                ],
             )
             doc_blob.arbitrary = [dv.visit(s) for s in arbitrary]
             doc_blob.example_section_data = dv.visit(doc_blob.example_section_data)

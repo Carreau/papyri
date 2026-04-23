@@ -252,3 +252,8 @@ robustness and coverage holes.
   bundle's declared root (`crosslink.py` ~line 412).  Gen already knows
   both values; moving the check there makes the contract explicit and
   surfaces mistakes earlier.
+- **RST substitutions are gen-time-only (done).**
+  `SubstitutionDef` and `SubstitutionRef` nodes are resolved inside
+  `ts.parse()` before any IR is written.  The IR must never contain
+  either node type.  Non-`replace::` substitution types (image, unicode)
+  are warned and dropped; support can be added per demand.

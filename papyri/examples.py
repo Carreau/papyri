@@ -125,9 +125,9 @@ This is a block quote, to do, we know that Attributions are not supported right 
 Substitutions
 ~~~~~~~~~~~~~
 
-In this paragraph: |SubstitutionRef| Should be replaced...
+This text uses a substitution: |papyri| is the package name.
 
-.. |SubstitutionDef| replace:: ASUBSTITUTIONDEF
+.. |papyri| replace:: Papyri
 
 
 
@@ -260,6 +260,7 @@ Examples of the pattern (rendered here so the viewer can exercise the fix):
 
 from collections.abc import AsyncIterator, Callable, Iterator
 from typing import Any
+
 from .tree import Code
 
 
@@ -818,10 +819,11 @@ class Patti:
 
 
 def _mydirective_handler(args: str, options: dict[str, str], value: str):
-    from .nodes import Paragraph, Text, ThematicBreak
-    from .ts import parse
-    from textwrap import indent
     import json
+    from textwrap import indent
+
+    from .nodes import ThematicBreak
+    from .ts import parse
 
     parsed_arguments = parse(args.encode(), qa="custom directive")
 
@@ -840,6 +842,6 @@ def _mydirective_handler(args: str, options: dict[str, str], value: str):
             + indent(value, "   "),
         ),
         *acc,
-        Code(f"_mydirective_handler(\n" f"{args=},\n{options=}, \n{value=}\n"),
+        Code(f"_mydirective_handler(\n{args=},\n{options=}, \n{value=}\n"),
         ThematicBreak(),
     ]

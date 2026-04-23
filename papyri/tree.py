@@ -34,7 +34,9 @@ from .nodes import (
     LocalRef,
     Paragraph,
     RefInfo,
+    Section,
     SubstitutionDef,
+    SubstitutionRef,
     Text,
     UnprocessedDirective,
 )
@@ -594,6 +596,51 @@ class DirectiveVisiter(TreeReplacer):
         self._targets: set[Any] = set()
         self.version = version
         self._tocs: Any = []
+        # Keyed by RST name with pipes (e.g. '|foo|').  Populated by
+        # collect_substitutions() before visiting; can be pre-seeded with
+        # config-level global substitutions.
+        self._substitutions: dict[str, list] = {}
+
+    def collect_substitutions(self, *sections: Section) -> None:
+        """Pre-scan sections for SubstitutionDef nodes to build the substitution map.
+
+        Call this on all sections that will be visited *before* calling visit(),
+        so that refs are resolved even when the def appears after the ref in
+        document order.
+        """
+        for section in sections:
+            for node in section.children:
+                if not isinstance(node, SubstitutionDef):
+                    continue
+                child = node.children[0] if node.children else None
+                if isinstance(child, UnprocessedDirective) and child.name == "replace":
+                    replacement_text = child.args or ""
+                    self._substitutions[node.value] = (
+                        [Text(replacement_text)] if replacement_text else []
+                    )
+                else:
+                    directive_name = (
+                        child.name
+                        if isinstance(child, UnprocessedDirective)
+                        else type(child).__name__
+                    )
+                    log.warning(
+                        "substitution %r uses unsupported directive %r in %s; dropping",
+                        node.value,
+                        directive_name,
+                        self.qa,
+                    )
+
+    def replace_SubstitutionDef(self, node: SubstitutionDef) -> list:
+        return []
+
+    def replace_SubstitutionRef(self, node: SubstitutionRef) -> list:
+        name = node.value  # e.g. '|foo|'
+        if name in self._substitutions:
+            return list(self._substitutions[name])
+        log.warning("unresolved substitution reference %r in %s", name, self.qa)
+        inner = name[1:-1] if name.startswith("|") and name.endswith("|") else name
+        return [Text(inner)]
 
     def replace_GenCode(self, code):
         """Flatten a GenCode intermediate into a plain Code node."""

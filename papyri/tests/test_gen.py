@@ -9,6 +9,7 @@ from papyri.gen import (
     BlockExecutor,
     Config,
     Gen,
+    GeneratedDoc,
     NumpyDocString,
     _normalize_see_also,
 )
@@ -22,6 +23,18 @@ def ex1():
 def test_BlockExecutor():
     b = BlockExecutor({})
     b.exec("# this is a comment")
+
+
+def test_generated_doc_new():
+    """ClassVar annotations on GeneratedDoc must not shift positional args.
+
+    Regression: adding `sections: ClassVar[list[str]]` caused get_type_hints to
+    include `sections` as the first entry, shifting all positional arguments by
+    one so that `_ordered_sections` received None instead of [].
+    """
+    doc = GeneratedDoc.new()
+    assert isinstance(doc._ordered_sections, list), doc._ordered_sections
+    assert isinstance(doc._content, dict), doc._content
 
 
 def test_find_beyond_decorators():

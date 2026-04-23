@@ -306,6 +306,27 @@ ordering before it's worth wiring up.
   references to builtins as ordinary cross-refs; ingest resolves them
   against the shim bundle exactly like any other package.  No special
   casing in `resolve_()` at ingest time.
+- **Core invariant: gen owns all ref classification; ingest only links.**
+  A well-formed DocBundle must satisfy:
+  - Every reference *within* the bundle is a `LocalRef` — no intra-bundle
+    `RefInfo` nodes.  Gen is responsible for converting relative refs,
+    aliases, and local names to `LocalRef` before writing the bundle.
+  - Every cross-bundle reference is a `RefInfo` with a fully qualified
+    `(package, version, kind, path)` — no fuzzy strings, no unresolved
+    aliases.  This includes builtins (resolved via the shim bundle at gen
+    time).
+  Ingest then has a clearly bounded job:
+  1. Resolve every `LocalRef` to a full key within the current bundle's
+     namespace (this is the only resolution work ingest does).
+  2. For every `RefInfo` in the resolved IR: if the target key exists in
+     the graphstore, record a live link; if not, record a dangling ref
+     (the target bundle has not been ingested yet).
+  3. Optionally run a **check pass** that asserts no `LocalRef` remains
+     unresolved and that all `RefInfo` targets are at least registered as
+     known nodes (even if dangling).
+  A two-step ingest (first pass: load all bundle metadata and build a
+  complete ref map; second pass: resolve all bundles against that map) is
+  acceptable and avoids the current ordering sensitivity of `relink()`.
 - **RST substitutions are gen-time-only (done).**
   `SubstitutionDef` and `SubstitutionRef` nodes are resolved inside
   `ts.parse()` before any IR is written.  The IR must never contain

@@ -10,6 +10,9 @@ html_dir.mkdir(parents=True, exist_ok=True)
 ingest_dir = base_dir / "ingest"
 ingest_dir.mkdir(parents=True, exist_ok=True)
 
+data_dir = base_dir / "data"
+data_dir.mkdir(parents=True, exist_ok=True)
+
 
 logo = r"""
   ___                    _

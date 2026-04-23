@@ -175,8 +175,7 @@ def resolve_(
     if ref in rev_aliases:
         new_ref = rev_aliases[ref]
         assert new_ref not in rev_aliases, "would loop...."
-        # TODO: likely can drop rev_aliases here
-        res = resolve_(qa, known_refs, local_refs, new_ref, rev_aliases)
+        res = resolve_(qa, known_refs, local_refs, new_ref, {})
         return res
 
     assert isinstance(ref, str), ref

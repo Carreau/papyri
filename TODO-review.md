@@ -38,28 +38,3 @@ See also: [`TODO`](TODO) (known bugs + linting queue) and
   pre-commit — is queued in [`TODO`](TODO) under "Linting / stability
   tooling". Don't double-track here.
 
-## Landed since this file was first written
-
-Rolled up for context (not actionable):
-
-- Deleted orphan debug comments in `gen.py`, `crosslink.py`,
-  `tree.py`, `ts.py`, `nodes.py`, `graphstore.py`, `examples.py`.
-- Fixed typos: `Cound` → `Could` in `numpydoc_compat.py`, `charter`
-  → `character` in `ts.py`, plus `Chck why we hav`, `.valueTODO:`
-  run-on, and a vim-key leak in `examples.py`.
-- Dropped the `# noqa: B007` suppression by renaming the unused
-  loop var.
-- Turned the scipy-1.8 module-walk warning into a DEBUG log and
-  rewrote the comment around it — the check is generic, not
-  scipy-specific.
-- Turned the tree-sitter ERROR-node path into a `Text` fallback
-  instead of silently dropping content; logged at DEBUG.
-- Fixed `papyri relink` crash when `DirectiveVisiter` is
-  constructed without a `config=`.
-- Expanded `.gitignore` to cover macOS / editor / Phase-1-leftover
-  directories.
-- Mypy tightening (`warn_unused_ignores`, `warn_redundant_casts`,
-  `no_implicit_optional`, `check_untyped_defs`), Dependabot config,
-  per-workflow least-privilege `permissions:`, `zizmor` workflow,
-  ruff rules `B`/`I`/`UP` — see [`TODO`](TODO) for what's still
-  open under that umbrella.

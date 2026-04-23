@@ -16,9 +16,10 @@ interface Props {
   activeQualname?: string;
   activeDocPath?: string;
   activeExamplePath?: string;
+  hasToc?: boolean;
 }
 
-const { pkg, ver, bundlePath, title, activeQualname, activeDocPath, activeExamplePath } =
+const { pkg, ver, bundlePath, title, activeQualname, activeDocPath, activeExamplePath, hasToc } =
   Astro.props;
 const nav = await loadBundleNav(pkg, ver, bundlePath);
 ---
@@ -29,7 +30,7 @@ const nav = await loadBundleNav(pkg, ver, bundlePath);
   </head>
   <body>
     <SiteHeader />
-    <div class="bundle-layout">
+    <div class:list={["bundle-layout", hasToc && "has-page-toc"]}>
       <input type="checkbox" id="sidebar-toggle" class="sidebar-toggle-cb" aria-hidden="true" />
       <label for="sidebar-toggle" class="sidebar-toggle-label">
         <span class="sidebar-toggle-open" aria-hidden="true">&#9776;</span>
@@ -45,6 +46,13 @@ const nav = await loadBundleNav(pkg, ver, bundlePath);
       <main class="bundle-main">
         <slot />
       </main>
+      {
+        hasToc && (
+          <aside class="page-toc-panel" aria-label="On this page">
+            <slot name="page-toc" />
+          </aside>
+        )
+      }
     </div>
   </body>
 </html>

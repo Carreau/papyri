@@ -119,6 +119,7 @@ const tocEntries = sections.filter((s, i) => s.title && !(i === 0 && firstTitleI
   bundlePath={bundlePath}
   title={`${pageTitle} — ${pkg} ${ver}`}
   activeDocPath={docPath}
+  hasToc={tocEntries.length >= 2}
 >
   <p class="crumb">
     <a href="/">bundles</a> / <a href={`/${pkg}/${ver}/`}>{pkg} {ver}</a> /
@@ -130,21 +131,6 @@ const tocEntries = sections.filter((s, i) => s.title && !(i === 0 && firstTitleI
     <h1>{displayTitle}</h1>
     <p class="source"><code>docs/{docPath}</code></p>
   </header>
-
-  {
-    tocEntries.length >= 2 && (
-      <nav class="doc-toc" aria-label="On this page">
-        <p class="doc-toc-label">On this page</p>
-        <ul>
-          {tocEntries.map((s) => (
-            <li>
-              <a href={`#${sectionId(s)}`}>{s.title}</a>
-            </li>
-          ))}
-        </ul>
-      </nav>
-    )
-  }
 
   {
     sections.length === 0 ? (
@@ -164,4 +150,44 @@ const tocEntries = sections.filter((s, i) => s.title && !(i === 0 && firstTitleI
       })
     )
   }
+
+  {
+    tocEntries.length >= 2 && (
+      <Fragment slot="page-toc">
+        <nav class="page-toc" aria-label="On this page">
+          <p class="page-toc-label">On this page</p>
+          <ul>
+            {tocEntries.map((s) => (
+              <li>
+                <a class="page-toc-link" href={`#${sectionId(s)}`}>
+                  {s.title}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      </Fragment>
+    )
+  }
 </BundleLayout>
+
+<script>
+  const links = [...document.querySelectorAll<HTMLAnchorElement>(".page-toc-link")];
+  const sections = [...document.querySelectorAll<HTMLElement>("section.doc-section[id]")];
+
+  if (links.length > 0 && sections.length > 0) {
+    function updateActive(): void {
+      const threshold = window.scrollY + window.innerHeight * 0.25;
+      let activeId = sections[0].id;
+      for (const s of sections) {
+        if (s.offsetTop <= threshold) activeId = s.id;
+        else break;
+      }
+      for (const link of links) {
+        link.classList.toggle("is-active", link.getAttribute("href") === "#" + activeId);
+      }
+    }
+    window.addEventListener("scroll", updateActive, { passive: true });
+    updateActive();
+  }
+</script>

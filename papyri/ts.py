@@ -244,9 +244,14 @@ class TSVisitor:
         for i, a in enumerate(acc):
             if isinstance(a, Unimplemented) and a.placeholder == "untarget":
                 if len(acc) > i and isinstance(acc[i + 1], Section):
-                    # TODO: don't mutate. Copy
                     target_name = a.value[1:-1]
-                    acc[i + 1].target = target_name
+                    sec = acc[i + 1]
+                    acc[i + 1] = Section(
+                        children=sec.children,
+                        title=sec.title,
+                        level=sec.level,
+                        target=target_name,
+                    )
                     self._targets.append(target_name)
                     continue
 

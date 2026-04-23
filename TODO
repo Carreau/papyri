@@ -18,27 +18,11 @@ in [`TODO-review.md`](TODO-review.md); milestones in [`PLAN.md`](PLAN.md).
 
 ## Papyri bugs (from `papyri gen` on IPython 9.12.0 + numpy 2.4.4, Py 3.14)
 
-- **PEP 649 / lazy-annotations compat in `papyri/signature.py:67`.**
-  `Signature.from_str` does `exec(f"def {sig}:pass", {}, glob)` then
-  `cls(glob[oname])`, which calls `inspect.signature(target_item)`. On
-  Python 3.14, annotations are evaluated lazily in the empty globals
-  passed to `exec`, so any name referenced in the signature string
-  (`Any`, `collections`, `t_total`, …) raises `NameError` when
-  `inspect.signature()` resolves them. The current code catches the
-  error and re-raises as `TextSignatureParsingFailed`; it does not yet
-  implement the fix. Reproduces on:
-    - `IPython.core.oinspect:OInfo`              (`Any` not defined)
-    - `IPython.terminal.shortcuts:Binding`,
-      `BaseBinding`, `RuntimeBinding`            (`collections` not defined)
-    - `IPython.utils.timing:clock2`              (`t_user` not defined)
-    - `IPython.utils.timing:timings`,
-      `timings_out`                              (`t_total` not defined)
-  Fix sketch: on Py 3.14+, call
-  `inspect.signature(target_item, annotation_format=annotationlib.Format.STRING)`
-  (or `FORWARDREF`) so names stay unresolved, or pass a richer globals
-  dict (e.g. `{"Any": typing.Any, "Optional": typing.Optional, …}`) into
-  the `exec`, or catch `NameError` and fall back to stringified
-  annotations.
+- ~~**PEP 649 / lazy-annotations compat in `papyri/signature.py:67`.**~~ ✓ FIXED
+  Used `annotation_format=annotationlib.Format.STRING` in `inspect.signature()`
+  to keep annotations as strings without resolving them, avoiding NameError
+  when annotation names are not defined in the function's scope. This fixes
+  issues with IPython functions like OInfo, Binding, and others.
 
 - **`AssertionError` in `papyri/ts.py:579`**
   (`assert len(post_text) >= len(self.as_text(tc))`). Fires on numpy

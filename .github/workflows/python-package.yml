@@ -98,6 +98,69 @@ jobs:
       with:
         fail_ci_if_error: false
         token: ${{ secrets.CODECOV_TOKEN }}
+  gen-ipython-main:
+    # Extended gen test: clone IPython main into ~/dev/IPython so the default
+    # docs_path in examples/IPython.toml (~/dev/IPython/docs/source) resolves,
+    # then run `papyri gen` with narrative enabled against main-branch sources.
+    # The `build` matrix above exercises the pip-installed release of IPython
+    # without narrative; this job complements it.
+    needs: changes
+    if: needs.changes.outputs.python == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.14"]
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      with:
+        persist-credentials: false
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install uv
+      run: pip install uv
+    - name: Install dependencies
+      run: |
+        uv pip install --system -r requirements-dev.txt
+        uv pip install --system -e .
+    - name: Clone IPython main
+      run: |
+        mkdir -p ~/dev
+        git clone --depth=1 https://github.com/ipython/ipython.git ~/dev/IPython
+    - name: Install IPython from main
+      run: |
+        uv pip install --system -e ~/dev/IPython
+    - name: Gen IPython (main branch, with narrative)
+      run: |
+        coverage run -a -m papyri gen examples/IPython.toml
+        sleep 1 # time for coverage to write its stuff
+        papyri pack
+        ls ~/.papyri/data
+    - name: Verify narrative docs were collected
+      run: |
+        set -e
+        bundle=$(ls -d ~/.papyri/data/IPython_*/ | head -1)
+        echo "Bundle: $bundle"
+        test -d "$bundle/docs" || { echo "docs/ missing"; exit 1; }
+        test -f "$bundle/toc.cbor" || { echo "toc.cbor missing"; exit 1; }
+        n=$(find "$bundle/docs" -type f | wc -l)
+        echo "Narrative doc count: $n"
+        test "$n" -gt 5 || { echo "expected >5 narrative docs, got $n"; exit 1; }
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+      with:
+        name: doc-bundles-IPython-main
+        path: ~/.papyri/data/*.zip
+    - name: Convert .coverage sql to xml for upload
+      run: |
+        coverage report
+        coverage xml
+    - name: "Upload coverage to Codecov"
+      uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238  # v4
+      with:
+        fail_ci_if_error: false
+        token: ${{ secrets.CODECOV_TOKEN }}
+
   ingest:
 
     runs-on: ubuntu-latest

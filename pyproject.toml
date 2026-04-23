@@ -82,3 +82,19 @@ ignore = [
     "UP040",  # `type` keyword requires Python 3.12+; local runtime is 3.11
 ]
 mccabe.max-complexity = 50
+
+[tool.coverage.run]
+source = ["papyri"]
+branch = true
+omit = [
+    "papyri/tests/*",
+    "papyri/examples/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@(abc\\.)?abstractmethod",
+]

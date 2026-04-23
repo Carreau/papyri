@@ -14,6 +14,7 @@ and rendered many times — independently, and across projects.
 | :---------- | :-----|
 |   Project   | [![License](https://img.shields.io/badge/License-MIT-gray.svg?colorA=2D2A56&colorB=5936D9&style=flat.svg)](https://opensource.org/license/mit/) |
 |     CI      | [![Python Package](https://github.com/carreau/papyri/actions/workflows/python-package.yml/badge.svg)](https://github.com/carreau/papyri/actions/workflows/python-package.yml) [![Linting](https://github.com/carreau/papyri/actions/workflows/lint.yml/badge.svg)](https://github.com/carreau/papyri/actions/workflows/lint.yml) |
+| Coverage | [![codecov](https://codecov.io/gh/carreau/papyri/branch/main/graph/badge.svg)](https://codecov.io/gh/carreau/papyri) |
 
 ---
 

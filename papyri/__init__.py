@@ -410,13 +410,30 @@ def describe(
 @app.command()
 def debug(
     path: Annotated[
-        Path,
-        typer.Argument(help="Path to a .cbor file to inspect."),
+        str,
+        typer.Argument(
+            help=(
+                "Path to a .cbor file to inspect. "
+                "Can be an absolute/relative path, or a shorthand relative to "
+                "~/.papyri/data/ (e.g. 'numpy_2.3.5/module/numpy.linspace'). "
+                "The .cbor extension is added automatically when absent."
+            )
+        ),
     ],
 ):
     """
-    Print the contents of a CBOR file in human-readable form, plus backrefs
-    from the graph store when the file lives inside the ingest tree.
+    Print the contents of a CBOR file in human-readable form.
+
+    Accepts:
+    - An absolute or relative path to any .cbor file.
+    - A shorthand path relative to ~/.papyri/data/ — the .cbor extension is
+      appended automatically if the file is not found without it.
+
+    When the file lives inside the ingest tree (~/.papyri/ingest/) the command
+    also prints backrefs from the graph store.
+
+    When the file lives inside the data tree (~/.papyri/data/) the command
+    prints the bundle context (package, version, kind) derived from the path.
 
     Tries to decode using the papyri IR tag registry first; falls back to
     plain cbor2 if the file does not contain tagged IR objects.
@@ -425,13 +442,18 @@ def debug(
 
     import cbor2
 
-    from papyri.config import ingest_dir
+    from papyri.config import data_dir, ingest_dir
     from papyri.graphstore import GraphStore, Key
 
     from .crosslink import IngestedDoc as IngestedDoc
     from .nodes import encoder
 
-    raw = path.read_bytes()
+    resolved = _resolve_debug_path(path, data_dir)
+    if resolved is None:
+        print(f"File not found: {path!r}", file=sys.stderr)
+        raise typer.Exit(1)
+
+    raw = resolved.read_bytes()
 
     try:
         obj = encoder.decode(raw)
@@ -441,12 +463,20 @@ def debug(
             obj = cbor2.loads(raw)
             pprint.pprint(obj)
         except Exception as e:
-            print(f"Failed to decode {path}: {e}", file=sys.stderr)
+            print(f"Failed to decode {resolved}: {e}", file=sys.stderr)
             raise typer.Exit(1) from None
+
+    # Show bundle context when the file is inside the data tree.
+    try:
+        rel = resolved.resolve().relative_to(data_dir.resolve())
+    except ValueError:
+        pass
+    else:
+        _print_data_context(rel)
 
     # Show backrefs when the file is inside the ingest tree.
     try:
-        rel = path.resolve().relative_to(ingest_dir)
+        rel = resolved.resolve().relative_to(ingest_dir.resolve())
     except ValueError:
         return
 
@@ -465,6 +495,54 @@ def debug(
         print("\n-- backrefs --")
         for b in sorted(backrefs):
             print(f"  {b.module} {b.version} {b.kind} {b.path}")
+
+
+def _resolve_debug_path(raw: str, data_dir: Path) -> Path | None:
+    """
+    Return the resolved Path for *raw*, trying several strategies:
+
+    1. Use *raw* directly if it points to an existing file.
+    2. Append '.cbor' if the result exists.
+    3. Treat *raw* as a path relative to *data_dir*, with and without '.cbor'.
+    """
+    p = Path(raw)
+    if p.exists():
+        return p
+    with_cbor = Path(raw + ".cbor")
+    if with_cbor.exists():
+        return with_cbor
+    in_data = data_dir / raw
+    if in_data.exists():
+        return in_data
+    in_data_cbor = data_dir / (raw + ".cbor")
+    if in_data_cbor.exists():
+        return in_data_cbor
+    return None
+
+
+def _print_data_context(rel: Path) -> None:
+    """Print bundle context for a path relative to data_dir."""
+    parts = rel.parts
+    if not parts:
+        return
+    bundle = parts[0]
+    # bundle dirs are named  <pkg>_<ver>
+    if "_" in bundle:
+        pkg, _, ver = bundle.partition("_")
+    else:
+        pkg, ver = bundle, ""
+    kind = parts[1] if len(parts) > 1 else ""
+    identifier = "/".join(parts[2:])
+    if identifier.endswith(".cbor"):
+        identifier = identifier[:-5]
+    print("\n-- bundle context --")
+    print(f"  package : {pkg}")
+    if ver:
+        print(f"  version : {ver}")
+    if kind:
+        print(f"  kind    : {kind}")
+    if identifier:
+        print(f"  id      : {identifier}")
 
 
 if __name__ == "__main__":

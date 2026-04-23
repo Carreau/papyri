@@ -409,3 +409,35 @@ def test_inline_role_unresolved_falls_back_to_inline_role():
     assert isinstance(out[0], InlineRole)
     assert out[0].role == "class"
     assert out[0].value == "not.a.real.symbol"
+
+
+@pytest.mark.parametrize(
+    "role",
+    ["class", "func", "meth", "any", None],
+)
+def test_ingest_visitor_inline_role_resolves(role):
+    """
+    ``IngestVisitor.replace_InlineRole`` must delegate to the parent class
+    resolve path and produce a ``CrossRef`` when the target is in
+    ``known_refs``.
+
+    Regression: the method was a no-op stub that returned the original
+    ``InlineRole`` unchanged, so cross-links to other packages (e.g.
+    ``numpy.sin``) in module-level docstrings were never wired up.
+    """
+    from papyri.nodes import CrossRef, InlineRole, RefInfo
+    from papyri.tree import IngestVisitor
+
+    target = RefInfo("numpy", "1.0", "api", "numpy.sin")
+    visitor = IngestVisitor(
+        "papyri.examples",
+        frozenset({target}),
+        frozenset(),
+        {},
+        version="0.0.8",
+        module="papyri",
+    )
+    out = visitor.replace_InlineRole(InlineRole("numpy.sin", domain=None, role=role))
+    assert len(out) == 1, (role, out)
+    assert isinstance(out[0], CrossRef), (role, out)
+    assert out[0].reference == target, (role, out)

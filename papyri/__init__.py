@@ -407,5 +407,65 @@ def describe(
                 print(f"  {f.module} {f.version} {f.kind} {f.path}")
 
 
+@app.command()
+def debug(
+    path: Annotated[
+        Path,
+        typer.Argument(help="Path to a .cbor file to inspect."),
+    ],
+):
+    """
+    Print the contents of a CBOR file in human-readable form, plus backrefs
+    from the graph store when the file lives inside the ingest tree.
+
+    Tries to decode using the papyri IR tag registry first; falls back to
+    plain cbor2 if the file does not contain tagged IR objects.
+    """
+    import pprint
+
+    import cbor2
+
+    from papyri.config import ingest_dir
+    from papyri.graphstore import GraphStore, Key
+
+    from .crosslink import IngestedDoc  # noqa: F401 — registers tag 4010
+    from .nodes import encoder
+
+    raw = path.read_bytes()
+
+    try:
+        obj = encoder.decode(raw)
+        pprint.pprint(obj)
+    except Exception:
+        try:
+            obj = cbor2.loads(raw)
+            pprint.pprint(obj)
+        except Exception as e:
+            print(f"Failed to decode {path}: {e}", file=sys.stderr)
+            raise typer.Exit(1) from None
+
+    # Show backrefs when the file is inside the ingest tree.
+    try:
+        rel = path.resolve().relative_to(ingest_dir)
+    except ValueError:
+        return
+
+    parts = rel.parts
+    if len(parts) != 4:
+        return
+
+    module, version, kind, identifier = parts
+    if identifier.endswith(".cbor"):
+        identifier = identifier[:-5]
+
+    key = Key(module, version, kind, identifier)
+    store = GraphStore(ingest_dir, {})
+    backrefs = store.get_backref(key)
+    if backrefs:
+        print("\n-- backrefs --")
+        for b in sorted(backrefs):
+            print(f"  {b.module} {b.version} {b.kind} {b.path}")
+
+
 if __name__ == "__main__":
     app()

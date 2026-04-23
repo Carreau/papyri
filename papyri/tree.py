@@ -518,7 +518,6 @@ def py_doc_handler(value):
 
 
 _MISSING_DIRECTIVES: list[str] = []
-_MISSING_INLINE_DIRECTIVES: list[tuple[str, str]] = []
 
 _SPHINX_ONLY_DIRECTIVES: frozenset[str] = frozenset(
     {
@@ -882,12 +881,6 @@ class IngestVisitor(DirectiveVisiter):
     def replace_GenCode(self, code):
         raise NotImplementedError
 
-    def replace_InlineRole(self, d):
-        if (d.domain, d.role) not in _MISSING_INLINE_DIRECTIVES:
-            _MISSING_INLINE_DIRECTIVES.append((d.domain, d.role))
-            log.info("TODO: %r %r %r", d.domain, d.role, d.value)
-        return [d]
-
     def replace_RefInfo(self, refinfo):
         log.debug("RefInfo: %r", refinfo)
         return [refinfo]
@@ -897,6 +890,20 @@ class IngestVisitor(DirectiveVisiter):
             ri = RefInfo(self.module, self.version, "docs", ref.reference.path)
             self._targets.add(ri)
             return [CrossRef(ref.value, ri, ref.kind)]
+        if isinstance(ref.reference, RefInfo) and ref.reference.kind == "api":
+            # "api"-kind stubs are produced by the import-solver at gen time
+            # (version="*", kind="api"). Resolve them against known_refs so the
+            # stored forward-ref edge points at the real versioned module doc.
+            resolved = resolve_(
+                self.qa,
+                self.known_refs,
+                frozenset(),
+                ref.reference.path,
+                rev_aliases=self.rev_aliases,
+            )
+            if resolved.kind not in ("missing", "local"):
+                self._targets.add(resolved)
+                return [CrossRef(ref.value, resolved, ref.kind)]
         return [ref]
 
     def replace_BlockDirective(self, block_directive: Directive):

@@ -1,4 +1,4 @@
-""" "
+"""
 
 Examples Modules Heading 1
 ==========================

@@ -725,6 +725,56 @@ section.backrefs ul.qualnames {
 }
 
 /* ---------------------------------------------------------------------------
+   Bundle index navigation cards — /[pkg]/[ver]/ landing page.
+--------------------------------------------------------------------------- */
+.bundle-index-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+.bundle-index-card {
+  display: flex;
+  flex-direction: column;
+  padding: 1rem 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  text-decoration: none;
+  color: var(--fg);
+  min-width: 10rem;
+  transition:
+    border-color 0.12s,
+    background-color 0.12s;
+}
+
+.bundle-index-card:hover {
+  border-color: var(--accent);
+  background: var(--surface-alt);
+}
+
+.bundle-index-card-title {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--accent);
+}
+
+.bundle-index-card-count {
+  font-size: 0.85rem;
+  color: var(--fg-muted);
+  margin-top: 0.25rem;
+}
+
+/* Sidebar API overflow note */
+.sidebar-api-more {
+  font-size: 0.72rem;
+  color: var(--fg-muted);
+  margin: 0.4rem 0 0;
+  padding: 0 0.25rem;
+}
+
+/* ---------------------------------------------------------------------------
    Bundle cards — landing page grid (§3).
 --------------------------------------------------------------------------- */
 /* Filter input above the card grid */

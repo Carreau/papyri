@@ -1,5 +1,6 @@
 ---
-import { listIngestedBundles, listModules } from "../../../lib/ir-reader.ts";
+import { listIngestedBundles } from "../../../lib/ir-reader.ts";
+import { loadBundleNav } from "../../../lib/nav.ts";
 import BundleLayout from "../../../layouts/BundleLayout.astro";
 
 export async function getStaticPaths() {
@@ -12,7 +13,17 @@ export async function getStaticPaths() {
 
 const { pkg, ver } = Astro.params;
 const { bundlePath } = Astro.props as { bundlePath: string };
-const qualnames = await listModules(bundlePath);
+const nav = await loadBundleNav(pkg!, ver!, bundlePath);
+
+const hasDocs = nav.toc.length > 0 || nav.docs.length > 0;
+const hasExamples = nav.examples.length > 0;
+const docsHref = nav.docsIndexHref ?? nav.docs[0]?.href ?? null;
+// Link to the root-package qualname page if it exists, otherwise the first qualname.
+const apiHref = nav.qualnames.includes(pkg!)
+  ? `/${pkg}/${ver}/${pkg}/`
+  : nav.qualnames.length > 0
+    ? `/${pkg}/${ver}/${nav.qualnames[0]}/`
+    : null;
 ---
 
 <BundleLayout pkg={pkg!} ver={ver!} bundlePath={bundlePath} title={`${pkg} ${ver} — Papyri viewer`}>
@@ -21,5 +32,38 @@ const qualnames = await listModules(bundlePath);
     {pkg}
     <span class="version">{ver}</span>
   </h1>
-  <p class="lede">{qualnames.length} qualnames</p>
+  {nav.meta.summary ? <p class="lede">{nav.meta.summary}</p> : null}
+  <div class="bundle-index-nav">
+    {
+      hasDocs && docsHref ? (
+        <a class="bundle-index-card" href={docsHref}>
+          <span class="bundle-index-card-title">Narrative docs</span>
+          <span class="bundle-index-card-count">
+            {nav.docs.length + nav.tutorials.length} page
+            {nav.docs.length + nav.tutorials.length !== 1 ? "s" : ""}
+          </span>
+        </a>
+      ) : null
+    }
+    {
+      apiHref ? (
+        <a class="bundle-index-card" href={apiHref}>
+          <span class="bundle-index-card-title">API reference</span>
+          <span class="bundle-index-card-count">
+            {nav.qualnames.length} item{nav.qualnames.length !== 1 ? "s" : ""}
+          </span>
+        </a>
+      ) : null
+    }
+    {
+      hasExamples ? (
+        <a class="bundle-index-card" href={nav.examples[0]!.href}>
+          <span class="bundle-index-card-title">Examples</span>
+          <span class="bundle-index-card-count">
+            {nav.examples.length} example{nav.examples.length !== 1 ? "s" : ""}
+          </span>
+        </a>
+      ) : null
+    }
+  </div>
 </BundleLayout>

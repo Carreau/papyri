@@ -33,8 +33,6 @@ addopts = "--durations=10"
 filterwarnings = "ignore:The module numpy.dual.*:DeprecationWarning"
 markers = [
     "postingest: requires a fully-ingested store at ~/.papyri/ingest/ (run papyri ingest + relink first)",
-    "network: requires network access (e.g. cloning from GitHub); skip with -m 'not network'",
-    "slow: long-running integration tests; skip with -m 'not slow'",
 ]
 
 [project.urls]

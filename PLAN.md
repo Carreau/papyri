@@ -219,6 +219,15 @@ robustness and coverage holes.
 
 ## Follow-ups (not yet scheduled)
 
+- **Directive handlers should not read global state.** `:ghpull:` and
+  `:ghissue:` currently pull the GitHub slug from a module-level
+  `_GITHUB_SLUG` in `tree.py`, set at gen start via `set_github_slug()`.
+  That works for a single sequential `papyri gen` run but is a hazard
+  for any future parallel/per-project codepath (the last setter wins).
+  The registry should pass the active `Config` (or a narrower
+  "directive context" carrying the relevant `[meta]` keys) into the
+  handler call itself, so handlers can be pure functions of
+  `(value, ctx)` again.
 - **Per-reference version resolution in `crosslink.py`.** See
   `TODO-review.md`. A related dead assertion (`tree.py`, comparing a
   string to a list so the raise never fired) has been removed; the

@@ -2294,11 +2294,8 @@ class Gen:
                             if new_ref:
                                 _local_refs = _local_refs + new_ref
 
-            # def flat(l) -> List[str]:
-            #    return [y for x in l for y in x]
             for lr1 in _local_refs:
                 assert isinstance(lr1, str)
-            # lr: FrozenSet[str] = frozenset(flat(_local_refs))
             lr: frozenset[str] = frozenset(_local_refs)
             doc_blob.local_refs = sorted(lr)
             dv = GenVisitor(

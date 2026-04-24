@@ -174,7 +174,12 @@ def resolve_(
     ref = Cannonical(ref)
     if ref in rev_aliases:
         new_ref = rev_aliases[ref]
-        assert new_ref not in rev_aliases, "would loop...."
+        # rev_aliases is keyed by Cannonical; the alias target is a
+        # FullQual. A direct ``new_ref not in rev_aliases`` compared
+        # FullQual against Cannonical keys, so the cycle guard never
+        # fired. The recursive call below is already safe (empty
+        # rev_aliases), so cycles cannot actually occur here — drop
+        # the defensive assert rather than keep a silent no-op.
         res = resolve_(qa, known_refs, local_refs, new_ref, {})
         return res
 

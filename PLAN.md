@@ -219,6 +219,21 @@ robustness and coverage holes.
 
 ## Follow-ups (not yet scheduled)
 
+- **Per-reference version resolution in `crosslink.py`.** See
+  `TODO-review.md`. A related dead assertion (`tree.py`, comparing a
+  string to a list so the raise never fired) has been removed; the
+  underlying "local reference should carry an explicit version"
+  invariant still needs a real enforcement point once cross-package
+  version data is threaded through.
+- **Configurable doctest `optionflags`.** `ExampleBlockExecutor` hardcodes
+  `doctest.ELLIPSIS`. Projects that need `NORMALIZE_WHITESPACE` or
+  `IGNORE_EXCEPTION_DETAIL` have no knob. A `[global].doctest_optionflags`
+  config key would suffice.
+- **Module-docstring placeholder in `gen.py`.** When NumpyDocString
+  fails to parse a module docstring we substitute a dummy
+  ``"To remove in the future -- {qa}"`` placeholder so the rest of the
+  pipeline succeeds. Tracked by the repeated ``ndoc-placeholder`` TODOs;
+  needs a proper "module docstring not parseable" sentinel.
 - Static export hardening for `viewer/dist/` deployment (the current
   build works; `viewer/DEPLOY.md` documents ready-to-use GitHub Actions
   workflows for GitHub Pages and Cloudflare Pages, plus SSR upgrade paths

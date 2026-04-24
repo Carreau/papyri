@@ -2122,6 +2122,14 @@ class Gen:
         self._meta.update({"logo": logo, "module": root, "version": self.version})
         self._meta.update(meta)
 
+        # Configure :ghpull: / :ghissue: to point at this project's repo when
+        # [meta].github_slug is set (falls back to the IPython default inside
+        # tree.set_github_slug). Previously both roles were hardcoded to
+        # github.com/ipython/ipython for every bundle.
+        from .tree import set_github_slug
+
+        set_github_slug(self._meta.get("github_slug"))
+
     def collect_api_docs(self, root: str, limit_to: list[str]) -> None:
         """
         Crawl one module and stores resulting DocBundle in json files.

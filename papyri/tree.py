@@ -464,25 +464,41 @@ for role in _PY_VERBATIM_ROLES:
     )
 
 
-# TODO: make that a plugin/extension/generic to the project.
+# :ghpull: / :ghissue: are IPython-invented roles; we honour them for any
+# project whose config declares a ``[meta].github_slug``. The slug is set
+# at gen time via ``set_github_slug()`` below. When absent, we fall back to
+# the long-standing hardcoded default so existing IPython bundles keep
+# producing the same URLs.
+_GITHUB_SLUG: str = "ipython/ipython"
+
+
+def set_github_slug(slug: str | None) -> None:
+    """Configure the repo used by ``:ghpull:`` / ``:ghissue:`` roles.
+
+    ``slug`` is the ``owner/name`` GitHub path. A falsy value resets to
+    the historical IPython default.
+    """
+    global _GITHUB_SLUG
+    _GITHUB_SLUG = slug or "ipython/ipython"
+
+
 @directive_handler("py", "ghpull")
 def py_ghpull_handler(value):
     return [
         Link(
             children=[Text(f"#{value}")],
-            url=f"https://github.com/ipython/ipython/pull/{value}",
+            url=f"https://github.com/{_GITHUB_SLUG}/pull/{value}",
             title="",
         )
     ]
 
 
-# TODO: make that a plugin/extension/generic to the project.
 @directive_handler("py", "ghissue")
 def py_ghissue_handler(value):
     return [
         Link(
             children=[Text(f"#{value}")],
-            url=f"https://github.com/ipython/ipython/issues/{value}",
+            url=f"https://github.com/{_GITHUB_SLUG}/issues/{value}",
             title="",
         )
     ]

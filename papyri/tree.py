@@ -375,16 +375,19 @@ class TreeReplacer:
                 new_children = []
                 if not hasattr(node, "children"):
                     raise ValueError(f"{node.__class__} has no children {node}")
-                for c in node.children:
+                # `children` is defined on concrete Node subclasses but
+                # not on the `Node` base, so mypy needs the escape hatch.
+                children: list[Node] = node.children  # type: ignore[attr-defined]
+                for c in children:
                     assert c is not None, f"{node=} has a None child"
                     assert isinstance(c, Node), c
                     replacement = self.generic_visit(c)
                     assert isinstance(replacement, list)
 
                     new_children.extend(replacement)
-                if node.children != new_children:
+                if children != new_children:
                     self._cr += 1
-                node.children = new_children
+                node.children = new_children  # type: ignore[attr-defined]
                 new_nodes = [node]
             assert isinstance(new_nodes, list)
             return new_nodes

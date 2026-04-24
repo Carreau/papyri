@@ -63,11 +63,25 @@ function slugify(title: string): string {
   );
 }
 
-// Section anchor: prefer the RST target label (explicit ``.. _label:``),
-// fall back to the slugified title. Returns undefined when there is no title.
+// Assign each section a unique DOM id. Prefer the RST target label
+// (explicit ``.. _label:``); otherwise slugify the title. When multiple
+// sections collide (e.g. several h3s named "Bug fixes"), suffix `-2`,
+// `-3`, ... so TOC anchors point to the right one.
+const sectionIds = new Map<SectionNode, string>();
+{
+  const used = new Set<string>();
+  for (const s of sections) {
+    if (!s.title) continue;
+    const base = s.target ?? slugify(s.title);
+    let id = base;
+    let n = 2;
+    while (used.has(id)) id = `${base}-${n++}`;
+    used.add(id);
+    sectionIds.set(s, id);
+  }
+}
 function sectionId(s: SectionNode): string | undefined {
-  if (!s.title) return undefined;
-  return s.target ?? slugify(s.title);
+  return sectionIds.get(s);
 }
 
 // Use the first section's RST title as the visible <h1>. Narrative docs
@@ -82,6 +96,20 @@ const firstTitleIsH1 = sections.length > 0 && sections[0].title === displayTitle
 
 // TOC: sections with titles, skipping the first when its title is the <h1>.
 const tocEntries = sections.filter((s, i) => s.title && !(i === 0 && firstTitleIsH1));
+
+// For each TOC entry, attach the id of its nearest enclosing h2 (level 1)
+// so the viewer can collapse deeper (level 2+) entries that don't belong to
+// the currently-active top-level section.
+let currentH2Id: string | undefined;
+const tocEntriesWithParent = tocEntries.map((s) => {
+  const id = sectionId(s);
+  const level = s.level ?? 1;
+  if (level <= 1) {
+    currentH2Id = id;
+    return { section: s, id, level, parentH2Id: id };
+  }
+  return { section: s, id, level, parentH2Id: currentH2Id };
+});
 ---
 
 <BundleLayout
@@ -128,10 +156,14 @@ const tocEntries = sections.filter((s, i) => s.title && !(i === 0 && firstTitleI
         <nav class="page-toc" aria-label="On this page">
           <p class="page-toc-label">On this page</p>
           <ul>
-            {tocEntries.map((s) => (
-              <li>
-                <a class="page-toc-link" href={`#${sectionId(s)}`}>
-                  {s.title}
+            {tocEntriesWithParent.map((e) => (
+              <li
+                class={`page-toc-level-${Math.min(Math.max(e.level, 1), 4)}`}
+                data-parent-h2={e.parentH2Id}
+                data-level={e.level}
+              >
+                <a class="page-toc-link" href={`#${e.id}`}>
+                  {e.section.title}
                 </a>
               </li>
             ))}
@@ -144,18 +176,42 @@ const tocEntries = sections.filter((s, i) => s.title && !(i === 0 && firstTitleI
 
 <script>
   const links = [...document.querySelectorAll<HTMLAnchorElement>(".page-toc-link")];
+  const tocItems = [...document.querySelectorAll<HTMLLIElement>("nav.page-toc li[data-level]")];
   const sections = [...document.querySelectorAll<HTMLElement>("section.doc-section[id]")];
+
+  // Parallel array: for each section element, the id of its enclosing h2 so
+  // we can tell which top-level group a scroll position belongs to. Mirrors
+  // the Astro-side parentH2Id walk.
+  const sectionParentH2: string[] = [];
+  {
+    let currentH2 = sections[0]?.id ?? "";
+    for (const s of sections) {
+      const h2 = s.querySelector("h2");
+      if (h2) currentH2 = s.id;
+      sectionParentH2.push(currentH2);
+    }
+  }
 
   if (links.length > 0 && sections.length > 0) {
     function updateActive(): void {
       const threshold = window.scrollY + window.innerHeight * 0.25;
-      let activeId = sections[0].id;
-      for (const s of sections) {
-        if (s.offsetTop <= threshold) activeId = s.id;
+      let activeIdx = 0;
+      for (let i = 0; i < sections.length; i++) {
+        if (sections[i].offsetTop <= threshold) activeIdx = i;
         else break;
       }
+      const activeId = sections[activeIdx].id;
+      const activeH2 = sectionParentH2[activeIdx];
+
       for (const link of links) {
         link.classList.toggle("is-active", link.getAttribute("href") === "#" + activeId);
+      }
+      // Collapse h3+ entries that don't belong to the currently-active h2.
+      for (const li of tocItems) {
+        const level = Number(li.dataset.level ?? "1");
+        if (level <= 1) continue;
+        const hidden = li.dataset.parentH2 !== activeH2;
+        li.classList.toggle("is-collapsed", hidden);
       }
     }
     window.addEventListener("scroll", updateActive, { passive: true });

@@ -60,6 +60,25 @@ body {
   line-height: 1.5;
 }
 
+/* Base link styling. Individual components (sidebar, crumb, TOC, search …)
+   override color/decoration where they want a distinct look. */
+a {
+  color: var(--accent);
+  text-decoration: none;
+  text-decoration-color: color-mix(in oklab, var(--accent) 40%, transparent);
+  text-underline-offset: 2px;
+  transition:
+    color 0.1s,
+    text-decoration-color 0.1s;
+}
+a:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+}
+a:visited {
+  color: color-mix(in oklab, var(--accent) 75%, var(--fg-muted));
+}
+
 /* .base-main — used by BaseLayout (landing, 404). Reproduces the old "main"
    centred container. */
 .base-main {
@@ -282,6 +301,42 @@ section h2 {
   margin: 0 0 0.75rem;
 }
 
+/* Narrative doc pages use a conventional heading hierarchy — the compact
+   uppercase `section h2` style above is for qualname pages (Parameters,
+   Examples, …) and would make h3/h4 look larger than h2 by default. */
+section.doc-section h2 {
+  font-size: 1.5rem;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--fg);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.25rem;
+  margin: 1.5rem 0 0.75rem;
+}
+section.doc-section h3 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--fg);
+  border-bottom: none;
+  margin: 1.25rem 0 0.5rem;
+}
+section.doc-section h4 {
+  font-size: 1.02rem;
+  font-weight: 600;
+  color: var(--fg);
+  margin: 1rem 0 0.4rem;
+}
+section.doc-section h5,
+section.doc-section h6 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0.8rem 0 0.3rem;
+}
+
 /* ---------------------------------------------------------------------------
    Floating "On this page" TOC — right column on wide viewports.
    The .bundle-layout.has-page-toc grid adds a third column; .page-toc-panel
@@ -330,6 +385,28 @@ nav.page-toc ul {
 }
 nav.page-toc li {
   margin: 0.1rem 0;
+}
+/* Deeper (h3+) TOC entries are hidden unless their parent h2 is active.
+   The client script toggles .is-collapsed as the user scrolls. */
+nav.page-toc li.is-collapsed {
+  display: none;
+}
+/* Level-aware indentation + size so nested headings read as subordinate.
+   Level 1 == h2 (top-level); level 2 == h3; etc. */
+nav.page-toc li.page-toc-level-2 .page-toc-link {
+  padding-left: 1.4rem;
+  font-size: 0.76rem;
+  opacity: 0.85;
+}
+nav.page-toc li.page-toc-level-3 .page-toc-link {
+  padding-left: 2.2rem;
+  font-size: 0.72rem;
+  opacity: 0.75;
+}
+nav.page-toc li.page-toc-level-4 .page-toc-link {
+  padding-left: 3rem;
+  font-size: 0.7rem;
+  opacity: 0.7;
 }
 .page-toc-link {
   display: block;

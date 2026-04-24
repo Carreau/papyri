@@ -5,7 +5,6 @@ exec_failure = "fallback"
 docs_path = "~/dev/IPython/docs/source"
 execute_doctests = true
 execute_exclude_patterns = [
-   'IPython.lib.display:Audio',
    'IPython.core.display_functions:display'
 ]
 exclude = []
@@ -27,7 +26,7 @@ get_ipython = 'IPython:get_ipython'
 
 [meta]
 github_slug = 'IPython/IPython'
-tag = '8.2.0'
+tag = '9.13.0'
 pypi = 'ipython'
 homepage = 'https://ipython.org/'
 docspage = 'https://ipython.readthedocs.org/'

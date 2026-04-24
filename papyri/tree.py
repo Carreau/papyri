@@ -854,9 +854,12 @@ class DirectiveVisiter(TreeReplacer):
             if text.startswith("~"):
                 tqa = tqa[1:]
                 text = tqa.split(".")[-1]
-            # TODO: this may not be correct, is it's start with `.` it should be relative to current object.
+            # Sphinx convention: a leading "." makes the reference relative
+            # to the current module (e.g. ".foo" inside numpy resolves to
+            # "numpy.foo"). Previously we just stripped the dot, which left
+            # the lookup unqualified and almost always failed to resolve.
             if tqa.startswith("."):
-                tqa = tqa[1:]
+                tqa = self.module + tqa
             if tqa.endswith("()"):
                 tqa = tqa[:-2]
 

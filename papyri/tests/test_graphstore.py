@@ -154,6 +154,62 @@ def test_second_connection_sees_data(tmp_path, monkeypatch):
     assert k in results
 
 
+def test_remove_drops_blob_and_outgoing_links(store):
+    """``remove`` must delete the blob file and outgoing links, but keep the
+    node row so documents that still reference it don't end up with dangling
+    dest rows."""
+    k1 = Key("pkg", "1.0", "module", "pkg.foo")
+    k2 = Key("pkg", "1.0", "module", "pkg.bar")
+    store.put(k1, b"foo", [k2])
+    store.put(k2, b"bar", [k1])
+    # Both sides see each other before removal.
+    assert store.get_backref(k1) == {k2}
+    assert store.get_forwardrefs(k1) == {k2}
+
+    store.remove(k1)
+
+    # k1's blob file is gone.
+    with pytest.raises(FileNotFoundError):
+        store.get(k1)
+    # k1's outgoing links are cleared.
+    assert store.get_forwardrefs(k1) == set()
+    # But k2 still points at k1 — we kept k1's node row on purpose.
+    assert k1 in store.get_forwardrefs(k2)
+
+
+def test_meta_roundtrip(store):
+    store.put_meta("pkg", "1.0", b"meta bytes")
+    key = Key("pkg", "1.0", "meta", "meta.cbor")
+    assert store.get_meta(key) == b"meta bytes"
+
+
+def test_glob_ignores_links_without_blobs(store):
+    """Referenced but never-put keys are placeholder rows: glob must skip them,
+    but they remain discoverable through ``get_forwardrefs``."""
+    src = Key("pkg", "1.0", "module", "pkg.foo")
+    dest = Key("other", "2.0", "module", "other.thing")
+    store.put(src, b"data", [dest])
+
+    all_keys = store.glob((None, None, None, None))
+    assert src in all_keys
+    assert dest not in all_keys
+    # But the graph edge is preserved so post-ingest link resolution can see it.
+    assert dest in store.get_forwardrefs(src)
+
+
+def test_put_assets_key_does_not_check_old_refs(store):
+    """Assets bypass the old_refs lookup (``"assets" not in key``).
+
+    Pinning this: the fast path writes the file even on re-put without
+    querying links, which matters for re-ingesting image blobs.
+    """
+    akey = Key("pkg", "1.0", "assets", "logo.png")
+    store.put(akey, b"v1", [])
+    assert store.get(akey) == b"v1"
+    store.put(akey, b"v2", [])
+    assert store.get(akey) == b"v2"
+
+
 def test_stale_schema_detected(tmp_path, monkeypatch):
     """Opening a DB with an old (pre-redesign) schema should raise RuntimeError."""
     import sqlite3

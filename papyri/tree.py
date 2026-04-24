@@ -881,10 +881,6 @@ class DirectiveVisiter(TreeReplacer):
 
             target_qa = self._import_solver(tqa)
             if target_qa is not None:
-                if target_qa.split(".")[0] == self.qa.split("."):
-                    raise AssertionError(
-                        "local reference should have explicit versions"
-                    )
                 module = target_qa.split(":")[0].split(".")[0]
                 ri = RefInfo(
                     module=module,

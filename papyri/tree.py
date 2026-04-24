@@ -465,43 +465,57 @@ for role in _PY_VERBATIM_ROLES:
 
 
 # :ghpull: / :ghissue: are IPython-invented roles; we honour them for any
-# project whose config declares a ``[meta].github_slug``. The slug is set
-# at gen time via ``set_github_slug()`` below. When absent, we fall back to
-# the long-standing hardcoded default so existing IPython bundles keep
-# producing the same URLs.
-_GITHUB_SLUG: str = "ipython/ipython"
+# project whose config declares ``[meta].github_slug``. The slug is set at
+# gen time via ``set_github_slug()`` below. When no slug is configured we
+# refuse to guess — the role renders as plain ``#N`` text and a warning is
+# logged once, so maintainers notice the missing config instead of getting
+# a silent link to the wrong repo (historically hardcoded to
+# ``ipython/ipython``, which was correct for exactly one project).
+_GITHUB_SLUG: str | None = None
+_WARNED_MISSING_SLUG: set[str] = set()
 
 
 def set_github_slug(slug: str | None) -> None:
     """Configure the repo used by ``:ghpull:`` / ``:ghissue:`` roles.
 
-    ``slug`` is the ``owner/name`` GitHub path. A falsy value resets to
-    the historical IPython default.
+    ``slug`` is the ``owner/name`` GitHub path from ``[meta].github_slug``.
+    Passing a falsy value clears the configured slug; the roles then fall
+    back to plain-text rendering with a one-shot warning.
     """
     global _GITHUB_SLUG
-    _GITHUB_SLUG = slug or "ipython/ipython"
+    _GITHUB_SLUG = slug or None
+    _WARNED_MISSING_SLUG.clear()
+
+
+def _gh_link_or_warn(role: str, path_segment: str, value: str) -> list:
+    if _GITHUB_SLUG is None:
+        if role not in _WARNED_MISSING_SLUG:
+            _WARNED_MISSING_SLUG.add(role)
+            log.warning(
+                ":%s: used but [meta].github_slug is not set; rendering "
+                "#%s as plain text. Add ``github_slug = 'owner/name'`` "
+                "under [meta] in your config to enable these links.",
+                role,
+                value,
+            )
+        return [Text(f"#{value}")]
+    return [
+        Link(
+            children=[Text(f"#{value}")],
+            url=f"https://github.com/{_GITHUB_SLUG}/{path_segment}/{value}",
+            title="",
+        )
+    ]
 
 
 @directive_handler("py", "ghpull")
 def py_ghpull_handler(value):
-    return [
-        Link(
-            children=[Text(f"#{value}")],
-            url=f"https://github.com/{_GITHUB_SLUG}/pull/{value}",
-            title="",
-        )
-    ]
+    return _gh_link_or_warn("ghpull", "pull", value)
 
 
 @directive_handler("py", "ghissue")
 def py_ghissue_handler(value):
-    return [
-        Link(
-            children=[Text(f"#{value}")],
-            url=f"https://github.com/{_GITHUB_SLUG}/issues/{value}",
-            title="",
-        )
-    ]
+    return _gh_link_or_warn("ghissue", "issues", value)
 
 
 @directive_handler("py", "math")

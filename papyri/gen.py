@@ -46,6 +46,9 @@ from packaging.version import parse
 from pygments import lex
 from pygments.formatters import HtmlFormatter
 from pygments.lexers import PythonLexer
+
+_PYGMENTS_LEXER = PythonLexer()
+_PYGMENTS_FMT = HtmlFormatter()
 from rich.logging import RichHandler
 from rich.progress import BarColumn, Progress, TextColumn, track
 
@@ -230,7 +233,7 @@ def parse_script(
     jeds = []
     warnings.simplefilter("ignore", UserWarning)
 
-    l_delta = len(prev.split("\n"))
+    l_delta = prev.count("\n") + 1
     contextscript = prev + "\n" + script
     if ns:
         jeds.append(jedi.Interpreter(contextscript, namespaces=[ns]))
@@ -336,10 +339,8 @@ def get_classes(code):
     """
     Extract Pygments token classes names for given code block
     """
-    list(lex(code, PythonLexer()))
-    FMT = HtmlFormatter()
-    classes = [FMT.ttype2class.get(x) for x, y in lex(code, PythonLexer())]
-    classes = [c if c is not None else "" for c in classes]
+    tokens = list(lex(code, _PYGMENTS_LEXER))
+    classes = [_PYGMENTS_FMT.ttype2class.get(x, "") for x, _ in tokens]
     return classes
 
 
@@ -613,11 +614,13 @@ class DFSCollector:
         """
         Attempt to find all objects.
         """
-        while len(self._open_list) >= 1:
+        seen: set[int] = set()
+        while self._open_list:
             current, stack = self._open_list.pop(0)
 
-            # numpy objects ane no bool values.
-            if id(current) not in [id(x) for x in self.obj.values()]:
+            # numpy objects have no bool values.
+            if id(current) not in seen:
+                seen.add(id(current))
                 self.visit(current, stack)
 
     def prune(self) -> None:
@@ -2301,7 +2304,7 @@ class Gen:
                         for param in child.children:
                             new_ref = [u.strip() for u in param[0].split(",") if u]
                             if new_ref:
-                                _local_refs = _local_refs + new_ref
+                                _local_refs.extend(new_ref)
 
             for lr1 in _local_refs:
                 assert isinstance(lr1, str)

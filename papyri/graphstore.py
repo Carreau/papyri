@@ -275,17 +275,22 @@ class GraphStore:
         Placeholder nodes (link destinations not yet ingested) are inserted with
         has_blob=False so that glob() skips them.
         """
-        self.conn.execute(
-            "INSERT OR IGNORE INTO nodes(package, version, category, identifier) VALUES (?, ?, ?, ?)",
+        # RETURNING only fires when a row is actually inserted (not on IGNORE).
+        row = self.conn.execute(
+            "INSERT OR IGNORE INTO nodes(package, version, category, identifier)"
+            " VALUES (?, ?, ?, ?) RETURNING id",
             list(key),
-        )
-        node_id = self.conn.execute(
-            "SELECT id FROM nodes WHERE package=? AND version=? AND category=? AND identifier=?",
-            list(key),
-        ).fetchone()["id"]
+        ).fetchone()
+        if row is None:
+            # Row already existed; look up its id.
+            row = self.conn.execute(
+                "SELECT id FROM nodes WHERE package=? AND version=? AND category=? AND identifier=?",
+                list(key),
+            ).fetchone()
+        node_id: int = row["id"]
         if has_blob:
             self.conn.execute("UPDATE nodes SET has_blob=1 WHERE id=?", (node_id,))
-        return node_id  # type: ignore[no-any-return]
+        return node_id
 
     def _meta_path(self, module: str, version: str):
         assert isinstance(module, str)
@@ -332,14 +337,17 @@ class GraphStore:
                 (source_id, self._maybe_insert_node(ref)) for ref in added_refs
             ]
 
-            del_params = []
-            for ref in removed_refs:
-                row = self.conn.execute(
-                    "SELECT id FROM nodes WHERE package=? AND version=? AND category=? AND identifier=?",
-                    list(ref),
-                ).fetchone()
-                if row:
-                    del_params.append((source_id, row["id"]))
+            if removed_refs:
+                placeholders = ",".join("(?,?,?,?)" for _ in removed_refs)
+                params = [v for ref in removed_refs for v in ref]
+                rows = self.conn.execute(
+                    f"SELECT id FROM nodes WHERE (package, version, category, identifier)"
+                    f" IN (VALUES {placeholders})",
+                    params,
+                ).fetchall()
+                del_params = [(source_id, row["id"]) for row in rows]
+            else:
+                del_params = []
 
             c = self.conn.cursor()
             c.executemany(

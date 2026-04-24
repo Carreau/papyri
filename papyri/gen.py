@@ -2097,8 +2097,21 @@ class Gen:
         else:
             logo = None
         module = __import__(root)
-        # TODO: xarray does not have __version__ anymore, find another logic
-        self.version = getattr(module, "__version__", "0.0.0")
+        # Prefer the module's own __version__ when available; fall back to
+        # installed-distribution metadata for projects that stopped exposing
+        # it (e.g. xarray). Distribution name may differ from the import
+        # name, so allow callers to override via [meta].pypi.
+        version = getattr(module, "__version__", None)
+        if version is None:
+            from importlib.metadata import PackageNotFoundError
+            from importlib.metadata import version as _dist_version
+
+            dist_name = meta.get("pypi") or root
+            try:
+                version = _dist_version(dist_name)
+            except PackageNotFoundError:
+                version = "0.0.0"
+        self.version = version
         assert parse(self.version)
 
         try:
@@ -2108,6 +2121,14 @@ class Gen:
 
         self._meta.update({"logo": logo, "module": root, "version": self.version})
         self._meta.update(meta)
+
+        # Configure :ghpull: / :ghissue: to point at this project's repo when
+        # [meta].github_slug is set (falls back to the IPython default inside
+        # tree.set_github_slug). Previously both roles were hardcoded to
+        # github.com/ipython/ipython for every bundle.
+        from .tree import set_github_slug
+
+        set_github_slug(self._meta.get("github_slug"))
 
     def collect_api_docs(self, root: str, limit_to: list[str]) -> None:
         """
@@ -2225,8 +2246,17 @@ class Gen:
                     )
                     failure_collection["NumpydocError-" + str(type(e))].append(qa)
                 if isinstance(target_item, ModuleType):
-                    # TODO: ndoc-placeholder : remove placeholder here
-                    ndoc = NumpyDocString(f"To remove in the future -- {qa}")
+                    # Module docstrings that numpydoc cannot parse fall
+                    # through to the same empty shell we use when a module
+                    # has no docstring at all. Previously the placeholder
+                    # read ``"To remove in the future -- <qa>"`` which
+                    # leaked into the rendered output.
+                    self.log.debug(
+                        "numpydoc failed to parse module docstring for %s; "
+                        "using empty placeholder",
+                        qa,
+                    )
+                    ndoc = NumpyDocString(dedent_but_first("No Docstrings"))
                 else:
                     continue
             if not isinstance(target_item, ModuleType):
@@ -2273,11 +2303,8 @@ class Gen:
                             if new_ref:
                                 _local_refs = _local_refs + new_ref
 
-            # def flat(l) -> List[str]:
-            #    return [y for x in l for y in x]
             for lr1 in _local_refs:
                 assert isinstance(lr1, str)
-            # lr: FrozenSet[str] = frozenset(flat(_local_refs))
             lr: frozenset[str] = frozenset(_local_refs)
             doc_blob.local_refs = sorted(lr)
             dv = GenVisitor(

@@ -21,7 +21,8 @@ def block_math_handler(argument, options, content):
         )
         content = argument + content
     elif argument and not content:
-        # TODO: do we want to allow that ?
+        # Terse form: ``.. math:: x^2`` with the equation on the directive
+        # line and no body. Promote the argument to the content.
         content = argument
     return [Math(content)]
 

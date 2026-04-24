@@ -478,8 +478,10 @@ class Ingester:
             for s in forward:
                 assert isinstance(s, Key)
             forward_refs = set(forward)
-            ss2 = doc_blob.all_forward_refs()
-            if ss2 != forward_refs:
+            # all_forward_refs returns a list; coerce before comparing against
+            # the stored set. Previously the `list != set` check was always
+            # true so gstore.put ran on every iteration (always-rewrite).
+            if set(doc_blob.all_forward_refs()) != forward_refs:
                 gstore.put(key, data, forward_refs)
 
         for _, key in progress(

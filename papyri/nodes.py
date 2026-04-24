@@ -769,7 +769,6 @@ class DefListItem(Node):
 class SeeAlsoItem(Node):
     name: CrossRef
 
-    # TODO: check why we have a Union here, and if we have only Paragraphs, remove the union.
     descriptions: list[Paragraph]
     # there are a few case when the lhs is `:func:something`... in scipy.
     type: str | None

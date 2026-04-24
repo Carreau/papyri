@@ -174,7 +174,12 @@ def resolve_(
     ref = Cannonical(ref)
     if ref in rev_aliases:
         new_ref = rev_aliases[ref]
-        assert new_ref not in rev_aliases, "would loop...."
+        # rev_aliases is keyed by Cannonical; the alias target is a
+        # FullQual. A direct ``new_ref not in rev_aliases`` compared
+        # FullQual against Cannonical keys, so the cycle guard never
+        # fired. The recursive call below is already safe (empty
+        # rev_aliases), so cycles cannot actually occur here — drop
+        # the defensive assert rather than keep a silent no-op.
         res = resolve_(qa, known_refs, local_refs, new_ref, {})
         return res
 
@@ -375,14 +380,15 @@ class TreeReplacer:
                 new_children = []
                 if not hasattr(node, "children"):
                     raise ValueError(f"{node.__class__} has no children {node}")
-                for c in node.children:
+                children: list[Node] = node.children
+                for c in children:
                     assert c is not None, f"{node=} has a None child"
                     assert isinstance(c, Node), c
                     replacement = self.generic_visit(c)
                     assert isinstance(replacement, list)
 
                     new_children.extend(replacement)
-                if node.children != new_children:
+                if children != new_children:
                     self._cr += 1
                 node.children = new_children
                 new_nodes = [node]
@@ -464,28 +470,58 @@ for role in _PY_VERBATIM_ROLES:
     )
 
 
-# TODO: make that a plugin/extension/generic to the project.
+# :ghpull: / :ghissue: are IPython-invented roles; we honour them for any
+# project whose config declares ``[meta].github_slug``. The slug is set at
+# gen time via ``set_github_slug()`` below. When no slug is configured we
+# refuse to guess — the role renders as plain ``#N`` text and a warning is
+# logged once, so maintainers notice the missing config instead of getting
+# a silent link to the wrong repo (historically hardcoded to
+# ``ipython/ipython``, which was correct for exactly one project).
+_GITHUB_SLUG: str | None = None
+_WARNED_MISSING_SLUG: set[str] = set()
+
+
+def set_github_slug(slug: str | None) -> None:
+    """Configure the repo used by ``:ghpull:`` / ``:ghissue:`` roles.
+
+    ``slug`` is the ``owner/name`` GitHub path from ``[meta].github_slug``.
+    Passing a falsy value clears the configured slug; the roles then fall
+    back to plain-text rendering with a one-shot warning.
+    """
+    global _GITHUB_SLUG
+    _GITHUB_SLUG = slug or None
+    _WARNED_MISSING_SLUG.clear()
+
+
+def _gh_link_or_warn(role: str, path_segment: str, value: str) -> list:
+    if _GITHUB_SLUG is None:
+        if role not in _WARNED_MISSING_SLUG:
+            _WARNED_MISSING_SLUG.add(role)
+            log.warning(
+                ":%s: used but [meta].github_slug is not set; rendering "
+                "#%s as plain text. Add ``github_slug = 'owner/name'`` "
+                "under [meta] in your config to enable these links.",
+                role,
+                value,
+            )
+        return [Text(f"#{value}")]
+    return [
+        Link(
+            children=[Text(f"#{value}")],
+            url=f"https://github.com/{_GITHUB_SLUG}/{path_segment}/{value}",
+            title="",
+        )
+    ]
+
+
 @directive_handler("py", "ghpull")
 def py_ghpull_handler(value):
-    return [
-        Link(
-            children=[Text(f"#{value}")],
-            url=f"https://github.com/ipython/ipython/pull/{value}",
-            title="",
-        )
-    ]
+    return _gh_link_or_warn("ghpull", "pull", value)
 
 
-# TODO: make that a plugin/extension/generic to the project.
 @directive_handler("py", "ghissue")
 def py_ghissue_handler(value):
-    return [
-        Link(
-            children=[Text(f"#{value}")],
-            url=f"https://github.com/ipython/ipython/issue/{value}",
-            title="",
-        )
-    ]
+    return _gh_link_or_warn("ghissue", "issues", value)
 
 
 @directive_handler("py", "math")
@@ -854,18 +890,17 @@ class DirectiveVisiter(TreeReplacer):
             if text.startswith("~"):
                 tqa = tqa[1:]
                 text = tqa.split(".")[-1]
-            # TODO: this may not be correct, is it's start with `.` it should be relative to current object.
+            # Sphinx convention: a leading "." makes the reference relative
+            # to the current module (e.g. ".foo" inside numpy resolves to
+            # "numpy.foo"). Previously we just stripped the dot, which left
+            # the lookup unqualified and almost always failed to resolve.
             if tqa.startswith("."):
-                tqa = tqa[1:]
+                tqa = self.module + tqa
             if tqa.endswith("()"):
                 tqa = tqa[:-2]
 
             target_qa = self._import_solver(tqa)
             if target_qa is not None:
-                if target_qa.split(".")[0] == self.qa.split("."):
-                    raise AssertionError(
-                        "local reference should have explicit versions"
-                    )
                 module = target_qa.split(":")[0].split(".")[0]
                 ri = RefInfo(
                     module=module,

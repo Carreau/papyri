@@ -52,17 +52,16 @@ Directive must not have spaces before double colon::
 
 """
 
-import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import Annotated
 
 import tomli_w
 import typer
 
-if TYPE_CHECKING:
-    from rich.console import Console
-
 from . import examples as examples
+from .cli.debug import debug
+from .cli.describe import describe
+from .cli.find import find
 
 __version__ = "0.0.8"
 
@@ -179,7 +178,7 @@ def relink(
     cr.relink(dummy_progress=no_progress)
 
 
-def find_toml():
+def _find_toml() -> list[str]:
     from glob import glob
 
     return glob("**/*.toml", recursive=True)
@@ -191,7 +190,7 @@ def gen(
         str,
         typer.Argument(
             help="toml configuration file",
-            autocompletion=find_toml,
+            autocompletion=_find_toml,
         ),
     ],
     infer: bool | None = typer.Option(
@@ -273,7 +272,8 @@ def bootstrap(file: str):
     """
     p = Path(file)
     if p.exists():
-        sys.exit(f"{p} already exists")
+        typer.echo(f"{p} already exists", err=True)
+        raise typer.Exit(1)
     name = input(f"package name [{p.stem}]:")
     if not name:
         name = p.stem
@@ -305,329 +305,9 @@ def drop(
     cr.drop()
 
 
-def complete_nodename():
-    from . import node_base, nodes
-
-    return dir(nodes) + dir(node_base)
-
-
-@app.command()
-def find(
-    node_name: Annotated[
-        str,
-        typer.Argument(
-            help="Name of the node to search",
-            autocompletion=complete_nodename,
-        ),
-    ],
-):
-    """
-    Find all documents with a given type of AST node.
-
-    Mostly used to debug IR. One can find all documents with, say, equations:
-
-    $ papyri find Math
-    """
-    from papyri.config import ingest_dir
-    from papyri.graphstore import GraphStore
-
-    from . import node_base, nodes
-    from .crosslink import IngestedDoc
-    from .nodes import encoder
-    from .tree import TreeVisitor
-
-    store = GraphStore(ingest_dir, {})
-
-    items = list(store.glob((None, None, None, None)))
-
-    node_type = getattr(
-        nodes,
-        node_name,
-        getattr(node_base, node_name, None),
-    )
-
-    if node_type is None:
-        sys.exit("no such node type")
-
-    visitor = TreeVisitor([node_type])
-    for it in items:
-        if it.kind in ("assets", "examples", "meta"):
-            continue
-        data = store.get(it)
-        obj = encoder.decode(data)
-        if not isinstance(obj, IngestedDoc):
-            print("SKIP", it)
-            continue
-        for a in obj.arbitrary + list(obj.content.values()):
-            res = visitor.generic_visit(a)
-            if res:
-                print(it)
-                print(res[node_type])
-
-
-@app.command()
-def describe(
-    qualname: Annotated[
-        str,
-        typer.Argument(
-            help=(
-                "Qualified name to describe, e.g. 'numpy.linspace'. "
-                "Optional prefixes select a kind or package: "
-                "'module:numpy.linspace', 'docs:intro', 'numpy/1.26.0/module/numpy.linspace'."
-            ),
-        ),
-    ],
-    kind: Annotated[
-        str | None,
-        typer.Option(
-            help="Restrict to a specific kind: module, docs, examples, meta, assets.",
-        ),
-    ] = None,
-    package: Annotated[
-        str | None,
-        typer.Option(help="Restrict to a specific package name."),
-    ] = None,
-    version: Annotated[
-        str | None,
-        typer.Option(help="Restrict to a specific package version."),
-    ] = None,
-):
-    """
-    Print the IR entry for a given qualified name, without rendering.
-
-    Looks up an ingested document in ~/.papyri/ingest/ and prints its
-    decoded structure, backrefs, and forward refs. Intended as a
-    maintainer-side debug tool for inspecting the IR.
-    """
-    from rich.console import Console
-    from rich.pretty import Pretty
-    from rich.rule import Rule
-
-    from papyri.config import ingest_dir
-    from papyri.graphstore import GraphStore
-
-    from .crosslink import IngestedDoc as IngestedDoc
-    from .nodes import encoder
-
-    console = Console()
-
-    path_part = qualname
-    # Only treat a leading "<kind>:" as a kind prefix when it matches a known
-    # kind; otherwise the colon is part of the qualname itself (e.g.
-    # "papyri.nodes:RefInfo").
-    _known_kinds = {"module", "docs", "examples", "meta", "assets"}
-    if ":" in path_part and "/" not in path_part:
-        prefix, rest = path_part.split(":", 1)
-        if prefix in _known_kinds:
-            path_part = rest
-            if kind is None:
-                kind = prefix
-    if "/" in path_part:
-        parts = path_part.split("/")
-        if len(parts) == 4:
-            package, version, kind, path_part = parts
-        else:
-            typer.echo(
-                f"unrecognised qualname format: {qualname!r} "
-                "(expected package/version/kind/identifier)",
-                err=True,
-            )
-            raise typer.Exit(1)
-
-    store = GraphStore(ingest_dir, {})
-    matches = [
-        k for k in store.glob((package, version, kind, path_part)) if k.kind != "assets"
-    ]
-
-    if not matches:
-        typer.echo(
-            f"no IR entry found for {qualname!r} "
-            f"(package={package!r}, version={version!r}, kind={kind!r}). "
-            "Have you run `papyri ingest` yet?",
-            err=True,
-        )
-        raise typer.Exit(1)
-
-    for it in sorted(matches):
-        console.print(
-            Rule(
-                f"[bold]{it.module}[/bold] [dim]{it.version}[/dim]"
-                f" · [yellow]{it.kind}[/yellow] · [cyan]{it.path}[/cyan]"
-            )
-        )
-        try:
-            data, backrefs, forward_refs = store.get_all(it)
-        except Exception as e:
-            console.print(f"  [red]error reading:[/red] {e}")
-            continue
-
-        try:
-            obj = encoder.decode(data)
-        except Exception as e:
-            console.print(f"  [red]error decoding:[/red] {e}")
-            continue
-
-        console.print(Pretty(obj))
-        if backrefs:
-            console.print("\n[bold]Backrefs[/bold]")
-            for b in sorted(backrefs):
-                console.print(
-                    f"  [dim]{b.module} {b.version}[/dim]"
-                    f" [yellow]{b.kind}[/yellow] [cyan]{b.path}[/cyan]"
-                )
-        if forward_refs:
-            console.print("\n[bold]Forward refs[/bold]")
-            for f in sorted(forward_refs):
-                console.print(
-                    f"  [dim]{f.module} {f.version}[/dim]"
-                    f" [yellow]{f.kind}[/yellow] [cyan]{f.path}[/cyan]"
-                )
-
-
-@app.command()
-def debug(
-    path: Annotated[
-        str,
-        typer.Argument(
-            help=(
-                "Path to a .cbor file to inspect. "
-                "Can be an absolute/relative path, or a shorthand relative to "
-                "~/.papyri/data/ (e.g. 'numpy_2.3.5/module/numpy.linspace'). "
-                "The .cbor extension is added automatically when absent."
-            )
-        ),
-    ],
-):
-    """
-    Print the contents of a CBOR file in human-readable form.
-
-    Accepts:
-    - An absolute or relative path to any .cbor file.
-    - A shorthand path relative to ~/.papyri/data/ — the .cbor extension is
-      appended automatically if the file is not found without it.
-
-    When the file lives inside the ingest tree (~/.papyri/ingest/) the command
-    also prints backrefs from the graph store.
-
-    When the file lives inside the data tree (~/.papyri/data/) the command
-    prints the bundle context (package, version, kind) derived from the path.
-
-    Tries to decode using the papyri IR tag registry first; falls back to
-    plain cbor2 if the file does not contain tagged IR objects.
-    """
-    import cbor2
-    from rich.console import Console
-    from rich.pretty import pprint as rich_pprint
-
-    from papyri.config import data_dir, ingest_dir
-    from papyri.graphstore import GraphStore, Key
-
-    from .crosslink import IngestedDoc as IngestedDoc
-    from .nodes import encoder
-
-    console = Console()
-
-    resolved = _resolve_debug_path(path, data_dir)
-    if resolved is None:
-        typer.echo(f"File not found: {path!r}", err=True)
-        raise typer.Exit(1)
-
-    raw = resolved.read_bytes()
-
-    try:
-        obj = encoder.decode(raw)
-        rich_pprint(obj)
-    except Exception:
-        try:
-            obj = cbor2.loads(raw)
-            rich_pprint(obj)
-        except Exception as e:
-            typer.echo(f"Failed to decode {resolved}: {e}", err=True)
-            raise typer.Exit(1) from None
-
-    # Show bundle context when the file is inside the data tree.
-    try:
-        rel = resolved.resolve().relative_to(data_dir.resolve())
-    except ValueError:
-        pass
-    else:
-        _print_data_context(rel, console)
-
-    # Show backrefs when the file is inside the ingest tree.
-    try:
-        rel = resolved.resolve().relative_to(ingest_dir.resolve())
-    except ValueError:
-        return
-
-    parts = rel.parts
-    if len(parts) != 4:
-        return
-
-    module, version, kind, identifier = parts
-    if identifier.endswith(".cbor"):
-        identifier = identifier[:-5]
-
-    key = Key(module, version, kind, identifier)
-    store = GraphStore(ingest_dir, {})
-    backrefs = store.get_backref(key)
-    if backrefs:
-        console.print("\n[bold]Backrefs[/bold]")
-        for b in sorted(backrefs):
-            console.print(
-                f"  [dim]{b.module} {b.version}[/dim]"
-                f" [yellow]{b.kind}[/yellow] [cyan]{b.path}[/cyan]"
-            )
-
-
-def _resolve_debug_path(raw: str, data_dir: Path) -> Path | None:
-    """
-    Return the resolved Path for *raw*, trying several strategies:
-
-    1. Use *raw* directly if it points to an existing file.
-    2. Append '.cbor' if the result exists.
-    3. Treat *raw* as a path relative to *data_dir*, with and without '.cbor'.
-    """
-    p = Path(raw)
-    if p.exists():
-        return p
-    with_cbor = Path(raw + ".cbor")
-    if with_cbor.exists():
-        return with_cbor
-    in_data = data_dir / raw
-    if in_data.exists():
-        return in_data
-    in_data_cbor = data_dir / (raw + ".cbor")
-    if in_data_cbor.exists():
-        return in_data_cbor
-    return None
-
-
-def _print_data_context(rel: Path, console: "Console | None" = None) -> None:
-    """Print bundle context for a path relative to data_dir."""
-    from rich.console import Console as _Console
-
-    _con = console if console is not None else _Console()
-    parts = rel.parts
-    if not parts:
-        return
-    bundle = parts[0]
-    # bundle dirs are named  <pkg>_<ver>
-    if "_" in bundle:
-        pkg, _, ver = bundle.partition("_")
-    else:
-        pkg, ver = bundle, ""
-    kind = parts[1] if len(parts) > 1 else ""
-    identifier = "/".join(parts[2:])
-    if identifier.endswith(".cbor"):
-        identifier = identifier[:-5]
-    _con.print("\n[bold]Bundle context[/bold]")
-    _con.print(f"  package : [cyan]{pkg}[/cyan]")
-    if ver:
-        _con.print(f"  version : [dim]{ver}[/dim]")
-    if kind:
-        _con.print(f"  kind    : [yellow]{kind}[/yellow]")
-    if identifier:
-        _con.print(f"  id      : [cyan]{identifier}[/cyan]")
+app.command()(find)
+app.command()(describe)
+app.command()(debug)
 
 
 if __name__ == "__main__":

@@ -9,7 +9,7 @@ we can pin it cheaply.
 
 from pathlib import Path
 
-from papyri import _print_data_context, _resolve_debug_path
+from papyri.cli.debug import _print_data_context, _resolve_debug_path
 
 # ---------------------------------------------------------------------------
 # _resolve_debug_path

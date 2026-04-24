@@ -2246,8 +2246,17 @@ class Gen:
                     )
                     failure_collection["NumpydocError-" + str(type(e))].append(qa)
                 if isinstance(target_item, ModuleType):
-                    # TODO: ndoc-placeholder : remove placeholder here
-                    ndoc = NumpyDocString(f"To remove in the future -- {qa}")
+                    # Module docstrings that numpydoc cannot parse fall
+                    # through to the same empty shell we use when a module
+                    # has no docstring at all. Previously the placeholder
+                    # read ``"To remove in the future -- <qa>"`` which
+                    # leaked into the rendered output.
+                    self.log.debug(
+                        "numpydoc failed to parse module docstring for %s; "
+                        "using empty placeholder",
+                        qa,
+                    )
+                    ndoc = NumpyDocString(dedent_but_first("No Docstrings"))
                 else:
                     continue
             if not isinstance(target_item, ModuleType):

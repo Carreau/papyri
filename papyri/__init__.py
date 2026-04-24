@@ -54,10 +54,13 @@ Directive must not have spaces before double colon::
 
 import sys
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import tomli_w
 import typer
+
+if TYPE_CHECKING:
+    from rich.console import Console
 
 from . import examples as examples
 
@@ -73,7 +76,6 @@ logo = r"""
 
 app = typer.Typer(
     help="""
-
 Generate Papyri IR for Python libraries and ingest it into a local
 cross-linked graph.
 
@@ -93,12 +95,38 @@ Ingesting IR:
 )
 
 
-def _intro():
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(logo.strip())
+        typer.echo(f"papyri {__version__}")
+        raise typer.Exit()
+
+
+@app.callback()
+def _app_callback(
+    version: bool = typer.Option(
+        None,
+        "--version",
+        "-V",
+        callback=_version_callback,
+        is_eager=True,
+        help="Show version and exit.",
+    ),
+) -> None:
+    pass
+
+
+@app.command()
+def about() -> None:
     """
-    Print the logo and current version to stdout.
+    Show the logo, version, and a short description of papyri.
     """
-    print(logo)
-    print(__version__)
+    typer.echo(logo.strip())
+    typer.echo(f"papyri {__version__}")
+    typer.echo(
+        "\nGenerate and ingest Python documentation IR for cross-linked browsing."
+    )
+    typer.echo("https://github.com/carreau/papyri")
 
 
 @app.command()
@@ -106,7 +134,12 @@ def ingest(
     paths: list[Path],
     check: bool = False,
     relink: bool = False,
-    dummy_progress: bool = typer.Option(False, help="Disable rich progress bar"),
+    no_progress: bool = typer.Option(
+        False,
+        "--no-progress",
+        is_flag=True,
+        help="Disable progress bars (useful in CI or with debuggers).",
+    ),
 ):
     """
     Given paths to a DocBundle folder, ingest it into the known libraries.
@@ -120,29 +153,30 @@ def ingest(
         crosslinks.
     check : bool
         run extra consistency checks while ingesting.
-    dummy_progress : bool
-        disable the rich progress bar.
     """
-    _intro()
     from . import crosslink as cr
 
     for p in paths:
-        cr.main(Path(p), check, dummy_progress=dummy_progress)
+        cr.main(Path(p), check, dummy_progress=no_progress)
     if relink:
-        cr.relink(dummy_progress=dummy_progress)
+        cr.relink(dummy_progress=no_progress)
 
 
 @app.command()
 def relink(
-    dummy_progress: bool = typer.Option(False, help="Disable rich progress bar"),
+    no_progress: bool = typer.Option(
+        False,
+        "--no-progress",
+        is_flag=True,
+        help="Disable progress bars (useful in CI or with debuggers).",
+    ),
 ):
     """
     Rescan all the documentation to find potential new crosslinks.
     """
-    _intro()
     from . import crosslink as cr
 
-    cr.relink(dummy_progress=dummy_progress)
+    cr.relink(dummy_progress=no_progress)
 
 
 def find_toml():
@@ -164,20 +198,29 @@ def gen(
         True, help="Whether to run type inference on code examples."
     ),
     exec: bool | None = typer.Option(
-        None, help="Whether to attempt to execute doctring code."
+        None, help="Whether to attempt to execute docstring code examples."
     ),
     debug: bool = False,
-    dummy_progress: bool = typer.Option(False, help="Disable rich progress bar"),
+    no_progress: bool = typer.Option(
+        False,
+        "--no-progress",
+        is_flag=True,
+        help="Disable progress bars (useful in CI or with debuggers).",
+    ),
     dry_run: bool = False,
     api: bool = True,
     examples: bool = True,
     narrative: bool = True,
-    fail: bool = typer.Option(False, help="Fail on first error"),
-    fail_early: bool = typer.Option(False, help="Overwrite early error option"),
+    fail: bool = typer.Option(False, help="Fail on first error."),
+    fail_early: bool = typer.Option(False, help="Override early error option."),
     fail_unseen_error: bool = typer.Option(
-        False, help="Overwrite fail on unseen error option"
+        False, help="Fail on any previously unseen error."
     ),
-    only: list[str] = typer.Option(None, "--only"),
+    only: list[str] = typer.Option(
+        None,
+        "--only",
+        help="Restrict generation to these qualified names (repeatable).",
+    ),
 ):
     """
     Generate documentation IR for a given package.
@@ -189,7 +232,6 @@ def gen(
     for multiple packages may have side effects (for example importing seaborn
     changes matplotlib defaults).
     """
-    _intro()
     import os
     from os.path import join
 
@@ -205,7 +247,7 @@ def gen(
             exec_=exec,
             target_file=join(here, file),
             debug=debug,
-            dummy_progress=dummy_progress,
+            dummy_progress=no_progress,
             dry_run=dry_run,
             api=api,
             examples=examples,
@@ -239,11 +281,25 @@ def bootstrap(file: str):
 
 
 @app.command()
-def drop():
+def drop(
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        "-y",
+        is_flag=True,
+        help="Skip confirmation prompt.",
+    ),
+):
     """
     Drop the full local database.
     """
-    _intro()
+    from papyri.config import ingest_dir
+
+    if not yes:
+        typer.confirm(
+            f"This will delete {ingest_dir} and all ingested data. Continue?",
+            abort=True,
+        )
     from . import crosslink as cr
 
     cr.drop()
@@ -343,11 +399,17 @@ def describe(
     decoded structure, backrefs, and forward refs. Intended as a
     maintainer-side debug tool for inspecting the IR.
     """
+    from rich.console import Console
+    from rich.pretty import Pretty
+    from rich.rule import Rule
+
     from papyri.config import ingest_dir
     from papyri.graphstore import GraphStore
 
     from .crosslink import IngestedDoc as IngestedDoc
     from .nodes import encoder
+
+    console = Console()
 
     path_part = qualname
     # Only treat a leading "<kind>:" as a kind prefix when it matches a known
@@ -365,10 +427,12 @@ def describe(
         if len(parts) == 4:
             package, version, kind, path_part = parts
         else:
-            sys.exit(
+            typer.echo(
                 f"unrecognised qualname format: {qualname!r} "
-                "(expected package/version/kind/identifier)"
+                "(expected package/version/kind/identifier)",
+                err=True,
             )
+            raise typer.Exit(1)
 
     store = GraphStore(ingest_dir, {})
     matches = [
@@ -376,35 +440,48 @@ def describe(
     ]
 
     if not matches:
-        sys.exit(
+        typer.echo(
             f"no IR entry found for {qualname!r} "
             f"(package={package!r}, version={version!r}, kind={kind!r}). "
-            "Have you run `papyri ingest` yet?"
+            "Have you run `papyri ingest` yet?",
+            err=True,
         )
+        raise typer.Exit(1)
 
     for it in sorted(matches):
-        print(f"=== {it.module} {it.version} {it.kind} {it.path} ===")
+        console.print(
+            Rule(
+                f"[bold]{it.module}[/bold] [dim]{it.version}[/dim]"
+                f" · [yellow]{it.kind}[/yellow] · [cyan]{it.path}[/cyan]"
+            )
+        )
         try:
             data, backrefs, forward_refs = store.get_all(it)
         except Exception as e:
-            print(f"  <error reading: {e}>")
+            console.print(f"  [red]error reading:[/red] {e}")
             continue
 
         try:
             obj = encoder.decode(data)
         except Exception as e:
-            print(f"  <error decoding: {e}>")
+            console.print(f"  [red]error decoding:[/red] {e}")
             continue
 
-        print(obj)
+        console.print(Pretty(obj))
         if backrefs:
-            print("-- backrefs --")
+            console.print("\n[bold]Backrefs[/bold]")
             for b in sorted(backrefs):
-                print(f"  {b.module} {b.version} {b.kind} {b.path}")
+                console.print(
+                    f"  [dim]{b.module} {b.version}[/dim]"
+                    f" [yellow]{b.kind}[/yellow] [cyan]{b.path}[/cyan]"
+                )
         if forward_refs:
-            print("-- forward refs --")
+            console.print("\n[bold]Forward refs[/bold]")
             for f in sorted(forward_refs):
-                print(f"  {f.module} {f.version} {f.kind} {f.path}")
+                console.print(
+                    f"  [dim]{f.module} {f.version}[/dim]"
+                    f" [yellow]{f.kind}[/yellow] [cyan]{f.path}[/cyan]"
+                )
 
 
 @app.command()
@@ -438,9 +515,9 @@ def debug(
     Tries to decode using the papyri IR tag registry first; falls back to
     plain cbor2 if the file does not contain tagged IR objects.
     """
-    import pprint
-
     import cbor2
+    from rich.console import Console
+    from rich.pretty import pprint as rich_pprint
 
     from papyri.config import data_dir, ingest_dir
     from papyri.graphstore import GraphStore, Key
@@ -448,22 +525,24 @@ def debug(
     from .crosslink import IngestedDoc as IngestedDoc
     from .nodes import encoder
 
+    console = Console()
+
     resolved = _resolve_debug_path(path, data_dir)
     if resolved is None:
-        print(f"File not found: {path!r}", file=sys.stderr)
+        typer.echo(f"File not found: {path!r}", err=True)
         raise typer.Exit(1)
 
     raw = resolved.read_bytes()
 
     try:
         obj = encoder.decode(raw)
-        pprint.pprint(obj)
+        rich_pprint(obj)
     except Exception:
         try:
             obj = cbor2.loads(raw)
-            pprint.pprint(obj)
+            rich_pprint(obj)
         except Exception as e:
-            print(f"Failed to decode {resolved}: {e}", file=sys.stderr)
+            typer.echo(f"Failed to decode {resolved}: {e}", err=True)
             raise typer.Exit(1) from None
 
     # Show bundle context when the file is inside the data tree.
@@ -472,7 +551,7 @@ def debug(
     except ValueError:
         pass
     else:
-        _print_data_context(rel)
+        _print_data_context(rel, console)
 
     # Show backrefs when the file is inside the ingest tree.
     try:
@@ -492,9 +571,12 @@ def debug(
     store = GraphStore(ingest_dir, {})
     backrefs = store.get_backref(key)
     if backrefs:
-        print("\n-- backrefs --")
+        console.print("\n[bold]Backrefs[/bold]")
         for b in sorted(backrefs):
-            print(f"  {b.module} {b.version} {b.kind} {b.path}")
+            console.print(
+                f"  [dim]{b.module} {b.version}[/dim]"
+                f" [yellow]{b.kind}[/yellow] [cyan]{b.path}[/cyan]"
+            )
 
 
 def _resolve_debug_path(raw: str, data_dir: Path) -> Path | None:
@@ -520,8 +602,11 @@ def _resolve_debug_path(raw: str, data_dir: Path) -> Path | None:
     return None
 
 
-def _print_data_context(rel: Path) -> None:
+def _print_data_context(rel: Path, console: "Console | None" = None) -> None:
     """Print bundle context for a path relative to data_dir."""
+    from rich.console import Console as _Console
+
+    _con = console if console is not None else _Console()
     parts = rel.parts
     if not parts:
         return
@@ -535,14 +620,14 @@ def _print_data_context(rel: Path) -> None:
     identifier = "/".join(parts[2:])
     if identifier.endswith(".cbor"):
         identifier = identifier[:-5]
-    print("\n-- bundle context --")
-    print(f"  package : {pkg}")
+    _con.print("\n[bold]Bundle context[/bold]")
+    _con.print(f"  package : [cyan]{pkg}[/cyan]")
     if ver:
-        print(f"  version : {ver}")
+        _con.print(f"  version : [dim]{ver}[/dim]")
     if kind:
-        print(f"  kind    : {kind}")
+        _con.print(f"  kind    : [yellow]{kind}[/yellow]")
     if identifier:
-        print(f"  id      : {identifier}")
+        _con.print(f"  id      : [cyan]{identifier}[/cyan]")
 
 
 if __name__ == "__main__":

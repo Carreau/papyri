@@ -2097,8 +2097,21 @@ class Gen:
         else:
             logo = None
         module = __import__(root)
-        # TODO: xarray does not have __version__ anymore, find another logic
-        self.version = getattr(module, "__version__", "0.0.0")
+        # Prefer the module's own __version__ when available; fall back to
+        # installed-distribution metadata for projects that stopped exposing
+        # it (e.g. xarray). Distribution name may differ from the import
+        # name, so allow callers to override via [meta].pypi.
+        version = getattr(module, "__version__", None)
+        if version is None:
+            from importlib.metadata import PackageNotFoundError
+            from importlib.metadata import version as _dist_version
+
+            dist_name = meta.get("pypi") or root
+            try:
+                version = _dist_version(dist_name)
+            except PackageNotFoundError:
+                version = "0.0.0"
+        self.version = version
         assert parse(self.version)
 
         try:

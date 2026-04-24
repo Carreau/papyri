@@ -66,6 +66,14 @@ from . import examples as examples
 
 __version__ = "0.0.8"
 
+logo = r"""
+  ___                    _
+ | _ \__ _ _ __ _  _ _ _(_)
+ |  _/ _` | '_ \ || | '_| |
+ |_| \__,_| .__/\_, |_| |_|
+          |_|   |__/
+"""
+
 app = typer.Typer(
     help="""
 Generate Papyri IR for Python libraries and ingest it into a local
@@ -89,6 +97,7 @@ Ingesting IR:
 
 def _version_callback(value: bool) -> None:
     if value:
+        typer.echo(logo.strip())
         typer.echo(f"papyri {__version__}")
         raise typer.Exit()
 
@@ -105,6 +114,19 @@ def _app_callback(
     ),
 ) -> None:
     pass
+
+
+@app.command()
+def about() -> None:
+    """
+    Show the logo, version, and a short description of papyri.
+    """
+    typer.echo(logo.strip())
+    typer.echo(f"papyri {__version__}")
+    typer.echo(
+        "\nGenerate and ingest Python documentation IR for cross-linked browsing."
+    )
+    typer.echo("https://github.com/carreau/papyri")
 
 
 @app.command()
@@ -580,8 +602,11 @@ def _resolve_debug_path(raw: str, data_dir: Path) -> Path | None:
     return None
 
 
-def _print_data_context(rel: Path, console: "Console") -> None:
+def _print_data_context(rel: Path, console: "Console | None" = None) -> None:
     """Print bundle context for a path relative to data_dir."""
+    from rich.console import Console as _Console
+
+    _con = console if console is not None else _Console()
     parts = rel.parts
     if not parts:
         return
@@ -595,14 +620,14 @@ def _print_data_context(rel: Path, console: "Console") -> None:
     identifier = "/".join(parts[2:])
     if identifier.endswith(".cbor"):
         identifier = identifier[:-5]
-    console.print("\n[bold]Bundle context[/bold]")
-    console.print(f"  package : [cyan]{pkg}[/cyan]")
+    _con.print("\n[bold]Bundle context[/bold]")
+    _con.print(f"  package : [cyan]{pkg}[/cyan]")
     if ver:
-        console.print(f"  version : [dim]{ver}[/dim]")
+        _con.print(f"  version : [dim]{ver}[/dim]")
     if kind:
-        console.print(f"  kind    : [yellow]{kind}[/yellow]")
+        _con.print(f"  kind    : [yellow]{kind}[/yellow]")
     if identifier:
-        console.print(f"  id      : [cyan]{identifier}[/cyan]")
+        _con.print(f"  id      : [cyan]{identifier}[/cyan]")
 
 
 if __name__ == "__main__":

@@ -132,7 +132,8 @@ export async function renderNode(node: IRNode, opts: RenderOptions = {}): Promis
 
     case "Heading": {
       const inner = await renderChildren(asArray(n.children), opts);
-      return `<h3>${inner}</h3>`;
+      const depth = Math.min(Math.max(Number(n.depth ?? 2), 1), 6);
+      return `<h${depth}>${inner}</h${depth}>`;
     }
 
     case "Math":

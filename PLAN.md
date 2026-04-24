@@ -229,11 +229,13 @@ robustness and coverage holes.
   `doctest.ELLIPSIS`. Projects that need `NORMALIZE_WHITESPACE` or
   `IGNORE_EXCEPTION_DETAIL` have no knob. A `[global].doctest_optionflags`
   config key would suffice.
-- **Module-docstring placeholder in `gen.py`.** When NumpyDocString
-  fails to parse a module docstring we substitute a dummy
-  ``"To remove in the future -- {qa}"`` placeholder so the rest of the
-  pipeline succeeds. Tracked by the repeated ``ndoc-placeholder`` TODOs;
-  needs a proper "module docstring not parseable" sentinel.
+- **Module-docstring parse failures.** The visible ``"To remove in the
+  future -- <qa>"`` placeholder has been replaced by the same empty
+  shell used for modules with no docstring, so nothing leaks into
+  rendered output. A proper sentinel that distinguishes "unparseable"
+  from "genuinely empty" at render time is still a follow-up — the
+  remaining ``ndoc-placeholder`` TODO in `gen.py` marks where it
+  would plug in.
 - Static export hardening for `viewer/dist/` deployment (the current
   build works; `viewer/DEPLOY.md` documents ready-to-use GitHub Actions
   workflows for GitHub Pages and Cloudflare Pages, plus SSR upgrade paths

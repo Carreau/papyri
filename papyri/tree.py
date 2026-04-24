@@ -235,12 +235,14 @@ def resolve_(
                 return RefInfo(None, None, "missing", ref)
 
         parts = qa.split(".")
-        for i in range(len(parts)):
-            attempt = ".".join(parts[:i]) + "." + ref
+        prefix = ""
+        for part in parts:
+            attempt = prefix + "." + ref
             if attempt in k_path_map:
                 return k_path_map[attempt]
+            prefix = part if not prefix else prefix + "." + part
 
-    q0 = qa.split(".")[0]
+    q0 = parts[0]
     rs = root_start(q0, keyset)
     attempts = [q for q in rs if (ref in q)]
     if len(attempts) == 1:

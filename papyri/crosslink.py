@@ -47,12 +47,9 @@ def find_all_refs(
     assert isinstance(graph_store, GraphStore)
     o_family = sorted(list(graph_store.glob((None, None, "module", None))))
 
-    known_refs: set[RefInfo] = set()
-    for item in o_family:
-        known_refs = known_refs | {
-            RefInfo(item.module, item.version, "module", item.path)
-        }
-    return frozenset(known_refs)
+    return frozenset(
+        RefInfo(item.module, item.version, "module", item.path) for item in o_family
+    )
 
 
 @register(4010)

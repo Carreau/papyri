@@ -482,7 +482,7 @@ def py_ghissue_handler(value):
     return [
         Link(
             children=[Text(f"#{value}")],
-            url=f"https://github.com/ipython/ipython/issue/{value}",
+            url=f"https://github.com/ipython/ipython/issues/{value}",
             title="",
         )
     ]

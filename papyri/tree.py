@@ -797,6 +797,13 @@ class DirectiveVisiter(TreeReplacer):
             self.qa, self.known_refs, loc, text, rev_aliases=self.rev_aliases
         )
 
+    def _ref_to_crossref(self, text: str, r: RefInfo, exists: str) -> CrossRef:
+        """Convert a resolved RefInfo to a CrossRef node.
+
+        Subclasses may override to substitute LocalRef for same-bundle targets.
+        """
+        return CrossRef(text, r, exists)
+
     @classmethod
     def _import_solver(cls, maybe_qa: str):
         parts = maybe_qa.split(".")
@@ -875,7 +882,7 @@ class DirectiveVisiter(TreeReplacer):
             if r.kind != "local":
                 assert None not in r, r
                 self._targets.add(r)
-            return [CrossRef(text, r, exists)]
+            return [self._ref_to_crossref(text, r, exists)]
         if (directive.domain, directive.role) in [
             (None, None),
             (None, "mod"),
@@ -954,6 +961,14 @@ class GenVisitor(DirectiveVisiter):
 
         return [fig]
 
+    def _ref_to_crossref(self, text: str, r: RefInfo, exists: str) -> CrossRef:
+        # Intra-bundle refs don't need a version stamp — store as LocalRef so
+        # the bundle digest is independent of its own version number.
+        if r.module == self.module:
+            self._targets.discard(r)
+            return CrossRef(text, LocalRef(r.kind, r.path), exists)
+        return CrossRef(text, r, exists)
+
 
 class IngestVisitor(DirectiveVisiter):
     def replace_GenCode(self, code):
@@ -964,10 +979,10 @@ class IngestVisitor(DirectiveVisiter):
         return [refinfo]
 
     def replace_CrossRef(self, ref):
-        if isinstance(ref.reference, LocalRef) and ref.reference.kind == "docs":
-            ri = RefInfo(self.module, self.version, "docs", ref.reference.path)
-            self._targets.add(ri)
-            return [CrossRef(ref.value, ri, ref.kind)]
+        if isinstance(ref.reference, LocalRef):
+            # Already intra-bundle; keep as LocalRef so the stored CBOR never
+            # contains a version-stamped RefInfo for same-bundle targets.
+            return [ref]
         if isinstance(ref.reference, RefInfo) and ref.reference.kind == "api":
             # "api"-kind stubs are produced by the import-solver at gen time
             # (version="*", kind="api"). Resolve them against known_refs so the
@@ -980,6 +995,13 @@ class IngestVisitor(DirectiveVisiter):
                 rev_aliases=self.rev_aliases,
             )
             if resolved.kind not in ("missing", "local"):
+                if resolved.module == self.module:
+                    # Same bundle — store as LocalRef, no forward-ref edge needed.
+                    return [
+                        CrossRef(
+                            ref.value, LocalRef(resolved.kind, resolved.path), ref.kind
+                        )
+                    ]
                 self._targets.add(resolved)
                 return [CrossRef(ref.value, resolved, ref.kind)]
         return [ref]

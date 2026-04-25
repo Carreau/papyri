@@ -863,7 +863,17 @@ class Encoder:
         self._rev_map = rev_map
 
     def encode(self, obj):
-        return cbor2.dumps(obj, default=lambda encoder, obj: obj.cbor(encoder))
+        # canonical=True sorts map keys per RFC 8949 §4.2, so the same logical
+        # input always produces byte-identical CBOR. Node fields are encoded as
+        # CBOR arrays (see node_base.Node.cbor), so attribute order is fixed by
+        # the class definition. The only dict whose iteration order is
+        # semantic (GeneratedDoc._content) has its order carried separately
+        # via _ordered_sections, so sorting its keys here loses no information.
+        return cbor2.dumps(
+            obj,
+            default=lambda encoder, obj: obj.cbor(encoder),
+            canonical=True,
+        )
 
     def _type_from_tag(self, tag):
         return self._rev_map[tag.tag]

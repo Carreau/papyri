@@ -175,3 +175,40 @@ def test_encoder_decode_list_of_nodes():
     assert len(out) == 2
     assert all(isinstance(s, Section) for s in out)
     assert [s.title for s in out] == ["Sec A", "Sec B"]
+
+
+def test_encoder_is_byte_deterministic():
+    # Encoding the same logical IR twice must produce identical bytes:
+    # this is the property that makes CBOR files comparable across runs
+    # (same source -> same hash). It relies on canonical=True in
+    # Encoder.encode (RFC 8949 §4.2 sorts map keys).
+    sec = Section(
+        children=[Paragraph([Text("body")])],
+        title="My Section",
+        level=1,
+        target="anchor",
+    )
+    assert encoder.encode(sec) == encoder.encode(sec)
+
+
+def test_encoder_dict_key_order_does_not_affect_bytes():
+    # A dict-typed Node field encoded with two different insertion orders
+    # for the same key/value pairs must yield identical CBOR bytes.
+    # We use a Directive's `options` field, which is `dict[str, str]`.
+    from papyri.nodes import Directive
+
+    d1 = Directive(
+        name="role",
+        args=None,
+        options={"a": "1", "b": "2"},
+        value=None,
+        children=[],
+    )
+    d2 = Directive(
+        name="role",
+        args=None,
+        options={"b": "2", "a": "1"},
+        value=None,
+        children=[],
+    )
+    assert encoder.encode(d1) == encoder.encode(d2)

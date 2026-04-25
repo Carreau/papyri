@@ -11,7 +11,7 @@
  * that ordering for the positional CBOR array.
  */
 
-import { Decoder, Encoder, Tag, addExtension } from "cbor-x";
+import { Decoder, Encoder, Tag } from "cbor-x";
 
 // ---------------------------------------------------------------------------
 // TypedNode shapes (same as viewer, re-exported for consumers)
@@ -152,46 +152,43 @@ function buildTyped(tag: number, value: unknown): IRNode {
   return node;
 }
 
-let _extensionsRegistered = false;
-function ensureExtensions(): void {
-  if (_extensionsRegistered) return;
-  _extensionsRegistered = true;
-
-  addExtension({
-    Class: Object as unknown as new (...a: unknown[]) => object,
-    tag: TUPLE_TAG,
-    encode() {
-      throw new Error("encode not implemented for tuple tag");
-    },
-    decode(item: unknown) {
-      return item;
-    },
-  });
-
-  for (const tagStr of Object.keys(FIELD_ORDER)) {
-    const tag = Number(tagStr);
-    addExtension({
-      Class: Object as unknown as new (...a: unknown[]) => object,
-      tag,
-      encode() {
-        throw new Error("use toEncodable() before encoding IR nodes");
-      },
-      decode(item: unknown) {
-        return buildTyped(tag, item);
-      },
-    });
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Decode
+//
+// We do NOT use addExtension() — its `Class: Object` would fire for every
+// plain object during encoding too, corrupting CBOR maps.  Instead we decode
+// without any extensions (raw Tag objects come through as cbor-x Tag
+// instances) and then walk the result with processRaw() to convert Tags to
+// TypedNodes.
 // ---------------------------------------------------------------------------
+
+/** Recursively convert raw cbor-x Tag instances to TypedNode objects. */
+function processRaw(val: unknown): unknown {
+  if (!val || typeof val !== "object") return val;
+  if (Array.isArray(val)) return val.map(processRaw);
+  if (val instanceof Tag) {
+    const tag = val.tag as number;
+    if (tag === TUPLE_TAG) {
+      // Treat Python tuples as plain arrays on the JS side.
+      return Array.isArray(val.value) ? val.value.map(processRaw) : processRaw(val.value);
+    }
+    const processed = processRaw(val.value);
+    return buildTyped(tag, processed);
+  }
+  // Plain object (CBOR map — e.g. _content or meta dict).
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(val as Record<string, unknown>)) {
+    out[k] = processRaw(v);
+  }
+  return out;
+}
+
+const _decoder = new Decoder({ mapsAsObjects: true });
 
 /** Decode a CBOR buffer into a decoded IR tree of TypedNode objects. */
 export function decode<T = unknown>(buf: Buffer | Uint8Array): T {
-  ensureExtensions();
-  const dec = new Decoder({ mapsAsObjects: true });
-  return dec.decode(buf) as T;
+  const raw = _decoder.decode(buf);
+  return processRaw(raw) as T;
 }
 
 // ---------------------------------------------------------------------------

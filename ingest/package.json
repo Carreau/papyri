@@ -12,9 +12,11 @@
   "scripts": {
     "build": "tsc",
     "check": "tsc --noEmit",
-    "lint": "eslint src",
-    "format": "prettier --write src",
-    "format:check": "prettier --check src"
+    "lint": "eslint src tests",
+    "format": "prettier --write src tests",
+    "format:check": "prettier --check src tests",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@noble/hashes": "^1.7.0",
@@ -29,7 +31,8 @@
     "eslint-config-prettier": "^9.1.0",
     "prettier": "^3.4.2",
     "typescript": "^5.7.0",
-    "typescript-eslint": "^8.17.0"
+    "typescript-eslint": "^8.17.0",
+    "vitest": "^4.1.4"
   },
   "engines": {
     "node": ">=22"

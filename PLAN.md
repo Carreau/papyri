@@ -217,6 +217,32 @@ robustness and coverage holes.
   done, or keep it as "install from git" only for the foreseeable future?
   **Still open.**
 
+## Cross-version page change detection (landed)
+
+`graphstore.put` records a 16-byte BLAKE2b fingerprint of every
+canonical (re-encoded) blob in a new `nodes.digest` column. One query
+method is exposed on `GraphStore`:
+
+- `diff_versions(package, version_a, version_b)` — returns the added /
+  removed / modified pages between two ingested versions, identified by
+  `(category, identifier)`. Identical-digest pages are omitted; callers
+  that only care about one category filter the returned list.
+
+The digest is computed **post-encoder** so it reflects the canonical
+form of the IR, not whatever bytes gen happened to write — which means
+re-ingesting yields stable digests even before the gen pipeline is fully
+canonicalized. The digest column is part of the schema for new
+databases; existing databases need to be dropped (`papyri drop`) and
+re-ingested.
+
+The next iteration is a **semantic digest** (signature + section titles
++ collapsed text, ignoring source positions) so the viewer can
+distinguish trivial whitespace churn from real content change. Add it as
+a second column rather than replacing the raw digest. CLI surfacing of
+the query (`papyri diff`) lives in a follow-up PR. "Unchanged since
+which version?" is also deferred — it needs a clear story for version
+ordering before it's worth wiring up.
+
 ## Follow-ups (not yet scheduled)
 
 - **Directive handlers should not read global state.** `:ghpull:` and

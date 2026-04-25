@@ -1,9 +1,14 @@
 # import json
 import logging
 import sqlite3
+from hashlib import blake2b
 from pathlib import Path as _Path
 
 import cbor2
+
+# 16-byte BLAKE2b is enough collision space for our use (page-content
+# fingerprint, not a security primitive) and noticeably faster than SHA-256.
+_DIGEST_SIZE = 16
 
 log = logging.getLogger("papyri")
 
@@ -19,6 +24,7 @@ CREATE TABLE nodes(
     category   TEXT NOT NULL,
     identifier TEXT NOT NULL,
     has_blob   INTEGER NOT NULL DEFAULT 0,
+    digest     BLOB,
     UNIQUE(package, version, category, identifier)
 );
 CREATE TABLE links(
@@ -27,6 +33,8 @@ CREATE TABLE links(
     PRIMARY KEY (source, dest)
 );
 CREATE INDEX idx_links_dest ON links(dest);
+CREATE INDEX idx_nodes_pkg_cat_ident
+    ON nodes(package, category, identifier);
 """
 
 # Applied to every connection, old or new.
@@ -171,19 +179,6 @@ class GraphStore:
                     stmt = stmt.strip()
                     if stmt:
                         self.conn.execute(stmt)
-        else:
-            # Detect stale schema from before the nodes/links redesign.
-            tables = {
-                row[0]
-                for row in self.conn.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table'"
-                )
-            }
-            if "nodes" not in tables:
-                raise RuntimeError(
-                    f"Database at {p} has an outdated schema. "
-                    "Run 'papyri drop' and re-ingest to rebuild it."
-                )
 
         assert isinstance(root, _Path)
         self._root = Path(root)
@@ -268,12 +263,22 @@ class GraphStore:
     def get(self, key: Key) -> bytes:
         return self._get(key)
 
-    def _maybe_insert_node(self, key, *, has_blob: bool = False) -> int:
+    def _maybe_insert_node(
+        self,
+        key,
+        *,
+        has_blob: bool = False,
+        digest: bytes | None = None,
+    ) -> int:
         """Insert node if not present, return its id. Must be called within a transaction.
 
         Pass has_blob=True when the caller is also writing a blob file for this key.
         Placeholder nodes (link destinations not yet ingested) are inserted with
         has_blob=False so that glob() skips them.
+
+        ``digest`` is a content fingerprint of the canonical (re-encoded)
+        blob bytes (BLAKE2b-128); it is only set when the caller is writing
+        a blob (has_blob=True).
         """
         # RETURNING only fires when a row is actually inserted (not on IGNORE).
         row = self.conn.execute(
@@ -289,7 +294,10 @@ class GraphStore:
             ).fetchone()
         node_id: int = row["id"]
         if has_blob:
-            self.conn.execute("UPDATE nodes SET has_blob=1 WHERE id=?", (node_id,))
+            self.conn.execute(
+                "UPDATE nodes SET has_blob=1, digest=? WHERE id=?",
+                (digest, node_id),
+            )
         return node_id
 
     def _meta_path(self, module: str, version: str):
@@ -311,6 +319,12 @@ class GraphStore:
         Store object ``bytes_``, as path ``key`` with the corresponding
         links to other objects.
 
+        A 16-byte BLAKE2b digest of ``bytes_`` is recorded as the node's
+        content fingerprint. Callers are expected to pass the canonical
+        (re-encoded) form of the blob; this is what gives us a meaningful
+        "did this page change between two versions" comparison without
+        re-reading every blob.
+
         refs : List[Key]
         """
         assert isinstance(key, Key)
@@ -325,13 +339,14 @@ class GraphStore:
             old_refs = set()
 
         path.write_bytes(bytes_)
+        digest = blake2b(bytes_, digest_size=_DIGEST_SIZE).digest()
 
         new_refs = set(refs)
         removed_refs = old_refs - new_refs
         added_refs = new_refs - old_refs
 
         with self.conn:
-            source_id = self._maybe_insert_node(key, has_blob=True)
+            source_id = self._maybe_insert_node(key, has_blob=True, digest=digest)
 
             add_params = [
                 (source_id, self._maybe_insert_node(ref)) for ref in added_refs
@@ -375,3 +390,95 @@ class GraphStore:
             params,
         ).fetchall()
         return [Key(r[0], r[1], r[2], r[3]) for r in rows]
+
+    def get_digest(self, key: Key) -> bytes | None:
+        """Return the content digest of the canonical blob bytes for ``key``.
+
+        The digest is a 16-byte BLAKE2b fingerprint computed at ``put``
+        time. Returns None if the row exists with no recorded digest, and
+        raises ``KeyError`` if the row does not exist at all.
+        """
+        row = self.conn.execute(
+            "SELECT digest FROM nodes"
+            " WHERE package=? AND version=? AND category=? AND identifier=?"
+            "   AND has_blob=1",
+            list(key),
+        ).fetchone()
+        if row is None:
+            raise KeyError(key)
+        digest: bytes | None = row["digest"]
+        return digest
+
+    def diff_versions(
+        self,
+        package: str,
+        version_a: str,
+        version_b: str,
+    ) -> list[tuple[str, str, bytes | None, bytes | None]]:
+        """Compare two versions of one package by content digest.
+
+        Returns rows ``(category, identifier, digest_a, digest_b)`` for
+        every page that exists in at least one of the versions and whose
+        digest differs between them. Pages with identical digests are
+        omitted.
+
+        - ``digest_a is None``: the page does not exist in ``version_a``
+          (i.e. it was added in ``version_b``).
+        - ``digest_b is None``: the page does not exist in ``version_b``
+          (i.e. it was removed).
+        - both not None and different: the page was modified.
+
+        Callers that only care about one ``category`` (module / docs /
+        examples / …) can filter the returned list directly.
+        """
+        # Emulate FULL OUTER JOIN with the union of two LEFT JOINs so we
+        # don't depend on SQLite >= 3.39 (Python's bundled sqlite3 version
+        # varies by platform/distribution).
+        sql = """
+            SELECT category, identifier, digest_a, digest_b
+            FROM (
+                SELECT a.category   AS category,
+                       a.identifier AS identifier,
+                       a.digest     AS digest_a,
+                       b.digest     AS digest_b
+                FROM (
+                    SELECT category, identifier, digest
+                    FROM nodes
+                    WHERE package=? AND version=? AND has_blob=1
+                ) a
+                LEFT JOIN (
+                    SELECT category, identifier, digest
+                    FROM nodes
+                    WHERE package=? AND version=? AND has_blob=1
+                ) b USING (category, identifier)
+                UNION
+                SELECT b.category, b.identifier, a.digest, b.digest
+                FROM (
+                    SELECT category, identifier, digest
+                    FROM nodes
+                    WHERE package=? AND version=? AND has_blob=1
+                ) b
+                LEFT JOIN (
+                    SELECT category, identifier, digest
+                    FROM nodes
+                    WHERE package=? AND version=? AND has_blob=1
+                ) a USING (category, identifier)
+                WHERE a.identifier IS NULL
+            )
+            WHERE digest_a IS NOT digest_b
+            ORDER BY category, identifier
+        """
+        params = [
+            package,
+            version_a,
+            package,
+            version_b,
+            package,
+            version_b,
+            package,
+            version_a,
+        ]
+        rows = self.conn.execute(sql, params).fetchall()
+        return [
+            (r["category"], r["identifier"], r["digest_a"], r["digest_b"]) for r in rows
+        ]

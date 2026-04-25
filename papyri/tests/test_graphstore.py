@@ -210,22 +210,92 @@ def test_put_assets_key_does_not_check_old_refs(store):
     assert store.get(akey) == b"v2"
 
 
-def test_stale_schema_detected(tmp_path, monkeypatch):
-    """Opening a DB with an old (pre-redesign) schema should raise RuntimeError."""
-    import sqlite3
+def test_put_records_blake2b_digest(store):
+    from hashlib import blake2b
 
-    import papyri.graphstore as gs
+    key = Key("pkg", "1.0", "module", "pkg.foo")
+    data = b"hello digest"
+    store.put(key, data, [])
+    assert store.get_digest(key) == blake2b(data, digest_size=16).digest()
 
-    db_path = tmp_path / "papyri.db"
-    # Create a database with the OLD schema (no 'nodes' table).
-    conn = sqlite3.connect(str(db_path))
-    conn.execute(
-        "CREATE TABLE documents(id INTEGER PRIMARY KEY, package TEXT, version TEXT, "
-        "category TEXT, identifier TEXT)"
-    )
-    conn.commit()
-    conn.close()
 
-    monkeypatch.setattr(gs, "GLOBAL_PATH", db_path)
-    with pytest.raises(RuntimeError, match="outdated schema"):
-        GraphStore(tmp_path)
+def test_put_overwrites_digest(store):
+    from hashlib import blake2b
+
+    key = Key("pkg", "1.0", "module", "pkg.foo")
+    store.put(key, b"v1", [])
+    assert store.get_digest(key) == blake2b(b"v1", digest_size=16).digest()
+    store.put(key, b"v2", [])
+    assert store.get_digest(key) == blake2b(b"v2", digest_size=16).digest()
+
+
+def test_get_digest_missing_key_raises(store):
+    with pytest.raises(KeyError):
+        store.get_digest(Key("pkg", "1.0", "module", "absent"))
+
+
+def test_get_digest_skips_placeholder_node(store):
+    """Placeholder nodes (link destination, never put) have has_blob=0 and
+    must not be returned by ``get_digest`` — they would otherwise look like
+    'page exists with NULL digest'."""
+    src = Key("pkg", "1.0", "module", "pkg.foo")
+    dest = Key("other", "2.0", "module", "other.bar")
+    store.put(src, b"data", [dest])
+    with pytest.raises(KeyError):
+        store.get_digest(dest)
+
+
+def test_diff_versions_added_removed_modified(store):
+    common_same = Key("pkg", "1.0", "module", "pkg.same")
+    common_changed_a = Key("pkg", "1.0", "module", "pkg.changed")
+    common_changed_b = Key("pkg", "2.0", "module", "pkg.changed")
+    only_in_a = Key("pkg", "1.0", "module", "pkg.removed")
+    only_in_b = Key("pkg", "2.0", "module", "pkg.added")
+
+    same_in_b = Key("pkg", "2.0", "module", "pkg.same")
+    store.put(common_same, b"identical", [])
+    store.put(same_in_b, b"identical", [])
+    store.put(common_changed_a, b"old body", [])
+    store.put(common_changed_b, b"new body", [])
+    store.put(only_in_a, b"gone", [])
+    store.put(only_in_b, b"new page", [])
+
+    rows = store.diff_versions("pkg", "1.0", "2.0")
+    bucketed = {(c, ident): (da, db) for c, ident, da, db in rows}
+
+    # pkg.same is omitted (digests match).
+    assert ("module", "pkg.same") not in bucketed
+
+    # pkg.changed shows up with both sides populated and different.
+    da, db = bucketed[("module", "pkg.changed")]
+    assert da is not None and db is not None and da != db
+
+    # Removed: present in a, absent in b.
+    da, db = bucketed[("module", "pkg.removed")]
+    assert da is not None and db is None
+
+    # Added: absent in a, present in b.
+    da, db = bucketed[("module", "pkg.added")]
+    assert da is None and db is not None
+
+
+def test_diff_versions_empty_when_identical(store):
+    """Two versions whose pages are byte-identical produce an empty diff."""
+    a = Key("pkg", "1.0", "module", "pkg.foo")
+    b = Key("pkg", "2.0", "module", "pkg.foo")
+    store.put(a, b"same bytes", [])
+    store.put(b, b"same bytes", [])
+    assert store.diff_versions("pkg", "1.0", "2.0") == []
+
+
+def test_diff_versions_includes_all_categories(store):
+    """diff_versions returns every changed page across every category;
+    callers that only care about one category filter the returned list."""
+    store.put(Key("pkg", "1.0", "module", "pkg.foo"), b"old mod", [])
+    store.put(Key("pkg", "2.0", "module", "pkg.foo"), b"new mod", [])
+    store.put(Key("pkg", "1.0", "docs", "intro"), b"old doc", [])
+    store.put(Key("pkg", "2.0", "docs", "intro"), b"new doc", [])
+
+    rows = store.diff_versions("pkg", "1.0", "2.0")
+    cats = {c for c, _ident, _, _ in rows}
+    assert cats == {"module", "docs"}

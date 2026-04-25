@@ -235,12 +235,14 @@ canonicalized. The digest column is part of the schema for new
 databases; existing databases need to be dropped (`papyri drop`) and
 re-ingested.
 
+CLI surfacing: `papyri diff <pkg> <va> <vb> [--summary]` prints the
+added / removed / modified buckets.
+
 The next iteration is a **semantic digest** (signature + section titles
 + collapsed text, ignoring source positions) so the viewer can
 distinguish trivial whitespace churn from real content change. Add it as
-a second column rather than replacing the raw digest. CLI surfacing of
-the query (`papyri diff`) lives in a follow-up PR. "Unchanged since
-which version?" is also deferred — it needs a clear story for version
+a second column rather than replacing the raw digest. "Unchanged since
+which version?" is deferred — it needs a clear story for version
 ordering before it's worth wiring up.
 
 ## Follow-ups (not yet scheduled)

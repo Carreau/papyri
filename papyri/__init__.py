@@ -61,6 +61,7 @@ import typer
 from . import examples as examples
 from .cli.debug import debug
 from .cli.describe import describe
+from .cli.diff import diff
 from .cli.find import find
 
 __version__ = "0.0.9"
@@ -308,6 +309,7 @@ def drop(
 app.command()(find)
 app.command()(describe)
 app.command()(debug)
+app.command()(diff)
 
 
 if __name__ == "__main__":

@@ -63,7 +63,7 @@ from .cli.debug import debug
 from .cli.describe import describe
 from .cli.find import find
 
-__version__ = "0.0.8"
+__version__ = "0.0.9"
 
 logo = r"""
   ___                    _

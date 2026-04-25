@@ -17,7 +17,6 @@ from .graphstore import GraphStore, Key
 from .node_base import Node, register
 from .nodes import (
     Figure,
-    LocalRef,
     RefInfo,
     Section,
     SeeAlsoItem,
@@ -262,7 +261,8 @@ class Ingester:
             key = Key(module, version, "docs", ref)
             doc.validate()
 
-            # Run IngestVisitor to resolve cross-bundle "api"-kind CrossRef stubs.
+            # Resolve LocalRef("docs", path) CrossRef nodes → RefInfo so
+            # the graph store can track doc-to-doc forward references.
             visitor = IngestVisitor(
                 ref, frozenset(), frozenset(), {}, version=version, module=module
             )
@@ -465,12 +465,9 @@ class Ingester:
                 )
                 if r.kind == "module":
                     log.debug("unresolved ok... %r %r", r, key)
-                    # Intra-bundle: use LocalRef so the stored CBOR never
-                    # contains a version stamp for same-bundle targets.
-                    if r.module == key.module:
-                        sa.name.reference = LocalRef(r.kind, r.path)
-                    else:
-                        sa.name.reference = r
+                    # `exists` is derived from `reference.kind`; updating the
+                    # reference to a resolved RefInfo is enough.
+                    sa.name.reference = r
 
             # end todo
 

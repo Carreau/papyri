@@ -52,7 +52,7 @@ class Path:
 
     def write_json(self, data):
         with open(self.path, "wb") as f:
-            return cbor2.dump(data, f)
+            return cbor2.dump(data, f, canonical=True)
 
     def __truediv__(self, other):
         return type(self)(self.path / other)

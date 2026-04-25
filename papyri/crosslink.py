@@ -319,7 +319,7 @@ class Ingester:
 
         gstore.put(
             Key(root, version, "meta", "aliases.cbor"),
-            cbor2.dumps(aliases),
+            cbor2.dumps(aliases, canonical=True),
             # json.dumps(aliases, indent=2).encode(),
             [],
         )

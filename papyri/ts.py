@@ -3,7 +3,8 @@ import logging
 from textwrap import dedent, indent
 from typing import Any
 
-from tree_sitter_language_pack import get_parser
+import tree_sitter_rst
+from tree_sitter import Language, Parser
 
 from . import errors
 from .nodes import (
@@ -35,7 +36,7 @@ from .nodes import (
     inline_nodes,
 )
 
-parser = get_parser("rst")
+parser = Parser(Language(tree_sitter_rst.language()))
 allowed_adorn = "=-`:.'\"~^_*+#<>"
 
 log = logging.getLogger("papyri")

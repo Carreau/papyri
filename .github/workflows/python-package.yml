@@ -97,7 +97,7 @@ jobs:
         coverage xml
         ls -la
     - name: "Upload coverage to Codecov"
-      uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238  # v4
+      uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2  # v6.0.0
       with:
         fail_ci_if_error: false
         token: ${{ secrets.CODECOV_TOKEN }}
@@ -162,7 +162,7 @@ jobs:
         coverage report
         coverage xml
     - name: "Upload coverage to Codecov"
-      uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238  # v4
+      uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2  # v6.0.0
       with:
         fail_ci_if_error: false
         token: ${{ secrets.CODECOV_TOKEN }}
@@ -200,7 +200,7 @@ jobs:
         coverage report
         coverage xml
     - name: "Upload coverage to Codecov"
-      uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238  # v4
+      uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2  # v6.0.0
       with:
         fail_ci_if_error: false
         token: ${{ secrets.CODECOV_TOKEN }}
@@ -297,7 +297,7 @@ jobs:
         coverage xml
         ls -la
     - name: "Upload coverage to Codecov"
-      uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238  # v4
+      uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2  # v6.0.0
       with:
         fail_ci_if_error: false
         token: ${{ secrets.CODECOV_TOKEN }}

@@ -252,7 +252,8 @@ ordering before it's worth wiring up.
   handler call itself, so handlers can be pure functions of
   `(value, ctx)` again.
 - **Per-reference version resolution in `crosslink.py`.** See
-  `TODO-review.md`. A related dead assertion (`tree.py`, comparing a
+  the TODO "Open code smells" section. A related dead assertion
+  (`tree.py`, comparing a
   string to a list so the raise never fired) has been removed; the
   underlying "local reference should carry an explicit version"
   invariant still needs a real enforcement point once cross-package
@@ -280,7 +281,7 @@ ordering before it's worth wiring up.
   across numpy and scipy".
 - Cross-package ingest correctness: `papyri/crosslink.py` still has
   TODOs around version resolution for `Figure`/`RefInfo` across packages.
-  See `TODO-review.md`.
+  See `TODO` "Open code smells".
 - **`normalise_ref` validation could move to gen.**
   `ingest()` silently drops files whose `qa` fails `normalise_ref()`
   when `--check` is passed (`crosslink.py` ~line 379).  Since

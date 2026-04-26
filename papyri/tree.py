@@ -388,7 +388,9 @@ class TreeReplacer:
                 new_children = []
                 if not hasattr(node, "children"):
                     raise ValueError(f"{node.__class__} has no children {node}")
-                children: list[Node] = node.children
+                # Node base class doesn't declare `children`; the hasattr
+                # guard above narrows `node` to a subclass that does.
+                children: list[Node] = node.children  # type: ignore[attr-defined]
                 for c in children:
                     assert c is not None, f"{node=} has a None child"
                     assert isinstance(c, Node), c
@@ -398,7 +400,7 @@ class TreeReplacer:
                     new_children.extend(replacement)
                 if children != new_children:
                     self._cr += 1
-                node.children = new_children
+                node.children = new_children  # type: ignore[attr-defined]
                 new_nodes = [node]
             assert isinstance(new_nodes, list)
             return new_nodes

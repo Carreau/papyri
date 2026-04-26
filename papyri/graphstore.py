@@ -161,6 +161,9 @@ class GraphStore:
     """
 
     def __init__(self, root: _Path, link_finder=None):
+        from .config import ensure_dirs
+
+        ensure_dirs()
         p = GLOBAL_PATH
         log.debug("connecting to database %s", p)
         is_new = not p.exists()

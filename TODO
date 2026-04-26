@@ -15,6 +15,18 @@ in [`TODO-review.md`](TODO-review.md); milestones in [`PLAN.md`](PLAN.md).
   `_content.Notes.children.2.children.0.dd` and math not rendered.
 - `scipy.sparse.data._create_method.<locals>.method`: likely gets a
   conflicting canonical name with another function (`tan`/`float`).
+- `dask.delayed.delayed`: multi-paragraph in one parameter.
+- `IPython.core.display.Video.__init__`: block Verbatim in params?
+- `IPython.core.interactiveshell.InteractiveShell.complete`: DefListItem.
+- `IPython.core.completer.Completion`: item list.
+- `matplotlib.transforms.Bbox`: parsing of example is completely incorrect.
+- `matplotlib.axes._axes.Axes.text`: misparses example as well.
+- `matplotlib.figure.Figure.add_subplot`: custom double-dot example.
+- `matplotlib.colors`: unnumbered list with indent; reference via
+  `.. _palettable: value` and autolink `paletable_`.
+- `numpy.npv`: has warning sections.
+- `scipy.signal.ltisys.bode`: multiple figures.
+- `scipy.signal.barthann`: multiple figures.
 
 ## Papyri bugs (from `papyri gen` on IPython 9.12.0 + numpy 2.4.4, Py 3.14)
 

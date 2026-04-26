@@ -358,6 +358,18 @@ export async function loadCbor<T = unknown>(path: string): Promise<T> {
   return dec.decode(raw) as T;
 }
 
+/**
+ * Decode raw CBOR bytes using the IR tag extensions (same as loadCbor but
+ * takes an already-read buffer instead of a path). Used by the ingest
+ * pipeline, which reads bytes through a StorageBackend rather than directly
+ * from disk.
+ */
+export function decodeCborBytes<T = unknown>(bytes: Uint8Array | Buffer): T {
+  ensureExtensions();
+  const dec = new Decoder({ mapsAsObjects: true });
+  return dec.decode(bytes) as T;
+}
+
 // ---------------------------------------------------------------------------
 // URL shaping for a RefInfo-shaped tuple.
 // `module` / `docs` / `examples` get the natural page URLs we render; `assets`

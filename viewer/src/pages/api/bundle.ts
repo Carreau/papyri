@@ -1,9 +1,9 @@
-// SSR endpoint: receive a pre-ingested bundle via HTTP PUT.
+// SSR endpoint: receive a pre-ingested bundle via HTTP PUT and crosslink it
+// into the graph DB.
 //
 // The client tars up an already-ingested bundle directory (the output of
-// `papyri ingest`, not the raw gen output) and streams it here.
-// The pkg name and version are read from `meta.cbor` inside the archive,
-// so the URL carries no path parameters.
+// `papyri ingest`) and streams it here. The pkg name and version are read
+// from `meta.cbor` inside the archive, so the URL carries no path parameters.
 //
 // Expected client command:
 //   tar czf - -C ~/.papyri/ingest/numpy/2.3.5 . \
@@ -12,10 +12,10 @@
 //            --data-binary @-
 //
 // Responses:
-//   201  { ok: true,  pkg, version, path }
+//   201  { ok: true, pkg, version, path, blobs, links }
 //   400  { ok: false, error }   — missing body or bad meta.cbor
 //   422  { ok: false, error }   — tar extraction failed
-//   500  { ok: false, error }   — filesystem error
+//   500  { ok: false, error }   — filesystem or DB error
 
 import type { APIRoute } from "astro";
 import { mkdir, readFile, rename, rm } from "node:fs/promises";
@@ -27,6 +27,10 @@ import { Readable } from "node:stream";
 import { Decoder } from "cbor-x";
 import { ingestDir } from "../../lib/ir-reader.ts";
 import { isSafeSegment } from "../../lib/paths.ts";
+import { ingestDb } from "../../lib/paths.ts";
+import { resetGraphDbCache } from "../../lib/graph.ts";
+import { LocalFsStorage } from "../../lib/storage.ts";
+import { crosslinkBundle, openCrosslinkDb } from "../../lib/crosslink.ts";
 
 export const prerender = false;
 
@@ -71,7 +75,31 @@ export const PUT: APIRoute = async ({ request }) => {
     return respond({ ok: false, error: `cannot install bundle: ${err}` }, 500);
   }
 
-  return respond({ ok: true, pkg, version, path: dest }, 201);
+  // Crosslink: walk the installed bundle, update the graph DB.
+  let blobs = 0;
+  let links = 0;
+  try {
+    const storage = new LocalFsStorage(dest);
+    const db = openCrosslinkDb(ingestDb());
+    try {
+      ({ blobs, links } = await crosslinkBundle(storage, pkg, version, db));
+    } finally {
+      db.close();
+    }
+    // Invalidate the reader's cached read-only handle so subsequent requests
+    // pick up the newly written rows.
+    resetGraphDbCache();
+  } catch (err) {
+    // Bundle files are on disk; return 207 so the caller knows blobs landed
+    // but the graph was not updated (a retry of just the crosslink step is
+    // not yet exposed, so the client should re-upload).
+    return respond(
+      { ok: false, error: `bundle stored but crosslink failed: ${err}`, pkg, version, path: dest },
+      207
+    );
+  }
+
+  return respond({ ok: true, pkg, version, path: dest, blobs, links }, 201);
 };
 
 // ---------------------------------------------------------------------------

@@ -50,17 +50,18 @@ from pygments.lexers import PythonLexer
 _PYGMENTS_LEXER = PythonLexer()
 _PYGMENTS_FMT = HtmlFormatter()
 from rich.logging import RichHandler
-from rich.progress import BarColumn, Progress, TextColumn, track
+from rich.progress import BarColumn, TextColumn, track
 
 log = logging.getLogger("papyri")
 
+from ._progress import TimeElapsedColumn, iter_with_progress, progress_class
 from .errors import (
     IncorrectInternalDocsLen,
     NumpydocParseError,
     TextSignatureParsingFailed,
     UnseenError,
 )
-from .misc import BlockExecutor, DummyP
+from .executors import BlockExecutor
 from .node_base import Node, register
 from .nodes import (
     Comment,
@@ -91,12 +92,10 @@ from .tree import GenVisitor
 from .utils import (
     Cannonical,
     FullQual,
-    TimeElapsedColumn,
     dedent_but_first,
     full_qual,
     obj_from_qualname,
     pos_to_nl,
-    progress,
 )
 
 
@@ -1220,11 +1219,8 @@ class Gen:
     bdata: dict[str, bytes]
 
     def __init__(self, dummy_progress: bool, config: Config):
-        self.Progress: type[Progress]
-        if dummy_progress:
-            self.Progress = DummyP
-        else:
-            self.Progress = Progress
+        self._dummy_progress = dummy_progress
+        self.Progress = progress_class(dummy=dummy_progress)
 
         self.progress = lambda: self.Progress(
             TextColumn("[progress.description]{task.description}", justify="right"),
@@ -1429,8 +1425,9 @@ class Gen:
         """
         subdirs = ("module", "assets", "docs", "examples")
         for i, sub in enumerate(subdirs, start=1):
-            for _, path in progress(
+            for _, path in iter_with_progress(
                 (where / sub).glob("*"),
+                dummy=self._dummy_progress,
                 description=f"cleaning previous bundle {i}/{len(subdirs)}",
             ):
                 path.unlink()

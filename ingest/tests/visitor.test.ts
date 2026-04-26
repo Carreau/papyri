@@ -178,6 +178,37 @@ describe("collectForwardRefs", () => {
       path: "numpy.linspace",
     });
   });
+
+  it("skips LocalRef-bearing CrossRefs (intra-bundle targets are not edges)", () => {
+    // GenVisitor._ref_to_crossref in papyri/tree.py rewrites intra-bundle
+    // CrossRef.reference from RefInfo to LocalRef so the bundle digest
+    // doesn't depend on the bundle's own version. Both Python's
+    // `IngestedDoc.all_forward_refs` and our `collectForwardRefs` then
+    // walk only RefInfo nodes — so intra-bundle CrossRefs currently
+    // produce no forward-ref edge, and back-ref queries against the
+    // target are empty. Tracked under "Walk LocalRefs when building
+    // the forward-ref graph" in `TODO`; once that lands this test
+    // becomes the expected-shape assertion for the LocalRef path.
+    const localRef: TypedNode = {
+      __type: "LocalRef",
+      __tag: 4022,
+      kind: "module",
+      path: "papyri.examples:example1",
+    };
+    const crossRef: TypedNode = {
+      __type: "CrossRef",
+      __tag: 4002,
+      value: "example1",
+      reference: localRef,
+      kind: "module",
+      anchor: null,
+    };
+    const doc = ingestedDoc({
+      arbitrary: [section([paragraph([crossRef])])],
+      qa: "papyri.examples",
+    });
+    expect(collectForwardRefs(doc)).toEqual([]);
+  });
 });
 
 // ---------------------------------------------------------------------------

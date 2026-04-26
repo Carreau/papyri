@@ -82,20 +82,16 @@ describe.skipIf(!existsSync(dbPath))("post-upload ingest verification", () => {
 
   // -------------------------------------------------------------------------
   // Back-reference tests
+  //
+  // Note: today only RefInfo forward-refs become graph edges; intra-bundle
+  // refs are stored as LocalRef (`papyri/tree.py:GenVisitor._ref_to_crossref`)
+  // and skipped by both Python's `IngestedDoc.all_forward_refs` and the TS
+  // `collectForwardRefs`, so a query like "does papyri.examples:example1
+  // back-link to papyri.examples?" is currently always empty. Walking
+  // LocalRefs in the visitor is queued under "Walk LocalRefs when building
+  // the forward-ref graph" in `TODO`; once that lands a same-bundle
+  // back-ref test belongs here.
   // -------------------------------------------------------------------------
-
-  // TODO(ingest-backref): re-enable once the TS ingester records back-refs
-  // for module-level `:func:` CrossRefs. Tracked in `TODO` under
-  // "Post-upload back-ref investigation". Surfaced when the YAML bug in
-  // python-package.yml was fixed and upload-verify ran for the first time.
-  it.skip("papyri.examples:example1 has papyri.examples as a back-reference", () => {
-    const key = glob1(store, "papyri", "module", "papyri.examples:example1");
-    if (!key) return; // papyri bundle not yet ingested — skip gracefully
-
-    const backrefs = store.getBackRefs(key);
-    const moduleRefs = backrefs.filter((k) => k.path === "papyri.examples");
-    expect(moduleRefs.length).toBeGreaterThan(0);
-  });
 
   it("numpy:linspace exists in the store after numpy is ingested", () => {
     const key = glob1(store, "numpy", "module", "numpy:linspace");

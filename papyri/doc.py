@@ -179,6 +179,11 @@ class GeneratedDoc(Node):
         return "<GeneratedDoc ...>"
 
     def slots(self):
+        # Order tracks the class declaration above (which is what
+        # `Node.cbor()` uses via `get_type_hints`); only the field names
+        # matter to the single caller (`crosslink.py:load_one_uningested`,
+        # which copies attribute by attribute), but matching the
+        # declaration order keeps readers out of a trap.
         return [
             "_content",
             "example_section_data",
@@ -186,9 +191,9 @@ class GeneratedDoc(Node):
             "item_file",
             "item_line",
             "item_type",
-            "signature",
             "aliases",
             "see_also",
+            "signature",
             "references",
             "arbitrary",
             "local_refs",

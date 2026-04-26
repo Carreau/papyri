@@ -6,60 +6,95 @@ in [`TODO-review.md`](TODO-review.md); milestones in [`PLAN.md`](PLAN.md).
 
 ## Next up
 
-### Post-upload back-ref investigation [next task]
+### Walk LocalRefs when building the forward-ref graph
 
-`ingest/tests/post_upload.test.ts:93` is currently `it.skip`-ed:
+Today both `IngestedDoc.all_forward_refs` (`papyri/crosslink.py:110-126`)
+and the TS `collectForwardRefs` (`ingest/src/visitor.ts`) walk only
+`RefInfo` (kind != "local") and `Figure` nodes. Intra-bundle CrossRefs
+are stored with `LocalRef.reference` instead of `RefInfo` (gen-time
+choice in `papyri/tree.py:GenVisitor._ref_to_crossref`, `974`-`976`),
+so they produce no graph edge and the viewer's "Referenced by" list
+never shows same-bundle callers — e.g. `papyri.examples` does not
+appear in the back-refs of `papyri.examples:example1`.
 
-```ts
-it.skip("papyri.examples:example1 has papyri.examples as a back-reference", ...)
-```
+The `LocalRef` is intentional for the *gen* output: it keeps a
+bundle's content digest independent of its own version stamp. But
+the *ingest* graph table is post-resolution; an edge keyed on
+`(ownPkg, ownVer, kind, path)` is fine there. So the visitor can
+walk `LocalRef` and emit a `Key` by attaching the bundle's
+`(module, version)` from the caller's context.
 
-The assertion checks that `papyri.examples` (the module) shows up in
-the back-ref set of `papyri.examples:example1` (a function defined in
-that module). The premise is sound: the module docstring (`papyri/
-examples.py:227`) contains `:func:`example1``, which gen turns into a
-CrossRef forward-link from `papyri.examples` → `papyri.examples:example1`.
-The TypeScript ingester is supposed to record an edge for that, so
-back-refs from `example1` should include `papyri.examples`. They do
-not.
+Concrete change:
 
-Surfaced when the `python-package.yml` YAML bug (commit `f9f7837`)
-was fixed and `upload-verify` ran for the first time. Since the YAML
-was silently rejected by GHA from the moment the test was added
-(commit `547e4ee`), this assertion has never been validated in CI.
+1. `collectForwardRefs(doc, *, ownPkg, ownVer)` adds `"LocalRef"` to
+   `FORWARD_REF_TYPES`; for each `LocalRef` node, emit
+   `Key(ownPkg, ownVer, ref.kind, ref.path)`. Same for
+   `collectForwardRefsFromSection`.
+2. `Ingester._ingestApiDocs` / `_ingestNarrativeDocs` /
+   `_ingestExamples` already have `(root, version)` in scope; thread
+   them in.
+3. `IngestedDoc.all_forward_refs(self, *, package, version)` mirrors
+   the change. Callers in `crosslink.py:419` and `:491` pass
+   `key.module, key.version`.
+4. Update the unit pin in `ingest/tests/visitor.test.ts`
+   ("skips LocalRef-bearing CrossRefs") to assert the *new* shape:
+   one edge keyed `(ownPkg, ownVer, ref.kind, ref.path)` per
+   LocalRef, with the test exercising both the call-site context
+   threading and the kind="local" exclusion.
 
-Likely candidates (TS ingester):
+Out of scope: changing the gen-time storage shape. LocalRef stays as
+LocalRef in the IR; only the visitor's projection to graph edges
+changes. Existing bundles need to be re-ingested for the edges to
+materialise (no schema migration; `gstore.put` rewrites the row's
+forward set when it differs).
 
-1. `ingest/src/visitor.ts:collectForwardRefs` may not walk into
-   module-level CrossRefs the way the Python `crosslink.py` walker
-   does. Module docstrings end up partly in `_content` and partly in
-   `arbitrary` — the walker has to cover both.
-2. CrossRef relink: `CrossRef.reference` is the placeholder
-   `RefInfo("current-module", "current-version", "to-resolve", name)`.
-   Whoever resolves that to the real `(papyri, <ver>, module,
-   "papyri.examples:example1")` may be missing for module-level
-   sources.
-3. Mismatched key shape: Python `Key.path`, TS schema column
-   `identifier`. The test reads `k.path`; if `getBackRefs` returns
-   rows shaped `{package, version, category, identifier}` rather
-   than `{module, version, kind, path}`, the filter
-   `(k) => k.path === "papyri.examples"` is always-falsy.
+### Split `LocalRef` into IntraDocument / IntraBundle ref types
 
-Ruled out: TS encoder field-order mismatch for `GeneratedDoc` (tag
-4011). `Node.cbor()` in `papyri/node_base.py:36-39` uses
-`get_type_hints(cls)` (class-declaration order); the TS
-`FIELD_ORDER[4011]` in `ingest/src/encoder.ts:71-84` already matches
-that order. The misordered `slots()` method on `GeneratedDoc`
-(`papyri/doc.py:181-195`, with `signature` before `aliases`) is dead
-code — only `crosslink.py:211` reads it, in a copy-by-name loop
-where order is irrelevant. Worth deleting `slots()` to remove the
-trap, but it's not what's breaking the back-ref query.
+Sibling consideration to the LocalRef walk above. Right now `LocalRef`
+covers two semantically distinct cases that the visitor wants to
+treat differently:
 
-Once the ingester is fixed (or the test re-shaped), drop the
-`it.skip(` and the `TODO(ingest-backref):` comment in
-`ingest/tests/post_upload.test.ts`.
+| Case             | Source                                | Visitor action                                  |
+| ---------------- | ------------------------------------- | ----------------------------------------------- |
+| Intra-document   | `papyri/tree.py:962` (`add_target`)   | Render as `<a href="#anchor">`; *no* graph edge |
+| Intra-bundle     | `papyri/tree.py:975` (`_ref_to_crossref`) | Emit graph edge with bundle's `(pkg, ver)` (per the LocalRef-walk task above) |
+| Inter-bundle     | `RefInfo`                             | Emit graph edge as-is                           |
 
+Today both intra cases are tagged `LocalRef(kind, path)` and
+distinguished only by `kind` ("docs" vs "module"), but a same-bundle
+*doc-to-doc* ref also has `kind="docs"` and is structurally
+indistinguishable from a same-page section anchor. Adding the
+LocalRef-walk above without splitting the type means the visitor
+either over-emits edges (anchors become graph edges to nowhere) or
+under-emits (real intra-bundle docs refs get dropped).
 
+Sketch of the three-type taxonomy:
+
+- `AnchorRef(target: str)` — same-page anchor; never an edge. New CBOR
+  tag (probably 4023 — currently free between 4022 LocalRef and 4024
+  Figure).
+- `LocalRef(kind, path)` — intra-bundle reference. Visitor emits a
+  Key with the caller's `(pkg, ver)`. (Same shape as today; cleaned
+  semantics.)
+- `RefInfo(module, version, kind, path)` — inter-bundle reference.
+  Unchanged.
+
+Practical consequences if this lands:
+
+1. New CBOR tag → existing bundles need re-gen (not just re-ingest).
+   Coordinate with the LocalRef-walk task: do this *first* so the
+   walk lands against the cleaned types.
+2. `tree.py:962` switches to `AnchorRef(node.target)`; `tree.py:975`
+   stays on `LocalRef`.
+3. Viewer code that resolves LocalRef → `<a href="...">` splits into
+   two paths: AnchorRef → `<a href="#target">`; LocalRef → page URL.
+4. `IngestVisitor.replace_CrossRef` (`papyri/tree.py:987`) and the TS
+   equivalent split the LocalRef branch in two.
+
+Tracked here so the LocalRef-walk task doesn't ossify the current
+overload.
+
+## Known docstring bugs (recorded pre-Phase 1 — verify before filing)
 
 - `IPython.lib.display.audio`: check parsing of bullet list in parameters.
 - `numpy.core.shape_base._concatenate_shapes`: may not be complete /

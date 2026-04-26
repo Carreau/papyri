@@ -79,6 +79,12 @@ def _build_resolver_cache(
     for k in known_refs:
         assert isinstance(k, RefInfo)
         _map[k.path].append(k)
+        # full_qual() uses "module:qualname" colon notation (e.g. "numpy:sin"),
+        # but RST inline roles produce dot notation (e.g. ":func:`numpy.sin`"
+        # → "numpy.sin").  Index the dot form as an alias so that both notations
+        # resolve to the same RefInfo.
+        if ":" in k.path:
+            _map[k.path.replace(":", ".")].append(k)
 
     _m2: dict[str, RefInfo] = {}
     for kk, v in _map.items():

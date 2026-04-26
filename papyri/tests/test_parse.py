@@ -500,6 +500,36 @@ def test_ingest_visitor_inline_role_resolves(role):
     assert out[0].reference == target, (role, out)
 
 
+def test_resolve_colon_notation_path_via_dot_notation():
+    """
+    Regression: API objects are stored with colon-notation paths by full_qual()
+    (e.g. "numpy:sin"), but RST inline roles produce dot-notation references
+    (e.g. ":func:`numpy.sin`" → "numpy.sin").  _build_resolver_cache must index
+    both so that the dot-notation lookup finds the colon-notation RefInfo.
+
+    Without the fix, resolve_() returns "missing" for "numpy.sin" even when
+    known_refs contains RefInfo(path="numpy:sin").
+    """
+    from papyri.nodes import CrossRef, InlineRole, RefInfo
+    from papyri.tree import IngestVisitor
+
+    # Mirrors what find_all_refs() actually produces: kind="module", colon path.
+    target = RefInfo("numpy", "1.26", "module", "numpy:sin")
+    visitor = IngestVisitor(
+        "papyri.examples",
+        frozenset({target}),
+        frozenset(),
+        {},
+        version="0.0.9",
+        module="papyri",
+    )
+    out = visitor.replace_InlineRole(InlineRole("numpy.sin", domain=None, role="func"))
+    assert len(out) == 1, out
+    assert isinstance(out[0], CrossRef), out
+    # The CrossRef must point at the real versioned RefInfo, not a "*" stub.
+    assert out[0].reference == target, out[0].reference
+
+
 @pytest.mark.parametrize(
     "kind", ["note", "warning", "deprecated", "versionadded", "versionchanged"]
 )

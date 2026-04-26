@@ -4,8 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Encoder, Tag } from "cbor-x";
 
-// Encode BEFORE importing ir-reader.ts: ir-reader registers a global
-// read-only encode extension for Object that would break encode() afterwards.
 const tg = (tag: number, fields: unknown[]) => new Tag(fields, tag);
 const enc = new Encoder({ useRecords: false });
 
@@ -65,17 +63,16 @@ describe("loadModule (CBOR roundtrip)", () => {
     expect((await loadModule(bundle, "pkg$bar")).qa).toBe("pkg:bar");
   });
 
-  it("leaves unregistered inner tags as raw cbor-x Tag instances", async () => {
-    // ir-reader only registers decoders for tags in FIELD_ORDER; this pins
-    // that unknown tags flow through as-is so a future fallback fails loudly.
-    const { Tag: DecTag } = await import("cbor-x");
+  it("wraps unregistered inner tags as UnknownNode", async () => {
+    // Tags outside FIELD_ORDER are surfaced as { __type: "unknown", __tag,
+    // value } so the UI can degrade to a JSON dump rather than crash.
     const bundle = await writeBlob("pkg$qux", bytesUnknown);
     const out = await loadModule(bundle, "pkg$qux");
     const arb = out.arbitrary as unknown[];
     expect(arb).toHaveLength(1);
-    const inner = arb[0] as InstanceType<typeof DecTag>;
-    expect(inner).toBeInstanceOf(DecTag);
-    expect(inner.tag).toBe(9999);
+    const inner = arb[0] as { __type: string; __tag: number; value: unknown };
+    expect(inner.__type).toBe("unknown");
+    expect(inner.__tag).toBe(9999);
     expect(inner.value).toEqual(["mystery"]);
   });
 });

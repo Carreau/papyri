@@ -24,7 +24,7 @@ jobs:
     outputs:
       python: ${{ steps.filter.outputs.python }}
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
           persist-credentials: false
       - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d  # v4.0.1
@@ -61,7 +61,7 @@ jobs:
             flags: '--no-narrative --no-exec --no-infer'
 
     steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
       with:
         persist-credentials: false
     - name: Set up Python ${{ matrix.python-version }}
@@ -117,7 +117,7 @@ jobs:
       matrix:
         python-version: ["3.14"]
     steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
       with:
         persist-credentials: false
     - name: Set up Python ${{ matrix.python-version }}
@@ -178,7 +178,7 @@ jobs:
       matrix:
         python-version: ["3.14"]
     steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
       with:
         persist-credentials: false
     - name: Set up Python ${{ matrix.python-version }}
@@ -217,7 +217,7 @@ jobs:
       matrix:
         python-version: ["3.14"]
     steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
       with:
         persist-credentials: false
     - name: Set up Python ${{ matrix.python-version }}

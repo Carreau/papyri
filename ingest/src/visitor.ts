@@ -61,11 +61,17 @@ export function collectForwardRefs(doc: IRNode): Key[] {
 
   for (const n of nodes) {
     if (n.__type === "RefInfo") {
-      const kind = n.kind as string | null;
+      let kind = n.kind as string | null;
       if (kind === "local") continue;
+      // Gen-time cross-package unresolved stubs have kind="api", version="*".
+      // Normalise to kind="module", version="?" so the stored link target
+      // matches the actual on-disk node (which uses kind="module").
+      if (kind === "api") kind = "module";
+      const rawVersion = (n.version as string) ?? "?";
+      const version = rawVersion === "*" ? "?" : rawVersion;
       const key: Key = {
         module: (n.module as string) ?? "",
-        version: (n.version as string) ?? "?",
+        version,
         kind: kind ?? "module",
         path: (n.path as string) ?? "",
       };
@@ -102,11 +108,14 @@ export function collectForwardRefsFromSection(section: IRNode): Key[] {
 
   for (const n of nodes) {
     if (n.__type === "RefInfo") {
-      const kind = n.kind as string | null;
+      let kind = n.kind as string | null;
       if (kind === "local") continue;
+      if (kind === "api") kind = "module";
+      const rawVersion = (n.version as string) ?? "?";
+      const version = rawVersion === "*" ? "?" : rawVersion;
       const key: Key = {
         module: (n.module as string) ?? "",
-        version: (n.version as string) ?? "?",
+        version,
         kind: kind ?? "module",
         path: (n.path as string) ?? "",
       };

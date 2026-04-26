@@ -4,7 +4,62 @@ Catch-all for bugs found in the wild and the ops/lint queue. Rename passes
 live in [`TODO-renames.md`](TODO-renames.md); post-review follow-ups live
 in [`TODO-review.md`](TODO-review.md); milestones in [`PLAN.md`](PLAN.md).
 
-## Known docstring bugs (recorded pre-Phase 1 — verify before filing)
+## Next up
+
+### Post-upload back-ref investigation [next task]
+
+`ingest/tests/post_upload.test.ts:93` is currently `it.skip`-ed:
+
+```ts
+it.skip("papyri.examples:example1 has papyri.examples as a back-reference", ...)
+```
+
+The assertion checks that `papyri.examples` (the module) shows up in
+the back-ref set of `papyri.examples:example1` (a function defined in
+that module). The premise is sound: the module docstring (`papyri/
+examples.py:227`) contains `:func:`example1``, which gen turns into a
+CrossRef forward-link from `papyri.examples` → `papyri.examples:example1`.
+The TypeScript ingester is supposed to record an edge for that, so
+back-refs from `example1` should include `papyri.examples`. They do
+not.
+
+Surfaced when the `python-package.yml` YAML bug (commit `f9f7837`)
+was fixed and `upload-verify` ran for the first time. Since the YAML
+was silently rejected by GHA from the moment the test was added
+(commit `547e4ee`), this assertion has never been validated in CI.
+
+Likely candidates (TS ingester):
+
+1. `ingest/src/visitor.ts:collectForwardRefs` may not walk into
+   module-level CrossRefs the way the Python `crosslink.py` walker
+   does. Module docstrings end up partly in `_content` and partly in
+   `arbitrary` — the walker has to cover both.
+2. CrossRef relink: `CrossRef.reference` is the placeholder
+   `RefInfo("current-module", "current-version", "to-resolve", name)`.
+   Whoever resolves that to the real `(papyri, <ver>, module,
+   "papyri.examples:example1")` may be missing for module-level
+   sources.
+3. Mismatched key shape: Python `Key.path`, TS schema column
+   `identifier`. The test reads `k.path`; if `getBackRefs` returns
+   rows shaped `{package, version, category, identifier}` rather
+   than `{module, version, kind, path}`, the filter
+   `(k) => k.path === "papyri.examples"` is always-falsy.
+
+Ruled out: TS encoder field-order mismatch for `GeneratedDoc` (tag
+4011). `Node.cbor()` in `papyri/node_base.py:36-39` uses
+`get_type_hints(cls)` (class-declaration order); the TS
+`FIELD_ORDER[4011]` in `ingest/src/encoder.ts:71-84` already matches
+that order. The misordered `slots()` method on `GeneratedDoc`
+(`papyri/doc.py:181-195`, with `signature` before `aliases`) is dead
+code — only `crosslink.py:211` reads it, in a copy-by-name loop
+where order is irrelevant. Worth deleting `slots()` to remove the
+trap, but it's not what's breaking the back-ref query.
+
+Once the ingester is fixed (or the test re-shaped), drop the
+`it.skip(` and the `TODO(ingest-backref):` comment in
+`ingest/tests/post_upload.test.ts`.
+
+
 
 - `IPython.lib.display.audio`: check parsing of bullet list in parameters.
 - `numpy.core.shape_base._concatenate_shapes`: may not be complete /

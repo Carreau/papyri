@@ -280,15 +280,13 @@ jobs:
       run: |
         response=$(curl -sf http://localhost:4321/api/bundles.json)
         echo "Bundles API response: $response"
-        python3 -c "
-import json, sys
-data = json.loads(sys.argv[1])
-bundles = data['bundles']
-assert len(bundles) > 0, f'Expected at least one ingested bundle, got none'
-for b in bundles:
-    print(f\"  ingested: {b['pkg']} {b['version']}\")
-print(f'Total bundles ingested: {len(bundles)}')
-" "$response"
+        count=$(jq '.bundles | length' <<<"$response")
+        if [ "$count" -lt 1 ]; then
+          echo "Expected at least one ingested bundle, got $count" >&2
+          exit 1
+        fi
+        jq -r '.bundles[] | "  ingested: \(.pkg) \(.version)"' <<<"$response"
+        echo "Total bundles ingested: $count"
     - name: Post-upload ingest tests (TypeScript)
       run: |
         pnpm --filter papyri-ingest run test

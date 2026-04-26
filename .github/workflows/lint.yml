@@ -61,7 +61,6 @@ jobs:
     - name: Install dependencies
       run: |
         uv pip install --system -r requirements-dev.txt
-        uv pip install --system types-requests types-cachetools types-toml
         uv pip install --system -e .
     - name: Lint with ruff
       run: |

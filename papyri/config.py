@@ -4,9 +4,6 @@ from pathlib import Path
 base_dir = Path(expanduser("~/.papyri/"))
 base_dir.mkdir(parents=True, exist_ok=True)
 
-html_dir = base_dir / "html"
-html_dir.mkdir(parents=True, exist_ok=True)
-
 ingest_dir = base_dir / "ingest"
 ingest_dir.mkdir(parents=True, exist_ok=True)
 

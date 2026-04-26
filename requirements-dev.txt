@@ -1,6 +1,5 @@
 pytest
 pytest-cov
-flit
 matplotlib
 coverage
 pipdeptree

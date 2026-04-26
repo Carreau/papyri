@@ -18,12 +18,6 @@ class FullQual(str):
     def __str__(self):
         return self._qa
 
-    def module(self):
-        return self._qa.split(":")
-
-    def root(self):
-        return self.module().split(".")[0]
-
 
 Cannonical = NewType("Cannonical", str)
 

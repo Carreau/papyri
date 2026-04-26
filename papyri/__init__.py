@@ -52,17 +52,20 @@ Directive must not have spaces before double colon::
 
 """
 
-from pathlib import Path
-from typing import Annotated
-
-import tomli_w
 import typer
 
 from . import examples as examples
+from .cli.about import about
+from .cli.bootstrap import bootstrap
 from .cli.debug import debug
 from .cli.describe import describe
 from .cli.diff import diff
+from .cli.drop import drop
 from .cli.find import find
+from .cli.gen import gen
+from .cli.ingest import ingest
+from .cli.pack import pack
+from .cli.relink import relink
 from .cli.upload import upload
 
 __version__ = "0.0.9"
@@ -117,201 +120,21 @@ def _app_callback(
     pass
 
 
-@app.command()
-def about() -> None:
-    """
-    Show the logo, version, and a short description of papyri.
-    """
-    typer.echo(logo.strip())
-    typer.echo(f"papyri {__version__}")
-    typer.echo(
-        "\nGenerate and ingest Python documentation IR for cross-linked browsing."
-    )
-    typer.echo("https://github.com/carreau/papyri")
-
-
-@app.command()
-def ingest(
-    paths: list[Path],
-    check: bool = False,
-    relink: bool = False,
-    no_progress: bool = typer.Option(
-        False,
-        "--no-progress",
-        is_flag=True,
-        help="Disable progress bars (useful in CI or with debuggers).",
-    ),
+for _cmd in (
+    about,
+    ingest,
+    relink,
+    gen,
+    pack,
+    bootstrap,
+    drop,
+    find,
+    describe,
+    debug,
+    diff,
+    upload,
 ):
-    """
-    Given paths to a DocBundle folder, ingest it into the known libraries.
-
-    Parameters
-    ----------
-    paths : List of Path
-        list of paths (directories) to ingest.
-    relink : bool
-        after ingesting all the paths, rescan the whole library to find new
-        crosslinks.
-    check : bool
-        run extra consistency checks while ingesting.
-    """
-    from . import crosslink as cr
-
-    for p in paths:
-        cr.main(Path(p), check, dummy_progress=no_progress)
-    if relink:
-        cr.relink(dummy_progress=no_progress)
-
-
-@app.command()
-def relink(
-    no_progress: bool = typer.Option(
-        False,
-        "--no-progress",
-        is_flag=True,
-        help="Disable progress bars (useful in CI or with debuggers).",
-    ),
-):
-    """
-    Rescan all the documentation to find potential new crosslinks.
-    """
-    from . import crosslink as cr
-
-    cr.relink(dummy_progress=no_progress)
-
-
-def _find_toml() -> list[str]:
-    from glob import glob
-
-    return glob("**/*.toml", recursive=True)
-
-
-@app.command()
-def gen(
-    file: Annotated[
-        str,
-        typer.Argument(
-            help="toml configuration file",
-            autocompletion=_find_toml,
-        ),
-    ],
-    infer: bool | None = typer.Option(
-        True, help="Whether to run type inference on code examples."
-    ),
-    exec: bool | None = typer.Option(
-        None, help="Whether to attempt to execute docstring code examples."
-    ),
-    debug: bool = False,
-    no_progress: bool = typer.Option(
-        False,
-        "--no-progress",
-        is_flag=True,
-        help="Disable progress bars (useful in CI or with debuggers).",
-    ),
-    dry_run: bool = False,
-    api: bool = True,
-    examples: bool = True,
-    narrative: bool = True,
-    fail: bool = typer.Option(False, help="Fail on first error."),
-    fail_early: bool = typer.Option(False, help="Override early error option."),
-    fail_unseen_error: bool = typer.Option(
-        False, help="Fail on any previously unseen error."
-    ),
-    only: list[str] = typer.Option(
-        None,
-        "--only",
-        help="Restrict generation to these qualified names (repeatable).",
-    ),
-):
-    """
-    Generate documentation IR for a given package.
-
-    First item should be the root package to import; if subpackages need to be
-    analyzed but are not accessible from the root pass them as extra arguments.
-
-    This takes a single file and builds the IR for a single package. Building
-    for multiple packages may have side effects (for example importing seaborn
-    changes matplotlib defaults).
-    """
-    import os
-    from os.path import join
-
-    from IPython.utils.tempdir import TemporaryWorkingDirectory
-
-    from papyri.gen import gen_main
-
-    here = os.getcwd()
-
-    with TemporaryWorkingDirectory():
-        gen_main(
-            infer=infer,
-            exec_=exec,
-            target_file=join(here, file),
-            debug=debug,
-            dummy_progress=no_progress,
-            dry_run=dry_run,
-            api=api,
-            examples=examples,
-            fail=fail,
-            narrative=narrative,
-            fail_early=fail_early,
-            fail_unseen_error=fail_unseen_error,
-            limit_to=only,
-        )
-
-
-@app.command()
-def pack():
-    from papyri.gen import pack
-
-    pack()
-
-
-@app.command()
-def bootstrap(file: str):
-    """
-    create a basic toml configuration file (draft)
-    """
-    p = Path(file)
-    if p.exists():
-        typer.echo(f"{p} already exists", err=True)
-        raise typer.Exit(1)
-    name = input(f"package name [{p.stem}]:")
-    if not name:
-        name = p.stem
-    p.write_text(tomli_w.dumps(dict(name={"module": [name]})))
-
-
-@app.command()
-def drop(
-    yes: bool = typer.Option(
-        False,
-        "--yes",
-        "-y",
-        is_flag=True,
-        help="Skip confirmation prompt.",
-    ),
-):
-    """
-    Drop the full local database.
-    """
-    from papyri.config import ingest_dir
-
-    if not yes:
-        typer.confirm(
-            f"This will delete {ingest_dir} and all ingested data. Continue?",
-            abort=True,
-        )
-    from . import crosslink as cr
-
-    cr.drop()
-
-
-app.command()(find)
-app.command()(describe)
-app.command()(debug)
-app.command()(diff)
-app.command()(upload)
+    app.command()(_cmd)
 
 
 if __name__ == "__main__":

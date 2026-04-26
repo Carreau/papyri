@@ -2,6 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { extname, join, relative, sep } from "node:path";
 import { Decoder } from "cbor-x";
 import { listModules, loadCbor, type TypedNode } from "./ir-reader.ts";
+import { linkForDoc, linkForExample, linkForLocalRef, linkForRef } from "./links.ts";
 
 // ---------------------------------------------------------------------------
 // Per-bundle view-model. Pages under [pkg]/[ver]/** call `loadBundleNav` to
@@ -161,33 +162,22 @@ interface TocTreeNode extends TypedNode {
   current: boolean;
 }
 
-function refToHref(
+function tocRefHref(
   ref: LocalRefNode | RefInfoNode | null,
   pkg: string,
   version: string
 ): string | null {
   if (!ref) return null;
-  // LocalRef carries no module/version; they come from the bundle context.
-  const module = ref.__type === "RefInfo" ? ref.module : pkg;
-  const ver = ref.__type === "RefInfo" ? ref.version : version;
-  const { kind, path } = ref;
-  switch (kind) {
-    case "module":
-      return `/${module}/${ver}/${path.replace(/:/g, "$")}/`;
-    case "docs":
-      return `/${module}/${ver}/docs/${path.split(":").map(encodeURIComponent).join("/")}/`;
-    case "examples":
-      return `/${module}/${ver}/examples/${path.split("/").map(encodeURIComponent).join("/")}/`;
-    default:
-      return null;
-  }
+  return ref.__type === "RefInfo"
+    ? linkForRef({ pkg: ref.module, ver: ref.version, kind: ref.kind, path: ref.path })
+    : linkForLocalRef(ref, pkg, version);
 }
 
 function walkToc(node: TocTreeNode, pkg: string, version: string): TocItem {
   const title = node.title ?? node.ref?.path ?? "(untitled)";
   return {
     title,
-    href: refToHref(node.ref ?? null, pkg, version),
+    href: tocRefHref(node.ref ?? null, pkg, version),
     children: (node.children ?? []).map((n) => walkToc(n, pkg, version)),
   };
 }
@@ -268,17 +258,6 @@ export function isTutorial(docPath: string): boolean {
   return false;
 }
 
-// Doc keys in the IR use `:` as path separator (gen.py joins parts with `:`).
-// Map to URL `/` so `whatsnew:index` → `/docs/whatsnew/index/`.
-function encodeDocKey(key: string): string {
-  return key.split(":").map(encodeURIComponent).join("/");
-}
-
-// Example paths are real filesystem paths; they already use `/`.
-function encodeExPath(p: string): string {
-  return p.split("/").map(encodeURIComponent).join("/");
-}
-
 function docsToEntries(
   pkg: string,
   version: string,
@@ -287,8 +266,7 @@ function docsToEntries(
   const docs: NavEntry[] = [];
   const tutorials: NavEntry[] = [];
   for (const p of paths) {
-    const href = `/${pkg}/${version}/docs/${encodeDocKey(p)}/`;
-    const entry: NavEntry = { name: p, href };
+    const entry: NavEntry = { name: p, href: linkForDoc(pkg, version, p) };
     if (isTutorial(p)) tutorials.push(entry);
     else docs.push(entry);
   }
@@ -296,10 +274,7 @@ function docsToEntries(
 }
 
 function examplesToEntries(pkg: string, version: string, paths: string[]): NavEntry[] {
-  return paths.map((p) => ({
-    name: p,
-    href: `/${pkg}/${version}/examples/${encodeExPath(p)}/`,
-  }));
+  return paths.map((p) => ({ name: p, href: linkForExample(pkg, version, p) }));
 }
 
 export async function listDocs(bundlePath: string): Promise<string[]> {

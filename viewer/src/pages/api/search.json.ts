@@ -18,7 +18,8 @@
 // we know the shape of the query load.
 
 import type { APIRoute } from "astro";
-import { linkForRef, listIngestedBundles, listModules } from "../../lib/ir-reader.ts";
+import { listIngestedBundles, listModules } from "../../lib/ir-reader.ts";
+import { linkForRef } from "../../lib/links.ts";
 import { filterQualnames } from "../../lib/search.ts";
 
 export const prerender = false;

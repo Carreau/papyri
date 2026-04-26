@@ -4,7 +4,7 @@
 // view-model in `nav.ts`; API is the per-bundle search island + the compact
 // qualname list.
 import BundleSearch from "./BundleSearch.tsx";
-import { qualnameToSlug } from "../lib/ir-reader.ts";
+import { linkForDoc, linkForQualname } from "../lib/links.ts";
 import type { BundleNav, NavEntry, TocItem } from "../lib/nav.ts";
 
 interface Props {
@@ -83,8 +83,7 @@ function isTocActive(item: TocItem): boolean {
   // Match the active doc path against the toc ref's href. Cheap check that
   // avoids re-parsing URLs.
   if (!item.href || !activeDocPath) return false;
-  const encoded = activeDocPath.split(":").map(encodeURIComponent).join("/");
-  return item.href.endsWith(`/docs/${encoded}/`);
+  return item.href === linkForDoc(nav.pkg, nav.version, activeDocPath);
 }
 
 function isTocSectionExpanded(item: TocItem): boolean {
@@ -203,10 +202,7 @@ function isTocSectionExpanded(item: TocItem): boolean {
             class={item.isActive ? "is-active" : item.isAncestor ? "is-ancestor" : undefined}
             style={item.depth > 1 ? `--tree-depth: ${item.depth}` : undefined}
           >
-            <a
-              href={`/${nav.pkg}/${nav.version}/${qualnameToSlug(item.qualname)}/`}
-              title={item.qualname}
-            >
+            <a href={linkForQualname(nav.pkg, nav.version, item.qualname)} title={item.qualname}>
               {item.label}
             </a>
           </li>

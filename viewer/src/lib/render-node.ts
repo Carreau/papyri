@@ -9,6 +9,7 @@
 import { renderMath } from "./math.ts";
 import { highlight } from "./highlight.ts";
 import type { IRNode } from "./ir-reader.ts";
+import { linkForAsset } from "./links.ts";
 
 export type XRefResolver = (node: unknown) => { url: string; label: string } | null;
 
@@ -229,8 +230,7 @@ export async function renderNode(node: IRNode, opts: RenderOptions = {}): Promis
     case "Figure": {
       const ref = n.value as { module?: string; version?: string; path?: string } | undefined;
       if (ref && ref.module && ref.version && ref.path) {
-        const safe = String(ref.path).replace(/:/g, "$");
-        const src = escapeHtml(`/assets/${String(ref.module)}/${String(ref.version)}/${safe}`);
+        const src = escapeHtml(linkForAsset(ref.module, ref.version, String(ref.path)));
         const alt = escapeHtml(String(ref.path));
         return `<figure class="fig"><img src="${src}" alt="${alt}" loading="lazy" /></figure>`;
       }

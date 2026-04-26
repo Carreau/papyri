@@ -7,8 +7,8 @@
 // where `reference` is a RefInfo tag node with fields
 // (module, version, kind, path). We resolve via that, falling back to null
 // for the papyri sentinel "current-module" / "to-resolve" placeholders.
-import { linkForRef } from "./ir-reader.ts";
 import { resolveRef } from "./graph.ts";
+import { linkForRef } from "./links.ts";
 
 export interface XRefShape {
   value?: string;

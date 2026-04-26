@@ -1,7 +1,6 @@
 ---
 import {
   ingestDir,
-  linkForRef,
   loadModule,
   sectionChildren,
   slugToQualname,
@@ -9,6 +8,7 @@ import {
   type SectionNode,
 } from "../../../lib/ir-reader.ts";
 import { getBackrefs } from "../../../lib/graph.ts";
+import { linkForRef } from "../../../lib/links.ts";
 import { resolveXref } from "../../../lib/xref.ts";
 import IrNode from "../../../components/IrNode.astro";
 import Signature from "../../../components/Signature.astro";

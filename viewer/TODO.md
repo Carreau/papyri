@@ -12,6 +12,13 @@ any new constraint in `PLAN.md`.
 - [ ] Playwright smoke: landing card click → bundle index → qualname
       page → narrative doc → example → asset. Deferred; needs a
       Playwright devDep + fixture ingest. Track as a follow-up PR.
+- [ ] Render bundle / site logos against a translucent background so
+      light-on-light or dark-on-dark logo PNGs (e.g. the white
+      silhouette in `assets/papyri-logo 2.png`) stay legible across
+      both themes. The current path inlines the logo as a data URI on
+      whatever surface the sidebar / card sits on; a small wrapper
+      with a checkered or theme-tinted backdrop would handle the
+      worst cases without per-bundle config.
 
 ## Out of scope for this pass
 

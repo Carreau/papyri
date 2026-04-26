@@ -48,6 +48,52 @@ changes. Existing bundles need to be re-ingested for the edges to
 materialise (no schema migration; `gstore.put` rewrites the row's
 forward set when it differs).
 
+### Split `LocalRef` into IntraDocument / IntraBundle ref types
+
+Sibling consideration to the LocalRef walk above. Right now `LocalRef`
+covers two semantically distinct cases that the visitor wants to
+treat differently:
+
+| Case             | Source                                | Visitor action                                  |
+| ---------------- | ------------------------------------- | ----------------------------------------------- |
+| Intra-document   | `papyri/tree.py:962` (`add_target`)   | Render as `<a href="#anchor">`; *no* graph edge |
+| Intra-bundle     | `papyri/tree.py:975` (`_ref_to_crossref`) | Emit graph edge with bundle's `(pkg, ver)` (per the LocalRef-walk task above) |
+| Inter-bundle     | `RefInfo`                             | Emit graph edge as-is                           |
+
+Today both intra cases are tagged `LocalRef(kind, path)` and
+distinguished only by `kind` ("docs" vs "module"), but a same-bundle
+*doc-to-doc* ref also has `kind="docs"` and is structurally
+indistinguishable from a same-page section anchor. Adding the
+LocalRef-walk above without splitting the type means the visitor
+either over-emits edges (anchors become graph edges to nowhere) or
+under-emits (real intra-bundle docs refs get dropped).
+
+Sketch of the three-type taxonomy:
+
+- `AnchorRef(target: str)` — same-page anchor; never an edge. New CBOR
+  tag (probably 4023 — currently free between 4022 LocalRef and 4024
+  Figure).
+- `LocalRef(kind, path)` — intra-bundle reference. Visitor emits a
+  Key with the caller's `(pkg, ver)`. (Same shape as today; cleaned
+  semantics.)
+- `RefInfo(module, version, kind, path)` — inter-bundle reference.
+  Unchanged.
+
+Practical consequences if this lands:
+
+1. New CBOR tag → existing bundles need re-gen (not just re-ingest).
+   Coordinate with the LocalRef-walk task: do this *first* so the
+   walk lands against the cleaned types.
+2. `tree.py:962` switches to `AnchorRef(node.target)`; `tree.py:975`
+   stays on `LocalRef`.
+3. Viewer code that resolves LocalRef → `<a href="...">` splits into
+   two paths: AnchorRef → `<a href="#target">`; LocalRef → page URL.
+4. `IngestVisitor.replace_CrossRef` (`papyri/tree.py:987`) and the TS
+   equivalent split the LocalRef branch in two.
+
+Tracked here so the LocalRef-walk task doesn't ossify the current
+overload.
+
 ## Known docstring bugs (recorded pre-Phase 1 — verify before filing)
 
 - `IPython.lib.display.audio`: check parsing of bullet list in parameters.

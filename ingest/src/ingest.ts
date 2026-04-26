@@ -261,8 +261,10 @@ export class Ingester {
         continue;
       }
 
-      // Verify the qualname's root module matches the bundle root.
-      const modRoot = qa.split(".")[0];
+      // Verify the qualname's root module matches the bundle root. Qualnames
+      // are `module.path:attr` for nested modules and `module:attr` for
+      // top-level attributes, so split on either delimiter.
+      const modRoot = qa.split(/[.:]/, 1)[0];
       if (modRoot !== root) {
         console.warn(`  module: skipping ${qa} (root ${modRoot} != bundle root ${root})`);
         continue;

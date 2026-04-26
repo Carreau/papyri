@@ -207,57 +207,47 @@ time.
 
 ### SQLite schema (`papyri.db`)
 
-Defined in `papyri/graphstore.py` (`GraphStore.__init__`). Three tables
-plus indexes:
+Defined in `papyri/graphstore.py` (`_SCHEMA`). Two tables plus indexes:
 
 ```sql
-CREATE TABLE documents(
-  id         INTEGER PRIMARY KEY,
-  package    TEXT NOT NULL,
-  version    TEXT NOT NULL,
-  category   TEXT NOT NULL,
-  identifier TEXT NOT NULL,
-  UNIQUE(package, version, category, identifier)
-);
-
-CREATE TABLE destinations(
-  id         INTEGER PRIMARY KEY,
-  package    TEXT NOT NULL,
-  version    TEXT NOT NULL,
-  category   TEXT NOT NULL,
-  identifier TEXT NOT NULL,
-  UNIQUE(package, version, category, identifier)
+CREATE TABLE nodes(
+    id         INTEGER PRIMARY KEY,
+    package    TEXT NOT NULL,
+    version    TEXT NOT NULL,
+    category   TEXT NOT NULL,
+    identifier TEXT NOT NULL,
+    has_blob   INTEGER NOT NULL DEFAULT 0,
+    digest     BLOB,
+    UNIQUE(package, version, category, identifier)
 );
 
 CREATE TABLE links(
-  id       INTEGER PRIMARY KEY,
-  source   INTEGER NOT NULL,            -- documents.id
-  dest     INTEGER NOT NULL,            -- destinations.id
-  metadata TEXT,
-  FOREIGN KEY (source) REFERENCES documents(id)    ON DELETE CASCADE,
-  FOREIGN KEY (dest)   REFERENCES destinations(id) ON DELETE CASCADE
+    source INTEGER NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+    dest   INTEGER NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+    PRIMARY KEY (source, dest)
 );
 
-CREATE INDEX module ON documents(package);
-CREATE INDEX px     ON documents(identifier);
-CREATE INDEX qa     ON destinations(identifier);
-CREATE INDEX ax     ON destinations(package, version, category, identifier);
-CREATE INDEX sx     ON links(source);
-CREATE INDEX dx     ON links(dest);
+CREATE INDEX idx_links_dest ON links(dest);
+CREATE INDEX idx_nodes_pkg_cat_ident
+    ON nodes(package, category, identifier);
 ```
 
 Semantics:
 
-- `documents` is the set of blobs papyri has actually stored on disk
-  under the ingest tree. A `(package, version, category, identifier)`
-  row corresponds 1:1 to a file at
-  `<package>/<version>/<category>/<identifier>`.
-- `destinations` is the set of ref targets — every place a document
-  links to, whether or not papyri has that blob on disk. Dangling refs
-  (links to things not yet ingested) show up here but not in
-  `documents`.
-- `links(source, dest)` is the directed edge set. The `metadata` column
-  currently carries debug strings only.
+- `nodes` carries every `(package, version, category, identifier)` key
+  the graph has ever seen — both blobs papyri has stored on disk and
+  ref targets that have not yet been ingested. The `has_blob` flag
+  distinguishes the two: rows with `has_blob = 1` correspond 1:1 to a
+  file at `<package>/<version>/<category>/<identifier>`; rows with
+  `has_blob = 0` are placeholder destinations (dangling refs). Cross-
+  package refs ingested before their target package may also use
+  wildcard `version = "?"` or `"*"`.
+- `digest` is a 16-byte BLAKE2b fingerprint of the canonical
+  (re-encoded) blob, set by `GraphStore.put` for blob-backed rows. It
+  drives `diff_versions` (and surfaces via `papyri diff`); placeholder
+  rows have `digest = NULL`.
+- `links(source, dest)` is the directed edge set, both columns FK into
+  `nodes(id)`. There is no `metadata` column today.
 
 `category` corresponds to the subdirectory name: `"module"`, `"docs"`,
 `"examples"`, `"assets"`, or `"meta"`.
@@ -367,7 +357,9 @@ renderer:
   forms, or restrict the search with `--kind` / `--package` /
   `--version`.
 
-Both commands are defined in `papyri/__init__.py`.
+Implementations live in `papyri/cli/find.py` and
+`papyri/cli/describe.py`; both are registered onto the Typer app in
+`papyri/__init__.py`.
 
 ## Stability
 

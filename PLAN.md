@@ -101,7 +101,8 @@ converging on a single encoding is part of Phase 2.
       because they're small configuration metadata, not IR.
 - [x] Add a `papyri describe <qualname>` (or reuse `find`) as a
       maintainer-side debug command that prints an IR entry without a
-      renderer. Implemented in `papyri/__init__.py`; accepts shorthand
+      renderer. Implemented in `papyri/cli/describe.py` (registered
+      onto the Typer app in `papyri/__init__.py`); accepts shorthand
       (`numpy.linspace`), kind-prefixed, and full `pkg/ver/kind/id`
       forms, plus `--kind` / `--package` / `--version` filters.
 - [x] Replace `tree_sitter_languages` with direct `tree-sitter-rst`
@@ -134,19 +135,17 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md). Summary:
 
 - Lives in `viewer/` as an Astro + React + TypeScript app (see
   `viewer/PLAN.md` for the tech rationale).
-- Reads the IR directly from `~/.papyri/data/…` and the SQLite graph; no
-  new intermediate format.
-- Milestones: all five landed.
-  - [x] M0 scaffolding (bundle list)
-  - [x] M1 single-page render (CBOR decode, signature + sections)
-  - [x] M2 crosslinks + backrefs (SQLite via `better-sqlite3`)
-  - [x] M3 math (KaTeX SSR) + syntax highlighting (Shiki)
-  - [x] M4 verified against a real-world bundle (numpy 2.3.5, 5396 pages,
-        zero unhandled IR nodes)
-  - [x] M5 polish: 404 page, dark mode, per-bundle client-side search
-- CI: `.github/workflows/viewer.yml` runs `pnpm check`, `pnpm test`
-  (vitest, 35 cases), and `pnpm build` on any push/PR touching
-  `viewer/**`.
+- Reads the IR directly from the ingest store (`~/.papyri/ingest/`) and
+  the SQLite graph; no new intermediate format.
+- Milestones M0–M8 have all landed; see
+  [`viewer/PLAN.md`](viewer/PLAN.md) "Milestones" for the
+  authoritative status (M6 layout/cards/assets, M7 SSR adapter, M8
+  bundle upload over HTTP). This file should not duplicate that
+  list — update it there.
+- CI: `.github/workflows/viewer.yml` runs `pnpm --filter papyri-viewer
+  run check` and `pnpm build`; `.github/workflows/lint.yml` runs the
+  ESLint + Prettier checks; `.github/workflows/ingest.yml` covers the
+  sibling `papyri-ingest` workspace package.
 - Originally planned as a separate sibling repo; now in-tree while the IR
   is still in flux. Splitting out remains an option once the IR schema
   stabilizes in Phase 2.

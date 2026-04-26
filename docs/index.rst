@@ -13,7 +13,7 @@ Welcome to Papyri narrative docs.
 This show that papyri can support narrative docs as well as API docs, 
 though for the time being API docs are better supported. 
 
-If you find issues feel free to `Open and issue on GitHub <https://github.com/jupyter/papyri/>`__.
+If you find issues feel free to `open an issue on GitHub <https://github.com/carreau/papyri/>`__.
 
 If you are working only on API docs, you can use ``papyri gen <conffile.toml> --no-api``, to skip the API generation
 part. Though be aware that some of the cross linking features will not work. 

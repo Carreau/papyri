@@ -118,10 +118,11 @@ local `papyri ingest` step is needed — the endpoint does that work.
 
 ### Step 2 — upload
 
-Stream the gen bundle directly to the running viewer:
+Stream the gen bundle directly to the running viewer (replace
+`<version>` with the actual `papyri.__version__`, e.g. `0.0.9`):
 
 ```sh
-tar czf - -C ~/.papyri/data/papyri_0.0.8 . \
+tar czf - -C ~/.papyri/data/papyri_<version> . \
   | curl -X PUT http://localhost:4321/api/bundle \
          -H "Content-Type: application/gzip" \
          --data-binary @-
@@ -130,10 +131,10 @@ tar czf - -C ~/.papyri/data/papyri_0.0.8 . \
 Or save the archive first if you need to inspect it or retry:
 
 ```sh
-tar czf papyri-0.0.8.tar.gz -C ~/.papyri/data/papyri_0.0.8 .
+tar czf papyri-<version>.tar.gz -C ~/.papyri/data/papyri_<version> .
 curl -X PUT http://localhost:4321/api/bundle \
      -H "Content-Type: application/gzip" \
-     --data-binary @papyri-0.0.8.tar.gz
+     --data-binary @papyri-<version>.tar.gz
 ```
 
 ### Response

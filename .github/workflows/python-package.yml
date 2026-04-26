@@ -256,6 +256,9 @@ for b in bundles:
     print(f\"  ingested: {b['pkg']} {b['version']}\")
 print(f'Total bundles ingested: {len(bundles)}')
 " "$response"
+    - name: Post-upload ingest tests (TypeScript)
+      run: |
+        pnpm --filter papyri-ingest run test
 
     - name: Convert .coverage sql to xml for upload
       run: |

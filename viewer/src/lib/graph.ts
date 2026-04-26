@@ -26,6 +26,7 @@ export interface RefTuple {
   path: string;
 }
 
+// undefined = not yet opened; null = file was absent at open time.
 let _db: DatabaseType.Database | null | undefined;
 
 /**
@@ -47,6 +48,16 @@ export function openGraphDb(): DatabaseType.Database | null {
     _db = null;
     return null;
   }
+}
+
+/**
+ * Close and evict the cached read-only DB handle. The next call to
+ * `openGraphDb()` will reopen the file, picking up any writes made since
+ * (e.g. after the bundle ingest endpoint updates the graph).
+ */
+export function resetGraphDbCache(): void {
+  if (_db) _db.close();
+  _db = undefined;
 }
 
 /**

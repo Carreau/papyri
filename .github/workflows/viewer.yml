@@ -5,11 +5,19 @@ on:
     branches: [main]
     paths:
       - 'viewer/**'
+      - 'ingest/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
       - '.github/workflows/viewer.yml'
   pull_request:
     branches: [main]
     paths:
       - 'viewer/**'
+      - 'ingest/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
       - '.github/workflows/viewer.yml'
   workflow_dispatch:
 
@@ -18,9 +26,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    defaults:
-      run:
-        working-directory: viewer
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
@@ -32,12 +37,12 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: viewer/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
       - name: Install deps
         run: pnpm install --frozen-lockfile
       - name: Type check
-        run: pnpm check
+        run: pnpm --filter papyri-viewer run check
       - name: Unit tests
-        run: pnpm test
+        run: pnpm --filter papyri-viewer run test
       - name: Build (no bundles)
-        run: pnpm build
+        run: pnpm --filter papyri-viewer run build

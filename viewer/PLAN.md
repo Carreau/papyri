@@ -148,17 +148,24 @@ Data flow per request/page:
    layout with a sidebar, card-based landing, narrative doc / example
    routes, Fig rendering, and a static asset endpoint. Tracked phase
    by phase in `viewer/TODO.md`.
-8. [ ] **M7 — SSR adapter + first dynamic routes.** Attach
+8. [x] **M7 — SSR adapter + first dynamic routes.** Attach
    `@astrojs/node` and keep `output: "static"` so every existing page
    stays prerendered. New `prerender = false` endpoints
    (`/api/bundles.json`, `/api/search.json`) exercise the server
-   bundle. This is scaffolding — any static-host deploy still works as
-   pure SSG because the SSR routes are never called. Next slices:
-   promote per-bundle client-side search to a cross-bundle SSR index,
-   add a `/api/resolve` endpoint for graph queries, then pick a
-   production host and swap to its Astro adapter (`@astrojs/cloudflare`,
-   `@astrojs/netlify`, `@astrojs/vercel`, or keep `@astrojs/node` for a
-   self-hosted Node server) once the set of dynamic routes is stable.
+   bundle.
+9. [x] **M8 — bundle upload over HTTP.** `PUT /api/bundle` accepts a
+   raw `papyri gen` bundle (tar.gz of `~/.papyri/data/<pkg>_<ver>/`),
+   extracts it into a staging dir under `PAPYRI_INGEST_DIR`, and runs
+   the full ingest pipeline directly against it. The endpoint is the
+   network-callable replacement for the local `papyri ingest` /
+   `papyri-ingest` step.
+   `viewer/` and `ingest/` are linked as a pnpm workspace (root
+   `pnpm-workspace.yaml`). The endpoint imports `Ingester` from the
+   sibling `papyri-ingest` package so blob writing, digest computation
+   (16-byte BLAKE2b-128), graph updates, and forward-ref collection all
+   live in one place — no viewer-side duplicates. After ingest the
+   read-only graph DB cache is invalidated so subsequent requests see
+   the new nodes/links. See `README.md` for the upload workflow.
 
 ### M3 notes
 

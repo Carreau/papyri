@@ -36,6 +36,10 @@ jobs:
               - '.github/workflows/lint.yml'
             typescript:
               - 'viewer/**'
+              - 'ingest/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
               - '.github/workflows/lint.yml'
 
   build:
@@ -88,18 +92,14 @@ jobs:
       with:
         node-version: "22"
         cache: "pnpm"
-        cache-dependency-path: "viewer/pnpm-lock.yaml"
+        cache-dependency-path: "pnpm-lock.yaml"
     - name: Install dependencies
-      working-directory: viewer
       run: pnpm install --frozen-lockfile
-    - name: Lint with ESLint
-      working-directory: viewer
-      run: pnpm run lint
-    - name: Format check with Prettier
+    - name: Lint with ESLint (viewer)
+      run: pnpm --filter papyri-viewer run lint
+    - name: Format check with Prettier (viewer)
       if: always()
-      working-directory: viewer
-      run: pnpm run format:check
+      run: pnpm --filter papyri-viewer run format:check
     - name: Check TypeScript (Astro)
       if: always()
-      working-directory: viewer
-      run: pnpm run check
+      run: pnpm --filter papyri-viewer run check

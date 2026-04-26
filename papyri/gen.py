@@ -10,8 +10,6 @@ likely be separated into a separate module at some point.
 
 from __future__ import annotations
 
-import dataclasses
-import datetime
 import doctest
 import inspect
 import io
@@ -22,11 +20,8 @@ import shutil
 import site
 import sys
 import tempfile
-import tomllib
 import warnings
 from collections import defaultdict
-from collections.abc import MutableMapping, Sequence
-from dataclasses import dataclass
 from functools import lru_cache
 from hashlib import sha256
 from itertools import count
@@ -34,38 +29,34 @@ from pathlib import Path
 from types import FunctionType, ModuleType
 from typing import (
     Any,
-    ClassVar,
 )
 
-import jedi
 import tomli_w
 from IPython.core.oinspect import find_file
 from IPython.utils.path import compress_user
 from matplotlib import _pylab_helpers
 from packaging.version import parse
-from pygments import lex
-from pygments.formatters import HtmlFormatter
-from pygments.lexers import PythonLexer
-
-_PYGMENTS_LEXER = PythonLexer()
-_PYGMENTS_FMT = HtmlFormatter()
 from rich.logging import RichHandler
 from rich.progress import BarColumn, TextColumn, track
 
 log = logging.getLogger("papyri")
 
 from ._progress import TimeElapsedColumn, iter_with_progress, progress_class
+from .config_loader import Config, load_configuration
+from .doc import (
+    GeneratedDoc,
+    _first_paragraph_text,
+    _normalize_see_also,
+    _numpy_data_to_section,
+)
+from .error_collector import ErrorCollector
 from .errors import (
     IncorrectInternalDocsLen,
     NumpydocParseError,
     TextSignatureParsingFailed,
-    UnseenError,
 )
 from .executors import BlockExecutor
-from .node_base import Node, register
 from .nodes import (
-    Comment,
-    CrossRef,
     DocParam,
     Figure,
     GenCode,
@@ -74,11 +65,9 @@ from .nodes import (
     NumpydocExample,
     NumpydocSeeAlso,
     NumpydocSignature,
-    Paragraph,
     Parameters,
     RefInfo,
     Section,
-    SeeAlsoItem,
     Text,
     TocTree,
     encoder,
@@ -86,8 +75,8 @@ from .nodes import (
 )
 from .numpydoc_compat import NumpyDocString
 from .signature import Signature as ObjectSignature
-from .signature import SignatureNode
 from .toc import make_tree
+from .tokens import _add_classes, parse_script
 from .tree import GenVisitor
 from .utils import (
     Cannonical,
@@ -95,57 +84,7 @@ from .utils import (
     dedent_but_first,
     full_qual,
     obj_from_qualname,
-    pos_to_nl,
 )
-
-
-class ErrorCollector:
-    _expected_unseen: dict[str, Any]
-    errored: bool
-    _unexpected_errors: dict[str, Any]
-    _expected_errors: dict[str, Any]
-
-    def __init__(self, config: Config, log):
-        self.config: Config = config
-        self.log = log
-
-        self._expected_unseen = {}
-        for err, names in self.config.expected_errors.items():
-            for name in names:
-                self._expected_unseen.setdefault(name, []).append(err)
-        self._unexpected_errors = {}
-        self._expected_errors = {}
-
-    def __call__(self, qa):
-        self._qa = qa
-        return self
-
-    def __enter__(self):
-        self.errored = False
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if exc_type in (BaseException, KeyboardInterrupt):
-            return
-        if exc_type:
-            self.errored = True
-            ename = exc_type.__name__
-            if ename in self._expected_unseen.get(self._qa, []):
-                self._expected_unseen[self._qa].remove(ename)
-                if not self._expected_unseen[self._qa]:
-                    del self._expected_unseen[self._qa]
-                self._expected_errors.setdefault(ename, []).append(self._qa)
-            else:
-                self._unexpected_errors.setdefault(ename, []).append(self._qa)
-                self.log.exception(f"Unexpected error {self._qa}")
-            if not self.config.early_error:
-                return True
-        expecting = self._expected_unseen.get(self._qa, [])
-        if expecting and self.config.fail_unseen_error:
-            raise UnseenError(f"Expecting one of {expecting}")
-
-        # return True
-
 
 try:
     from . import ts
@@ -157,131 +96,6 @@ except (ImportError, OSError):
             $ pip install -e .
             """)
 SITE_PACKAGE = site.getsitepackages()
-
-
-def paragraph(lines: list[str], qa) -> Any:
-    """
-    Leftover rst parsing,
-
-    Remove at some point.
-    """
-    [section] = ts.parse("\n".join(lines).encode(), qa)
-    assert len(section.children) == 1
-    p2 = section.children[0]
-    return p2
-
-
-_JEDI_CACHE = Path("~/.cache/papyri/jedi/").expanduser()
-
-
-def _hashf(text):
-    ##  for cache expiring every day.
-    ## for every hours, change to 0:13.
-
-    return sha256(text.encode()).hexdigest() + datetime.datetime.now().isoformat()[0:10]
-
-
-def _jedi_get_cache(text):
-    _JEDI_CACHE.mkdir(exist_ok=True, parents=True)
-
-    _cache = _JEDI_CACHE / _hashf(text)
-    if _cache.exists():
-        return tuple(tuple(x) for x in json.loads(_cache.read_text()))
-
-    return None
-
-
-def _jedi_set_cache(text, value):
-    _JEDI_CACHE.mkdir(exist_ok=True, parents=True)
-
-    _cache = _JEDI_CACHE / _hashf(text)
-    _cache.write_text(json.dumps(value))
-
-
-def parse_script(
-    script: str, ns: dict, prev, config, *, where=None
-) -> list[tuple[str, str | None]] | None:
-    """
-    Parse a script into tokens and use Jedi to infer the fully qualified names
-    of each token.
-
-    Parameters
-    ----------
-    script : str
-        the script to tokenize and infer types on
-    ns : dict
-        Extra namespace to use with jedi's Interpreter. This will be used for
-        implicit imports, for example that `np` is interpreted as numpy.
-    prev : str
-        previous lines that lead to this.
-    where : <Insert Type here>
-        <Multiline Description Here>
-    config : <Insert Type here>
-        <Multiline Description Here>
-
-    Returns
-    -------
-    List of tuples with:
-    text:
-        text of the token
-    reference : str
-        fully qualified name of the type of current token
-
-    """
-    assert isinstance(ns, dict)
-    jeds = []
-    warnings.simplefilter("ignore", UserWarning)
-
-    l_delta = prev.count("\n") + 1
-    contextscript = prev + "\n" + script
-    if ns:
-        jeds.append(jedi.Interpreter(contextscript, namespaces=[ns]))
-    full_text = prev + "\n" + script
-    k = _jedi_get_cache(full_text)
-    if k is not None:
-        return k  # type: ignore[no-any-return]
-    jeds.append(jedi.Script(full_text))
-    P = PythonLexer()
-
-    acc: list[tuple[str, str | None]] = []
-
-    for index, _type, text in P.get_tokens_unprocessed(script):
-        line_n, col_n = pos_to_nl(script, index)
-        line_n += l_delta
-        ref = None
-        if not config.infer or (text in (" .=()[],")) or not text.isidentifier():
-            acc.append((text, ""))
-            continue
-
-        for jed in jeds:
-            try:
-                inf = jed.infer(line_n + 1, col_n)
-                if inf:
-                    # TODO: we might want the qualname to
-                    # be module_name:name for disambiguation.
-                    ref = inf[0].full_name
-            except (AttributeError, TypeError) as e:
-                raise type(e)(
-                    f"{contextscript}, {line_n=}, {col_n=}, {prev=}, {jed=}"
-                ) from e
-            except jedi.inference.utils.UncaughtAttributeError:
-                if config.jedi_failure_mode in (None, "error"):
-                    raise
-                elif config.jedi_failure_mode == "log":
-                    log.warning(
-                        "failed inference example will be empty %r %r %r",
-                        where,
-                        line_n,
-                        col_n,
-                    )
-                    return None
-            break
-        acc.append((text, ref))
-    _jedi_set_cache(full_text, acc)
-    warnings.simplefilter("default", UserWarning)
-    for a in acc:
-        assert len(a) == 2
-    return acc
 
 
 from enum import Enum
@@ -334,22 +148,6 @@ def _get_implied_imports(obj):
     return {}
 
 
-def get_classes(code):
-    """
-    Extract Pygments token classes names for given code block
-    """
-    tokens = list(lex(code, _PYGMENTS_LEXER))
-    classes = [_PYGMENTS_FMT.ttype2class.get(x, "") for x, _ in tokens]
-    return classes
-
-
-def _add_classes(entries):
-    assert set(len(x) for x in entries) == {2}
-    text = "".join([x for x, y in entries])
-    classes = get_classes(text)
-    return [(*ii, cc) for ii, cc in zip(entries, classes, strict=True)]
-
-
 def processed_example_data(example_section_data) -> Section:
     """this should be no-op on already ingested"""
     new_example_section_data = Section([], None)
@@ -395,63 +193,6 @@ def normalise_ref(ref):
     except Exception:
         pass
     return ref
-
-
-@dataclass
-class Config:
-    # we might want to suppress progress/ rich as it infers with ipdb.
-    dummy_progress: bool = False
-    # Do not actually touch disk
-    dry_run: bool = False
-    exec_failure: str | None = None  # should move to enum
-    jedi_failure_mode: str | None = None  # move to enum ?
-    logo: str | None = None  # should change to path likely
-    execute_exclude_patterns: Sequence[str] = ()
-    infer: bool = True
-    exclude: Sequence[str] = ()  # list of dotted object name to exclude from collection
-    examples_folder: str | None = None  # < to path ?
-    submodules: Sequence[str] = ()
-    source: str | None = None
-    homepage: str | None = None
-    docs: str | None = None
-    docs_path: str | None = None
-    wait_for_plt_show: bool | None = True
-    examples_exclude: Sequence[str] = ()
-    narrative_exclude: Sequence[str] = ()
-    exclude_jedi: Sequence[str] = ()
-    implied_imports: dict[str, str] = dataclasses.field(default_factory=dict)
-    # mapping from expected name of error instances, to which fully-qualified names are raising those errors.
-    # the build will fail if the given item does not raise this error.
-    expected_errors: dict[str, list[str]] = dataclasses.field(default_factory=dict)
-    early_error: bool = True
-    fail_unseen_error: bool = False
-    execute_doctests: bool = True
-    directives: dict[str, str] = dataclasses.field(default_factory=lambda: {})
-
-    def replace(self, **kwargs):
-        return dataclasses.replace(self, **kwargs)
-
-
-def load_configuration(
-    path: str,
-) -> tuple[str, MutableMapping[str, Any], dict[str, Any]]:
-    """
-    Given a path, load a configuration from a File.
-
-    Each configuration file should have two sections: ['global', 'meta'] where
-    the name of the module should be defined under the 'global' section.
-    Additionally, a section for expected errors can be defined.
-    """
-    conffile = Path(path).expanduser()
-    if conffile.exists():
-        conf: MutableMapping[str, Any] = tomllib.loads(conffile.read_text())
-        ks = set(conf.keys()) - {"meta"}
-        assert len(ks) >= 1, conf.keys()
-        info = conf["global"]
-        root = info.pop("module")
-        return root, info, conf.get("meta", {})
-    else:
-        sys.exit(f"{conffile!r} does not exist.")
 
 
 def gen_main(
@@ -726,181 +467,6 @@ class DFSCollector:
         return aliases, not_found
 
 
-class _OrderedDictProxy:
-    """
-    a dict like class proxy for GeneratedDoc to keep the order of sections in GeneratedDoc.
-
-    We Can't use an ordered Dict because of serialisation/deserialisation that
-    would/might loose order
-    """
-
-    orderring: list[str]
-    mapping: dict[str, Any]
-
-    def __init__(self, ordering: list[str], mapping: dict[str, Any]):
-        self.ordering = ordering
-        self.mapping = mapping
-        assert isinstance(ordering, list), ordering
-        assert isinstance(mapping, dict), mapping
-        assert set(self.mapping.keys()) == set(self.ordering)
-
-    def __getitem__(self, key: str):
-        return self.mapping[key]
-
-    def __contains__(self, key: str):
-        return key in self.mapping
-
-    def __setitem__(self, key: str, value: Any):
-        if key not in self.ordering:
-            self.ordering.append(key)
-        self.mapping[key] = value
-
-    def __delitem__(self, key: str):
-        self.ordering.remove(key)
-        del self.mapping[key]
-
-    def __iter__(self):
-        return iter(self.ordering)
-
-    def keys(self) -> tuple[str, ...]:
-        return tuple(self.ordering)
-
-    def get(self, key: str, default=None, /):
-        return self.mapping.get(key, default)
-
-    def items(self):
-        return [(k, self.mapping[k]) for k in self.ordering]
-
-    def values(self):
-        return [self.mapping[k] for k in self.ordering]
-
-
-@register(4011)
-class GeneratedDoc(Node):
-    """
-    An object containing information about the documentation of an arbitrary
-    object.
-
-    Instead of GeneratedDoc being a NumpyDocString, I'm thinking of them having a
-    NumpyDocString. This helps with arbitrary documents (module, examples files)
-    that cannot be parsed by Numpydoc, as well as links to external references,
-    like images generated.
-
-    """
-
-    __slots__ = (
-        "_content",
-        "_dp",
-        "_ordered_sections",
-        "aliases",
-        "arbitrary",
-        "example_section_data",
-        "item_file",
-        "item_line",
-        "item_type",
-        "local_refs",
-        "references",
-        "see_also",
-        "signature",
-    )
-
-    @classmethod
-    def _deserialise(cls, **kwargs):
-        try:
-            instance = cls(**kwargs)
-        except Exception as e:
-            raise type(e)(f"Error deserialising {cls}, {kwargs})") from e
-        for k, v in kwargs.items():
-            setattr(instance, k, v)
-        return instance
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        assert not isinstance(self._content, str)
-        self._dp = _OrderedDictProxy(self._ordered_sections, self._content)  # type: ignore[arg-type]
-
-    @property
-    def ordered_sections(self):
-        return tuple(self._ordered_sections)  # type: ignore[arg-type]
-
-    @property
-    def content(self):
-        return self._dp
-
-    sections: ClassVar[list[str]] = [
-        "Signature",
-        "Summary",
-        "Extended Summary",
-        "Parameters",
-        "Returns",
-        "Yields",
-        "Receives",
-        "Raises",
-        "Warns",
-        "Other Parameters",
-        "Attributes",
-        "Methods",
-        "See Also",
-        "Notes",
-        "Warnings",
-        "References",
-        "Examples",
-    ]  # List of sections in order
-
-    _content: dict[str, Section]
-    example_section_data: Section
-    _ordered_sections: list[str] | None
-    item_file: str | None
-    item_line: int | None
-    item_type: str | None
-    aliases: list[str]
-    see_also: list[SeeAlsoItem]  # see also data
-    signature: SignatureNode | None
-    references: list[str] | None
-    arbitrary: list[Section]
-    local_refs: list[str]
-
-    def __repr__(self):
-        return "<GeneratedDoc ...>"
-
-    def slots(self):
-        return [
-            "_content",
-            "example_section_data",
-            "_ordered_sections",
-            "item_file",
-            "item_line",
-            "item_type",
-            "signature",
-            "aliases",
-            "see_also",
-            "references",
-            "arbitrary",
-            "local_refs",
-        ]
-
-    @classmethod
-    def new(cls):
-        return cls({}, None, [], None, None, None, [], [], None, None, [], [])
-
-
-def _numpy_data_to_section(data: list[tuple[str, str, list[str]]], title: str, qa):
-    assert isinstance(data, list), repr(data)
-    acc = []
-    for param, type_, desc in data:
-        assert isinstance(desc, list)
-        items = []
-        if desc:
-            items = parse_rst_section("\n".join(desc), qa)
-            for l in items:
-                assert not isinstance(l, Section)
-        acc.append(DocParam(param, type_, desc=items).validate())
-    if acc:
-        return Section([Parameters(acc)], title).validate()
-    else:
-        return Section([], title)
-
-
 _numpydoc_sections_with_param = {
     "Parameters",
     "Returns",
@@ -1011,62 +577,6 @@ class APIObjectInfo:
                 p, (Section, NumpydocExample, NumpydocSeeAlso, NumpydocSignature)
             )
             p.validate()
-
-
-def _normalize_see_also(see_also: Section, qa: str):
-    """
-    numpydoc is complex, the See Also fields can be quite complicated,
-    so here we sort of try to normalise them.
-    from what I can remember,
-    See also can have
-    name1 : type1
-    name2 : type2
-        description for both name1 and name 2.
-
-    Though if description is empty, them the type is actually the description.
-    """
-    if not see_also:
-        return []
-    assert see_also is not None
-    new_see_also = []
-    name_and_types: list[tuple[str, str]]
-    name: str
-    type_or_description: str
-
-    for name_and_types, raw_description in see_also:
-        try:
-            for name, type_or_description in name_and_types:
-                if type_or_description and not raw_description:
-                    assert isinstance(type_or_description, str)
-                    type_ = None
-                    # we have all in a single line,
-                    # and there is no description, so the type field is
-                    # actually the description.
-                    desc = [paragraph([type_or_description], qa)]
-                elif raw_description:
-                    assert isinstance(raw_description, list)
-                    type_ = type_or_description
-                    parsed = paragraph(raw_description, qa)
-                    # RST `..` with no content parses as a Comment; drop it
-                    desc = [] if isinstance(parsed, Comment) else [parsed]
-                else:
-                    type_ = type_or_description
-                    desc = []
-                refinfo = RefInfo.from_untrusted(
-                    "current-module", "current-version", "to-resolve", name
-                )
-                # `exists` is derived from `refinfo.kind`; the "to-resolve" kind
-                # flags this as a placeholder for the ingest relink pass.
-                link = CrossRef(name, refinfo, "module")
-                sai = SeeAlsoItem(link, desc, type_)
-                new_see_also.append(sai)
-                del desc
-                del type_
-        except Exception as e:
-            raise ValueError(
-                f"Error {qa}: {see_also=} | {name_and_types=}  | {raw_description=}"
-            ) from e
-    return new_see_also
 
 
 class PapyriDocTestRunner(doctest.DocTestRunner):
@@ -2403,29 +1913,6 @@ class Gen:
                 blurb = _first_paragraph_text(summary_section)
                 if blurb:
                     self._meta["summary"] = blurb
-
-
-def _flatten_text(node: Any, out: list[str]) -> None:
-    if isinstance(node, Text):
-        out.append(node.value)
-        return
-    children = getattr(node, "children", None)
-    if children is None:
-        return
-    for child in children:
-        _flatten_text(child, out)
-
-
-def _first_paragraph_text(section: Section) -> str | None:
-    """Return the plain-text content of the first Paragraph in ``section``."""
-    for child in section.children:
-        if isinstance(child, Paragraph):
-            parts: list[str] = []
-            _flatten_text(child, parts)
-            text = "".join(parts).strip()
-            if text:
-                return text
-    return None
 
 
 def is_private(path):

@@ -2,8 +2,9 @@ import logging
 
 import pytest
 
+from papyri.config_loader import Config
+from papyri.error_collector import ErrorCollector
 from papyri.errors import UnseenError
-from papyri.gen import Config, ErrorCollector
 
 log = logging.getLogger(__name__)
 

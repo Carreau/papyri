@@ -13,7 +13,8 @@ from rich.logging import RichHandler
 
 from ._progress import iter_with_progress
 from .config import ingest_dir
-from .gen import GeneratedDoc, _OrderedDictProxy, normalise_ref
+from .doc import GeneratedDoc, _OrderedDictProxy
+from .gen import normalise_ref
 from .graphstore import GraphStore, Key
 from .node_base import Node, register
 from .nodes import (

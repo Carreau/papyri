@@ -4,15 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from papyri.gen import (
-    APIObjectInfo,
-    BlockExecutor,
-    Config,
-    Gen,
-    GeneratedDoc,
-    NumpyDocString,
-    _normalize_see_also,
-)
+from papyri.config_loader import Config
+from papyri.doc import GeneratedDoc, _normalize_see_also
+from papyri.executors import BlockExecutor
+from papyri.gen import APIObjectInfo, Gen
+from papyri.numpydoc_compat import NumpyDocString
 
 
 @lru_cache
@@ -63,7 +59,8 @@ def test_infer():
     pytest.importorskip("scipy")
     from scipy.linalg import LinAlgError
 
-    from papyri.gen import Config, parse_script
+    from papyri.config_loader import Config
+    from papyri.tokens import parse_script
 
     c = Config(infer=True)
     res = parse_script(
@@ -141,7 +138,8 @@ def test_numpy_2(module, submodules, objects):
 
 
 def test_self():
-    from papyri.gen import Config, Gen
+    from papyri.config_loader import Config
+    from papyri.gen import Gen
 
     c = Config(dry_run=True, dummy_progress=True)
     g = Gen(False, config=c)

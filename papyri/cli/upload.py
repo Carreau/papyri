@@ -70,11 +70,7 @@ def upload(
 
         typer.echo(f"uploading {pkg} {version} from {path} …")
 
-        buf = io.BytesIO()
-        with tarfile.open(fileobj=buf, mode="w:gz") as tar:
-            for item in sorted(path.rglob("*")):
-                tar.add(item, arcname=str(item.relative_to(path)))
-        data = buf.getvalue()
+        data = _make_tarball(path)
 
         req = urllib.request.Request(
             url,
@@ -104,3 +100,12 @@ def upload(
 
     if not ok:
         raise typer.Exit(1)
+
+
+def _make_tarball(path: Path) -> bytes:
+    """Return a gzip-compressed tar archive of *path* with contents at the root."""
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        for item in sorted(path.rglob("*")):
+            tar.add(item, arcname=str(item.relative_to(path)))
+    return buf.getvalue()

@@ -137,6 +137,37 @@ describe("collectForwardRefs", () => {
     const refs = collectForwardRefs(doc);
     expect(refs.map((r) => r.path)).toEqual(["numpy.arange", "numpy.zeros"]);
   });
+
+  it("normalises api-kind stubs to module kind", () => {
+    // Gen-time cross-package refs are stored as RefInfo(kind="api", version="*").
+    // The ingest normalises them so the stored link target matches the actual
+    // on-disk node (kind="module").
+    const apiRef = refInfo("numpy", "*", "api", "numpy.linspace");
+    const doc = ingestedDoc({
+      _content: { Summary: section([paragraph([apiRef])]) },
+    });
+    const refs = collectForwardRefs(doc);
+    expect(refs).toHaveLength(1);
+    expect(refs[0]).toMatchObject({ module: "numpy", version: "?", kind: "module", path: "numpy.linspace" });
+  });
+
+  it("normalises api-kind stubs nested inside CrossRef.reference", () => {
+    const apiRef = refInfo("numpy", "*", "api", "numpy.linspace");
+    const crossRef: TypedNode = {
+      __type: "CrossRef",
+      __tag: 4002,
+      value: "linspace",
+      reference: apiRef,
+      kind: "module",
+      anchor: null,
+    };
+    const doc = ingestedDoc({
+      _content: { Summary: section([paragraph([crossRef])]) },
+    });
+    const refs = collectForwardRefs(doc);
+    expect(refs).toHaveLength(1);
+    expect(refs[0]).toMatchObject({ module: "numpy", version: "?", kind: "module", path: "numpy.linspace" });
+  });
 });
 
 // ---------------------------------------------------------------------------

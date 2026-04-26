@@ -66,17 +66,23 @@ export function resetGraphDbCache(): void {
  * or a stale version; prefer the exact match but fall back to the same
  * (pkg, kind, path) on any version (lexicographic sort, descending).
  * Returns `null` if nothing matches.
+ *
+ * `kind === "api"` is a gen-time placeholder for unresolved cross-package
+ * module refs; it is normalised to `"module"` here since the on-disk node
+ * uses `kind = "module"`.
  */
 export function resolveRef(ref: RefTuple): RefTuple | null {
   const db = openGraphDb();
   if (!db) return null;
+  // Normalise gen-time "api" stub kind to the actual on-disk kind.
+  const kind = ref.kind === "api" ? "module" : ref.kind;
   // Exact match first.
   const exact = db
     .prepare(
       "SELECT package, version, category, identifier FROM nodes " +
         "WHERE has_blob=1 AND package=? AND version=? AND category=? AND identifier=? LIMIT 1"
     )
-    .get(ref.pkg, ref.ver, ref.kind, ref.path) as
+    .get(ref.pkg, ref.ver, kind, ref.path) as
     | { package: string; version: string; category: string; identifier: string }
     | undefined;
   if (exact) {
@@ -95,7 +101,7 @@ export function resolveRef(ref: RefTuple): RefTuple | null {
       "SELECT package, version, category, identifier FROM nodes " +
         "WHERE has_blob=1 AND package=? AND category=? AND identifier=?"
     )
-    .all(ref.pkg, ref.kind, ref.path) as Array<{
+    .all(ref.pkg, kind, ref.path) as Array<{
     package: string;
     version: string;
     category: string;
@@ -117,6 +123,13 @@ export function resolveRef(ref: RefTuple): RefTuple | null {
  * (pkg, version, kind, path) tuples. Sorted lexicographically and
  * deduplicated. Empty list if the DB is missing or the target has no
  * incoming edges.
+ *
+ * In addition to exact-version links, also matches wildcard-version stubs
+ * ("?" or "*") for the same (package, category, identifier).  These arise
+ * from cross-package refs ingested by the TypeScript ingest path, which
+ * cannot resolve the version at ingest time.  Pre-fix bundles may also
+ * carry "api"-kind stubs (version="*", category="api") for the same path;
+ * those are matched by the OR branch on category='api'.
  */
 export function getBackrefs(target: RefTuple): RefTuple[] {
   const db = openGraphDb();
@@ -128,9 +141,13 @@ export function getBackrefs(target: RefTuple): RefTuple[] {
         "JOIN nodes n_src ON n_src.id = l.source " +
         "JOIN nodes n_dest ON n_dest.id = l.dest " +
         "WHERE n_src.has_blob=1 " +
-        "AND n_dest.package=? AND n_dest.version=? AND n_dest.category=? AND n_dest.identifier=?"
+        "AND n_dest.package=? AND n_dest.identifier=? " +
+        "AND (" +
+        "  (n_dest.version=? AND n_dest.category=?) " +
+        "  OR (n_dest.version IN ('?','*') AND n_dest.category IN ('module','api'))" +
+        ")"
     )
-    .all(target.pkg, target.ver, target.kind, target.path) as Array<{
+    .all(target.pkg, target.path, target.ver, target.kind) as Array<{
     package: string;
     version: string;
     category: string;

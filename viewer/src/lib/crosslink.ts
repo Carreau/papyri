@@ -4,12 +4,13 @@
 //   1. Opens / creates the SQLite graph DB with the canonical schema.
 //   2. Walks module/, docs/, and examples/ through the StorageBackend.
 //   3. For each file: decodes the CBOR, collects non-local RefInfo refs,
-//      upserts a `nodes` row (has_blob=1), and replaces the outgoing `links`.
+//      upserts a `nodes` row (has_blob=1, digest=blake2b-128), and replaces
+//      the outgoing `links`.
 //
-// Digest note: graphstore.py records 16-byte BLAKE2b-128 fingerprints. Node
-// has no built-in BLAKE2b with variable output length (only blake2b512). We
-// store NULL for now; the digest column is only used by `papyri diff`, a
-// Python CLI command. Add @noble/hashes if TS-side diffing is ever needed.
+// Digest: graphstore.py records 16-byte BLAKE2b-128 fingerprints via
+// hashlib.blake2b(data, digest_size=16). Node's built-in crypto only exposes
+// blake2b512 (64-byte); @noble/hashes provides the same variable-length
+// BLAKE2b so TS-side digests are byte-for-byte identical to Python's.
 //
 // Storage note: the engine reads exclusively through StorageBackend so the
 // same code works when the backing store is swapped from local filesystem to
@@ -18,8 +19,12 @@
 
 import Database from "better-sqlite3";
 import type DatabaseType from "better-sqlite3";
+import { blake2b } from "@noble/hashes/blake2.js";
 import { decodeCborBytes } from "./ir-reader.ts";
 import type { StorageBackend } from "./storage.ts";
+
+// Matches graphstore.py _DIGEST_SIZE = 16.
+const DIGEST_SIZE = 16;
 
 // ---------------------------------------------------------------------------
 // Schema — mirrors graphstore.py _SCHEMA.
@@ -111,13 +116,13 @@ function upsertNode(
   version: string,
   category: string,
   identifier: string,
-  hasBlob: boolean
+  hasBlob: boolean,
+  digest?: Uint8Array
 ): number {
   stmts.insertIgnore.run(pkg, version, category, identifier);
   const row = stmts.selectId.get(pkg, version, category, identifier) as { id: number };
   if (hasBlob) {
-    // digest=NULL: see module-level note on BLAKE2b.
-    stmts.setHasBlob.run(row.id);
+    stmts.setHasBlob.run(digest ?? null, row.id);
   }
   return row.id;
 }
@@ -137,8 +142,9 @@ function processFile(
     return 0;
   }
 
+  const digest = blake2b(bytes, { dkLen: DIGEST_SIZE });
   const refs = collectRefs(decoded);
-  const sourceId = upsertNode(stmts, pkg, version, category, identifier, true);
+  const sourceId = upsertNode(stmts, pkg, version, category, identifier, true, digest);
 
   stmts.deleteLinks.run(sourceId);
   let linkCount = 0;
@@ -171,7 +177,7 @@ function prepareStmts(db: DatabaseType.Database): PreparedStmts {
     selectId: db.prepare(
       "SELECT id FROM nodes WHERE package=? AND version=? AND category=? AND identifier=?"
     ),
-    setHasBlob: db.prepare("UPDATE nodes SET has_blob=1, digest=NULL WHERE id=?"),
+    setHasBlob: db.prepare("UPDATE nodes SET has_blob=1, digest=? WHERE id=?"),
     deleteLinks: db.prepare("DELETE FROM links WHERE source=?"),
     insertLink: db.prepare("INSERT OR IGNORE INTO links(source, dest) VALUES (?,?)"),
   };

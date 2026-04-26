@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { encode as cborEncode } from "cbor-x";
 import Database from "better-sqlite3";
+import { blake2b } from "@noble/hashes/blake2.js";
 import { crosslinkBundle, openCrosslinkDb } from "../src/lib/crosslink.ts";
 import { LocalFsStorage } from "../src/lib/storage.ts";
 
@@ -64,19 +65,28 @@ describe("crosslinkBundle", () => {
     const db2 = new Database(dbPath, { readonly: true });
     const srcNode = db2
       .prepare("SELECT * FROM nodes WHERE package=? AND version=? AND category=? AND identifier=?")
-      .get("mypkg", "1.0.0", "module", "mymod.func") as { has_blob: number } | undefined;
+      .get("mypkg", "1.0.0", "module", "mymod.func") as {
+      has_blob: number;
+      digest: Buffer | null;
+    } | undefined;
     expect(srcNode).toBeDefined();
     expect(srcNode!.has_blob).toBe(1);
+    // Digest must be a 16-byte BLAKE2b-128 matching Python's blake2b(data, digest_size=16).
+    expect(srcNode!.digest).not.toBeNull();
+    expect(srcNode!.digest!.byteLength).toBe(16);
+    expect(Buffer.from(srcNode!.digest!)).toEqual(Buffer.from(blake2b(blob, { dkLen: 16 })));
 
     const destNode = db2
       .prepare("SELECT * FROM nodes WHERE package=? AND version=? AND category=? AND identifier=?")
-      .get("numpy", "2.3.5", "module", "numpy.array") as { has_blob: number } | undefined;
+      .get("numpy", "2.3.5", "module", "numpy.array") as {
+      has_blob: number;
+      digest: Buffer | null;
+    } | undefined;
     expect(destNode).toBeDefined();
     expect(destNode!.has_blob).toBe(0); // placeholder
+    expect(destNode!.digest).toBeNull(); // no blob → no digest
 
-    const linkCount = (
-      db2.prepare("SELECT COUNT(*) AS c FROM links").get() as { c: number }
-    ).c;
+    const linkCount = (db2.prepare("SELECT COUNT(*) AS c FROM links").get() as { c: number }).c;
     expect(linkCount).toBe(1);
     db2.close();
   });

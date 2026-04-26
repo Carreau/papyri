@@ -1,5 +1,0 @@
-{
-  "description": "numpy:linspace must have a signature node named linspace (skipped when numpy is not ingested)",
-  "key": {"module": "numpy", "kind": "module", "path": "numpy:linspace"},
-  "contains": {"type": "signature", "target_name": "linspace"}
-}

@@ -127,9 +127,7 @@ export function resolveRef(ref: RefTuple): RefTuple | null {
  * In addition to exact-version links, also matches wildcard-version stubs
  * ("?" or "*") for the same (package, category, identifier).  These arise
  * from cross-package refs ingested by the TypeScript ingest path, which
- * cannot resolve the version at ingest time.  Pre-fix bundles may also
- * carry "api"-kind stubs (version="*", category="api") for the same path;
- * those are matched by the OR branch on category='api'.
+ * cannot resolve the version at ingest time.
  */
 export function getBackrefs(target: RefTuple): RefTuple[] {
   const db = openGraphDb();
@@ -144,10 +142,10 @@ export function getBackrefs(target: RefTuple): RefTuple[] {
         "AND n_dest.package=? AND n_dest.identifier=? " +
         "AND (" +
         "  (n_dest.version=? AND n_dest.category=?) " +
-        "  OR (n_dest.version IN ('?','*') AND n_dest.category IN ('module','api'))" +
+        "  OR (n_dest.version IN ('?','*') AND n_dest.category=?)" +
         ")"
     )
-    .all(target.pkg, target.path, target.ver, target.kind) as Array<{
+    .all(target.pkg, target.path, target.ver, target.kind, target.kind) as Array<{
     package: string;
     version: string;
     category: string;

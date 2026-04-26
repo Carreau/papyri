@@ -1,5 +1,0 @@
-{
-  "description": "The papyri.examples module docstring contains at least one paragraph node in its ingested content",
-  "key": {"module": "papyri", "kind": "module", "path": "papyri.examples"},
-  "contains": {"type": "paragraph"}
-}

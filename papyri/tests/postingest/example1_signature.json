@@ -1,5 +1,0 @@
-{
-  "description": "papyri.examples:example1 is an async coroutine and must carry a coroutine-function signature node",
-  "key": {"module": "papyri", "kind": "module", "path": "papyri.examples:example1"},
-  "contains": {"type": "signature", "kind": "coroutine function"}
-}

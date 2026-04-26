@@ -63,6 +63,7 @@ from .cli.debug import debug
 from .cli.describe import describe
 from .cli.diff import diff
 from .cli.find import find
+from .cli.upload import upload
 
 __version__ = "0.0.9"
 
@@ -310,6 +311,7 @@ app.command()(find)
 app.command()(describe)
 app.command()(debug)
 app.command()(diff)
+app.command()(upload)
 
 
 if __name__ == "__main__":

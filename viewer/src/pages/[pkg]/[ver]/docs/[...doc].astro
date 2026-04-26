@@ -1,16 +1,16 @@
 ---
+import { join } from "node:path";
 import {
   listIngestedBundles,
   loadCbor,
   sectionChildren,
   type IngestedDoc,
-  type SectionNode,
 } from "../../../../lib/ir-reader.ts";
+import { buildDocPageView } from "../../../../lib/doc-page.ts";
 import { listDocs } from "../../../../lib/nav.ts";
 import { resolveXref } from "../../../../lib/xref.ts";
 import IrNode from "../../../../components/IrNode.astro";
 import BundleLayout from "../../../../layouts/BundleLayout.astro";
-import { join } from "node:path";
 
 export async function getStaticPaths() {
   const bundles = await listIngestedBundles();
@@ -41,8 +41,7 @@ const { bundlePath, docPath } = Astro.props as {
 // Doc blobs are IngestedDoc (tag 4010). The body lives in `arbitrary` as
 // Section children; `_content` is typically empty for narrative docs.
 const doc = (await loadCbor(join(bundlePath, "docs", docPath))) as IngestedDoc;
-
-const sections: SectionNode[] = Array.isArray(doc.arbitrary) ? doc.arbitrary : [];
+const view = buildDocPageView(doc, docPath);
 
 // Map a section level (0-indexed, where 0 = document title shown as h1) to
 // an HTML heading element. Level 1 → h2, level 2 → h3, etc., clamped to h6.
@@ -51,74 +50,15 @@ function sectionHeading(title: string, level: number): string {
   const safe = title.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   return `<${tag}>${safe}</${tag}>`;
 }
-
-// Produce a stable HTML id from a heading string.
-function slugify(title: string): string {
-  return (
-    title
-      .toLowerCase()
-      .replace(/\s+/g, "-")
-      .replace(/[^a-z0-9-]/g, "")
-      .replace(/^-+|-+$/g, "") || "section"
-  );
-}
-
-// Assign each section a unique DOM id. Prefer the RST target label
-// (explicit ``.. _label:``); otherwise slugify the title. When multiple
-// sections collide (e.g. several h3s named "Bug fixes"), suffix `-2`,
-// `-3`, ... so TOC anchors point to the right one.
-const sectionIds = new Map<SectionNode, string>();
-{
-  const used = new Set<string>();
-  for (const s of sections) {
-    if (!s.title) continue;
-    const base = s.target ?? slugify(s.title);
-    let id = base;
-    let n = 2;
-    while (used.has(id)) id = `${base}-${n++}`;
-    used.add(id);
-    sectionIds.set(s, id);
-  }
-}
-function sectionId(s: SectionNode): string | undefined {
-  return sectionIds.get(s);
-}
-
-// Use the first section's RST title as the visible <h1>. Narrative docs
-// store their document-level heading in arbitrary[0].title; falling back to
-// doc.qa avoids showing raw IR keys like "config:details".
-const displayTitle = sections[0]?.title || doc.qa || docPath;
-const pageTitle = doc.qa || docPath;
-
-// If the first section's title became the page <h1>, suppress its <h2>
-// inside the body so the heading isn't rendered twice.
-const firstTitleIsH1 = sections.length > 0 && sections[0].title === displayTitle;
-
-// TOC: sections with titles, skipping the first when its title is the <h1>.
-const tocEntries = sections.filter((s, i) => s.title && !(i === 0 && firstTitleIsH1));
-
-// For each TOC entry, attach the id of its nearest enclosing h2 (level 1)
-// so the viewer can collapse deeper (level 2+) entries that don't belong to
-// the currently-active top-level section.
-let currentH2Id: string | undefined;
-const tocEntriesWithParent = tocEntries.map((s) => {
-  const id = sectionId(s);
-  const level = s.level ?? 1;
-  if (level <= 1) {
-    currentH2Id = id;
-    return { section: s, id, level, parentH2Id: id };
-  }
-  return { section: s, id, level, parentH2Id: currentH2Id };
-});
 ---
 
 <BundleLayout
   pkg={pkg!}
   ver={ver!}
   bundlePath={bundlePath}
-  title={`${pageTitle} — ${pkg} ${ver}`}
+  title={`${view.pageTitle} — ${pkg} ${ver}`}
   activeDocPath={docPath}
-  hasToc={tocEntries.length >= 2}
+  hasToc={view.tocEntries.length >= 2}
 >
   <p class="crumb">
     <a href="/">bundles</a> / <a href={`/${pkg}/${ver}/`}>{pkg} {ver}</a> /
@@ -127,17 +67,17 @@ const tocEntriesWithParent = tocEntries.map((s) => {
 
   <header class="qa-header">
     <p class="kind">Doc</p>
-    <h1>{displayTitle}</h1>
+    <h1>{view.displayTitle}</h1>
     <p class="source"><code>docs/{docPath}</code></p>
   </header>
 
   {
-    sections.length === 0 ? (
+    view.sections.length === 0 ? (
       <p class="lede">This doc is empty.</p>
     ) : (
-      sections.map((s, i) => {
-        const id = sectionId(s);
-        const showH2 = s.title && !(i === 0 && firstTitleIsH1);
+      view.sections.map((s, i) => {
+        const id = view.sectionIds.get(s);
+        const showH2 = s.title && !(i === 0 && view.firstTitleIsH1);
         return (
           <section class="doc-section" id={id}>
             {showH2 ? <Fragment set:html={sectionHeading(s.title!, s.level ?? 0)} /> : null}
@@ -151,12 +91,12 @@ const tocEntriesWithParent = tocEntries.map((s) => {
   }
 
   {
-    tocEntries.length >= 2 && (
+    view.tocEntries.length >= 2 && (
       <Fragment slot="page-toc">
         <nav class="page-toc" aria-label="On this page">
           <p class="page-toc-label">On this page</p>
           <ul>
-            {tocEntriesWithParent.map((e) => (
+            {view.tocEntries.map((e) => (
               <li
                 class={`page-toc-level-${Math.min(Math.max(e.level, 1), 4)}`}
                 data-parent-h2={e.parentH2Id}

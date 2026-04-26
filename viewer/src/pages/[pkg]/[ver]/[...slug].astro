@@ -1,19 +1,18 @@
 ---
+import { join } from "node:path";
 import {
   ingestDir,
   loadModule,
   sectionChildren,
   slugToQualname,
   type IngestedDoc,
-  type SectionNode,
 } from "../../../lib/ir-reader.ts";
 import { getBackrefs } from "../../../lib/graph.ts";
-import { linkForRef } from "../../../lib/links.ts";
+import { buildQualnamePageView } from "../../../lib/qualname-page.ts";
 import { resolveXref } from "../../../lib/xref.ts";
 import IrNode from "../../../components/IrNode.astro";
 import Signature from "../../../components/Signature.astro";
 import BundleLayout from "../../../layouts/BundleLayout.astro";
-import { join } from "node:path";
 
 export const prerender = false;
 
@@ -33,64 +32,9 @@ try {
   return new Response(`Module ${qualname} not found`, { status: 404 });
 }
 
-// Iteration order of sections: prefer _ordered_sections, fall back to
-// Object.keys. Skip sections whose Section body is empty.
-const orderedKeys: string[] = doc._ordered_sections ?? [];
-const contentKeys: string[] = Object.keys(doc._content ?? {});
-const renderOrder: string[] = [
-  ...orderedKeys.filter((k) => contentKeys.includes(k)),
-  ...contentKeys.filter((k) => !orderedKeys.includes(k)),
-];
-
-interface RenderSection {
-  title: string;
-  section: SectionNode;
-}
-const sections: RenderSection[] = [];
-for (const key of renderOrder) {
-  const s = doc._content[key] as SectionNode | undefined;
-  if (!s) continue;
-  if (!Array.isArray(s.children) || s.children.length === 0) continue;
-  sections.push({ title: key, section: s });
-}
-
-const arbitrary = Array.isArray(doc.arbitrary) ? doc.arbitrary : [];
-
-// example_section_data is a Section (tag 4015) on IngestedDoc that was
-// previously ignored. Render it after the regular sections if it contains
-// anything. Normalise to a list of child IR nodes so the template stays flat.
-const exampleSection = (() => {
-  const es = doc.example_section_data as SectionNode | null | undefined;
-  if (!es) return null;
-  const kids = Array.isArray(es.children) ? es.children : [];
-  if (kids.length === 0) return null;
-  return { title: es.title ?? "Examples", children: kids };
-})();
-
-// Backrefs for this document, split into same-package and cross-package.
 const backrefs = getBackrefs({ pkg, ver, kind: "module", path: qualname });
-interface BackrefRow {
-  url: string;
-  label: string;
-  key: string;
-  // For external refs, include the package name as context.
-  pkg?: string;
-}
-const internalBackrefRows: BackrefRow[] = [];
-const externalBackrefRows: BackrefRow[] = [];
-const _seen = new Set<string>();
-for (const b of backrefs) {
-  const url = linkForRef(b);
-  if (!url) continue;
-  const key = `${b.pkg}/${b.ver}/${b.kind}/${b.path}`;
-  if (_seen.has(key)) continue;
-  _seen.add(key);
-  if (b.pkg === pkg) {
-    internalBackrefRows.push({ url, label: b.path, key });
-  } else {
-    externalBackrefRows.push({ url, label: b.path, key, pkg: b.pkg });
-  }
-}
+const view = buildQualnamePageView(doc, backrefs, pkg);
+const hasBackrefs = view.internalBackrefs.length > 0 || view.externalBackrefs.length > 0;
 ---
 
 <BundleLayout
@@ -127,7 +71,7 @@ for (const b of backrefs) {
   }
 
   {
-    sections.map(({ title, section }) => (
+    view.sections.map(({ title, section }) => (
       <section class={`doc-section doc-section-${title.toLowerCase().replace(/\s+/g, "-")}`}>
         <h2>{title}</h2>
         {sectionChildren(section).map((c) => (
@@ -138,10 +82,10 @@ for (const b of backrefs) {
   }
 
   {
-    arbitrary.length > 0 ? (
+    view.arbitrary.length > 0 ? (
       <section class="doc-section doc-section-arbitrary">
         <h2>Additional content</h2>
-        {arbitrary.map((s) => (
+        {view.arbitrary.map((s) => (
           <div>
             {s.title ? <h3>{s.title}</h3> : null}
             {sectionChildren(s).map((c) => (
@@ -154,10 +98,10 @@ for (const b of backrefs) {
   }
 
   {
-    exampleSection ? (
+    view.exampleSection ? (
       <section class="doc-section doc-section-examples">
-        <h2>{exampleSection.title}</h2>
-        {exampleSection.children.map((c) => (
+        <h2>{view.exampleSection.title}</h2>
+        {view.exampleSection.children.map((c) => (
           <IrNode node={c} resolveXref={resolveXref} />
         ))}
       </section>
@@ -180,14 +124,14 @@ for (const b of backrefs) {
   }
 
   {
-    internalBackrefRows.length > 0 || externalBackrefRows.length > 0 ? (
+    hasBackrefs ? (
       <section class="backrefs">
         <h2>Referenced by</h2>
-        {internalBackrefRows.length > 0 ? (
+        {view.internalBackrefs.length > 0 ? (
           <div class="backref-group">
             <h3>This package</h3>
             <ul class="qualnames">
-              {internalBackrefRows.map((b) => (
+              {view.internalBackrefs.map((b) => (
                 <li>
                   <a href={b.url}>{b.label}</a>
                 </li>
@@ -195,11 +139,11 @@ for (const b of backrefs) {
             </ul>
           </div>
         ) : null}
-        {externalBackrefRows.length > 0 ? (
+        {view.externalBackrefs.length > 0 ? (
           <div class="backref-group">
             <h3>Other packages</h3>
             <ul class="qualnames qualnames-external">
-              {externalBackrefRows.map((b) => (
+              {view.externalBackrefs.map((b) => (
                 <li>
                   <span class="backref-pkg">{b.pkg}</span>
                   <a href={b.url}>{b.label}</a>

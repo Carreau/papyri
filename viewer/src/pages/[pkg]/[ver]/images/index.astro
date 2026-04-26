@@ -1,16 +1,7 @@
 ---
-import { join } from "node:path";
 import BundleLayout from "../../../../layouts/BundleLayout.astro";
-import {
-  listIngestedBundles,
-  listModules,
-  loadModule,
-  loadCbor,
-  collectImages,
-  type FoundImgNode,
-} from "../../../../lib/ir-reader.ts";
-import { linkForDoc, linkForExample, linkForQualname } from "../../../../lib/links.ts";
-import { listDocs, listExamples } from "../../../../lib/nav.ts";
+import { listIngestedBundles } from "../../../../lib/ir-reader.ts";
+import { collectBundleImages } from "../../../../lib/image-index.ts";
 
 export async function getStaticPaths() {
   const bundles = await listIngestedBundles();
@@ -23,78 +14,7 @@ export async function getStaticPaths() {
 const { pkg, ver } = Astro.params;
 const { bundlePath } = Astro.props as { bundlePath: string };
 
-interface PageRef {
-  label: string;
-  href: string;
-}
-
-interface ImgEntry {
-  img: FoundImgNode;
-  pages: PageRef[];
-}
-
-// Walk every module / doc / example in the bundle and collect all Image and
-// Figure nodes. Group by src URL so each image appears once with all the
-// pages that reference it.
-const imageMap = new Map<string, ImgEntry>();
-
-function addHit(found: FoundImgNode, page: PageRef) {
-  const existing = imageMap.get(found.src);
-  if (existing) {
-    if (!existing.pages.some((p) => p.href === page.href)) {
-      existing.pages.push(page);
-    }
-  } else {
-    imageMap.set(found.src, { img: found, pages: [page] });
-  }
-}
-
-// Modules
-const qualnames = await listModules(bundlePath);
-await Promise.all(
-  qualnames.map(async (qa) => {
-    let doc;
-    try {
-      doc = await loadModule(bundlePath, qa);
-    } catch {
-      return;
-    }
-    const href = linkForQualname(pkg!, ver!, qa);
-    for (const found of collectImages(doc)) addHit(found, { label: qa, href });
-  })
-);
-
-// Narrative docs
-const docPaths = await listDocs(bundlePath);
-await Promise.all(
-  docPaths.map(async (docPath) => {
-    let section;
-    try {
-      section = await loadCbor(join(bundlePath, "docs", docPath));
-    } catch {
-      return;
-    }
-    const href = linkForDoc(pkg!, ver!, docPath);
-    for (const found of collectImages(section)) addHit(found, { label: docPath, href });
-  })
-);
-
-// Examples
-const exPaths = await listExamples(bundlePath);
-await Promise.all(
-  exPaths.map(async (exPath) => {
-    let section;
-    try {
-      section = await loadCbor(join(bundlePath, "examples", exPath));
-    } catch {
-      return;
-    }
-    const href = linkForExample(pkg!, ver!, exPath);
-    for (const found of collectImages(section)) addHit(found, { label: exPath, href });
-  })
-);
-
-const entries = [...imageMap.values()].sort((a, b) => a.img.src.localeCompare(b.img.src));
+const entries = await collectBundleImages(pkg!, ver!, bundlePath);
 ---
 
 <BundleLayout

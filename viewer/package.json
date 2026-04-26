@@ -21,11 +21,11 @@
   "dependencies": {
     "@astrojs/node": "^10.0.5",
     "@astrojs/react": "^5.0.0",
-    "@noble/hashes": "^2.2.0",
     "astro": "^6.1.6",
     "better-sqlite3": "^12.9.0",
     "cbor-x": "^1.6.4",
     "katex": "^0.16.45",
+    "papyri-ingest": "workspace:*",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "shiki": "^4.0.2"
@@ -52,12 +52,5 @@
   },
   "engines": {
     "node": ">=22"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "better-sqlite3",
-      "esbuild",
-      "sharp"
-    ]
   }
 }

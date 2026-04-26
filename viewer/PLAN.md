@@ -153,21 +153,19 @@ Data flow per request/page:
    stays prerendered. New `prerender = false` endpoints
    (`/api/bundles.json`, `/api/search.json`) exercise the server
    bundle.
-9. [x] **M8 — bundle upload + TypeScript crosslink.** `PUT /api/bundle`
-   receives a pre-ingested bundle, extracts it atomically into the
-   ingest store, and updates the cross-link graph (nodes + links) in a
-   single SQLite transaction. Digests are 16-byte BLAKE2b-128 via
-   `@noble/hashes`, byte-identical to Python's `graphstore.py`. A
-   `StorageBackend` interface (`src/lib/storage.ts`) abstracts the blob
-   store so an R2 implementation can be swapped in without touching the
-   crosslink engine (`src/lib/crosslink.ts`).
-   **Structural debt**: `crosslink.ts` and `storage.ts` overlap with the
-   sibling `ingest/` package (`GraphStore`, `collectForwardRefs`,
-   `@noble/hashes`). Once `viewer/` and `ingest/` share a pnpm workspace,
-   the endpoint should drive `Ingester` directly so maintainers can upload
-   raw gen bundles without a local ingest step first. The viewer-side
-   duplicates can then be deleted. See `README.md` for the current
-   upload workflow.
+9. [x] **M8 — bundle upload over HTTP.** `PUT /api/bundle` accepts a
+   raw `papyri gen` bundle (tar.gz of `~/.papyri/data/<pkg>_<ver>/`),
+   extracts it into a staging dir under `PAPYRI_INGEST_DIR`, and runs
+   the full ingest pipeline directly against it. The endpoint is the
+   network-callable replacement for the local `papyri ingest` /
+   `papyri-ingest` step.
+   `viewer/` and `ingest/` are linked as a pnpm workspace (root
+   `pnpm-workspace.yaml`). The endpoint imports `Ingester` from the
+   sibling `papyri-ingest` package so blob writing, digest computation
+   (16-byte BLAKE2b-128), graph updates, and forward-ref collection all
+   live in one place — no viewer-side duplicates. After ingest the
+   read-only graph DB cache is invalidated so subsequent requests see
+   the new nodes/links. See `README.md` for the upload workflow.
 
 ### M3 notes
 

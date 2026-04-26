@@ -83,13 +83,14 @@ describe.skipIf(!existsSync(dbPath))("post-upload ingest verification", () => {
   // -------------------------------------------------------------------------
   // Back-reference tests
   //
-  // Note: only RefInfo forward-refs become graph edges; intra-bundle refs
-  // are stored as LocalRef (`papyri/tree.py:GenVisitor._ref_to_crossref`)
+  // Note: today only RefInfo forward-refs become graph edges; intra-bundle
+  // refs are stored as LocalRef (`papyri/tree.py:GenVisitor._ref_to_crossref`)
   // and skipped by both Python's `IngestedDoc.all_forward_refs` and the TS
-  // `collectForwardRefs`. So a query like "does papyri.examples:example1
-  // back-link to papyri.examples?" is by design always empty. See
-  // `ingest/tests/visitor.test.ts` "skips LocalRef-bearing CrossRefs" for
-  // a unit-level pin of the same behaviour.
+  // `collectForwardRefs`, so a query like "does papyri.examples:example1
+  // back-link to papyri.examples?" is currently always empty. Walking
+  // LocalRefs in the visitor is queued under "Walk LocalRefs when building
+  // the forward-ref graph" in `TODO`; once that lands a same-bundle
+  // back-ref test belongs here.
   // -------------------------------------------------------------------------
 
   it("numpy:linspace exists in the store after numpy is ingested", () => {

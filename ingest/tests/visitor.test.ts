@@ -184,9 +184,11 @@ describe("collectForwardRefs", () => {
     // CrossRef.reference from RefInfo to LocalRef so the bundle digest
     // doesn't depend on the bundle's own version. Both Python's
     // `IngestedDoc.all_forward_refs` and our `collectForwardRefs` then
-    // walk only RefInfo nodes — so intra-bundle CrossRefs intentionally
+    // walk only RefInfo nodes — so intra-bundle CrossRefs currently
     // produce no forward-ref edge, and back-ref queries against the
-    // target are empty. Pinned as a regression guard.
+    // target are empty. Tracked under "Walk LocalRefs when building
+    // the forward-ref graph" in `TODO`; once that lands this test
+    // becomes the expected-shape assertion for the LocalRef path.
     const localRef: TypedNode = {
       __type: "LocalRef",
       __tag: 4022,

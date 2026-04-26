@@ -4,7 +4,51 @@ Catch-all for bugs found in the wild and the ops/lint queue. Rename passes
 live in [`TODO-renames.md`](TODO-renames.md); post-review follow-ups live
 in [`TODO-review.md`](TODO-review.md); milestones in [`PLAN.md`](PLAN.md).
 
+## Next up
 
+### Walk LocalRefs when building the forward-ref graph
+
+Today both `IngestedDoc.all_forward_refs` (`papyri/crosslink.py:110-126`)
+and the TS `collectForwardRefs` (`ingest/src/visitor.ts`) walk only
+`RefInfo` (kind != "local") and `Figure` nodes. Intra-bundle CrossRefs
+are stored with `LocalRef.reference` instead of `RefInfo` (gen-time
+choice in `papyri/tree.py:GenVisitor._ref_to_crossref`, `974`-`976`),
+so they produce no graph edge and the viewer's "Referenced by" list
+never shows same-bundle callers — e.g. `papyri.examples` does not
+appear in the back-refs of `papyri.examples:example1`.
+
+The `LocalRef` is intentional for the *gen* output: it keeps a
+bundle's content digest independent of its own version stamp. But
+the *ingest* graph table is post-resolution; an edge keyed on
+`(ownPkg, ownVer, kind, path)` is fine there. So the visitor can
+walk `LocalRef` and emit a `Key` by attaching the bundle's
+`(module, version)` from the caller's context.
+
+Concrete change:
+
+1. `collectForwardRefs(doc, *, ownPkg, ownVer)` adds `"LocalRef"` to
+   `FORWARD_REF_TYPES`; for each `LocalRef` node, emit
+   `Key(ownPkg, ownVer, ref.kind, ref.path)`. Same for
+   `collectForwardRefsFromSection`.
+2. `Ingester._ingestApiDocs` / `_ingestNarrativeDocs` /
+   `_ingestExamples` already have `(root, version)` in scope; thread
+   them in.
+3. `IngestedDoc.all_forward_refs(self, *, package, version)` mirrors
+   the change. Callers in `crosslink.py:419` and `:491` pass
+   `key.module, key.version`.
+4. Update the unit pin in `ingest/tests/visitor.test.ts`
+   ("skips LocalRef-bearing CrossRefs") to assert the *new* shape:
+   one edge keyed `(ownPkg, ownVer, ref.kind, ref.path)` per
+   LocalRef, with the test exercising both the call-site context
+   threading and the kind="local" exclusion.
+
+Out of scope: changing the gen-time storage shape. LocalRef stays as
+LocalRef in the IR; only the visitor's projection to graph edges
+changes. Existing bundles need to be re-ingested for the edges to
+materialise (no schema migration; `gstore.put` rewrites the row's
+forward set when it differs).
+
+## Known docstring bugs (recorded pre-Phase 1 — verify before filing)
 
 - `IPython.lib.display.audio`: check parsing of bullet list in parameters.
 - `numpy.core.shape_base._concatenate_shapes`: may not be complete /

@@ -1,39 +1,27 @@
 # Papyri IR format
 
-This document describes the on-disk intermediate representation (IR) that
-`papyri gen` writes and `papyri ingest` reads.
+This document describes the on-disk intermediate representation (IR)
+that `papyri gen` writes — i.e. a *DocBundle*. The IR is the contract
+between `papyri gen` (run by a library maintainer) and any downstream
+consumer (the in-tree `viewer/`, the central ingest service, or any
+future out-of-tree tool).
 
-It is aimed at papyri maintainers and at authors of IR consumers (the
-in-tree `viewer/`, or any future out-of-tree consumer). See `PLAN.md` for
-project-wide scope; the code of record for everything below is
-`papyri/gen.py`, `papyri/crosslink.py`, `papyri/node_base.py`, and
+What the central service does with bundles after they arrive — how it
+indexes them, links them, or stores them — is not part of the IR and
+is not described here.
+
+The code of record is `papyri/gen.py`, `papyri/node_base.py`, and
 `papyri/nodes.py`.
-
-## Two stores, two stages
-
-Papyri has two stages and two corresponding on-disk locations:
-
-| Stage             | Command                 | Path                                | Purpose                                                            |
-| ----------------- | ----------------------- | ----------------------------------- | ------------------------------------------------------------------ |
-| Generate          | `papyri gen <cfg.toml>` | `~/.papyri/data/<pkg>_<ver>/`       | Per-bundle IR for one library version, self-contained.             |
-| Ingest + link     | `papyri ingest <dir>`   | `~/.papyri/ingest/`                 | Cross-linked store over all ingested bundles.                      |
-
-Gen produces a bundle; ingest merges bundles into the cross-linked
-store and resolves cross-references between them. A consumer (the
-viewer) reads from the ingest store — not from individual gen
-bundles. The exact representation of the cross-link index is an
-internal detail of the ingest store and not part of the IR contract.
 
 ## Encoding
 
-Papyri uses two encodings:
+Papyri uses two encodings inside a bundle:
 
 - **CBOR** (via `cbor2`) for all IR node graphs — everything that flows
-  through `Encoder` in `papyri/nodes.py`. This covers API docs, narrative
-  docs, examples, and per-package metadata blobs (`toc.cbor`,
-  `aliases.cbor`).
-- **JSON** for small, human-authored or human-inspectable bundle metadata
-  — `papyri.json` and `toc.json` inside a gen bundle.
+  through `Encoder` in `papyri/nodes.py`. This covers API docs,
+  narrative docs, and examples.
+- **JSON** for small, human-authored or human-inspectable bundle
+  metadata — `papyri.json` and `toc.json`.
 
 The split is intentional: IR payloads are large, deeply nested, and
 change shape frequently, so CBOR (typed tags, binary) is cheaper and
@@ -141,85 +129,27 @@ sidebar, for instance) filter by filename convention:
 - Files that sit under a `tutorials/` path component (e.g.
   `docs/tutorials/intro`) are treated as tutorials.
 
-Authors pick either convention when laying out their source docs; both
-flow through `papyri gen` → `papyri ingest` unchanged. Promoting this to
-a first-class IR field is a future change — flagging it here so the
-convention stays stable in the meantime.
+Authors pick either convention when laying out their source docs.
+Promoting this to a first-class IR field is a future change — flagging
+it here so the convention stays stable in the meantime.
 
 ### `assets/`
 
-Raw bytes. Images, logos, etc. Referenced from IR via the `Figure` node,
-which carries a `RefInfo(module, version, "assets", filename)`.
+Raw bytes. Images, logos, etc. Referenced from IR via the `Figure`
+node, which carries a `RefInfo(module, version, "assets", filename)`.
 
-## Ingest store layout
-
-`papyri ingest <bundle>` reads a gen bundle, resolves cross-references
-against everything already ingested, and writes into
-`~/.papyri/ingest/`:
-
-```
-~/.papyri/ingest/
-└── <module>/
-    └── <version>/
-        ├── meta.cbor                      # bundle meta (minus aliases, plus summary)
-        ├── module/
-        │   └── <qualname>.cbor            # IngestedDoc (CBOR)
-        ├── docs/
-        │   └── <name>                     # IngestedDoc (CBOR)
-        ├── examples/
-        │   └── <name>                     # Section (CBOR)
-        ├── assets/
-        │   └── <filename>                 # raw bytes
-        └── meta/
-            ├── toc.cbor                   # List[TocTree] (CBOR)
-            ├── aliases.cbor               # Dict[str,str] (CBOR)
-            └── logo.<ext>                 # optional, copied from gen assets/
-```
-
-The cross-link index that `papyri ingest` maintains alongside this
-tree is an implementation detail of the ingest tool / hosted service
-and is not described here.
-
-### `meta.cbor`
-
-CBOR-encoded dict, written by `Ingester.ingest` after all API docs have
-been processed. Carries the same fields as `papyri.json` (minus
-`aliases`, which lives in `meta/aliases.cbor`), with two ingest-time
-additions for viewer consumption:
-
-| Field     | Type            | Notes                                                    |
-| --------- | --------------- | -------------------------------------------------------- |
-| `module`  | `str`           | Root package name.                                       |
-| `version` | `str`           | Package version string.                                  |
-| `tag`     | `str`           | Release tag.                                             |
-| `logo`    | `str \| null`   | Basename under `<pkg>/<ver>/meta/` (e.g. `"logo.png"`), or null. Rewritten from the gen-side filename at ingest time so consumers don't have to sniff the asset directory. |
-| `summary` | `str` (opt.)    | Plain-text first paragraph of the top-level module's docstring `Summary` section. Added when available; absent otherwise. |
-
-Any other keys present in the bundle's `papyri.json` (e.g. `pypi`,
-`github_slug`) pass through unchanged.
-
-An `IngestedDoc` (`papyri/crosslink.py`, `@register(4010)`) is a
-`GeneratedDoc` that has been walked by the cross-link visitor so that
-every `CrossRef` / `SeeAlsoItem` / `Figure` has a resolved `RefInfo` pointing
-at a known destination (or explicitly marked as unresolved). Structure
-is nearly identical to `GeneratedDoc` — same section map, signature,
-arbitrary sections — plus a `qa: str` field holding the fully qualified
-name this blob represents.
-
-The `meta/` directory is not written by gen; it is produced at ingest
-time.
-
-The subdirectory names — `module`, `docs`, `examples`, `assets`,
-`meta` — also serve as the `kind` discriminator on `RefInfo` (below).
+The subdirectory names under a bundle — `module`, `docs`, `examples`,
+`assets` — also serve as the `kind` discriminator on `RefInfo`
+(below).
 
 ### RefInfo
 
 `RefInfo(module, version, kind, path)` (`papyri/nodes.py`) is the
-in-IR reference: it appears inside `GeneratedDoc` / `IngestedDoc`
-nodes as the target of a cross-reference. The `Figure.value` field,
-for example, is a `RefInfo`. The four fields address a blob inside a
-bundle (`<module>/<version>/<kind>/<path>`), and a `RefInfo` is the
-only form a cross-reference takes in the IR consumers see.
+in-IR reference: it appears inside `GeneratedDoc` nodes as the target
+of a cross-reference. The `Figure.value` field, for example, is a
+`RefInfo`. The four fields address a blob inside a bundle
+(`<module>/<version>/<kind>/<path>`), and a `RefInfo` is the only
+form a cross-reference takes in the IR.
 
 ## Node type registry (CBOR tags)
 
@@ -238,7 +168,6 @@ for the authoritative list):
 | 4001 | `Root`             | `nodes.py`   |
 | 4002 | `CrossRef`             | `nodes.py`   |
 | 4003 | `InlineRole`       | `nodes.py`   |
-| 4010 | `IngestedDoc`      | `crosslink.py` |
 | 4011 | `GeneratedDoc`     | `gen.py`     |
 | 4012 | `NumpydocExample`  | `nodes.py`   |
 | 4013 | `NumpydocSeeAlso`  | `nodes.py`   |
@@ -295,36 +224,18 @@ preserved. Non-Python consumers can treat it as an array.
 CBOR encoder with any of them is a bug. See
 `node_base.UnserializableNode` for the invariant.
 
-## Debug / inspection
-
-Two maintainer-side commands operate directly on the IR without a
-renderer:
-
-- `papyri find <NodeType>` — scan every ingested document and print
-  matches of a given node class. Useful to audit whether a node type
-  still appears in the wild (e.g. `papyri find UnprocessedDirective`).
-- `papyri describe <qualname>` — print the decoded IR for a single
-  ingested entry plus its back- and forward-refs. Accepts shorthand
-  (`numpy.linspace`), kind-prefixed (`module:numpy.linspace`,
-  `docs:intro`), and fully qualified (`numpy/1.26.0/module/numpy.linspace`)
-  forms, or restrict the search with `--kind` / `--package` /
-  `--version`.
-
-Implementations live in `papyri/cli/find.py` and
-`papyri/cli/describe.py`; both are registered onto the Typer app in
-`papyri/__init__.py`.
-
 ## Stability
 
-The IR is **not yet stable**. Tag numbers are stable only once assigned
-(never reuse a retired tag number), but field sets on individual nodes
-change as gen / ingest evolves. Consumers should:
+The IR is **not yet stable**. Tag numbers are stable only once
+assigned (never reuse a retired tag number), but field sets on
+individual nodes change as gen evolves. Consumers should:
 
 - Use `cbor2` tag-hook-based decoding via `papyri.nodes.Encoder` if
   running in Python; the encoder tolerates unknown trailing fields via
   `Node.__init__` kwargs validation.
-- Treat `papyri.json` / `toc.json` as forward-compatible: ignore unknown
-  keys.
+- Treat `papyri.json` / `toc.json` as forward-compatible: ignore
+  unknown keys.
 
-Stabilizing the schema (versioning + a `docs/IR-CHANGELOG.md`, possibly
-JSON Schema fragments per node) is tracked in `PLAN.md` Phase 2.
+Stabilizing the schema (versioning + a `docs/IR-CHANGELOG.md`,
+possibly JSON Schema fragments per node) is tracked in `PLAN.md`
+Phase 2.

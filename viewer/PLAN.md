@@ -148,17 +148,26 @@ Data flow per request/page:
    layout with a sidebar, card-based landing, narrative doc / example
    routes, Fig rendering, and a static asset endpoint. Tracked phase
    by phase in `viewer/TODO.md`.
-8. [ ] **M7 — SSR adapter + first dynamic routes.** Attach
+8. [x] **M7 — SSR adapter + first dynamic routes.** Attach
    `@astrojs/node` and keep `output: "static"` so every existing page
    stays prerendered. New `prerender = false` endpoints
    (`/api/bundles.json`, `/api/search.json`) exercise the server
-   bundle. This is scaffolding — any static-host deploy still works as
-   pure SSG because the SSR routes are never called. Next slices:
-   promote per-bundle client-side search to a cross-bundle SSR index,
-   add a `/api/resolve` endpoint for graph queries, then pick a
-   production host and swap to its Astro adapter (`@astrojs/cloudflare`,
-   `@astrojs/netlify`, `@astrojs/vercel`, or keep `@astrojs/node` for a
-   self-hosted Node server) once the set of dynamic routes is stable.
+   bundle.
+9. [x] **M8 — bundle upload + TypeScript crosslink.** `PUT /api/bundle`
+   receives a pre-ingested bundle, extracts it atomically into the
+   ingest store, and updates the cross-link graph (nodes + links) in a
+   single SQLite transaction. Digests are 16-byte BLAKE2b-128 via
+   `@noble/hashes`, byte-identical to Python's `graphstore.py`. A
+   `StorageBackend` interface (`src/lib/storage.ts`) abstracts the blob
+   store so an R2 implementation can be swapped in without touching the
+   crosslink engine (`src/lib/crosslink.ts`).
+   **Structural debt**: `crosslink.ts` and `storage.ts` overlap with the
+   sibling `ingest/` package (`GraphStore`, `collectForwardRefs`,
+   `@noble/hashes`). Once `viewer/` and `ingest/` share a pnpm workspace,
+   the endpoint should drive `Ingester` directly so maintainers can upload
+   raw gen bundles without a local ingest step first. The viewer-side
+   duplicates can then be deleted. See `README.md` for the current
+   upload workflow.
 
 ### M3 notes
 

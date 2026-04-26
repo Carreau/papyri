@@ -1,5 +1,6 @@
 """
-Misc helper functions
+Code-execution helpers used by ``papyri gen`` to run docstring examples
+and capture the resulting figures / stdout / stderr.
 """
 
 import ast
@@ -7,8 +8,6 @@ import io
 import sys
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from typing import Any
-
-from rich.progress import Progress
 
 
 @contextmanager
@@ -22,28 +21,6 @@ def capture_displayhook(acc):
         yield
     finally:
         sys.displayhook = old_dh
-
-
-class DummyP(Progress):
-    """
-    Rich progress bar can screw up ipdb, so it can be useful to have a dummy
-    replacement
-    """
-
-    def add_task(self, *args, **kwargs):  # type: ignore[override,unused-ignore]
-        pass
-
-    def advance(self, *args, **kwargs):  # type: ignore[override,unused-ignore]
-        pass
-
-    def update(self, *args, **kwargs):  # type: ignore[override,unused-ignore]
-        pass
-
-    def __enter__(self, *args, **kwargs):
-        return self
-
-    def __exit__(self, *args, **kwargs):
-        pass
 
 
 class BlockExecutor:

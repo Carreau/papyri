@@ -11,6 +11,7 @@ from typing import Any
 import cbor2
 from rich.logging import RichHandler
 
+from ._progress import iter_with_progress
 from .config import ingest_dir
 from .gen import GeneratedDoc, _OrderedDictProxy, normalise_ref
 from .graphstore import GraphStore, Key
@@ -25,7 +26,7 @@ from .nodes import (
 )
 from .signature import SignatureNode
 from .tree import IngestVisitor, TreeVisitor, resolve_
-from .utils import Cannonical, FullQual, dummy_progress, progress
+from .utils import Cannonical, FullQual
 
 warnings.simplefilter("ignore", UserWarning)
 
@@ -220,7 +221,12 @@ class Ingester:
     def __init__(self, dp):
         self.ingest_dir = ingest_dir
         self.gstore = GraphStore(self.ingest_dir)
-        self.progress = dummy_progress if dp else progress
+        self._dummy_progress = dp
+
+    def progress(self, iterable, *, description: str = "Progress"):
+        return iter_with_progress(
+            iterable, dummy=self._dummy_progress, description=description
+        )
 
     def _ingest_logo(
         self, path: Path, root: str, version: str, logo_name: str, gstore: GraphStore
@@ -484,7 +490,7 @@ class Ingester:
             if set(doc_blob.all_forward_refs()) != forward_refs:
                 gstore.put(key, data, forward_refs)
 
-        for _, key in progress(
+        for _, key in self.progress(
             gstore.glob((None, None, "examples", None)),
             description="Relinking Examples...",
         ):
@@ -505,7 +511,7 @@ class Ingester:
                 refs,
             )
 
-        for _, key in progress(
+        for _, key in self.progress(
             gstore.glob((None, None, "docs", None)),
             description="Relinking Narrative Docs...",
         ):

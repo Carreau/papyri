@@ -2,10 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   qualnameToSlug,
   slugToQualname,
-  linkForRef,
   collectNodes,
   collectImages,
 } from "../src/lib/ir-reader.ts";
+import { linkForRef } from "../src/lib/links.ts";
 
 describe("qualname <-> slug", () => {
   it("rewrites colons to $ and leaves dotted qualnames alone", () => {

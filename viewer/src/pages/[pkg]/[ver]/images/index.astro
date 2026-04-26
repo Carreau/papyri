@@ -9,6 +9,7 @@ import {
   collectImages,
   type FoundImgNode,
 } from "../../../../lib/ir-reader.ts";
+import { linkForDoc, linkForExample, linkForQualname } from "../../../../lib/links.ts";
 import { listDocs, listExamples } from "../../../../lib/nav.ts";
 
 export async function getStaticPaths() {
@@ -58,7 +59,7 @@ await Promise.all(
     } catch {
       return;
     }
-    const href = `/${pkg}/${ver}/${qa.replace(/:/g, "$")}/`;
+    const href = linkForQualname(pkg!, ver!, qa);
     for (const found of collectImages(doc)) addHit(found, { label: qa, href });
   })
 );
@@ -73,7 +74,7 @@ await Promise.all(
     } catch {
       return;
     }
-    const href = `/${pkg}/${ver}/docs/${docPath.split("/").map(encodeURIComponent).join("/")}/`;
+    const href = linkForDoc(pkg!, ver!, docPath);
     for (const found of collectImages(section)) addHit(found, { label: docPath, href });
   })
 );
@@ -88,7 +89,7 @@ await Promise.all(
     } catch {
       return;
     }
-    const href = `/${pkg}/${ver}/examples/${exPath.split("/").map(encodeURIComponent).join("/")}/`;
+    const href = linkForExample(pkg!, ver!, exPath);
     for (const found of collectImages(section)) addHit(found, { label: exPath, href });
   })
 );

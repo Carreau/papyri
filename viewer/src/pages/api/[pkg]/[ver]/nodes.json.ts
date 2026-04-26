@@ -28,6 +28,7 @@ import {
 } from "../../../../lib/ir-reader.ts";
 import { listDocs, listExamples } from "../../../../lib/nav.ts";
 import { typeFromSlug } from "../../../../lib/ir-types.ts";
+import { linkForDoc, linkForExample, linkForQualname } from "../../../../lib/links.ts";
 import { renderNode } from "../../../../lib/render-node.ts";
 
 export const prerender = false;
@@ -105,7 +106,7 @@ export async function collectBundleNodes(
     }
     addHits(collectNodes(doc, types), {
       label: qa,
-      href: `/${pkg}/${ver}/${qa.replace(/:/g, "$")}/`,
+      href: linkForQualname(pkg, ver, qa),
     });
   }
 
@@ -121,7 +122,7 @@ export async function collectBundleNodes(
     }
     addHits(collectNodes(section, types), {
       label: docPath,
-      href: `/${pkg}/${ver}/docs/${docPath.split("/").map(encodeURIComponent).join("/")}/`,
+      href: linkForDoc(pkg, ver, docPath),
     });
   }
 
@@ -137,7 +138,7 @@ export async function collectBundleNodes(
     }
     addHits(collectNodes(section, types), {
       label: exPath,
-      href: `/${pkg}/${ver}/examples/${exPath.split("/").map(encodeURIComponent).join("/")}/`,
+      href: linkForExample(pkg, ver, exPath),
     });
   }
 

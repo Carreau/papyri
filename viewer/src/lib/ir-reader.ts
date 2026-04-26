@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { decode as decodeIR } from "papyri-ingest";
 import { IR_TYPE_NAMES } from "./ir-types.ts";
+import { linkForAsset } from "./links.ts";
 import { qualnameToSlug, slugToQualname } from "./slugs.ts";
 export { qualnameToSlug, slugToQualname };
 
@@ -203,20 +204,6 @@ export function decodeCborBytes<T = unknown>(bytes: Uint8Array | Buffer): T {
 }
 
 // ---------------------------------------------------------------------------
-// URL shaping for a RefInfo-shaped tuple.
-// `module` / `docs` / `examples` get the natural page URLs we render; `assets`
-// gets a static path (actual asset serving is deferred to M3). Unknown kinds
-// return null so the caller can render an unresolved span.
-// ---------------------------------------------------------------------------
-
-export interface LinkRef {
-  pkg: string;
-  ver: string;
-  kind: string;
-  path: string;
-}
-
-// ---------------------------------------------------------------------------
 // Generic IR node collection.
 //
 // collectNodes walks a decoded IR tree and returns every node whose __type
@@ -273,7 +260,7 @@ export function collectImages(node: unknown): FoundImgNode[] {
         const assetPath = String(ref.path);
         out.push({
           kind: "Figure",
-          src: `/assets/${ref.module}/${ref.version}/${assetPath.replace(/:/g, "$")}`,
+          src: linkForAsset(ref.module, ref.version, assetPath),
           assetPath,
         });
       }
@@ -283,22 +270,4 @@ export function collectImages(node: unknown): FoundImgNode[] {
     }
   }
   return out;
-}
-
-export function linkForRef(ref: LinkRef): string | null {
-  switch (ref.kind) {
-    case "module":
-      return `/${ref.pkg}/${ref.ver}/${qualnameToSlug(ref.path)}/`;
-    case "docs":
-      return `/${ref.pkg}/${ref.ver}/docs/${ref.path.split(":").map(encodeURIComponent).join("/")}/`;
-    case "examples":
-      return `/${ref.pkg}/${ref.ver}/examples/${ref.path.split("/").map(encodeURIComponent).join("/")}/`;
-    case "assets":
-      // Colons are legal on disk but break Astro's URL-based path writer.
-      // Same slug rule as qualnames: `:` -> `$`. Kept in sync with the
-      // asset endpoint's `slugifyAssetPath`.
-      return `/assets/${ref.pkg}/${ref.ver}/${ref.path.replace(/:/g, "$")}`;
-    default:
-      return null;
-  }
 }

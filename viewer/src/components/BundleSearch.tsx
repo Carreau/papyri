@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactElement } from "react";
+import { linkForQualname } from "../lib/links.ts";
 import { filterQualnames, type SearchHit } from "../lib/search.ts";
-import { qualnameToSlug } from "../lib/slugs.ts";
 
 interface Props {
   pkg: string;
@@ -65,7 +65,7 @@ export default function BundleSearch({ pkg, ver }: Props): ReactElement {
           ) : (
             hits.map((h) => (
               <li key={h.qualname}>
-                <a href={`/${pkg}/${ver}/${qualnameToSlug(h.qualname)}/`}>{h.qualname}</a>
+                <a href={linkForQualname(pkg, ver, h.qualname)}>{h.qualname}</a>
               </li>
             ))
           )}

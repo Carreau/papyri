@@ -1,6 +1,6 @@
 // SSR endpoint that serves files from a bundle's ingest `assets/` dir.
-// `linkForRef({kind: "assets"})` renders URLs like
-//   /assets/<pkg>/<ver>/<filename>
+// URL shape (built by `linkForAsset` in `lib/links.ts`):
+//   /assets/<pkg>/<ver>/<filename-with-colons-as-dollars>
 //
 // This is a hybrid SSR route (`prerender = false`) so it works in both
 // `pnpm dev` and when running the built server via the node adapter.
@@ -13,6 +13,7 @@ import { readFile } from "node:fs/promises";
 import { extname, join } from "node:path";
 import type { APIRoute } from "astro";
 import { ingestDir } from "../../../../lib/ir-reader.ts";
+import { slugToQualname } from "../../../../lib/slugs.ts";
 
 const MIME: Record<string, string> = {
   ".png": "image/png",
@@ -30,15 +31,6 @@ const MIME: Record<string, string> = {
   ".pdf": "application/pdf",
 };
 
-// papyri writes asset filenames like `fig-papyri.examples:example1-0.png`.
-// Colons are legal on disk but unsafe in URLs (Astro rejects them as a
-// scheme-prefix during output-path generation), so we mirror the qualname
-// slug rule and rewrite `:` -> `$` in the URL-facing segment.
-// The endpoint reverses the substitution when building the file path.
-export function slugifyAssetPath(p: string): string {
-  return p.replace(/:/g, "$");
-}
-
 export const prerender = false;
 
 export const GET: APIRoute = async ({ params }) => {
@@ -46,8 +38,10 @@ export const GET: APIRoute = async ({ params }) => {
   if (!pkg || !ver || !asset) {
     return new Response("Not found", { status: 404 });
   }
-  // Reverse the URL-safe slug: `$` → `:` to recover the real filename.
-  const filename = asset.replace(/\$/g, ":");
+  // Reverse the URL-safe slug (`$` -> `:`) to recover the real filename;
+  // asset filenames like `fig-papyri.examples:example1-0.png` are legal on
+  // disk but unsafe in URLs.
+  const filename = slugToQualname(asset);
   const filePath = join(ingestDir(), pkg, ver, "assets", filename);
   let buf: Buffer;
   try {

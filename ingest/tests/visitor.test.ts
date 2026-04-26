@@ -148,7 +148,12 @@ describe("collectForwardRefs", () => {
     });
     const refs = collectForwardRefs(doc);
     expect(refs).toHaveLength(1);
-    expect(refs[0]).toMatchObject({ module: "numpy", version: "?", kind: "module", path: "numpy.linspace" });
+    expect(refs[0]).toMatchObject({
+      module: "numpy",
+      version: "?",
+      kind: "module",
+      path: "numpy.linspace",
+    });
   });
 
   it("normalises api-kind stubs nested inside CrossRef.reference", () => {
@@ -166,7 +171,12 @@ describe("collectForwardRefs", () => {
     });
     const refs = collectForwardRefs(doc);
     expect(refs).toHaveLength(1);
-    expect(refs[0]).toMatchObject({ module: "numpy", version: "?", kind: "module", path: "numpy.linspace" });
+    expect(refs[0]).toMatchObject({
+      module: "numpy",
+      version: "?",
+      kind: "module",
+      path: "numpy.linspace",
+    });
   });
 });
 

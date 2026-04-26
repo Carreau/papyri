@@ -137,11 +137,7 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md). Summary:
   `viewer/PLAN.md` for the tech rationale).
 - Reads the IR directly from the ingest store (`~/.papyri/ingest/`) and
   the SQLite graph; no new intermediate format.
-- Milestones M0–M8 have all landed; see
-  [`viewer/PLAN.md`](viewer/PLAN.md) "Milestones" for the
-  authoritative status (M6 layout/cards/assets, M7 SSR adapter, M8
-  bundle upload over HTTP). This file should not duplicate that
-  list — update it there.
+- Milestones tracked in [`viewer/PLAN.md`](viewer/PLAN.md) "Milestones".
 - CI: `.github/workflows/viewer.yml` runs `pnpm --filter papyri-viewer
   run check` and `pnpm build`; `.github/workflows/lint.yml` runs the
   ESLint + Prettier checks; `.github/workflows/ingest.yml` covers the

@@ -52,11 +52,7 @@ strict_equality = true
 strict_optional = true
 
 [tool.ruff]
-# Match `requires-python = ">=3.14"` (CLAUDE.md "Python 3.14+ only").
-# If ruff's PEP 758 (unparenthesized `except`) reformatting becomes a
-# problem in practice, address it via per-rule ignores rather than by
-# misrepresenting the supported version.
-target-version = "py314"
+target-version = "py313"
 line-length = 88
 extend-exclude = ["node_modules", "jupyter_server_test_config.py"]
 
@@ -81,10 +77,6 @@ ignore = [
     "E741",   # Ambiguous variable name
     "F811",   # Redefinition of unused name
     "B008",   # typer.Option() in function defaults is the intended typer pattern
-    # UP040 was previously kept for a 3.11 dev environment; with the project
-    # at 3.14+ the `type` keyword is available everywhere and the ignore can
-    # likely be dropped — see TODO. Keeping it for now to avoid mixing an
-    # autofix sweep into the doc-cleanup PR.
     "UP040",
 ]
 mccabe.max-complexity = 50

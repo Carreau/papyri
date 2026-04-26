@@ -1,27 +1,28 @@
 # Papyri IR format
 
 This document describes the on-disk intermediate representation (IR) that
-`papyri gen` writes and `papyri ingest` reads, and the local cross-linked
-graph that `papyri ingest` produces.
+`papyri gen` writes and `papyri ingest` reads.
 
 It is aimed at papyri maintainers and at authors of IR consumers (the
 in-tree `viewer/`, or any future out-of-tree consumer). See `PLAN.md` for
 project-wide scope; the code of record for everything below is
-`papyri/gen.py`, `papyri/crosslink.py`, `papyri/graphstore.py`,
-`papyri/node_base.py`, and `papyri/nodes.py`.
+`papyri/gen.py`, `papyri/crosslink.py`, `papyri/node_base.py`, and
+`papyri/nodes.py`.
 
 ## Two stores, two stages
 
 Papyri has two stages and two corresponding on-disk locations:
 
-| Stage             | Command                 | Path                                | Purpose                                                                |
-| ----------------- | ----------------------- | ----------------------------------- | ---------------------------------------------------------------------- |
-| Generate          | `papyri gen <cfg.toml>` | `~/.papyri/data/<pkg>_<ver>/`       | Per-bundle IR for one library version, self-contained.                 |
-| Ingest + link     | `papyri ingest <dir>`   | `~/.papyri/ingest/`                 | Cross-linked graph over all ingested bundles, queryable via SQLite.    |
+| Stage             | Command                 | Path                                | Purpose                                                            |
+| ----------------- | ----------------------- | ----------------------------------- | ------------------------------------------------------------------ |
+| Generate          | `papyri gen <cfg.toml>` | `~/.papyri/data/<pkg>_<ver>/`       | Per-bundle IR for one library version, self-contained.             |
+| Ingest + link     | `papyri ingest <dir>`   | `~/.papyri/ingest/`                 | Cross-linked store over all ingested bundles.                      |
 
-Gen produces a bundle; ingest merges bundles into the graph store and
-resolves cross-references between them. A consumer (the viewer) reads from
-the ingest store — not from individual gen bundles.
+Gen produces a bundle; ingest merges bundles into the cross-linked
+store and resolves cross-references between them. A consumer (the
+viewer) reads from the ingest store — not from individual gen
+bundles. The exact representation of the cross-link index is an
+internal detail of the ingest store and not part of the IR contract.
 
 ## Encoding
 
@@ -158,7 +159,6 @@ against everything already ingested, and writes into
 
 ```
 ~/.papyri/ingest/
-├── papyri.db                              # SQLite graph index
 └── <module>/
     └── <version>/
         ├── meta.cbor                      # bundle meta (minus aliases, plus summary)
@@ -175,6 +175,10 @@ against everything already ingested, and writes into
             ├── aliases.cbor               # Dict[str,str] (CBOR)
             └── logo.<ext>                 # optional, copied from gen assets/
 ```
+
+The cross-link index that `papyri ingest` maintains alongside this
+tree is an implementation detail of the ingest tool / hosted service
+and is not described here.
 
 ### `meta.cbor`
 
@@ -205,68 +209,17 @@ name this blob represents.
 The `meta/` directory is not written by gen; it is produced at ingest
 time.
 
-### SQLite schema (`papyri.db`)
+The subdirectory names — `module`, `docs`, `examples`, `assets`,
+`meta` — also serve as the `kind` discriminator on `RefInfo` (below).
 
-Defined in `papyri/graphstore.py` (`_SCHEMA`). Two tables plus indexes:
+### RefInfo
 
-```sql
-CREATE TABLE nodes(
-    id         INTEGER PRIMARY KEY,
-    package    TEXT NOT NULL,
-    version    TEXT NOT NULL,
-    category   TEXT NOT NULL,
-    identifier TEXT NOT NULL,
-    has_blob   INTEGER NOT NULL DEFAULT 0,
-    digest     BLOB,
-    UNIQUE(package, version, category, identifier)
-);
-
-CREATE TABLE links(
-    source INTEGER NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
-    dest   INTEGER NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
-    PRIMARY KEY (source, dest)
-);
-
-CREATE INDEX idx_links_dest ON links(dest);
-CREATE INDEX idx_nodes_pkg_cat_ident
-    ON nodes(package, category, identifier);
-```
-
-Semantics:
-
-- `nodes` carries every `(package, version, category, identifier)` key
-  the graph has ever seen — both blobs papyri has stored on disk and
-  ref targets that have not yet been ingested. The `has_blob` flag
-  distinguishes the two: rows with `has_blob = 1` correspond 1:1 to a
-  file at `<package>/<version>/<category>/<identifier>`; rows with
-  `has_blob = 0` are placeholder destinations (dangling refs). Cross-
-  package refs ingested before their target package may also use
-  wildcard `version = "?"` or `"*"`.
-- `digest` is a 16-byte BLAKE2b fingerprint of the canonical
-  (re-encoded) blob, set by `GraphStore.put` for blob-backed rows. It
-  drives `diff_versions` (and surfaces via `papyri diff`); placeholder
-  rows have `digest = NULL`.
-- `links(source, dest)` is the directed edge set, both columns FK into
-  `nodes(id)`. There is no `metadata` column today.
-
-`category` corresponds to the subdirectory name: `"module"`, `"docs"`,
-`"examples"`, `"assets"`, or `"meta"`.
-
-### Key vs. RefInfo
-
-Two closely related tuples appear throughout the code:
-
-- `Key(module, version, kind, path)` (`papyri/graphstore.py`) is the
-  storage key used by `GraphStore.get / put / glob`. It is what addresses
-  a blob on disk and a row in the SQLite graph.
-- `RefInfo(module, version, kind, path)` (`papyri/nodes.py`) is the
-  in-IR reference: it appears inside `GeneratedDoc` /
-  `IngestedDoc` nodes as the target of a cross-reference.
-
-They carry the same four fields. `RefInfo` is what ends up CBOR-encoded
-inside documents; `Key` is the lookup handle the store uses. The
-`Figure.value` field, for example, is a `RefInfo`, and ingest materializes
-it into a `Key` for the `links` table.
+`RefInfo(module, version, kind, path)` (`papyri/nodes.py`) is the
+in-IR reference: it appears inside `GeneratedDoc` / `IngestedDoc`
+nodes as the target of a cross-reference. The `Figure.value` field,
+for example, is a `RefInfo`. The four fields address a blob inside a
+bundle (`<module>/<version>/<kind>/<path>`), and a `RefInfo` is the
+only form a cross-reference takes in the IR consumers see.
 
 ## Node type registry (CBOR tags)
 

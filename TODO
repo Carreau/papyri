@@ -1,8 +1,27 @@
 # Papyri TODO
 
-Catch-all for bugs found in the wild and the ops/lint queue. Rename passes
-live in [`TODO-renames.md`](TODO-renames.md); post-review follow-ups live
-in [`TODO-review.md`](TODO-review.md); milestones in [`PLAN.md`](PLAN.md).
+Catch-all for bugs found in the wild, planning notes, and the ops /
+lint queue. Rename passes live in [`TODO-renames.md`](TODO-renames.md);
+milestones in [`PLAN.md`](PLAN.md).
+
+## Open code smells
+
+- `crosslink.py` version resolution across packages. Three related
+  prose `TODO:` markers (lines 172, 380, 393, 415):
+  - the main `.process` loop has a stale `assert len(visitor.local)
+    == 0` that would need a gen-time pass over local refs before it
+    can be re-enabled (`:172`).
+  - per-reference version information is still needed to support
+    cross-package linking correctly (`:393`).
+  - `doc_blob.all_forward_refs()` on Figures: Figure's
+    `RefInfo.version` is populated at walk time today; proper fix
+    populates it at serialisation time (`:415`).
+  Anyone touching cross-package linking should read them first.
+  `PLAN.md` "Follow-ups" echoes this item as well.
+
+- `tree.py` still has ~8 `TODO:` markers inside the directive /
+  resolve code paths. Triage as a batch when the resolver is
+  touched; not blocking day-to-day work.
 
 ## Next up
 

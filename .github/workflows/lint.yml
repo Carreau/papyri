@@ -102,3 +102,17 @@ jobs:
     - name: Check TypeScript (Astro)
       if: always()
       run: pnpm --filter papyri-viewer run check
+
+  actionlint:
+    # No paths filter: invalid workflow YAML is silently rejected by GitHub
+    # Actions, so the only way to catch a regression is to validate on every
+    # PR before merge. ubuntu-latest ships Go, so we run actionlint via
+    # `go run` (downloads + executes in one step, pinned by version) — no
+    # curl|bash, no docker pull, no GOPATH/PATH dance.
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      with:
+        persist-credentials: false
+    - name: Lint workflows
+      run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 -color

@@ -392,7 +392,8 @@ class Ingester:
                 raise
 
         # TODO: crosslink still needs per-reference version information to
-        # support cross-package linking correctly. See TODO-review.md.
+        # support cross-package linking correctly. See TODO "Open code
+        # smells".
 
         for _, (qa, doc_blob) in self.progress(
             nvisited_items.items(), description=f"{path.name} Validating..."

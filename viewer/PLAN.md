@@ -5,7 +5,7 @@ from the local papyri IR on disk (`~/.papyri/data/<pkg>_<ver>/`) and the
 SQLite cross-link graph (`~/.papyri/ingest/papyri.db`).
 
 > Relation to top-level `PLAN.md`: that doc's Phase 3 originally punted
-> rendering to a *separate* repo. Decision: **keep the renderer in-tree
+> rendering to a _separate_ repo. Decision: **keep the renderer in-tree
 > under `viewer/` for now.** Rationale: the IR is still in heavy
 > development (Phase 2 hasn't stabilized it yet), so having the renderer
 > and the IR producer in the same repo lets us iterate on both in a single
@@ -72,20 +72,20 @@ SQLite cross-link graph (`~/.papyri/ingest/papyri.db`).
 
 Leaning toward the minimum that reads the IR cleanly.
 
-| Area            | Choice                        | Why                                             |
-| --------------- | ----------------------------- | ----------------------------------------------- |
-| Language        | TypeScript                    | Typed IR = fewer renderer bugs                  |
-| Runtime         | Node LTS                      | Matches the "future Node project" in `PLAN.md`  |
-| Framework       | **Astro** (SSG + SSR islands) | Content-shaped site; minimal JS by default      |
-| UI components   | React (inside Astro islands)  | Familiar; matches the original Phase 3 intent   |
-| CBOR reader     | `cbor-x`                      | Fast, streaming, TS types                       |
-| Graph client    | `better-sqlite3`              | Sync, tiny, reads `papyri.db` directly          |
-| Math            | `katex` (client)              | Replaces `flatlatex`; no server dep             |
-| Syntax highlight| `shiki`                       | Zero-runtime, VS Code grammars                  |
-| Styling         | Plain CSS + CSS custom props  | No Tailwind yet; keep the surface small         |
-| Package manager | `pnpm`                        | Workspace-ready if we add a shared IR lib       |
-| Lint / format   | ESLint + Prettier             | Standard                                        |
-| Tests           | Vitest + Playwright smoke     | Unit for IR reader; e2e for a few golden pages  |
+| Area             | Choice                        | Why                                            |
+| ---------------- | ----------------------------- | ---------------------------------------------- |
+| Language         | TypeScript                    | Typed IR = fewer renderer bugs                 |
+| Runtime          | Node LTS                      | Matches the "future Node project" in `PLAN.md` |
+| Framework        | **Astro** (SSG + SSR islands) | Content-shaped site; minimal JS by default     |
+| UI components    | React (inside Astro islands)  | Familiar; matches the original Phase 3 intent  |
+| CBOR reader      | `cbor-x`                      | Fast, streaming, TS types                      |
+| Graph client     | `better-sqlite3`              | Sync, tiny, reads `papyri.db` directly         |
+| Math             | `katex` (client)              | Replaces `flatlatex`; no server dep            |
+| Syntax highlight | `shiki`                       | Zero-runtime, VS Code grammars                 |
+| Styling          | Plain CSS + CSS custom props  | No Tailwind yet; keep the surface small        |
+| Package manager  | `pnpm`                        | Workspace-ready if we add a shared IR lib      |
+| Lint / format    | ESLint + Prettier             | Standard                                       |
+| Tests            | Vitest + Playwright smoke     | Unit for IR reader; e2e for a few golden pages |
 
 ### Alternatives considered
 
@@ -135,37 +135,103 @@ Data flow per request/page:
 
 ## Milestones
 
-1. [x] **M0 — scaffolding.** `pnpm init`, Astro app boots, reads
-   `~/.papyri/data` and lists bundles. No qualname rendering yet.
-2. [x] **M1 — single-page render.** Given `(pkg, ver, qualname)`, render
-   signature + description from the IR. No crosslinks.
-3. [x] **M2 — crosslinks + backrefs** via `papyri.db`.
-4. [x] **M3 — examples, math, syntax highlighting.**
-5. [x] **M4 — static export** (`astro build`) verified against a real
-   ingested set (numpy, scipy).
-6. [x] **M5 — polish**: search, error pages, dark mode.
-7. [x] **M6 — layout redo + nav + cards + assets.** Two-column bundle
-   layout with a sidebar, card-based landing, narrative doc / example
-   routes, Fig rendering, and a static asset endpoint. Tracked phase
-   by phase in `viewer/TODO.md`.
-8. [x] **M7 — SSR adapter + first dynamic routes.** Attach
-   `@astrojs/node` and keep `output: "static"` so every existing page
-   stays prerendered. New `prerender = false` endpoints
-   (`/api/bundles.json`, `/api/search.json`) exercise the server
-   bundle.
-9. [x] **M8 — bundle upload over HTTP.** `PUT /api/bundle` accepts a
-   raw `papyri gen` bundle (tar.gz of `~/.papyri/data/<pkg>_<ver>/`),
-   extracts it into a staging dir under `PAPYRI_INGEST_DIR`, and runs
-   the full ingest pipeline directly against it. The endpoint is the
-   network-callable replacement for the local `papyri ingest` /
-   `papyri-ingest` step.
-   `viewer/` and `ingest/` are linked as a pnpm workspace (root
-   `pnpm-workspace.yaml`). The endpoint imports `Ingester` from the
-   sibling `papyri-ingest` package so blob writing, digest computation
-   (16-byte BLAKE2b-128), graph updates, and forward-ref collection all
-   live in one place — no viewer-side duplicates. After ingest the
-   read-only graph DB cache is invalidated so subsequent requests see
-   the new nodes/links. See `README.md` for the upload workflow.
+1.  [x] **M0 — scaffolding.** `pnpm init`, Astro app boots, reads
+        `~/.papyri/data` and lists bundles. No qualname rendering yet.
+2.  [x] **M1 — single-page render.** Given `(pkg, ver, qualname)`, render
+        signature + description from the IR. No crosslinks.
+3.  [x] **M2 — crosslinks + backrefs** via `papyri.db`.
+4.  [x] **M3 — examples, math, syntax highlighting.**
+5.  [x] **M4 — static export** (`astro build`) verified against a real
+        ingested set (numpy, scipy).
+6.  [x] **M5 — polish**: search, error pages, dark mode.
+7.  [x] **M6 — layout redo + nav + cards + assets.** Two-column bundle
+        layout with a sidebar, card-based landing, narrative doc / example
+        routes, Fig rendering, and a static asset endpoint. Tracked phase
+        by phase in `viewer/TODO.md`.
+8.  [x] **M7 — SSR adapter + first dynamic routes.** Attach
+        `@astrojs/node` and keep `output: "static"` so every existing page
+        stays prerendered. New `prerender = false` endpoints
+        (`/api/bundles.json`, `/api/search.json`) exercise the server
+        bundle.
+9.  [x] **M8 — bundle upload over HTTP.** `PUT /api/bundle` accepts a
+        raw `papyri gen` bundle (tar.gz of `~/.papyri/data/<pkg>_<ver>/`),
+        extracts it into a staging dir under `PAPYRI_INGEST_DIR`, and runs
+        the full ingest pipeline directly against it. The endpoint is the
+        network-callable replacement for the local `papyri ingest` /
+        `papyri-ingest` step.
+        `viewer/` and `ingest/` are linked as a pnpm workspace (root
+        `pnpm-workspace.yaml`). The endpoint imports `Ingester` from the
+        sibling `papyri-ingest` package so blob writing, digest computation
+        (16-byte BLAKE2b-128), graph updates, and forward-ref collection all
+        live in one place — no viewer-side duplicates. After ingest the
+        read-only graph DB cache is invalidated so subsequent requests see
+        the new nodes/links. See `README.md` for the upload workflow.
+10. [ ] **M9 — Cloudflare Workers (D1 + R2) under `wrangler dev`.**
+        Goal: the viewer can run under `pnpm wrangler dev` against a local
+        miniflare-backed D1 database (graph store) and R2 bucket (CBOR
+        blobs + assets), so the same code path that will run in production
+        on Workers is exercised during development. The aspirational hosted
+        target is a Cloudflare Workers deploy whose IR + graph live entirely
+        in D1 / R2 — no per-deploy filesystem state. The work is staged so
+        each phase lands a working slice; the existing `pnpm dev` /
+        `pnpm build` / `pnpm serve` flows keep working throughout.
+
+Sub-phases of M9 (tracked separately to keep this list flat for prettier):
+
+- [x] **M9.0 — local seeder + binding scaffolding.** Add
+      `viewer/wrangler.toml` declaring `GRAPH_DB` (D1) and `BLOBS` (R2)
+      bindings, plus a `viewer/scripts/seed-wrangler.mjs` script that walks
+      `~/.papyri/ingest/` and pushes every blob to the local R2 bucket and
+      the contents of `papyri.db` into the local D1 database (via the
+      `wrangler r2 object put --local` and `wrangler d1 execute --local`
+      subcommands, fed a single SQL dump file). The seeder is a one-shot
+      bootstrap, not a sync daemon: it overwrites local state so each run
+      is reproducible. No code paths in the viewer use the bindings yet —
+      this is just the data plumbing.
+- [ ] **M9.1 — `StorageBackend` abstraction.** Introduce
+      `src/lib/storage.ts` with an async interface (`getBlob`,
+      `listKeys(prefix)`, `getMeta`) and a Node-fs implementation that
+      wraps the existing `node:fs/promises` calls in `ir-reader.ts` /
+      `nav.ts`. All callers go through the backend; the on-disk layout
+      stops leaking past `storage.ts`. No behaviour change yet — the fs
+      backend is the only one wired in.
+- [ ] **M9.2 — async graph store.** Mirror the abstraction for the
+      graph: a `GraphBackend` with `resolveRef` / `getBackrefs` that
+      returns a Promise. A `Sqlite3Backend` keeps the current sync calls
+      inside an async wrapper for SSR/SSG; a `D1Backend` runs the same SQL
+      through the D1 client. Pages that consume xrefs (qualname / doc /
+      example) become `await`-aware. Build-time SSG continues against
+      `Sqlite3Backend`.
+- [ ] **M9.3 — Cloudflare adapter + worker entrypoint.** Add
+      `@astrojs/cloudflare` as a _parallel_ config (`astro.config.cf.mjs`
+      or env-switched in the existing config) so `pnpm build:cf` produces
+      a worker bundle that `wrangler dev` can serve. The Workers runtime
+      injects `env.GRAPH_DB` / `env.BLOBS`; we read them via Astro's
+      `locals.runtime.env`. `pnpm build` (Node SSG + SSR) is unchanged.
+- [ ] **M9.4 — bundle upload via Workers.** Reimplement
+      `PUT /api/bundle` on the Workers side: stream the tarball,
+      decompress + untar in-Worker (no `child_process.spawn`), invoke a
+      Workers-compatible variant of `Ingester` that writes through
+      `BLOBS.put` and `GRAPH_DB.prepare(...).bind(...).run()` instead of
+      better-sqlite3 + fs. Likely needs a small extraction of the
+      SQL/blob-writing core out of `ingest/src/graphstore.ts` so both
+      backends share the same statements.
+- [ ] **M9.5 — CI smoke + docs.** Add a workflow that runs
+      `pnpm wrangler dev` against a tiny seeded fixture and hits a handful
+      of routes; document the dev workflow in `README.md` and the deploy
+      story in `DEPLOY.md`. Decide whether to host Cloudflare deploys as
+      preview-only or as the default.
+
+M9 constraints:
+
+- The Node / SSG path stays a first-class supported configuration. The
+  Cloudflare path is additive; nothing in the IR shape changes.
+- `better-sqlite3` and `node:fs` are still allowed in build-time code
+  (SSG) and the Node adapter; they just must not be reachable from a
+  route compiled into the Workers bundle.
+- `papyri-ingest` keeps its sync filesystem write path for the CLI and
+  the Node-mode `PUT /api/bundle`. The Workers ingest is a parallel
+  implementation, not a replacement.
 
 ### M3 notes
 
@@ -282,7 +348,7 @@ Data flow per request/page:
   is a few MB and all lookups happen at SSG time, so we want a zero-async
   API rather than e.g. `sql.js`.
 - Async/sync DB access: Astro component frontmatter is async but Astro
-  component *props* are resolved synchronously per render. Rather than
+  component _props_ are resolved synchronously per render. Rather than
   pre-resolving every XRef into a flat `{url, label}` table before rendering
   (which would mean walking the whole IR tree up front), we pass a
   synchronous `resolveXref(node) => {url, label} | null` function into

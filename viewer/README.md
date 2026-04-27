@@ -84,11 +84,11 @@ pnpm serve
 
 SSR endpoints:
 
-| Method | Route                        | What it does                                         |
-| ------ | ---------------------------- | ---------------------------------------------------- |
-| `GET`  | `/api/bundles.json`          | Live list of ingested bundles, read per request.     |
-| `GET`  | `/api/search.json?q=<term>`  | Cross-bundle substring search over qualnames.        |
-| `PUT`  | `/api/bundle`                | Receive a gen bundle, ingest it, update the graph.   |
+| Method | Route                       | What it does                                       |
+| ------ | --------------------------- | -------------------------------------------------- |
+| `GET`  | `/api/bundles.json`         | Live list of ingested bundles, read per request.   |
+| `GET`  | `/api/search.json?q=<term>` | Cross-bundle substring search over qualnames.      |
+| `PUT`  | `/api/bundle`               | Receive a gen bundle, ingest it, update the graph. |
 
 These are the designated shock absorber for future dynamic behaviour
 (global search, on-the-fly bundle swaps, the hosted multi-tenant
@@ -129,12 +129,12 @@ viewer (`http://localhost:4321/api/bundle`); point it elsewhere with
 
 ### Response
 
-| Status | Body                       | Meaning                                          |
-| ------ | -------------------------- | ------------------------------------------------ |
-| `201`  | `{ok:true, pkg, version}`  | Bundle ingested into the graph store.            |
-| `400`  | `{ok:false, error}`        | Missing body or bad `papyri.json`.               |
-| `422`  | `{ok:false, error}`        | Tar extraction or ingest failed.                 |
-| `500`  | `{ok:false, error}`        | Filesystem error before ingest started.          |
+| Status | Body                      | Meaning                                 |
+| ------ | ------------------------- | --------------------------------------- |
+| `201`  | `{ok:true, pkg, version}` | Bundle ingested into the graph store.   |
+| `400`  | `{ok:false, error}`       | Missing body or bad `papyri.json`.      |
+| `422`  | `{ok:false, error}`       | Tar extraction or ingest failed.        |
+| `500`  | `{ok:false, error}`       | Filesystem error before ingest started. |
 
 ### Notes
 
@@ -160,13 +160,61 @@ viewer (`http://localhost:4321/api/bundle`); point it elsewhere with
 | `pnpm test`          | Run the vitest unit suite once.               |
 | `pnpm test:watch`    | Vitest in watch mode.                         |
 | `pnpm serve`         | Run the built Node server (SSG + SSR routes). |
+| `pnpm seed:wrangler` | Seed local D1 + R2 from the ingest store.     |
+
+## Cloudflare Workers (D1 + R2) — experimental
+
+Tracked as **M9** in [`PLAN.md`](PLAN.md). The eventual hosted target is
+a Cloudflare Workers deploy whose graph store lives in D1 and whose CBOR
+blobs / assets live in R2 — no per-deploy filesystem state. The work is
+staged so each phase lands a working slice.
+
+What is wired up today (M9.0):
+
+- [`wrangler.toml`](wrangler.toml) declares the bindings the viewer
+  expects at runtime: `GRAPH_DB` (D1, database name
+  `papyri-viewer-graph`) and `BLOBS` (R2, bucket name
+  `papyri-viewer-blobs`).
+- [`scripts/seed-wrangler.mjs`](scripts/seed-wrangler.mjs) bootstraps
+  the local miniflare state from your existing ingest store. It walks
+  `~/.papyri/ingest/`, copies every row of `papyri.db` into D1
+  (creating the schema first), and PUTs every blob to R2 with the same
+  relative path as on disk.
+
+What does **not** work yet: there is no Workers entrypoint, so
+`wrangler dev` cannot serve the viewer. `pnpm dev` / `pnpm build` /
+`pnpm serve` (Node adapter) remain the supported run modes. The
+adapter swap and the async storage refactor land in M9.1–M9.3.
+
+### Try the seeder
+
+Prereqs:
+
+- A populated `~/.papyri/ingest/` (run `papyri ingest` first).
+- `wrangler` on your `PATH`. The script does **not** add it as a
+  dependency yet; install it ad-hoc with `pnpm add -D wrangler` from
+  `viewer/`, or globally with `npm install -g wrangler`.
+
+```sh
+cd viewer
+pnpm seed:wrangler
+```
+
+Pass `--remote` to write to a real Cloudflare account instead of the
+local miniflare state. The first remote run requires `wrangler d1
+create papyri-viewer-graph` and `wrangler r2 bucket create
+papyri-viewer-blobs`, plus replacing the placeholder `database_id` in
+`wrangler.toml` with the UUID `wrangler d1 create` prints.
+
+Local state lives under `viewer/.wrangler/state/v3/`. Delete that
+directory to start over.
 
 ## Environment variables
 
-| Variable            | Default                          | Purpose                                  |
-| ------------------- | -------------------------------- | ---------------------------------------- |
-| `PAPYRI_INGEST_DIR` | `~/.papyri/ingest`               | Root of the ingested store.              |
-| `PAPYRI_INGEST_DB`  | `~/.papyri/ingest/papyri.db`     | SQLite graph database.                   |
+| Variable            | Default                      | Purpose                     |
+| ------------------- | ---------------------------- | --------------------------- |
+| `PAPYRI_INGEST_DIR` | `~/.papyri/ingest`           | Root of the ingested store. |
+| `PAPYRI_INGEST_DB`  | `~/.papyri/ingest/papyri.db` | SQLite graph database.      |
 
 If `PAPYRI_INGEST_DB` points at a missing file, the viewer still
 builds and serves: xrefs render as muted "unresolved" spans and the

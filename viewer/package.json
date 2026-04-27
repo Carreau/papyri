@@ -16,7 +16,8 @@
     "format": "prettier --write src",
     "format:check": "prettier --check src",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "seed:wrangler": "node ./scripts/seed-wrangler.mjs"
   },
   "dependencies": {
     "@astrojs/node": "^10.0.5",

@@ -1,0 +1,50 @@
+# Cloudflare Workers configuration for the papyri viewer.
+#
+# Status: M9.0 scaffolding (see PLAN.md). The viewer does NOT yet run as a
+# Workers application — this file exists so the local seeder script
+# (`scripts/seed-wrangler.mjs`) can populate a local D1 database and R2
+# bucket via `wrangler d1 execute --local` / `wrangler r2 object put
+# --local`, and so subsequent phases can wire up `wrangler dev` against a
+# real Cloudflare adapter (M9.3).
+#
+# Until the adapter swap lands in M9.3, `wrangler dev` cannot serve the
+# viewer (there is no worker entrypoint). The bindings here are a
+# forward-looking declaration of what the viewer's runtime expects.
+
+name = "papyri-viewer"
+compatibility_date = "2026-04-27"
+compatibility_flags = ["nodejs_compat"]
+
+# Worker entrypoint will be filled in by M9.3 when @astrojs/cloudflare is
+# wired up. Once that lands, the build emits a worker module that wrangler
+# dev can serve directly.
+# main = "./dist/_worker.js/index.js"
+# assets = { directory = "./dist", binding = "ASSETS" }
+
+# ----------------------------------------------------------------------------
+# D1 — graph store (port of `~/.papyri/ingest/papyri.db`).
+#
+# Schema mirrors `ingest/src/graphstore.ts` exactly: nodes(id, package,
+# version, category, identifier, has_blob, digest) + links(source, dest).
+# The seeder script creates the schema and copies every row from the local
+# SQLite file into D1.
+#
+# `database_id` is a placeholder that miniflare ignores in --local mode.
+# When provisioning a real remote D1 database (`wrangler d1 create
+# papyri-viewer-graph`), replace it with the UUID printed by that command
+# and check the result in.
+# ----------------------------------------------------------------------------
+[[d1_databases]]
+binding = "GRAPH_DB"
+database_name = "papyri-viewer-graph"
+database_id = "00000000-0000-0000-0000-000000000000"
+
+# ----------------------------------------------------------------------------
+# R2 — blob store. Replaces the on-disk per-bundle directory tree under
+# `~/.papyri/ingest/<pkg>/<ver>/`. R2 keys mirror the on-disk relative path
+# verbatim so a key like `numpy/2.3.5/module/numpy.linspace` round-trips
+# unchanged.
+# ----------------------------------------------------------------------------
+[[r2_buckets]]
+binding = "BLOBS"
+bucket_name = "papyri-viewer-blobs"

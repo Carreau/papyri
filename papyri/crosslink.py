@@ -27,7 +27,7 @@ from .nodes import (
 )
 from .signature import SignatureNode
 from .tree import IngestVisitor, TreeVisitor, resolve_
-from .utils import Cannonical, FullQual
+from .utils import Canonical, FullQual
 
 warnings.simplefilter("ignore", UserWarning)
 
@@ -346,7 +346,7 @@ class Ingester:
         root = data["module"]
         # long : short
         aliases: dict[str, str] = data.get("aliases", {})
-        # rev_aliases = {Cannonical(v): FullQual(k) for k, v in aliases.items()}
+        # rev_aliases = {Canonical(v): FullQual(k) for k, v in aliases.items()}
         meta = {k: v for k, v in data.items() if k != "aliases"}
 
         self._ingest_examples(path, gstore, known_refs, aliases, version, root)
@@ -442,7 +442,7 @@ class Ingester:
         for key in gstore.glob((None, None, "meta", "aliases.cbor")):
             aliases.update(cbor2.loads(gstore.get(key)))
 
-        rev_aliases = {Cannonical(v): FullQual(k) for k, v in aliases.items()}
+        rev_aliases = {Canonical(v): FullQual(k) for k, v in aliases.items()}
 
         print("Relinking is safe to cancel, but some back references may be broken....")
         print("Press Ctrl-C to abort...")

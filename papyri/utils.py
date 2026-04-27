@@ -14,7 +14,7 @@ class FullQual(str):
         return self._qa
 
 
-Cannonical = NewType("Cannonical", str)
+Canonical = NewType("Canonical", str)
 
 
 def full_qual(obj) -> FullQual | None:

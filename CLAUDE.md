@@ -94,6 +94,17 @@ service *could* be built later without a breaking change to the IR.
    ```
    Re-stage any files Prettier rewrites before committing.
 
+   **Workflows** (when `.github/workflows/` files changed):
+   ```
+   apt-get install shellcheck       # CI's actionlint runs the shellcheck rule
+   go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+   ```
+   GitHub Actions silently rejects workflow YAML it can't parse, so the
+   only safety net is `actionlint` locally. `shellcheck` must be on
+   `PATH` — without it, `actionlint` skips the shell-script rule and
+   misses what CI catches (this exact gap leaked the SC2012 fix in
+   commit `3164f37`).
+
    CI enforces all of the above via `.github/workflows/lint.yml` — a
    failing commit blocks the PR.
 7. **Do not commit anything under `~/.papyri/`.** That's user data, not

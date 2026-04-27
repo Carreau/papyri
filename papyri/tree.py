@@ -9,7 +9,7 @@ from collections import Counter, defaultdict
 from collections.abc import Callable
 from functools import lru_cache
 from textwrap import indent
-from typing import Any
+from typing import Any, cast
 
 from .directives import (
     block_math_handler,
@@ -388,9 +388,13 @@ class TreeReplacer:
                 new_children = []
                 if not hasattr(node, "children"):
                     raise ValueError(f"{node.__class__} has no children {node}")
-                # Node base class doesn't declare `children`; the hasattr
-                # guard above narrows `node` to a subclass that does.
-                children: list[Node] = node.children  # type: ignore[attr-defined]
+                # `Node` itself doesn't declare `children`; only subclasses
+                # do. The hasattr guard above narrows at runtime; cast
+                # tells mypy to accept the attribute without a brittle
+                # type-ignore (which `warn_unused_ignores` may flag on
+                # Python 3.14).
+                node_with_children = cast(Any, node)
+                children: list[Node] = node_with_children.children
                 for c in children:
                     assert c is not None, f"{node=} has a None child"
                     assert isinstance(c, Node), c
@@ -400,7 +404,7 @@ class TreeReplacer:
                     new_children.extend(replacement)
                 if children != new_children:
                     self._cr += 1
-                node.children = new_children  # type: ignore[attr-defined]
+                node_with_children.children = new_children
                 new_nodes = [node]
             assert isinstance(new_nodes, list)
             return new_nodes

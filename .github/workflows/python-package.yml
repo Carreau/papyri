@@ -146,7 +146,14 @@ jobs:
     - name: Verify narrative docs were collected
       run: |
         set -e
-        bundle=$(ls -d ~/.papyri/data/IPython_*/ | head -1)
+        # Pick the first IPython gen bundle via shell glob (shellcheck SC2012).
+        shopt -s nullglob
+        bundles=(~/.papyri/data/IPython_*/)
+        if [ ${#bundles[@]} -eq 0 ]; then
+          echo "no IPython_* bundle under ~/.papyri/data" >&2
+          exit 1
+        fi
+        bundle="${bundles[0]}"
         echo "Bundle: $bundle"
         test -d "$bundle/docs" || { echo "docs/ missing"; exit 1; }
         test -f "$bundle/toc.cbor" || { echo "toc.cbor missing"; exit 1; }

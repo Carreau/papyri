@@ -18,11 +18,16 @@ name = "papyri-viewer"
 compatibility_date = "2026-04-27"
 compatibility_flags = ["nodejs_compat"]
 
-# Worker entrypoint is filled in by M9.2 when @astrojs/cloudflare is wired
-# up. Once that lands the build emits a worker module that wrangler dev can
-# serve directly.
-# main = "./dist/_worker.js/index.js"
-# assets = { directory = "./dist", binding = "ASSETS" }
+# `pnpm build:cf` (PAPYRI_ADAPTER=cloudflare astro build) emits the
+# worker entrypoint at `dist/_worker.js/index.js` and pre-rendered
+# HTML / client assets under `dist/`. The @astrojs/cloudflare adapter
+# wires those into wrangler at dev/deploy time, so `main` and `assets`
+# are intentionally NOT set here — declaring them eagerly fails the
+# build (`main doesn't point to an existing file`) because the cloudflare
+# vite plugin validates them before the build emits anything.
+#
+# Run `pnpm wrangler:dev` after `pnpm build:cf` and wrangler will pick
+# up the adapter's wrangler config from the build output.
 
 # ----------------------------------------------------------------------------
 # D1 — graph store. Replaces the on-disk SQLite file.

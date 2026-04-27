@@ -70,8 +70,12 @@ designated shock absorbers. The SSR migration path depends on the chosen host:
   [`PLAN.md`](PLAN.md). The single populator of D1 + R2 is the
   Workers-side `PUT /api/bundle` handler (M9.3) — there is no parallel
   seeder, and the soon-to-be-removed `papyri ingest` tree is not an
-  input. M9.0 (bindings + D1 schema migration) has landed; see
-  `wrangler.toml` and `migrations/0000_init.sql`.
+  input. M9.0 (bindings + D1 schema migration) and M9.1 (CF adapter +
+  worker entrypoint) have landed: `pnpm build:cf && pnpm wrangler:dev`
+  boots a worker against an empty D1+R2 with both bindings wired
+  (`/api/health.json` confirms). Storage-touching routes still 500
+  under `wrangler dev` until the async storage layer (M9.2) and the
+  Workers bundle PUT (M9.3) ship.
 - **Netlify / Vercel Edge Functions**: similar pattern — managed Postgres or
   Turso instead of D1, object storage instead of R2, matching Astro adapter.
 - **Node server (Fly.io, Railway, VPS)**: keep `better-sqlite3` and the SQLite

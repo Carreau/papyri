@@ -174,38 +174,60 @@ is the Workers-side `PUT /api/bundle` handler (M9.3) which receives a
 parallel seeder — `papyri ingest` is being removed and the on-disk
 ingest tree it produced isn't an input here.
 
-### What is wired up today (M9.0)
+### Boot wrangler dev
+
+```sh
+# Apply the D1 schema (one-time, --local writes to miniflare state).
+pnpm wrangler d1 migrations apply papyri-viewer-graph --local
+
+# Build for the Cloudflare adapter and start the local Workers runtime.
+pnpm build:cf
+pnpm wrangler:dev
+```
+
+`wrangler dev` boots on http://localhost:8787 by default. The
+`/api/health.json` probe should return
+`{"adapter":"cloudflare","graphDb":true,"blobs":true}` confirming both
+bindings are wired. The static landing page (`/`) is served from
+`dist/client/` — it shows zero bundles because the store is empty.
+
+`pnpm dev` / `pnpm build` / `pnpm serve` (Node adapter) keep working
+exactly as before. The `PAPYRI_ADAPTER` env var (default `node`)
+selects the adapter at build time.
+
+### What is wired up today (M9.0–M9.1)
 
 - [`wrangler.toml`](wrangler.toml) declares the bindings the worker
-  will consume: `GRAPH_DB` (D1, database name `papyri-viewer-graph`)
-  and `BLOBS` (R2, bucket name `papyri-viewer-blobs`).
+  consumes: `GRAPH_DB` (D1, database `papyri-viewer-graph`) and
+  `BLOBS` (R2, bucket `papyri-viewer-blobs`).
 - [`migrations/0000_init.sql`](migrations/0000_init.sql) creates the
   D1 schema (`nodes` + `links` tables, identical to the SQLite shape
-  in `ingest/src/graphstore.ts`). Apply once with:
-
-  ```sh
-  pnpm wrangler d1 migrations apply papyri-viewer-graph --local
-  ```
-
-  Pass `--remote` to apply to a real D1 database. The first remote run
-  also needs `wrangler d1 create papyri-viewer-graph` and `wrangler r2
-bucket create papyri-viewer-blobs`, plus replacing the placeholder
-  `database_id` in `wrangler.toml` with the UUID `wrangler d1 create`
-  prints.
+  in `ingest/src/graphstore.ts`).
+- `astro.config.mjs` selects `@astrojs/node` (default) or
+  `@astrojs/cloudflare` (when `PAPYRI_ADAPTER=cloudflare`). Output is
+  always `output: "static"` so SSG pages stay prerendered.
+- The Cloudflare build emits `dist/server/entry.mjs` (worker) +
+  `dist/server/wrangler.json` (adapter-generated config with both
+  bindings) + `dist/client/` (static HTML / assets).
 
 ### What does NOT work yet
 
-- There is no Workers entrypoint, so `wrangler dev` cannot serve the
-  viewer. The adapter swap is M9.1.
-- The async storage / graph layer is M9.2; until it lands the existing
-  routes still read `node:fs` + `better-sqlite3`.
-- The Workers bundle PUT is M9.3; until it lands D1 + R2 stay empty.
+- Routes that read storage (`/api/bundles.json`, `/api/search.json`,
+  `/api/[pkg]/[ver]/nodes.json`, `/assets/*`, qualname / doc / example
+  pages) still 500 under `wrangler dev` because their handlers go
+  through `node:fs` + `better-sqlite3`. M9.2 introduces an async
+  storage layer that lets them read from R2 + D1 instead.
+- The Workers bundle PUT is M9.3. Until it lands the dev store stays
+  empty, so the qualname / doc / example pages have nothing to render
+  even if you swapped the storage layer manually.
 
-`pnpm dev` / `pnpm build` / `pnpm serve` (Node adapter) remain the only
-working run modes today.
+The first remote deploy (later, not yet) requires `wrangler d1 create
+papyri-viewer-graph` and `wrangler r2 bucket create
+papyri-viewer-blobs`, plus replacing the placeholder `database_id` in
+`wrangler.toml` with the UUID `wrangler d1 create` prints.
 
-Local miniflare state lives under `viewer/.wrangler/state/v3/`. Delete
-that directory to start over.
+Local miniflare state lives under `viewer/.wrangler/`. Delete that
+directory to start over.
 
 ## Environment variables
 

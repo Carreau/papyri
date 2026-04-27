@@ -8,8 +8,11 @@
     "dev": "astro dev",
     "start": "astro dev",
     "build": "astro build",
+    "build:cf": "PAPYRI_ADAPTER=cloudflare astro build",
     "preview": "astro preview",
     "serve": "node ./dist/server/entry.mjs",
+    "wrangler": "wrangler",
+    "wrangler:dev": "wrangler dev --config dist/server/wrangler.json",
     "astro": "astro",
     "check": "astro check",
     "lint": "eslint src --ext .ts,.tsx,.astro",
@@ -32,6 +35,7 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.8",
+    "@astrojs/cloudflare": "^13.2.1",
     "@eslint/js": "^9.18.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/katex": "^0.16.8",
@@ -48,7 +52,8 @@
     "prettier-plugin-astro": "^0.14.1",
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.17.0",
-    "vitest": "^4.1.4"
+    "vitest": "^4.1.4",
+    "wrangler": "^4.85.0"
   },
   "engines": {
     "node": ">=22"

@@ -191,15 +191,20 @@ Sub-phases of M9 (tracked separately to keep this list flat for prettier):
       produces a database the rest of M9 can target. R2 has no schema.
       Nothing in the viewer reads these bindings yet — this is just the
       data-plane scaffolding.
-- [ ] **M9.1 — Cloudflare adapter + worker entrypoint.** Add
-      `@astrojs/cloudflare` so `pnpm build:cf` (or an env-switched
-      `astro.config.mjs`) emits a worker module that `wrangler dev` can
-      serve. The Workers runtime injects `env.GRAPH_DB` / `env.BLOBS`;
-      Astro exposes them via `locals.runtime.env`. Pages that don't read
-      storage yet (the landing card, 404) work end-to-end under
-      `wrangler dev` against an empty D1+R2 — the first observable proof
-      that the worker boots. `pnpm build` (Node SSG + SSR) remains the
-      default.
+- [x] **M9.1 — Cloudflare adapter + worker entrypoint.**
+      `@astrojs/cloudflare` is wired in alongside `@astrojs/node`; the
+      adapter is selected at build time by `PAPYRI_ADAPTER` (default
+      `node`). `pnpm build:cf` (= `PAPYRI_ADAPTER=cloudflare astro
+build`) emits the Workers entrypoint at `dist/server/entry.mjs`
+      with an adapter-generated `dist/server/wrangler.json` that carries
+      both bindings; `pnpm wrangler:dev` serves it. Verified end-to-end:
+      static `/` is served from `dist/client/`, and a new SSR probe
+      `/api/health.json` returns
+      `{adapter:"cloudflare",graphDb:true,blobs:true}` against an empty
+      D1+R2. Astro v6 removed `Astro.locals.runtime.env`, so the probe
+      reads bindings via `import { env } from "cloudflare:workers"` —
+      dynamically imported and marked `external` for the Node build so
+      both adapters compile from the same source.
 - [ ] **M9.2 — async storage + graph layer.** Two-headed abstraction so
       the same Astro code runs against fs+sqlite (Node) and R2+D1
       (Workers): - `src/lib/storage.ts` — async `StorageBackend` (`getBlob`,

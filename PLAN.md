@@ -96,9 +96,13 @@ converging on a single encoding is part of Phase 2.
       per file type, CBOR-encoded fields, `graphstore` SQLite schema.
       Followup: JSON-Schema fragments per node + an `IR-CHANGELOG.md`.
 - [x] Decide whether to move everything to a single encoding (all JSON, or
-      all CBOR) vs documenting the hybrid. Done: CBOR everywhere for IR
-      (gen bundle + ingest store); `papyri.json` / `toc.json` remain JSON
-      because they're small configuration metadata, not IR.
+      all CBOR) vs documenting the hybrid. Done: gen-side bundles use CBOR
+      for IR blobs; `papyri.json` / `toc.json` remain JSON as small
+      configuration metadata.  **Ingest-side storage format is not
+      mandated** — CBOR is used today as a space-saving measure before
+      uploading to a central service, but the graphstore must not assume
+      CBOR.  A future implementation (e.g. TypeScript) may use a different
+      encoding.
 - [x] Add a `papyri describe <qualname>` (or reuse `find`) as a
       maintainer-side debug command that prints an IR entry without a
       renderer. Implemented in `papyri/cli/describe.py` (registered
@@ -293,3 +297,43 @@ ordering before it's worth wiring up.
   bundle's declared root (`crosslink.py` ~line 412).  Gen already knows
   both values; moving the check there makes the contract explicit and
   surfaces mistakes earlier.
+- **Builtin ref resolution belongs at gen time, not ingest.**
+  `resolve_()` currently has a special-case branch that recognises Python
+  builtins (`int`, `str`, `list`, …) and returns a `missing` RefInfo for
+  them.  This is gen-specific knowledge that does not belong in the
+  ingest resolver.  The correct model: ship a **Python-builtins bundle
+  shim** — a minimal DocBundle (generated once, checked in or published)
+  that registers every builtin as a proper `RefInfo`.  `papyri gen` emits
+  references to builtins as ordinary cross-refs; ingest resolves them
+  against the shim bundle exactly like any other package.  No special
+  casing in `resolve_()` at ingest time.
+- **Core invariant: gen owns all ref classification; ingest only links.**
+  A well-formed DocBundle must satisfy:
+  - `LocalRef` means *this bundle*, always.  Gen is responsible for
+    converting every relative ref, alias, and local name within the
+    bundle to a `LocalRef` before writing the IR.  A `LocalRef` is never
+    ambiguous and never cross-bundle.
+  - Every cross-bundle reference is a `RefInfo` with a fully qualified
+    `(package, version, kind, path)`.  No fuzzy strings, no unresolved
+    aliases survive gen.  This includes builtins (resolved via the shim
+    bundle at gen time).
+  Ingest then has a clearly bounded job:
+  1. Resolve every `LocalRef` to a full key within the current bundle's
+     namespace.  Because `LocalRef` is always intra-bundle, resolution
+     cannot fail on a well-formed bundle; a failure here is a gen bug.
+  2. For every `RefInfo` in the IR: record a live link if the target key
+     is already in the graphstore (`has_blob=1`), or a dangling ref if
+     not (`has_blob=0`, edge stored immediately).  When the target bundle
+     is ingested later, `put()` flips the node to `has_blob=1` — no
+     re-processing pass needed.  Incremental ingest across bundles works
+     correctly in any order.
+  3. Optionally run a **check pass** that asserts every `LocalRef`
+     resolved and that all `RefInfo` targets are at least registered.
+  A two-step ingest (build a ref map from all bundle metadata first,
+  then resolve) is an optimisation to avoid `has_blob=0` intermediate
+  state, not a correctness requirement.
+- **RST substitutions are gen-time-only (done).**
+  `SubstitutionDef` and `SubstitutionRef` nodes are resolved inside
+  `ts.parse()` before any IR is written.  The IR must never contain
+  either node type.  Non-`replace::` substitution types (image, unicode)
+  are warned and dropped; support can be added per demand.

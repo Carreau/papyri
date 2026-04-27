@@ -308,34 +308,29 @@ ordering before it's worth wiring up.
   casing in `resolve_()` at ingest time.
 - **Core invariant: gen owns all ref classification; ingest only links.**
   A well-formed DocBundle must satisfy:
-  - Every reference *within* the bundle is a `LocalRef` — no intra-bundle
-    `RefInfo` nodes.  Gen is responsible for converting relative refs,
-    aliases, and local names to `LocalRef` before writing the bundle.
+  - `LocalRef` means *this bundle*, always.  Gen is responsible for
+    converting every relative ref, alias, and local name within the
+    bundle to a `LocalRef` before writing the IR.  A `LocalRef` is never
+    ambiguous and never cross-bundle.
   - Every cross-bundle reference is a `RefInfo` with a fully qualified
-    `(package, version, kind, path)` — no fuzzy strings, no unresolved
-    aliases.  This includes builtins (resolved via the shim bundle at gen
-    time).
+    `(package, version, kind, path)`.  No fuzzy strings, no unresolved
+    aliases survive gen.  This includes builtins (resolved via the shim
+    bundle at gen time).
   Ingest then has a clearly bounded job:
   1. Resolve every `LocalRef` to a full key within the current bundle's
-     namespace.  A `LocalRef` that cannot be resolved within the current
-     bundle is promoted to a dangling `RefInfo`: the graphstore records
-     the node with `has_blob=0` and stores the link edge immediately.
-     When the target bundle is ingested later, `put()` flips the node to
-     `has_blob=1` — the edge already exists, so cross-resolution
-     completes without any re-processing pass.  This means incremental
-     ingest works correctly without building a full ref map first.
-  2. For every `RefInfo` already present in the bundle IR: check whether
-     the target key exists in the graphstore.  If yes, the link is live;
-     if not, record it as a dangling ref (same `has_blob=0` mechanism).
-  3. Optionally run a **check pass** that asserts no `LocalRef` remains
-     unresolved and that all dangling `RefInfo` targets are at least
-     registered as known nodes.
-  A two-step ingest (first pass: load all bundle metadata and build a
-  complete ref map; second pass: resolve all bundles against that map) is
-  an optimisation for the ambiguous-`LocalRef` case (where the target
-  package is not known at gen time) and to avoid the ordering sensitivity
-  of the current `relink()`.  It is not a requirement for the common case
-  where gen has already fully attributed every cross-bundle ref.
+     namespace.  Because `LocalRef` is always intra-bundle, resolution
+     cannot fail on a well-formed bundle; a failure here is a gen bug.
+  2. For every `RefInfo` in the IR: record a live link if the target key
+     is already in the graphstore (`has_blob=1`), or a dangling ref if
+     not (`has_blob=0`, edge stored immediately).  When the target bundle
+     is ingested later, `put()` flips the node to `has_blob=1` — no
+     re-processing pass needed.  Incremental ingest across bundles works
+     correctly in any order.
+  3. Optionally run a **check pass** that asserts every `LocalRef`
+     resolved and that all `RefInfo` targets are at least registered.
+  A two-step ingest (build a ref map from all bundle metadata first,
+  then resolve) is an optimisation to avoid `has_blob=0` intermediate
+  state, not a correctness requirement.
 - **RST substitutions are gen-time-only (done).**
   `SubstitutionDef` and `SubstitutionRef` nodes are resolved inside
   `ts.parse()` before any IR is written.  The IR must never contain

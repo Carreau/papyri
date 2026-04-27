@@ -67,12 +67,11 @@ qualname rendering, or moving to an SSR-on-serverless path.
 designated shock absorbers. The SSR migration path depends on the chosen host:
 
 - **Cloudflare Workers**: in progress as **M9** in
-  [`PLAN.md`](PLAN.md). Replace `better-sqlite3` with the D1 binding in
-  `src/lib/graph.ts`; push CBOR blobs to R2 and fetch + decode with
-  `cbor-x` on demand; swap to `@astrojs/cloudflare`. Pure-SQL schema in
-  `papyri/graphstore.py` ports with minor tweaks; `cbor-x` runs in
-  Workers. Phase M9.0 (local seeder + binding scaffolding) has landed
-  — see `wrangler.toml` and `scripts/seed-wrangler.mjs`.
+  [`PLAN.md`](PLAN.md). The single populator of D1 + R2 is the
+  Workers-side `PUT /api/bundle` handler (M9.3) — there is no parallel
+  seeder, and the soon-to-be-removed `papyri ingest` tree is not an
+  input. M9.0 (bindings + D1 schema migration) has landed; see
+  `wrangler.toml` and `migrations/0000_init.sql`.
 - **Netlify / Vercel Edge Functions**: similar pattern — managed Postgres or
   Turso instead of D1, object storage instead of R2, matching Astro adapter.
 - **Node server (Fly.io, Railway, VPS)**: keep `better-sqlite3` and the SQLite

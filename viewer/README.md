@@ -154,60 +154,58 @@ viewer (`http://localhost:4321/api/bundle`); point it elsewhere with
 
 ## Other scripts
 
-| Script               | What it does                                  |
-| -------------------- | --------------------------------------------- |
-| `pnpm check`         | Astro + TypeScript type-check.                |
-| `pnpm test`          | Run the vitest unit suite once.               |
-| `pnpm test:watch`    | Vitest in watch mode.                         |
-| `pnpm serve`         | Run the built Node server (SSG + SSR routes). |
-| `pnpm seed:wrangler` | Seed local D1 + R2 from the ingest store.     |
+| Script            | What it does                                  |
+| ----------------- | --------------------------------------------- |
+| `pnpm check`      | Astro + TypeScript type-check.                |
+| `pnpm test`       | Run the vitest unit suite once.               |
+| `pnpm test:watch` | Vitest in watch mode.                         |
+| `pnpm serve`      | Run the built Node server (SSG + SSR routes). |
 
-## Cloudflare Workers (D1 + R2) — experimental
+## Cloudflare Workers (D1 + R2) — in progress
 
 Tracked as **M9** in [`PLAN.md`](PLAN.md). The eventual hosted target is
 a Cloudflare Workers deploy whose graph store lives in D1 and whose CBOR
-blobs / assets live in R2 — no per-deploy filesystem state. The work is
-staged so each phase lands a working slice.
+blobs / assets live in R2 — no per-deploy filesystem state, no Node
+runtime in production.
 
-What is wired up today (M9.0):
+Operating model: D1 + R2 always start **empty**. The single populator
+is the Workers-side `PUT /api/bundle` handler (M9.3) which receives a
+`papyri gen` bundle and writes graph rows + blobs directly. There is no
+parallel seeder — `papyri ingest` is being removed and the on-disk
+ingest tree it produced isn't an input here.
 
-- [`wrangler.toml`](wrangler.toml) declares the bindings the viewer
-  expects at runtime: `GRAPH_DB` (D1, database name
-  `papyri-viewer-graph`) and `BLOBS` (R2, bucket name
-  `papyri-viewer-blobs`).
-- [`scripts/seed-wrangler.mjs`](scripts/seed-wrangler.mjs) bootstraps
-  the local miniflare state from your existing ingest store. It walks
-  `~/.papyri/ingest/`, copies every row of `papyri.db` into D1
-  (creating the schema first), and PUTs every blob to R2 with the same
-  relative path as on disk.
+### What is wired up today (M9.0)
 
-What does **not** work yet: there is no Workers entrypoint, so
-`wrangler dev` cannot serve the viewer. `pnpm dev` / `pnpm build` /
-`pnpm serve` (Node adapter) remain the supported run modes. The
-adapter swap and the async storage refactor land in M9.1–M9.3.
+- [`wrangler.toml`](wrangler.toml) declares the bindings the worker
+  will consume: `GRAPH_DB` (D1, database name `papyri-viewer-graph`)
+  and `BLOBS` (R2, bucket name `papyri-viewer-blobs`).
+- [`migrations/0000_init.sql`](migrations/0000_init.sql) creates the
+  D1 schema (`nodes` + `links` tables, identical to the SQLite shape
+  in `ingest/src/graphstore.ts`). Apply once with:
 
-### Try the seeder
+  ```sh
+  pnpm wrangler d1 migrations apply papyri-viewer-graph --local
+  ```
 
-Prereqs:
+  Pass `--remote` to apply to a real D1 database. The first remote run
+  also needs `wrangler d1 create papyri-viewer-graph` and `wrangler r2
+bucket create papyri-viewer-blobs`, plus replacing the placeholder
+  `database_id` in `wrangler.toml` with the UUID `wrangler d1 create`
+  prints.
 
-- A populated `~/.papyri/ingest/` (run `papyri ingest` first).
-- `wrangler` on your `PATH`. The script does **not** add it as a
-  dependency yet; install it ad-hoc with `pnpm add -D wrangler` from
-  `viewer/`, or globally with `npm install -g wrangler`.
+### What does NOT work yet
 
-```sh
-cd viewer
-pnpm seed:wrangler
-```
+- There is no Workers entrypoint, so `wrangler dev` cannot serve the
+  viewer. The adapter swap is M9.1.
+- The async storage / graph layer is M9.2; until it lands the existing
+  routes still read `node:fs` + `better-sqlite3`.
+- The Workers bundle PUT is M9.3; until it lands D1 + R2 stay empty.
 
-Pass `--remote` to write to a real Cloudflare account instead of the
-local miniflare state. The first remote run requires `wrangler d1
-create papyri-viewer-graph` and `wrangler r2 bucket create
-papyri-viewer-blobs`, plus replacing the placeholder `database_id` in
-`wrangler.toml` with the UUID `wrangler d1 create` prints.
+`pnpm dev` / `pnpm build` / `pnpm serve` (Node adapter) remain the only
+working run modes today.
 
-Local state lives under `viewer/.wrangler/state/v3/`. Delete that
-directory to start over.
+Local miniflare state lives under `viewer/.wrangler/state/v3/`. Delete
+that directory to start over.
 
 ## Environment variables
 

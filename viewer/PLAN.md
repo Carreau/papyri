@@ -167,71 +167,72 @@ Data flow per request/page:
         read-only graph DB cache is invalidated so subsequent requests see
         the new nodes/links. See `README.md` for the upload workflow.
 10. [ ] **M9 — Cloudflare Workers (D1 + R2) under `wrangler dev`.**
-        Goal: the viewer can run under `pnpm wrangler dev` against a local
+        Goal: the viewer runs under `pnpm wrangler dev` against a local
         miniflare-backed D1 database (graph store) and R2 bucket (CBOR
         blobs + assets), so the same code path that will run in production
         on Workers is exercised during development. The aspirational hosted
         target is a Cloudflare Workers deploy whose IR + graph live entirely
-        in D1 / R2 — no per-deploy filesystem state. The work is staged so
-        each phase lands a working slice; the existing `pnpm dev` /
-        `pnpm build` / `pnpm serve` flows keep working throughout.
+        in D1 / R2 — no per-deploy filesystem state.
+
+        Operating model: `papyri ingest` is going away. The single
+        populator of D1 + R2 is the Workers-side `PUT /api/bundle` handler,
+        which receives a `papyri gen` bundle and writes graph rows + blobs
+        directly. Local dev starts from scratch every time: empty D1, empty
+        R2, then a `papyri upload` to bring up state. There is no parallel
+        seeder reading the old `~/.papyri/ingest/` tree, because that tree
+        will not exist after the cut.
 
 Sub-phases of M9 (tracked separately to keep this list flat for prettier):
 
-- [x] **M9.0 — local seeder + binding scaffolding.** Add
-      `viewer/wrangler.toml` declaring `GRAPH_DB` (D1) and `BLOBS` (R2)
-      bindings, plus a `viewer/scripts/seed-wrangler.mjs` script that walks
-      `~/.papyri/ingest/` and pushes every blob to the local R2 bucket and
-      the contents of `papyri.db` into the local D1 database (via the
-      `wrangler r2 object put --local` and `wrangler d1 execute --local`
-      subcommands, fed a single SQL dump file). The seeder is a one-shot
-      bootstrap, not a sync daemon: it overwrites local state so each run
-      is reproducible. No code paths in the viewer use the bindings yet —
-      this is just the data plumbing.
-- [ ] **M9.1 — `StorageBackend` abstraction.** Introduce
-      `src/lib/storage.ts` with an async interface (`getBlob`,
-      `listKeys(prefix)`, `getMeta`) and a Node-fs implementation that
-      wraps the existing `node:fs/promises` calls in `ir-reader.ts` /
-      `nav.ts`. All callers go through the backend; the on-disk layout
-      stops leaking past `storage.ts`. No behaviour change yet — the fs
-      backend is the only one wired in.
-- [ ] **M9.2 — async graph store.** Mirror the abstraction for the
-      graph: a `GraphBackend` with `resolveRef` / `getBackrefs` that
-      returns a Promise. A `Sqlite3Backend` keeps the current sync calls
-      inside an async wrapper for SSR/SSG; a `D1Backend` runs the same SQL
-      through the D1 client. Pages that consume xrefs (qualname / doc /
-      example) become `await`-aware. Build-time SSG continues against
-      `Sqlite3Backend`.
-- [ ] **M9.3 — Cloudflare adapter + worker entrypoint.** Add
-      `@astrojs/cloudflare` as a _parallel_ config (`astro.config.cf.mjs`
-      or env-switched in the existing config) so `pnpm build:cf` produces
-      a worker bundle that `wrangler dev` can serve. The Workers runtime
-      injects `env.GRAPH_DB` / `env.BLOBS`; we read them via Astro's
-      `locals.runtime.env`. `pnpm build` (Node SSG + SSR) is unchanged.
-- [ ] **M9.4 — bundle upload via Workers.** Reimplement
-      `PUT /api/bundle` on the Workers side: stream the tarball,
-      decompress + untar in-Worker (no `child_process.spawn`), invoke a
-      Workers-compatible variant of `Ingester` that writes through
-      `BLOBS.put` and `GRAPH_DB.prepare(...).bind(...).run()` instead of
-      better-sqlite3 + fs. Likely needs a small extraction of the
-      SQL/blob-writing core out of `ingest/src/graphstore.ts` so both
-      backends share the same statements.
-- [ ] **M9.5 — CI smoke + docs.** Add a workflow that runs
-      `pnpm wrangler dev` against a tiny seeded fixture and hits a handful
-      of routes; document the dev workflow in `README.md` and the deploy
-      story in `DEPLOY.md`. Decide whether to host Cloudflare deploys as
-      preview-only or as the default.
+- [x] **M9.0 — bindings + D1 schema.** `viewer/wrangler.toml` declares
+      `GRAPH_DB` (D1) and `BLOBS` (R2) bindings;
+      `viewer/migrations/0000_init.sql` mirrors `ingest/src/graphstore.ts`
+      exactly, so `wrangler d1 migrations apply papyri-viewer-graph --local`
+      produces a database the rest of M9 can target. R2 has no schema.
+      Nothing in the viewer reads these bindings yet — this is just the
+      data-plane scaffolding.
+- [ ] **M9.1 — Cloudflare adapter + worker entrypoint.** Add
+      `@astrojs/cloudflare` so `pnpm build:cf` (or an env-switched
+      `astro.config.mjs`) emits a worker module that `wrangler dev` can
+      serve. The Workers runtime injects `env.GRAPH_DB` / `env.BLOBS`;
+      Astro exposes them via `locals.runtime.env`. Pages that don't read
+      storage yet (the landing card, 404) work end-to-end under
+      `wrangler dev` against an empty D1+R2 — the first observable proof
+      that the worker boots. `pnpm build` (Node SSG + SSR) remains the
+      default.
+- [ ] **M9.2 — async storage + graph layer.** Two-headed abstraction so
+      the same Astro code runs against fs+sqlite (Node) and R2+D1
+      (Workers): - `src/lib/storage.ts` — async `StorageBackend` (`getBlob`,
+      `listKeys(prefix)`, `getMeta`); `NodeFsBackend` wraps the existing
+      `node:fs/promises` calls in `ir-reader.ts` / `nav.ts`, `R2Backend`
+      wraps `env.BLOBS`. - `src/lib/graph.ts` — async `GraphBackend` (`resolveRef`,
+      `getBackrefs`); `Sqlite3Backend` for Node, `D1Backend` for
+      Workers. Pages that consume xrefs (qualname / doc / example)
+      become `await`-aware.
+- [ ] **M9.3 — bundle upload on Workers.** Port `PUT /api/bundle` to
+      the Workers runtime: stream the tarball, decompress + untar
+      in-Worker (no `child_process.spawn`), call a Workers-compatible
+      variant of `Ingester` that writes through `BLOBS.put` and
+      `GRAPH_DB.prepare(...).bind(...).run()` instead of better-sqlite3 + fs. This is the only path that puts data into D1 + R2; until it
+      lands the dev server boots empty. The current Node-mode handler
+      keeps existing for `pnpm serve` while the Workers path stabilises.
+- [ ] **M9.4 — CI smoke + cutover.** A workflow that runs `wrangler dev`
+      against an empty store, hits a few routes, then `papyri upload`s a
+      fixture bundle and checks that pages now resolve. Decide cutover:
+      whether the Node `pnpm serve` mode stays as a maintained fallback
+      or is dropped now that Workers covers everything.
 
 M9 constraints:
 
-- The Node / SSG path stays a first-class supported configuration. The
-  Cloudflare path is additive; nothing in the IR shape changes.
-- `better-sqlite3` and `node:fs` are still allowed in build-time code
-  (SSG) and the Node adapter; they just must not be reachable from a
-  route compiled into the Workers bundle.
-- `papyri-ingest` keeps its sync filesystem write path for the CLI and
-  the Node-mode `PUT /api/bundle`. The Workers ingest is a parallel
-  implementation, not a replacement.
+- Nothing in the IR shape changes.
+- `better-sqlite3` and `node:fs` must not be reachable from a route
+  compiled into the Workers bundle (sync APIs, native bindings).
+- The Node `PUT /api/bundle` keeps working until M9.3 ships, so contributors
+  who develop with the Node adapter still have a populator path.
+- `papyri ingest` is being removed in parallel. Anything that depends on
+  reading `~/.papyri/ingest/` or `papyri.db` from outside the viewer is
+  on borrowed time — including `viewer/src/lib/graph.ts`'s current
+  `better-sqlite3` reads, which M9.2 replaces.
 
 ### M3 notes
 

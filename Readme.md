@@ -6,9 +6,10 @@ and rendered many times — independently, and across projects.
 
 ---
 
-> **Project status (2026): active development.** Core `gen` / `ingest`
-> pipeline works on Python 3.14. A local web viewer lives under `viewer/`.
-> See `PLAN.md` for roadmap.
+> **Project status (2026): active development.** Core `gen` / `upload`
+> pipeline works on Python 3.14; ingestion now runs server-side in the
+> viewer. A local web viewer lives under `viewer/`. See `PLAN.md` for
+> roadmap.
 
 | Information | Links |
 | :---------- | :-----|
@@ -54,11 +55,12 @@ This makes it hard to:
 
 Papyri's model (inspired by conda-forge) is:
 
-- Each library maintainer runs `papyri gen` in their project's CI and uploads
-  the resulting DocBundle to a central service.
-- The central service runs `papyri ingest` to wire bundles together, then
-  serves them all from one place with real bidirectional cross-links between
-  packages.
+- Each library maintainer runs `papyri gen` in their project's CI and
+  `papyri upload`s the resulting DocBundle to a central service.
+- The central service ingests bundles into a cross-linked graph and serves
+  them all from one place with real bidirectional cross-links between
+  packages. The TypeScript `papyri-ingest` package (under `ingest/`) does the
+  ingestion server-side, invoked by the viewer's upload endpoint.
 
 The `viewer/` directory in this repo is being built with this centralized
 model in mind. It currently works locally for development and debugging, and
@@ -108,14 +110,11 @@ current architecture. Prefer the development install above.
 
 ```bash
 pip install -r requirements-dev.txt
-python -m pytest -m "not postingest"
+python -m pytest
 ```
 
 Use `python -m pytest` (not bare `pytest`) to ensure the same interpreter as
 your editable install.
-
-The `postingest` tests require a populated `~/.papyri/ingest/`; see the CI
-workflow for the full sequence.
 
 ---
 
@@ -125,13 +124,13 @@ Papyri has two stages that run in different contexts:
 
 - **IR generation** (`papyri gen`) — run **per project**, by the library
   maintainer, in the project's own environment (typically CI). Produces a
-  DocBundle and uploads it.
-- **IR ingestion** (`papyri ingest`) — run by the **central service** (or
-  locally for development) to wire multiple bundles together into a
-  cross-linked graph.
+  self-contained DocBundle on disk.
+- **Upload** (`papyri upload`) — pushes the DocBundle to a viewer instance,
+  whose `/api/bundle` endpoint runs the ingest pipeline server-side and
+  wires bundles into the cross-linked graph.
 
-Rendering is handled by the `viewer/` web app, which reads the ingested graph.
-It is not part of the Python package itself.
+Rendering is handled by the `viewer/` web app, which reads the ingested
+graph. The TypeScript ingest engine lives alongside it under `ingest/`.
 
 ### IR Generation (`papyri gen`)
 
@@ -168,16 +167,18 @@ papyri gen examples/numpy.toml --only numpy:einsum
 > Papyri uses [fully qualified names](#qualified-names) (`numpy:einsum`, not
 > `numpy.einsum`) to avoid module/attribute ambiguity.
 
-### Ingestion (`papyri ingest`)
+### Upload (`papyri upload`)
 
-Ingestion adds a bundle into the local cross-linked SQLite graph and resolves
-forward and back references across all known bundles.
+Upload tars each bundle and PUTs it to a viewer instance's `/api/bundle`
+endpoint, which runs the TypeScript ingest pipeline server-side:
 
 ```
-papyri ingest ~/.papyri/data/<bundle-folder>
+papyri upload ~/.papyri/data/<bundle-folder>
 ```
 
-Ingested data lives in `~/.papyri/ingest/`. Do not edit this folder manually.
+The default endpoint is `http://localhost:4321/api/bundle`; override with
+`--url`. Ingested data lives in `~/.papyri/ingest/` (managed by the viewer);
+do not edit this folder manually.
 
 ---
 
@@ -198,23 +199,25 @@ During generation, normalisation steps run:
   `numpy.zeros_like`).
 - Examples executed to capture output images (partially implemented).
 
-### Ingestion (`papyri ingest`)
+### Ingestion (server-side, TypeScript `ingest/`)
 
-Takes a DocBundle and merges it into the local SQLite graph
-(`~/.papyri/ingest/papyri.db`), updating forward references and
+The viewer's `/api/bundle` endpoint receives uploaded DocBundles and runs the
+TypeScript `papyri-ingest` package to merge each bundle into the local
+SQLite graph (`~/.papyri/ingest/papyri.db`), updating forward references and
 backreferences across all ingested bundles.
 
 ### Viewer (`viewer/`)
 
-An Astro + React + TypeScript app that reads the IR from `~/.papyri/data/`
-and the SQLite graph. It is the primary way to browse generated docs locally
-during development, and is being built with the centralized service in mind:
-the same viewer code, or a close derivative, is the intended rendering
-frontend for the hosted service.
+An Astro + React + TypeScript app that reads the SQLite graph at
+`~/.papyri/ingest/papyri.db` and the per-bundle CBOR blobs alongside it. It
+is the primary way to browse generated docs locally during development, and
+is being built with the centralized service in mind: the same viewer code,
+or a close derivative, is the intended rendering frontend for the hosted
+service.
 
-The boundary between the Python side (gen + ingest) and the rendering side is
-the on-disk IR, kept stable so any renderer — local or hosted — can consume
-it without changes to the Python package.
+The boundary between the Python side (gen + upload) and the rendering side
+is the on-disk IR, kept stable so any renderer — local or hosted — can
+consume it without changes to the Python package.
 
 ### Qualified names
 
@@ -229,11 +232,11 @@ and makes `importlib.import_module` calls unambiguous.
 
 The project is in active development; contributions are very welcome.
 
-The Python side (IR generation and ingestion) is the core focus:
+The Python side (IR generation and upload) is the core focus:
 
 - **IR correctness**: does `papyri gen` faithfully represent a library's API?
-- **Cross-link resolution**: does `papyri ingest` correctly wire references
-  across packages?
+- **Cross-link resolution**: does the (TypeScript) ingest pipeline under
+  `ingest/` correctly wire references across packages?
 - **IR schema**: see `docs/IR.md` for the current format; help stabilising it
   is valuable.
 
@@ -255,7 +258,8 @@ named for its collection of many papyrus scrolls.
 
 #### `SqlOperationalError`
 
-The DB schema changed. Run `rm -rf ~/.papyri/ingest/` and re-ingest.
+The DB schema changed. Run `rm -rf ~/.papyri/ingest/` and re-upload your
+bundles to a fresh viewer instance.
 
 #### `ModuleNotFoundError: No module named 'tomli_w'` when running `pytest`
 

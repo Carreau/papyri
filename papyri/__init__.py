@@ -1,11 +1,12 @@
 """
-Papyri - Python IR producer + local graph store.
+Papyri - Python IR producer.
 
 Papyri parses Python library docstrings into an intermediate representation
-(IR) and ingests many libraries' IR into a local cross-linked SQLite graph.
+(IR) and uploads the resulting DocBundle to a viewer instance, which runs
+the ingest pipeline server-side.
 
-Rendering (HTML / terminal / TUI) has been removed from this repo; a future
-separate project is expected to consume the IR directly. See ``PLAN.md``.
+Rendering (HTML / terminal / TUI) has been removed from this repo; the
+TypeScript viewer under ``viewer/`` consumes the IR directly. See ``PLAN.md``.
 
 
 Installation (dev)
@@ -30,9 +31,9 @@ Two stages:
   Example TOML configs live under ``examples/``. Output lands in
   ``~/.papyri/data/<library>_<version>/``.
 
-- As a system operator, ingest IR into the local cross-linked graph::
+- Upload the bundle to a running viewer instance, which ingests it::
 
-    $ papyri ingest ~/.papyri/data/<library>_<version>/
+    $ papyri upload ~/.papyri/data/<library>_<version>/
 
 
 Changes in behavior
@@ -60,12 +61,9 @@ from .cli.bootstrap import bootstrap
 from .cli.debug import debug
 from .cli.describe import describe
 from .cli.diff import diff
-from .cli.drop import drop
 from .cli.find import find
 from .cli.gen import gen
-from .cli.ingest import ingest
 from .cli.pack import pack
-from .cli.relink import relink
 from .cli.upload import upload
 
 __version__ = "0.0.9"
@@ -80,8 +78,7 @@ logo = r"""
 
 app = typer.Typer(
     help="""
-Generate Papyri IR for Python libraries and ingest it into a local
-cross-linked graph.
+Generate Papyri IR for Python libraries and upload it to a viewer instance.
 
 Generating IR:
 
@@ -89,9 +86,9 @@ Generating IR:
 
     Will generate in ~/.papyri/data/ the folder `numpy_$numpyversion`.
 
-Ingesting IR:
+Uploading IR:
 
-    $ papyri ingest ~/.papyri/data/numpy_$numpyversion
+    $ papyri upload ~/.papyri/data/numpy_$numpyversion
 
 """,
     pretty_exceptions_enable=False,
@@ -122,12 +119,9 @@ def _app_callback(
 
 for _cmd in (
     about,
-    ingest,
-    relink,
     gen,
     pack,
     bootstrap,
-    drop,
     find,
     describe,
     debug,

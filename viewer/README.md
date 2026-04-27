@@ -2,8 +2,8 @@
 
 A read-only web viewer that renders pages directly from a local papyri
 IR on disk. Lives in-tree next to the Python producer; reads the same
-CBOR bundles and SQLite graph that `papyri gen` + `papyri ingest`
-write to `~/.papyri/`.
+CBOR bundles and SQLite graph that `papyri gen` produces and the
+sibling `ingest/` (TypeScript) package writes under `~/.papyri/`.
 
 See [`PLAN.md`](PLAN.md) for scope, milestones, and rationale.
 
@@ -12,16 +12,16 @@ See [`PLAN.md`](PLAN.md) for scope, milestones, and rationale.
 - Node.js 20+
 - pnpm 10+ (`npm install -g pnpm`)
 - An ingested papyri bundle somewhere on disk. If you don't have one
-  yet, run these from the repo root:
+  yet, generate a bundle and upload it to a running viewer:
 
   ```sh
   pip install -e .
   papyri gen examples/papyri.toml --no-infer
-  papyri ingest ~/.papyri/data/papyri_<version>/
+  # in another terminal: pnpm --filter papyri-viewer dev
+  papyri upload ~/.papyri/data/papyri_<version>/
   ```
 
-  Or, once the viewer is running in SSR mode, upload the gen bundle
-  directly over HTTP — see [Uploading a bundle](#uploading-a-bundle).
+  See [Uploading a bundle](#uploading-a-bundle) for details.
 
   By default the viewer reads `~/.papyri/ingest/` and
   `~/.papyri/ingest/papyri.db`. Point it elsewhere with the env vars
@@ -101,8 +101,9 @@ prerender = false;` are rendered at runtime.
 The `PUT /api/bundle` endpoint receives a raw `papyri gen` bundle, runs
 the full ingest pipeline (the same code path as the `papyri-ingest`
 CLI), and updates the cross-link graph — so cross-refs and back-refs
-work immediately without restarting the server. This is the
-network-callable replacement for running `papyri ingest` locally.
+work immediately without restarting the server. This is the canonical
+ingest entry point; the Python side ships bundles to it via
+`papyri upload`.
 
 **Prerequisite**: the server must be running in SSR mode (`pnpm dev` or
 `pnpm serve`).
@@ -113,8 +114,8 @@ network-callable replacement for running `papyri ingest` locally.
 papyri gen examples/papyri.toml --no-infer
 ```
 
-This writes a gen bundle to `~/.papyri/data/papyri_<version>/`. No
-local `papyri ingest` step is needed — the endpoint does that work.
+This writes a gen bundle to `~/.papyri/data/papyri_<version>/`. The
+upload endpoint runs the ingest pipeline server-side.
 
 ### Step 2 — upload
 

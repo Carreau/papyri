@@ -16,17 +16,20 @@ from *rendering* (stateless, redoable against the saved IR).
 **Problem 2 — Documentation is fragmented across domains.**
 Every library lives on its own subdomain with no real cross-linking.
 Papyri's model (conda-forge style): maintainers publish DocBundles; a single
-rendering service ingests many and serves them from one place.
+service ingests many and serves them from one place.
 
 ## Target shape
 
 - **`papyri gen`**: run per project, by each library maintainer in their own
-  CI or build environment. Produces a self-contained DocBundle and uploads it.
-- **`papyri ingest`**: run by the central service (or locally for dev) to
-  wire multiple bundles into a cross-linked graph.
+  CI or build environment. Produces a self-contained DocBundle on disk.
+- **`papyri upload`**: ships the bundle to a viewer instance's
+  `/api/bundle` endpoint, which runs the TypeScript ingest pipeline
+  server-side to wire bundles into the cross-linked graph.
 - **`viewer/`**: TypeScript/Astro renderer. Works locally for development
   and is being built with the centralized service in mind — it is the intended
   rendering frontend for the hosted service, not just a local debug tool.
+- **`ingest/`**: TypeScript `papyri-ingest` package that performs ingestion.
+  Replaces the removed Python `papyri ingest` CLI.
 
 The viewer lives in-tree while the IR is still in flux; co-locating producer
 and consumer lets us iterate across breaking changes in one PR. Splitting into
@@ -209,6 +212,43 @@ robustness and coverage holes.
       outside the Sphinx build environment: `.. autofunction::`,
       `.. autoclass::`, `.. automodule::`, `.. ipython::`.
       Emits `log.warning` and returns `[]` (no output node).
+
+### Phase 5 — Retire the Python ingest pipeline
+
+The TypeScript `papyri-ingest` package and the viewer's `/api/bundle`
+upload endpoint now own the ingestion path. `papyri upload` is the
+maintainer-side entry point. Phase 5 retires the redundant Python
+pipeline that used to populate `~/.papyri/ingest/` directly.
+
+- [x] Remove the `papyri ingest`, `papyri relink`, and `papyri drop`
+      CLI commands. Their files under `papyri/cli/` are deleted; the
+      Typer registration in `papyri/__init__.py` no longer references
+      them.
+- [x] Delete the `Ingester` class plus `find_all_refs`,
+      `load_one_uningested`, the module-level `drop`/`main`/`relink`
+      entry points, and `IngestedDoc.process` /
+      `IngestedDoc.all_forward_refs` from `papyri/crosslink.py`.
+      `IngestedDoc` itself stays as a read-time CBOR container (tag
+      4010) used by `papyri find` / `describe` / `diff` / `debug`.
+- [x] Delete `IngestVisitor` from `papyri/tree.py`. `GenVisitor`,
+      `DirectiveVisiter`, and `TreeVisitor` are unaffected.
+- [x] Repoint the inline-role-resolution tests in `test_parse.py` at
+      `DirectiveVisiter` (their actual subject) instead of the deleted
+      `IngestVisitor`.
+- [x] Update `Readme.md` and module docstrings to describe the new
+      gen → upload → server-side-ingest pipeline.
+
+Follow-ups (not in this phase):
+
+- Rename `crosslink.py` to something that reflects its new read-only
+  role (`ingested_doc.py`?), or fold `IngestedDoc` into `nodes.py`.
+- Audit `papyri/graphstore.py`: the write-side methods (`put`,
+  `put_meta`) are no longer called by the Python side. Decide whether
+  to slim it to a read-only interface or leave the writers for
+  programmatic use.
+- Decide the future of `papyri find` / `describe` / `diff` / `debug`.
+  They still work against the ingest store written by the TypeScript
+  pipeline, but the viewer is the user-facing replacement.
 
 ## Open questions
 

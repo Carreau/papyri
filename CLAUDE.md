@@ -33,8 +33,12 @@ intentionally shaped to support a future hosted service.
 
 - **`papyri gen`**: run per project, by each library maintainer in their own
   CI or build environment. Produces a self-contained DocBundle.
-- **`papyri ingest`**: run by the central service (or locally for dev) to
-  wire multiple bundles into a cross-linked graph.
+- **`papyri upload`**: ships the bundle to a viewer instance whose
+  `/api/bundle` endpoint runs the TypeScript ingest pipeline server-side to
+  wire bundles into the cross-linked graph.
+- **`ingest/`**: TypeScript `papyri-ingest` package — the canonical
+  ingestion engine, invoked by the viewer's upload endpoint. The Python
+  `papyri ingest` CLI has been removed; do not reintroduce it.
 - **`viewer/`**: TypeScript/Astro renderer. Works locally for development
   today, and is being designed with the centralized service in mind — it is
   the intended rendering frontend, not just a debug tool. When building the
@@ -66,12 +70,13 @@ service *could* be built later without a breaking change to the IR.
    ```
    pip install -e .
    papyri gen examples/papyri.toml --no-infer
-   papyri ingest ~/.papyri/data/papyri_<version>
-   python -m pytest -m "not postingest"
+   # then run a viewer instance and:
+   papyri upload ~/.papyri/data/papyri_<version>
+   python -m pytest
    ```
    Run `python -m pytest` (not bare `pytest`) so the editable install's
    interpreter is used. If `papyri.db` complains about schema, `rm -rf
-   ~/.papyri/ingest/` and re-ingest.
+   ~/.papyri/ingest/` and re-upload to a fresh viewer instance.
 6. **Run linters and formatters before every commit — before pushing.**
    Waiting for CI to report a formatting or lint failure is wasteful.
    Run all of these locally and fix any issues first:

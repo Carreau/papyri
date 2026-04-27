@@ -32,9 +32,10 @@ compatibility_flags = ["nodejs_compat"]
 # ----------------------------------------------------------------------------
 # D1 — graph store. Replaces the on-disk SQLite file.
 #
-# `migrations_dir = "migrations"` is the standard wrangler convention; the
-# `0000_init.sql` migration creates the same `nodes` + `links` schema used
-# by `ingest/src/graphstore.ts`. Apply locally:
+# `migrations_dir` points at `ingest/migrations/` so the same SQL files
+# initialise both the Node-mode SQLite store (read by
+# `ingest/src/graphstore.ts` at `new GraphStore()` time) and the D1
+# database. Apply locally:
 #
 #   pnpm wrangler d1 migrations apply papyri-viewer-graph --local
 #
@@ -47,7 +48,7 @@ compatibility_flags = ["nodejs_compat"]
 binding = "GRAPH_DB"
 database_name = "papyri-viewer-graph"
 database_id = "00000000-0000-0000-0000-000000000000"
-migrations_dir = "migrations"
+migrations_dir = "../ingest/migrations"
 
 # ----------------------------------------------------------------------------
 # R2 — blob store. Replaces the per-bundle directory tree under

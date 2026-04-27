@@ -200,9 +200,12 @@ selects the adapter at build time.
 - [`wrangler.toml`](wrangler.toml) declares the bindings the worker
   consumes: `GRAPH_DB` (D1, database `papyri-viewer-graph`) and
   `BLOBS` (R2, bucket `papyri-viewer-blobs`).
-- [`migrations/0000_init.sql`](migrations/0000_init.sql) creates the
-  D1 schema (`nodes` + `links` tables, identical to the SQLite shape
-  in `ingest/src/graphstore.ts`).
+- The graph schema lives at
+  [`../ingest/migrations/0000_init.sql`](../ingest/migrations/0000_init.sql)
+  and is the single source of truth for both the Node-mode SQLite
+  store (read at `new GraphStore()` time in
+  `ingest/src/graphstore.ts`) and D1 (`migrations_dir =
+"../ingest/migrations"` in `wrangler.toml`).
 - `astro.config.mjs` selects `@astrojs/node` (default) or
   `@astrojs/cloudflare` (when `PAPYRI_ADAPTER=cloudflare`). Output is
   always `output: "static"` so SSG pages stay prerendered.

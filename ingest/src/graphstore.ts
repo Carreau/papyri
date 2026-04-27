@@ -9,8 +9,9 @@
  * SQLite: <root>/papyri.db  (nodes + links tables)
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { blake2b } from "@noble/hashes/blake2b.js";
 import DatabaseType from "better-sqlite3";
 import Database from "better-sqlite3";
@@ -38,28 +39,48 @@ export function keyStr(k: Key): string {
 
 // ---------------------------------------------------------------------------
 // Schema
+//
+// Single source of truth: `ingest/migrations/*.sql`. The Cloudflare D1
+// path applies the same files via `wrangler d1 migrations apply`
+// (`viewer/wrangler.toml` points `migrations_dir = "../ingest/migrations"`).
 // ---------------------------------------------------------------------------
 
-const SCHEMA = `
-CREATE TABLE nodes(
-    id         INTEGER PRIMARY KEY,
-    package    TEXT NOT NULL,
-    version    TEXT NOT NULL,
-    category   TEXT NOT NULL,
-    identifier TEXT NOT NULL,
-    has_blob   INTEGER NOT NULL DEFAULT 0,
-    digest     BLOB,
-    UNIQUE(package, version, category, identifier)
-);
-CREATE TABLE links(
-    source INTEGER NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
-    dest   INTEGER NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
-    PRIMARY KEY (source, dest)
-);
-CREATE INDEX idx_links_dest ON links(dest);
-CREATE INDEX idx_nodes_pkg_cat_ident
-    ON nodes(package, category, identifier);
-`.trim();
+function migrationsDir(): string {
+  // Resolved lazily because this module is loaded transitively by
+  // viewer code that runs inside the Cloudflare prerender miniflare
+  // worker, where `import.meta.url` is not always a `file:` URL. The
+  // `new GraphStore()` constructor that needs this path never runs in
+  // that context — the lazy path keeps module load side-effect-free.
+  //
+  // `src/graphstore.ts` and `dist/graphstore.js` are both siblings of
+  // `migrations/`, so the same relative path resolves at dev time
+  // (vitest / tsx) and after `tsc`.
+  const here = dirname(fileURLToPath(import.meta.url));
+  return join(here, "..", "migrations");
+}
+
+function loadSchema(): string {
+  const dir = migrationsDir();
+  const files = readdirSync(dir)
+    .filter((f) => f.endsWith(".sql"))
+    .sort(); // lexicographic so 0000_*.sql lands before 0001_*.sql
+  return files.map((f) => readFileSync(join(dir, f), "utf8")).join("\n");
+}
+
+function splitStatements(sql: string): string[] {
+  // SQLite `--` line comments are stripped before splitting so a comment
+  // ending in `;` doesn't confuse the splitter. We don't use string
+  // literals containing `--` or `;` in the migrations themselves; if that
+  // ever changes, swap this for a real tokenizer.
+  const stripped = sql
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("--"))
+    .join("\n");
+  return stripped
+    .split(";")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
 
 const PRAGMAS = [
   "PRAGMA foreign_keys = 1",
@@ -87,10 +108,7 @@ export class GraphStore {
     for (const p of PRAGMAS) this.db.exec(p);
 
     if (isNew) {
-      for (const stmt of SCHEMA.split(";")) {
-        const s = stmt.trim();
-        if (s) this.db.exec(s);
-      }
+      for (const stmt of splitStatements(loadSchema())) this.db.exec(stmt);
     }
   }
 

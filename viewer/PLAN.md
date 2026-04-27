@@ -185,12 +185,14 @@ Data flow per request/page:
 Sub-phases of M9 (tracked separately to keep this list flat for prettier):
 
 - [x] **M9.0 — bindings + D1 schema.** `viewer/wrangler.toml` declares
-      `GRAPH_DB` (D1) and `BLOBS` (R2) bindings;
-      `viewer/migrations/0000_init.sql` mirrors `ingest/src/graphstore.ts`
-      exactly, so `wrangler d1 migrations apply papyri-viewer-graph --local`
-      produces a database the rest of M9 can target. R2 has no schema.
-      Nothing in the viewer reads these bindings yet — this is just the
-      data-plane scaffolding.
+      `GRAPH_DB` (D1) and `BLOBS` (R2) bindings. The schema is
+      single-sourced at `ingest/migrations/0000_init.sql`: the Node-mode
+      `GraphStore` (`ingest/src/graphstore.ts`) reads it from disk at
+      construction time, and `viewer/wrangler.toml` points
+      `migrations_dir = "../ingest/migrations"` so `wrangler d1 migrations
+apply papyri-viewer-graph --local` applies the same SQL to D1. R2
+      has no schema. Nothing in the viewer reads these bindings yet —
+      this is just the data-plane scaffolding.
 - [x] **M9.1 — Cloudflare adapter + worker entrypoint.**
       `@astrojs/cloudflare` is wired in alongside `@astrojs/node`; the
       adapter is selected at build time by `PAPYRI_ADAPTER` (default

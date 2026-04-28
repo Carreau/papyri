@@ -132,6 +132,36 @@ export async function getBackrefs(graphDb: GraphDb, target: RefTuple): Promise<R
   return out;
 }
 
+/**
+ * Map of `identifier → digest hex` for all blob-backed nodes of a given
+ * (package, version, category). Digests are 16-byte BLAKE2b sums of the
+ * raw blob bytes (see `Ingester._digest_blob`); we hex-encode here so
+ * callers can compare across backends (better-sqlite3 returns Buffer,
+ * D1 returns Uint8Array).
+ */
+export async function listDigests(
+  graphDb: GraphDb,
+  pkg: string,
+  ver: string,
+  category: string
+): Promise<Map<string, string>> {
+  const rows = await graphDb.all<{ identifier: string; digest: Uint8Array | null }>(
+    "SELECT identifier, digest FROM nodes " +
+      "WHERE has_blob=1 AND package=? AND version=? AND category=?",
+    [pkg, ver, category]
+  );
+  const out = new Map<string, string>();
+  for (const r of rows) {
+    if (!r.digest) continue;
+    const bytes =
+      r.digest instanceof Uint8Array ? r.digest : new Uint8Array(r.digest as ArrayLike<number>);
+    let hex = "";
+    for (const b of bytes) hex += b.toString(16).padStart(2, "0");
+    out.set(r.identifier, hex);
+  }
+  return out;
+}
+
 /** Distinct (pkg, ver) pairs of bundles that have any blob in the graph. */
 export async function listBundlesViaGraph(
   graphDb: GraphDb

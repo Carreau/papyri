@@ -12,7 +12,7 @@
     "preview": "astro preview",
     "serve": "node ./dist/server/entry.mjs",
     "wrangler": "wrangler",
-    "wrangler:dev": "wrangler dev --config dist/server/wrangler.json",
+    "wrangler:dev": "wrangler dev --config dist/server/wrangler.json --persist-to .wrangler/state",
     "astro": "astro",
     "check": "astro check",
     "lint": "eslint src --ext .ts,.tsx,.astro",

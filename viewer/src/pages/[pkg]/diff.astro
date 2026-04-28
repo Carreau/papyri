@@ -1,9 +1,17 @@
 ---
 // Per-package qualname diff between two ingested versions.
 // Query params: ?from=<ver>&to=<ver>
-// Computes set diff over `listModules`. A blob-hash level "changed"
-// distinction is a follow-up; this page reports added/removed only.
-import { listIngestedPackages, listModules } from "../../lib/ir-reader.ts";
+//
+// Three buckets:
+//   added   — qualnames present in `to` but not in `from`
+//   removed — qualnames present in `from` but not in `to`
+//   changed — qualnames in both, but with a different blob digest
+// "kept" is the count of qualnames whose digest is identical across versions.
+//
+// Digests come from the graph store (`nodes.digest` — a 16-byte BLAKE2b
+// of the raw CBOR blob bytes, set by the ingester at write time).
+import { listIngestedPackages } from "../../lib/ir-reader.ts";
+import { listDigests } from "../../lib/graph.ts";
 import { getBackends } from "../../lib/backends.ts";
 import { linkForQualname } from "../../lib/links.ts";
 import BaseLayout from "../../layouts/BaseLayout.astro";
@@ -17,7 +25,7 @@ const url = new URL(Astro.request.url);
 const fromVer = url.searchParams.get("from");
 const toVer = url.searchParams.get("to");
 
-const { blobStore } = await getBackends();
+const { blobStore, graphDb } = await getBackends();
 const entry = (await listIngestedPackages(blobStore)).find((p) => p.pkg === pkg);
 if (!entry) return new Response(`Package ${pkg} not found`, { status: 404 });
 
@@ -26,18 +34,26 @@ const haveBoth = valid(fromVer) && valid(toVer);
 
 let added: string[] = [];
 let removed: string[] = [];
+let changed: string[] = [];
 let kept = 0;
 
 if (haveBoth && fromVer && toVer) {
-  const [fromList, toList] = await Promise.all([
-    listModules(blobStore, pkg, fromVer),
-    listModules(blobStore, pkg, toVer),
+  const [fromDigests, toDigests] = await Promise.all([
+    listDigests(graphDb, pkg, fromVer, "module"),
+    listDigests(graphDb, pkg, toVer, "module"),
   ]);
-  const fromSet = new Set(fromList);
-  const toSet = new Set(toList);
-  added = toList.filter((q) => !fromSet.has(q));
-  removed = fromList.filter((q) => !toSet.has(q));
-  kept = toList.filter((q) => fromSet.has(q)).length;
+  const fromKeys = [...fromDigests.keys()];
+  const toKeys = [...toDigests.keys()];
+  const fromSet = new Set(fromKeys);
+  const toSet = new Set(toKeys);
+  added = toKeys.filter((q) => !fromSet.has(q)).sort();
+  removed = fromKeys.filter((q) => !toSet.has(q)).sort();
+  for (const q of toKeys) {
+    if (!fromSet.has(q)) continue;
+    if (fromDigests.get(q) !== toDigests.get(q)) changed.push(q);
+    else kept++;
+  }
+  changed.sort();
 }
 ---
 
@@ -87,7 +103,8 @@ if (haveBoth && fromVer && toVer) {
       <>
         <p class="lede">
           <code>{fromVer}</code> → <code>{toVer}</code>: <strong>{added.length}</strong> added,{" "}
-          <strong>{removed.length}</strong> removed, {kept} kept.
+          <strong>{removed.length}</strong> removed, <strong>{changed.length}</strong> changed,{" "}
+          {kept} unchanged.
         </p>
 
         <div class="diff-grid">
@@ -114,6 +131,23 @@ if (haveBoth && fromVer && toVer) {
                 {removed.map((q) => (
                   <li>
                     <a href={linkForQualname(pkg, fromVer!, q)}>{q}</a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+          <section class="diff-changed">
+            <h2 class="changed">Changed</h2>
+            {changed.length === 0 ? (
+              <p class="muted">none</p>
+            ) : (
+              <ul>
+                {changed.map((q) => (
+                  <li>
+                    <a href={linkForQualname(pkg, toVer!, q)}>{q}</a>
+                    <span class="changed-from">
+                      (was <a href={linkForQualname(pkg, fromVer!, q)}>{fromVer}</a>)
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -151,9 +185,15 @@ if (haveBoth && fromVer && toVer) {
     grid-template-columns: 1fr 1fr;
     gap: 2rem;
   }
+  .diff-grid .diff-changed {
+    grid-column: 1 / -1;
+  }
   @media (max-width: 720px) {
     .diff-grid {
       grid-template-columns: 1fr;
+    }
+    .diff-grid .diff-changed {
+      grid-column: auto;
     }
   }
   .diff-grid h2.added {
@@ -162,9 +202,17 @@ if (haveBoth && fromVer && toVer) {
   .diff-grid h2.removed {
     color: #b42318;
   }
+  .diff-grid h2.changed {
+    color: #9a6700;
+  }
   .diff-grid ul {
     padding-left: 1.2rem;
     font-family: var(--font-mono, ui-monospace, monospace);
     font-size: 0.85rem;
+  }
+  .changed-from {
+    margin-left: 0.5rem;
+    color: var(--muted, #888);
+    font-size: 0.8rem;
   }
 </style>

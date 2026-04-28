@@ -66,6 +66,7 @@ def pack(
             try:
                 _pack_one(target, _DEFAULT_DATA_DIR)
             except BundleError as exc:
+                raise
                 typer.echo(f"error packing {target}: {exc}", err=True)
                 ok = False
         if not ok:

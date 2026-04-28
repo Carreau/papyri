@@ -1065,7 +1065,7 @@ class Gen:
 
     def write_assets(self, where: Path) -> None:
         assets = where / "assets"
-        assets.mkdir()
+        assets.mkdir(exist_ok=True)
         for k, v in self.bdata.items():
             (assets / k).write_bytes(v)
 

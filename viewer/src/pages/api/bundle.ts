@@ -66,13 +66,13 @@ export const PUT: APIRoute = async ({ request }) => {
   if (typeof rawPkg !== "string" || !rawPkg || !isSafeSegment(rawPkg)) {
     return respond(
       { ok: false, error: `unsafe or missing package name in Bundle: ${JSON.stringify(rawPkg)}` },
-      400,
+      400
     );
   }
   if (typeof rawVer !== "string" || !rawVer || !isSafeSegment(rawVer)) {
     return respond(
       { ok: false, error: `unsafe or missing version in Bundle: ${JSON.stringify(rawVer)}` },
-      400,
+      400
     );
   }
 

@@ -97,8 +97,7 @@ async function nodeBackends(): Promise<Backends> {
   };
   const Database = sqliteMod.default;
 
-  const ingestDir =
-    process.env.PAPYRI_INGEST_DIR ?? path.join(os.homedir(), ".papyri", "ingest");
+  const ingestDir = process.env.PAPYRI_INGEST_DIR ?? path.join(os.homedir(), ".papyri", "ingest");
   const dbPath = path.join(ingestDir, "papyri.db");
 
   fs.mkdirSync(ingestDir, { recursive: true });

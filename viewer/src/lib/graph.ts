@@ -49,7 +49,7 @@ export async function resolveRef(graphDb: GraphDb, ref: RefTuple): Promise<RefTu
   const exact = await graphDb.get<NodeRow>(
     "SELECT package, version, category, identifier FROM nodes " +
       "WHERE has_blob=1 AND package=? AND version=? AND category=? AND identifier=? LIMIT 1",
-    [ref.pkg, ref.ver, kind, ref.path],
+    [ref.pkg, ref.ver, kind, ref.path]
   );
   if (exact) {
     return {
@@ -62,7 +62,7 @@ export async function resolveRef(graphDb: GraphDb, ref: RefTuple): Promise<RefTu
   const rows = await graphDb.all<NodeRow>(
     "SELECT package, version, category, identifier FROM nodes " +
       "WHERE has_blob=1 AND package=? AND category=? AND identifier=?",
-    [ref.pkg, kind, ref.path],
+    [ref.pkg, kind, ref.path]
   );
   if (rows.length === 0) return null;
   rows.sort((a, b) => b.version.localeCompare(a.version));
@@ -77,7 +77,7 @@ export async function resolveRef(graphDb: GraphDb, ref: RefTuple): Promise<RefTu
  */
 export async function resolveRefs(
   graphDb: GraphDb,
-  refs: RefTuple[],
+  refs: RefTuple[]
 ): Promise<Map<string, RefTuple>> {
   // Naive impl: parallel resolves. Good enough until N gets big — D1
   // batches don't help here because each lookup may need its own fallback
@@ -87,7 +87,7 @@ export async function resolveRefs(
     refs.map(async (r) => {
       const resolved = await resolveRef(graphDb, r);
       if (resolved) out.set(refKey(r), resolved);
-    }),
+    })
   );
   return out;
 }
@@ -118,7 +118,7 @@ export async function getBackrefs(graphDb: GraphDb, target: RefTuple): Promise<R
       "  (n_dest.version=? AND n_dest.category=?) " +
       "  OR (n_dest.version IN ('?','*') AND n_dest.category=?)" +
       ")",
-    [target.pkg, target.path, target.ver, target.kind, target.kind],
+    [target.pkg, target.path, target.ver, target.kind, target.kind]
   );
   const out: RefTuple[] = rows.map((r) => ({
     pkg: r.package,
@@ -127,17 +127,17 @@ export async function getBackrefs(graphDb: GraphDb, target: RefTuple): Promise<R
     path: r.identifier,
   }));
   out.sort((a, b) =>
-    `${a.pkg}/${a.ver}/${a.kind}/${a.path}`.localeCompare(`${b.pkg}/${b.ver}/${b.kind}/${b.path}`),
+    `${a.pkg}/${a.ver}/${a.kind}/${a.path}`.localeCompare(`${b.pkg}/${b.ver}/${b.kind}/${b.path}`)
   );
   return out;
 }
 
 /** Distinct (pkg, ver) pairs of bundles that have any blob in the graph. */
 export async function listBundlesViaGraph(
-  graphDb: GraphDb,
+  graphDb: GraphDb
 ): Promise<{ pkg: string; ver: string }[]> {
   const rows = await graphDb.all<{ package: string; version: string }>(
-    "SELECT DISTINCT package, version FROM nodes WHERE has_blob=1 ORDER BY package, version",
+    "SELECT DISTINCT package, version FROM nodes WHERE has_blob=1 ORDER BY package, version"
   );
   return rows.map((r) => ({ pkg: r.package, ver: r.version }));
 }

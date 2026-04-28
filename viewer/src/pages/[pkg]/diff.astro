@@ -1,0 +1,170 @@
+---
+// Per-package qualname diff between two ingested versions.
+// Query params: ?from=<ver>&to=<ver>
+// Computes set diff over `listModules`. A blob-hash level "changed"
+// distinction is a follow-up; this page reports added/removed only.
+import { listIngestedPackages, listModules } from "../../lib/ir-reader.ts";
+import { getBackends } from "../../lib/backends.ts";
+import { linkForQualname } from "../../lib/links.ts";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+
+export const prerender = false;
+
+const { pkg } = Astro.params;
+if (!pkg) return new Response("Not found", { status: 404 });
+
+const url = new URL(Astro.request.url);
+const fromVer = url.searchParams.get("from");
+const toVer = url.searchParams.get("to");
+
+const { blobStore } = await getBackends();
+const entry = (await listIngestedPackages(blobStore)).find((p) => p.pkg === pkg);
+if (!entry) return new Response(`Package ${pkg} not found`, { status: 404 });
+
+const valid = (v: string | null) => !!v && entry.versions.includes(v);
+const haveBoth = valid(fromVer) && valid(toVer);
+
+let added: string[] = [];
+let removed: string[] = [];
+let kept = 0;
+
+if (haveBoth && fromVer && toVer) {
+  const [fromList, toList] = await Promise.all([
+    listModules(blobStore, pkg, fromVer),
+    listModules(blobStore, pkg, toVer),
+  ]);
+  const fromSet = new Set(fromList);
+  const toSet = new Set(toList);
+  added = toList.filter((q) => !fromSet.has(q));
+  removed = fromList.filter((q) => !toSet.has(q));
+  kept = toList.filter((q) => fromSet.has(q)).length;
+}
+---
+
+<BaseLayout title={`${pkg} diff — Papyri viewer`}>
+  <p class="crumb">
+    <a href={`/${pkg}/`}>&larr; {pkg}</a>
+  </p>
+  <h1>
+    {pkg}
+    <span class="muted">diff</span>
+  </h1>
+
+  <form method="get" class="diff-picker">
+    <label>
+      From
+      <select name="from">
+        {
+          entry.versions.map((v) => (
+            <option value={v} selected={v === fromVer}>
+              {v}
+            </option>
+          ))
+        }
+      </select>
+    </label>
+    <label>
+      To
+      <select name="to">
+        {
+          entry.versions.map((v) => (
+            <option value={v} selected={v === toVer}>
+              {v}
+            </option>
+          ))
+        }
+      </select>
+    </label>
+    <button type="submit">Compare</button>
+  </form>
+
+  {
+    !haveBoth ? (
+      <p class="empty">
+        Pick two ingested versions of <code>{pkg}</code> to compare.
+      </p>
+    ) : (
+      <>
+        <p class="lede">
+          <code>{fromVer}</code> → <code>{toVer}</code>: <strong>{added.length}</strong> added,{" "}
+          <strong>{removed.length}</strong> removed, {kept} kept.
+        </p>
+
+        <div class="diff-grid">
+          <section>
+            <h2 class="added">Added in {toVer}</h2>
+            {added.length === 0 ? (
+              <p class="muted">none</p>
+            ) : (
+              <ul>
+                {added.map((q) => (
+                  <li>
+                    <a href={linkForQualname(pkg, toVer!, q)}>{q}</a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+          <section>
+            <h2 class="removed">Removed since {fromVer}</h2>
+            {removed.length === 0 ? (
+              <p class="muted">none</p>
+            ) : (
+              <ul>
+                {removed.map((q) => (
+                  <li>
+                    <a href={linkForQualname(pkg, fromVer!, q)}>{q}</a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+      </>
+    )
+  }
+</BaseLayout>
+
+<style>
+  .muted {
+    color: var(--muted, #888);
+    font-weight: normal;
+  }
+  .diff-picker {
+    display: flex;
+    gap: 1rem;
+    align-items: end;
+    flex-wrap: wrap;
+    margin-bottom: 2rem;
+  }
+  .diff-picker label {
+    display: flex;
+    flex-direction: column;
+    font-size: 0.85rem;
+  }
+  .diff-picker select {
+    margin-top: 0.25rem;
+    padding: 0.3rem 0.5rem;
+  }
+  .diff-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+  }
+  @media (max-width: 720px) {
+    .diff-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+  .diff-grid h2.added {
+    color: #1a7f37;
+  }
+  .diff-grid h2.removed {
+    color: #b42318;
+  }
+  .diff-grid ul {
+    padding-left: 1.2rem;
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 0.85rem;
+  }
+</style>

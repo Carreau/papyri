@@ -57,7 +57,7 @@ async function collectBundleNodes(
   pkg: string,
   ver: string,
   types: ReadonlySet<string>,
-  limit: number,
+  limit: number
 ): Promise<NodesResponse> {
   const valueMap = new Map<string, NodeEntry>();
   const nodeMap = new Map<string, IRNode>();
@@ -138,7 +138,7 @@ async function collectBundleNodes(
       if (originalNode) {
         entry.html = await renderNode(originalNode);
       }
-    }),
+    })
   );
 
   return { total: valueMap.size, limit, entries };

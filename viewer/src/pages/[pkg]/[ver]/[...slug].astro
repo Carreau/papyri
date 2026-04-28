@@ -37,12 +37,7 @@ const hasBackrefs = view.internalBackrefs.length > 0 || view.externalBackrefs.le
 const resolveXref = await buildXrefResolver(graphDb, doc);
 ---
 
-<BundleLayout
-  pkg={pkg}
-  ver={ver}
-  title={`${qualname} — Papyri viewer`}
-  activeQualname={qualname}
->
+<BundleLayout pkg={pkg} ver={ver} title={`${qualname} — Papyri viewer`} activeQualname={qualname}>
   <p class="crumb">
     <a href="/">bundles</a> / <a href={`/${pkg}/${ver}/`}>{pkg} {ver}</a>
   </p>

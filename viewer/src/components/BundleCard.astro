@@ -1,23 +1,25 @@
 ---
-// One card on the landing page. Shows logo, pkg name, version, summary, and
-// counts. The entire card is a single <a> so there are no nested links.
+// Landing-page card. One card per package; links to the package overview
+// page (`/<pkg>/`) where the user can pick a version. Counts reflect the
+// latest available version.
 import { loadBundleNav } from "../lib/nav.ts";
 import { getBackends } from "../lib/backends.ts";
 
 interface Props {
   pkg: string;
-  version: string;
+  latest: string;
+  versionCount: number;
 }
 
-const { pkg, version } = Astro.props;
+const { pkg, latest, versionCount } = Astro.props;
 
 const { blobStore } = await getBackends();
-const nav = await loadBundleNav(blobStore, pkg, version);
+const nav = await loadBundleNav(blobStore, pkg, latest);
 
 const docCount = nav.docs.length + nav.tutorials.length;
 const exampleCount = nav.examples.length;
 const summary = typeof nav.meta.summary === "string" ? nav.meta.summary : null;
-const href = `/${pkg}/${version}/`;
+const href = `/${pkg}/`;
 ---
 
 <a class="bundle-card" href={href} data-pkg={pkg} data-summary={summary ?? ""}>
@@ -33,7 +35,10 @@ const href = `/${pkg}/${version}/`;
     }
     <div class="bundle-card-title">
       <span class="bundle-card-pkg">{pkg}</span>
-      <span class="bundle-card-version">{version}</span>
+      <span class="bundle-card-version">
+        {latest}
+        {versionCount > 1 ? ` · ${versionCount} versions` : ""}
+      </span>
     </div>
   </div>
 

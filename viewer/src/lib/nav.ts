@@ -85,7 +85,7 @@ async function logoDataUrl(
   blobStore: BlobStore,
   pkg: string,
   ver: string,
-  logoName: string | undefined,
+  logoName: string | undefined
 ): Promise<string | null> {
   // Prefer the canonical `<pkg>/<ver>/meta/logo.<ext>` written by
   // `Ingester._ingest_logo`; fall back to whatever `meta.logo` points at
@@ -140,7 +140,7 @@ interface TocTreeNode extends TypedNode {
 function tocRefHref(
   ref: LocalRefNode | RefInfoNode | null,
   pkg: string,
-  version: string,
+  version: string
 ): string | null {
   if (!ref) return null;
   return ref.__type === "RefInfo"
@@ -162,11 +162,7 @@ interface ReadTocResult {
   rootHref: string | null;
 }
 
-async function readToc(
-  blobStore: BlobStore,
-  pkg: string,
-  ver: string,
-): Promise<ReadTocResult> {
+async function readToc(blobStore: BlobStore, pkg: string, ver: string): Promise<ReadTocResult> {
   try {
     const raw = await loadCbor(blobStore, pkg, ver, "meta", "toc.cbor");
     if (Array.isArray(raw)) {
@@ -194,7 +190,7 @@ export function isTutorial(docPath: string): boolean {
 function docsToEntries(
   pkg: string,
   version: string,
-  paths: string[],
+  paths: string[]
 ): { docs: NavEntry[]; tutorials: NavEntry[] } {
   const docs: NavEntry[] = [];
   const tutorials: NavEntry[] = [];
@@ -210,27 +206,19 @@ function examplesToEntries(pkg: string, version: string, paths: string[]): NavEn
   return paths.map((p) => ({ name: p, href: linkForExample(pkg, version, p) }));
 }
 
-export async function listDocs(
-  blobStore: BlobStore,
-  pkg: string,
-  ver: string,
-): Promise<string[]> {
+export async function listDocs(blobStore: BlobStore, pkg: string, ver: string): Promise<string[]> {
   return listFiles(blobStore, pkg, ver, "docs");
 }
 
 export async function listExamples(
   blobStore: BlobStore,
   pkg: string,
-  ver: string,
+  ver: string
 ): Promise<string[]> {
   return listFiles(blobStore, pkg, ver, "examples");
 }
 
-async function buildNav(
-  blobStore: BlobStore,
-  pkg: string,
-  version: string,
-): Promise<BundleNav> {
+async function buildNav(blobStore: BlobStore, pkg: string, version: string): Promise<BundleNav> {
   const [meta, tocResult, docPaths, examplePaths, qualnames] = await Promise.all([
     readMetaCbor(blobStore, pkg, version),
     readToc(blobStore, pkg, version),
@@ -259,7 +247,7 @@ async function buildNav(
 export async function loadBundleNav(
   blobStore: BlobStore,
   pkg: string,
-  version: string,
+  version: string
 ): Promise<BundleNav> {
   const id = `${pkg}/${version}`;
   const cached = _navCache.get(id);

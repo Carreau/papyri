@@ -53,7 +53,7 @@ async function collectFromModules(ctx: BundleCtx, out: Map<string, ImgEntry>): P
       }
       const href = linkForQualname(ctx.pkg, ctx.ver, qa);
       for (const found of collectImages(doc)) addHit(out, found, { label: qa, href });
-    }),
+    })
   );
 }
 
@@ -69,7 +69,7 @@ async function collectFromDocs(ctx: BundleCtx, out: Map<string, ImgEntry>): Prom
       }
       const href = linkForDoc(ctx.pkg, ctx.ver, docPath);
       for (const found of collectImages(section)) addHit(out, found, { label: docPath, href });
-    }),
+    })
   );
 }
 
@@ -85,7 +85,7 @@ async function collectFromExamples(ctx: BundleCtx, out: Map<string, ImgEntry>): 
       }
       const href = linkForExample(ctx.pkg, ctx.ver, exPath);
       for (const found of collectImages(section)) addHit(out, found, { label: exPath, href });
-    }),
+    })
   );
 }
 
@@ -97,7 +97,7 @@ async function collectFromExamples(ctx: BundleCtx, out: Map<string, ImgEntry>): 
 export async function collectBundleImages(
   blobStore: BlobStore,
   pkg: string,
-  ver: string,
+  ver: string
 ): Promise<ImgEntry[]> {
   const ctx: BundleCtx = { blobStore, pkg, ver };
   const map = new Map<string, ImgEntry>();

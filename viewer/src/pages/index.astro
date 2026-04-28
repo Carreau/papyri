@@ -1,5 +1,5 @@
 ---
-import { listIngestedBundles } from "../lib/ir-reader.ts";
+import { listIngestedPackages } from "../lib/ir-reader.ts";
 import { getBackends } from "../lib/backends.ts";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import BundleCard from "../components/BundleCard.astro";
@@ -8,10 +8,10 @@ import BundleGridSearch from "../components/BundleGridSearch.tsx";
 export const prerender = false;
 
 const { blobStore } = await getBackends();
-const ingested = await listIngestedBundles(blobStore);
+const packages = await listIngestedPackages(blobStore);
 
-const bundlesForFilter = ingested.map((b) => ({
-  pkg: b.pkg,
+const bundlesForFilter = packages.map((p) => ({
+  pkg: p.pkg,
   summary: "",
 }));
 ---
@@ -19,11 +19,11 @@ const bundlesForFilter = ingested.map((b) => ({
 <BaseLayout title="Papyri viewer">
   <h1>Papyri viewer</h1>
   <p class="lede">
-    {ingested.length} bundle{ingested.length !== 1 ? "s" : ""} ingested.
+    {packages.length} package{packages.length !== 1 ? "s" : ""} ingested.
   </p>
 
   {
-    ingested.length === 0 ? (
+    packages.length === 0 ? (
       <div class="empty">
         No ingested bundles found. Generate one with
         <code>papyri gen examples/papyri.toml --no-infer</code>, then upload it with{" "}
@@ -33,8 +33,8 @@ const bundlesForFilter = ingested.map((b) => ({
       <>
         <BundleGridSearch client:load bundles={bundlesForFilter} gridId="bundle-card-grid" />
         <div class="bundle-card-grid" id="bundle-card-grid">
-          {ingested.map((b) => (
-            <BundleCard pkg={b.pkg} version={b.version} />
+          {packages.map((p) => (
+            <BundleCard pkg={p.pkg} latest={p.latest} versionCount={p.versions.length} />
           ))}
         </div>
       </>

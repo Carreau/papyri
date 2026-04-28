@@ -1,0 +1,181 @@
+---
+// Package overview: lists every ingested version, links into each
+// bundle's home, and offers a version-pair picker that links to /diff.
+import { listIngestedPackages, listModules, type IngestedPackage } from "../../lib/ir-reader.ts";
+import { loadBundleNav } from "../../lib/nav.ts";
+import { getBackends } from "../../lib/backends.ts";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+
+export const prerender = false;
+
+const { pkg } = Astro.params;
+if (!pkg) return new Response("Not found", { status: 404 });
+
+const { blobStore } = await getBackends();
+const packages = await listIngestedPackages(blobStore);
+const entry: IngestedPackage | undefined = packages.find((p) => p.pkg === pkg);
+
+if (!entry) {
+  return new Response(`Package ${pkg} not found`, { status: 404 });
+}
+
+const latestNav = await loadBundleNav(blobStore, pkg, entry.latest);
+const summary = typeof latestNav.meta.summary === "string" ? latestNav.meta.summary : null;
+const homepage = typeof latestNav.meta.homepage === "string" ? latestNav.meta.homepage : null;
+
+// Gather counts per version. listModules is cheap; nav would be heavier.
+const rows = await Promise.all(
+  entry.versions.map(async (v) => ({
+    version: v,
+    qualnameCount: (await listModules(blobStore, pkg, v)).length,
+  }))
+);
+
+// Default diff comparison: latest vs second-latest if available.
+const defaultFrom = entry.versions[1] ?? entry.versions[0]!;
+const defaultTo = entry.versions[0]!;
+---
+
+<BaseLayout title={`${pkg} — Papyri viewer`}>
+  <p class="crumb"><a href="/">&larr; bundles</a></p>
+  <header class="package-header">
+    {
+      latestNav.logoDataUrl ? (
+        <img class="package-logo" src={latestNav.logoDataUrl} alt={`${pkg} logo`} />
+      ) : null
+    }
+    <div>
+      <h1>{pkg}</h1>
+      {summary ? <p class="lede">{summary}</p> : null}
+      {
+        homepage ? (
+          <p class="package-homepage">
+            <a href={homepage} rel="noreferrer">
+              {homepage}
+            </a>
+          </p>
+        ) : null
+      }
+    </div>
+  </header>
+
+  <section>
+    <h2>Versions</h2>
+    <table class="versions-table">
+      <thead>
+        <tr>
+          <th>Version</th>
+          <th class="num">API items</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {
+          rows.map((r) => (
+            <tr>
+              <td>
+                <a href={`/${pkg}/${r.version}/`}>{r.version}</a>
+                {r.version === entry.latest ? <span class="badge">latest</span> : null}
+              </td>
+              <td class="num">{r.qualnameCount}</td>
+              <td>
+                <a href={`/${pkg}/${r.version}/`}>browse →</a>
+              </td>
+            </tr>
+          ))
+        }
+      </tbody>
+    </table>
+  </section>
+
+  {
+    entry.versions.length >= 2 ? (
+      <section class="diff-picker">
+        <h2>Compare versions</h2>
+        <form method="get" action={`/${pkg}/diff`}>
+          <label>
+            From
+            <select name="from">
+              {entry.versions.map((v) => (
+                <option value={v} selected={v === defaultFrom}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            To
+            <select name="to">
+              {entry.versions.map((v) => (
+                <option value={v} selected={v === defaultTo}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="submit">Compare</button>
+        </form>
+      </section>
+    ) : null
+  }
+</BaseLayout>
+
+<style>
+  .package-header {
+    display: flex;
+    gap: 1.25rem;
+    align-items: flex-start;
+    margin-bottom: 2rem;
+  }
+  .package-logo {
+    width: 64px;
+    height: 64px;
+    object-fit: contain;
+    border-radius: 8px;
+  }
+  .package-homepage {
+    font-size: 0.9rem;
+    margin: 0.25rem 0 0;
+  }
+  .versions-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .versions-table th,
+  .versions-table td {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border, #e5e5e5);
+  }
+  .versions-table th.num,
+  .versions-table td.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .badge {
+    margin-left: 0.5rem;
+    padding: 0.05rem 0.4rem;
+    font-size: 0.75rem;
+    border-radius: 4px;
+    background: var(--accent-soft, #eef);
+    color: var(--accent, #335);
+  }
+  .diff-picker {
+    margin-top: 2rem;
+  }
+  .diff-picker form {
+    display: flex;
+    gap: 1rem;
+    align-items: end;
+    flex-wrap: wrap;
+  }
+  .diff-picker label {
+    display: flex;
+    flex-direction: column;
+    font-size: 0.85rem;
+  }
+  .diff-picker select {
+    margin-top: 0.25rem;
+    padding: 0.3rem 0.5rem;
+  }
+</style>

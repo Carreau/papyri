@@ -55,10 +55,7 @@ export function collectXrefs(node: unknown): RefTuple[] {
  * `resolveRefs(graphDb, …)` and returns a closure that components can
  * call inside the render tree.
  */
-export async function buildXrefResolver(
-  graphDb: GraphDb,
-  doc: unknown,
-): Promise<XRefResolver> {
+export async function buildXrefResolver(graphDb: GraphDb, doc: unknown): Promise<XRefResolver> {
   const refs = collectXrefs(doc);
   const resolved = await resolveRefs(graphDb, refs);
   return (raw: unknown) => {

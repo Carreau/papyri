@@ -26,6 +26,55 @@ export interface IngestedBundle {
   version: string;
 }
 
+/**
+ * Compare two version strings; later version sorts first.
+ * Best-effort: numeric segments are compared numerically, the rest
+ * falls back to localeCompare. Good enough for typical PEP 440 strings;
+ * not a full semver/PEP 440 parser.
+ */
+export function compareVersionsDesc(a: string, b: string): number {
+  const pa = a.split(/[.\-+]/);
+  const pb = b.split(/[.\-+]/);
+  const n = Math.max(pa.length, pb.length);
+  for (let i = 0; i < n; i++) {
+    const sa = pa[i] ?? "";
+    const sb = pb[i] ?? "";
+    const na = /^\d+$/.test(sa) ? Number(sa) : NaN;
+    const nb = /^\d+$/.test(sb) ? Number(sb) : NaN;
+    if (!Number.isNaN(na) && !Number.isNaN(nb)) {
+      if (na !== nb) return nb - na;
+      continue;
+    }
+    const cmp = sa.localeCompare(sb);
+    if (cmp !== 0) return -cmp;
+  }
+  return 0;
+}
+
+export interface IngestedPackage {
+  pkg: string;
+  versions: string[];
+  latest: string;
+}
+
+/** Distinct packages with their versions, latest first. */
+export async function listIngestedPackages(blobStore: BlobStore): Promise<IngestedPackage[]> {
+  const bundles = await listIngestedBundles(blobStore);
+  const byPkg = new Map<string, string[]>();
+  for (const b of bundles) {
+    const arr = byPkg.get(b.pkg) ?? [];
+    arr.push(b.version);
+    byPkg.set(b.pkg, arr);
+  }
+  const out: IngestedPackage[] = [];
+  for (const [pkg, versions] of byPkg) {
+    versions.sort(compareVersionsDesc);
+    out.push({ pkg, versions, latest: versions[0]! });
+  }
+  out.sort((a, b) => a.pkg.localeCompare(b.pkg));
+  return out;
+}
+
 /** Distinct (pkg, version) pairs that have any blob in the store. */
 export async function listIngestedBundles(blobStore: BlobStore): Promise<IngestedBundle[]> {
   const keys = await blobStore.list("");
@@ -49,7 +98,7 @@ export async function listIngestedBundles(blobStore: BlobStore): Promise<Ingeste
 export async function listModules(
   blobStore: BlobStore,
   pkg: string,
-  version: string,
+  version: string
 ): Promise<string[]> {
   const prefix = `${pkg}/${version}/module/`;
   const keys = await blobStore.list(prefix);
@@ -72,7 +121,7 @@ export async function listFiles(
   blobStore: BlobStore,
   pkg: string,
   version: string,
-  kind: string,
+  kind: string
 ): Promise<string[]> {
   const prefix = `${pkg}/${version}/${kind}/`;
   const keys = await blobStore.list(prefix);
@@ -168,7 +217,7 @@ export async function loadModule(
   blobStore: BlobStore,
   pkg: string,
   version: string,
-  qualname: string,
+  qualname: string
 ): Promise<IngestedDoc> {
   // Ingester writes `module/<qualname>` (no .cbor) on the gen→ingest path,
   // but older bundles or alternate writers may have used `.cbor`. Try both.
@@ -195,7 +244,7 @@ export async function loadCbor<T = unknown>(
   pkg: string,
   version: string,
   kind: string,
-  path: string,
+  path: string
 ): Promise<T> {
   const bytes = await blobStore.get({ module: pkg, version, kind, path });
   if (!bytes) throw new Error(`blob not found: ${pkg}/${version}/${kind}/${path}`);
@@ -207,7 +256,7 @@ export async function loadAsset(
   blobStore: BlobStore,
   pkg: string,
   version: string,
-  path: string,
+  path: string
 ): Promise<Uint8Array | null> {
   return blobStore.get({ module: pkg, version, kind: "assets", path });
 }
@@ -219,7 +268,7 @@ export async function loadAsset(
 export function collectNodes(
   node: unknown,
   types: ReadonlySet<string>,
-  out: IRNode[] = [],
+  out: IRNode[] = []
 ): IRNode[] {
   if (!node || typeof node !== "object") return out;
   if (Array.isArray(node)) {

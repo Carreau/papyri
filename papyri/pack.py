@@ -12,6 +12,7 @@ from __future__ import annotations
 import gzip
 import io
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,10 @@ from .nodes import encoder
 
 _ALLOWED_TOPLEVEL = {"papyri.json", "toc.json", "module", "docs", "examples", "assets"}
 _OPTIONAL_DIRS = ("docs", "examples", "assets")
+
+
+def _count_files(d: Path) -> int:
+    return sum(1 for e in d.iterdir() if e.is_file()) if d.is_dir() else 0
 
 
 class BundleError(ValueError):
@@ -110,30 +115,65 @@ def _decode_dir(
     return out
 
 
-def read_bundle_dir(path: Path) -> Bundle:
+def read_bundle_dir(path: Path, log: Callable[[str], None] | None = None) -> Bundle:
     """Read a DocBundle directory and construct a typed ``Bundle``.
 
     Fail-fast: raises ``BundleError`` on the first problem encountered.
+    Pass a ``log`` callable to receive fine-grained progress messages
+    (one string per step, no trailing newline needed).
     """
     from .doc import GeneratedDoc
     from .nodes import Section, TocTree
 
+    if log:
+        log("  checking layout …")
     _check_layout(path)
     meta = _read_meta(path)
+    if log and "module" in meta and "version" in meta:
+        log(f"  metadata: module={meta['module']!r}, version={meta['version']!r}")
 
-    api = _decode_dir(path / "module", GeneratedDoc, strip_suffix=".json")
-    narrative = _decode_dir(path / "docs", GeneratedDoc)
-    examples = _decode_dir(path / "examples", Section)
+    module_dir = path / "module"
+    if log:
+        n = _count_files(module_dir)
+        log(f"  decoding module/   ({n} item{'s' if n != 1 else ''}) …")
+    api = _decode_dir(module_dir, GeneratedDoc, strip_suffix=".json")
+
+    docs_dir = path / "docs"
+    if log:
+        n = _count_files(docs_dir)
+        log(
+            f"  decoding docs/     ({n} item{'s' if n != 1 else ''}) …"
+            if n
+            else "  docs/     (none)"
+        )
+    narrative = _decode_dir(docs_dir, GeneratedDoc)
+
+    examples_dir = path / "examples"
+    if log:
+        n = _count_files(examples_dir)
+        log(
+            f"  decoding examples/ ({n} item{'s' if n != 1 else ''}) …"
+            if n
+            else "  examples/ (none)"
+        )
+    examples = _decode_dir(examples_dir, Section)
 
     assets: dict[str, bytes] = {}
     assets_dir = path / "assets"
     if assets_dir.is_dir():
+        if log:
+            n = _count_files(assets_dir)
+            log(f"  reading  assets/   ({n} item{'s' if n != 1 else ''}) …")
         for entry in sorted(assets_dir.iterdir()):
             if entry.is_file():
                 assets[entry.name] = entry.read_bytes()
+    elif log:
+        log("  assets/   (none)")
 
     toc: list[TocTree] = []
     toc_path = path / "toc.json"
+    if log:
+        log("  decoding toc.json …" if toc_path.is_file() else "  toc.json  (absent)")
     if toc_path.is_file():
         try:
             decoded = [TocTree.from_dict(t) for t in json.loads(toc_path.read_bytes())]
@@ -172,20 +212,29 @@ def read_bundle_dir(path: Path) -> Bundle:
     return bundle
 
 
-def make_artifact(bundle: Bundle) -> bytes:
+def make_artifact(bundle: Bundle, log: Callable[[str], None] | None = None) -> bytes:
     """Encode a ``Bundle`` to canonical-CBOR + gzip bytes (deterministic)."""
+    if log:
+        log("  encoding CBOR …")
     cbor_bytes = encoder.encode(bundle)
+    if log:
+        log(f"  compressing (gzip, {len(cbor_bytes) / (1024 * 1024):.1f} MiB raw) …")
     buf = io.BytesIO()
     # mtime=0 + no filename → reproducible gzip header.
     with gzip.GzipFile(fileobj=buf, mode="wb", mtime=0, compresslevel=9) as gz:
         gz.write(cbor_bytes)
-    return buf.getvalue()
+    data = buf.getvalue()
+    if log:
+        log(f"  compressed → {len(data) / (1024 * 1024):.1f} MiB")
+    return data
 
 
-def make_artifact_from_dir(path: Path) -> tuple[bytes, Bundle]:
+def make_artifact_from_dir(
+    path: Path, log: Callable[[str], None] | None = None
+) -> tuple[bytes, Bundle]:
     """Validate and pack a DocBundle directory. Returns (artifact_bytes, bundle)."""
-    bundle = read_bundle_dir(path)
-    return make_artifact(bundle), bundle
+    bundle = read_bundle_dir(path, log=log)
+    return make_artifact(bundle, log=log), bundle
 
 
 def load_artifact(data: bytes) -> Bundle:

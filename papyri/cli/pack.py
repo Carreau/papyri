@@ -34,6 +34,14 @@ def pack(
             ),
         ),
     ] = None,
+    verbose: Annotated[
+        bool,
+        typer.Option(
+            "--verbose",
+            "-v",
+            help="Show per-step packing progress (layout check, per-directory item counts, encode/compress sizes).",
+        ),
+    ] = False,
 ) -> None:
     """
     Validate a DocBundle directory and write a single deterministic
@@ -60,20 +68,20 @@ def pack(
         if not targets:
             typer.echo(f"error: no bundles found under {_DEFAULT_DATA_DIR}", err=True)
             raise typer.Exit(1)
-        ok = True
         for target in targets:
-            _pack_one(target, _DEFAULT_DATA_DIR)
-        if not ok:
-            raise typer.Exit(1)
+            _pack_one(target, _DEFAULT_DATA_DIR, verbose=verbose)
         return
 
-    _pack_one(bundle_dir.expanduser().resolve(), output)
+    _pack_one(bundle_dir.expanduser().resolve(), output, verbose=verbose)
 
 
-def _pack_one(bundle_dir: Path, output: Path | None) -> None:
+def _pack_one(bundle_dir: Path, output: Path | None, verbose: bool = False) -> None:
     from papyri.pack import make_artifact_from_dir
 
-    data, bundle = make_artifact_from_dir(bundle_dir)
+    log = (lambda msg: typer.echo(msg, err=True)) if verbose else None
+    if verbose:
+        typer.echo(f"packing {bundle_dir.name} …", err=True)
+    data, bundle = make_artifact_from_dir(bundle_dir, log=log)
     default_name = f"{bundle.module}-{bundle.version}.papyri"
     if output is None:
         out_path = Path.cwd() / default_name

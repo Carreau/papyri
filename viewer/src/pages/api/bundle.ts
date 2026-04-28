@@ -22,6 +22,7 @@
 //   400  { ok: false, error }   — missing body or bad papyri.json
 //   422  { ok: false, error }   — tar extraction or ingest failed
 //   500  { ok: false, error }   — filesystem error before ingest started
+//   501  { ok: false, error }   — running under Cloudflare Workers (M9.3 not shipped yet)
 
 import type { APIRoute } from "astro";
 import { mkdir, readFile, rm } from "node:fs/promises";
@@ -44,6 +45,29 @@ import { resetGraphDbCache } from "../../lib/graph.ts";
 export const prerender = false;
 
 export const PUT: APIRoute = async ({ request }) => {
+  // The current implementation depends on Node-only APIs: `node:fs` for
+  // staging, `child_process.spawn("tar", ...)` for extraction, and
+  // `papyri-ingest`'s `better-sqlite3` driver. None of these work in the
+  // Cloudflare Workers runtime. Detect the Workers runtime and return a
+  // clear 501 instead of letting the request 500 deep inside one of those
+  // calls. Porting to Workers-native I/O (R2 + D1, in-Worker gzip) is
+  // tracked as M9.3 in viewer/PLAN.md.
+  if (
+    typeof navigator !== "undefined" &&
+    (navigator as { userAgent?: string }).userAgent === "Cloudflare-Workers"
+  ) {
+    return respond(
+      {
+        ok: false,
+        error:
+          "bundle upload is not yet implemented for the Cloudflare Workers runtime " +
+          "(M9.3 in viewer/PLAN.md). Run the viewer with the Node adapter " +
+          "(`pnpm dev` or `pnpm serve`) and upload to that instance instead.",
+      },
+      501
+    );
+  }
+
   if (!request.body) {
     return respond({ ok: false, error: "request body required (tar.gz of gen bundle)" }, 400);
   }

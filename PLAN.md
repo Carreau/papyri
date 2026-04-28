@@ -56,9 +56,9 @@ converging on a single encoding is part of Phase 2.
 
 ## Dependency pins
 
-- RST parsing uses `tree-sitter-language-pack` (the maintained successor
-  of the abandoned `tree_sitter_languages`) on top of `tree-sitter >= 0.24`.
-  Don't reintroduce `tree_sitter_languages`.
+- RST parsing uses the `tree-sitter-rst` PyPI bindings directly on top of
+  `tree-sitter >= 0.24`. Don't reintroduce `tree_sitter_languages` or
+  `tree-sitter-language-pack`.
 - `numpy`, `scipy`, `astropy`, `IPython` in the CI matrix drift frequently;
   the current numpy test failure is a canonical-path change for
   `numpy:array`. Either xfail with a reason or pin each matrix entry to a

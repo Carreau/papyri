@@ -83,7 +83,9 @@ jobs:
         pipdeptree -r
     - name: Gen ${{matrix.lib}}
       run: |
-        uv pip install --system ${{matrix.lib}}
+        if [ "${{ matrix.lib }}" != "papyri" ]; then
+          uv pip install --system "${{ matrix.lib }}"
+        fi
         coverage run -a -m papyri gen examples/${{matrix.lib}}.toml ${{matrix.flags}}
         sleep 1 # time for coverage to write its stuff
         papyri pack

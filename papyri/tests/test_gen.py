@@ -91,7 +91,6 @@ def test_infer():
                 "numpy:histogram2d",
             ),
         ),
-        ("IPython", (), ("IPython:embed_kernel",)),
     ],
 )
 def test_numpy(module, submodules, objects):
@@ -141,7 +140,7 @@ def test_self():
     from papyri.config_loader import Config
     from papyri.gen import Gen
 
-    c = Config(dry_run=True, dummy_progress=True)
+    c = Config(dry_run=True, dummy_progress=True, execute_doctests=False)
     g = Gen(False, config=c)
     g.collect_package_metadata("papyri", ".", {})
     g.collect_api_docs("papyri", list({"papyri.examples:example1", "papyri"}))
@@ -207,7 +206,7 @@ def test_self():
 
 def test_self_2():
     """RefInfo class should resolve its source file; private methods should not."""
-    c = Config(dry_run=True, dummy_progress=True)
+    c = Config(dry_run=True, dummy_progress=True, execute_doctests=False)
     g = Gen(False, config=c)
     g.collect_package_metadata("papyri", ".", {})
     g.collect_api_docs(

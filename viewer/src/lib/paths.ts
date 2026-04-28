@@ -1,3 +1,14 @@
+import { homedir } from "node:os";
+import { join } from "node:path";
+
+/**
+ * Absolute path to the SQLite graph DB used by the Node/local backend.
+ * Override with PAPYRI_INGEST_DB for testing or custom installations.
+ */
+export function ingestDb(): string {
+  return process.env.PAPYRI_INGEST_DB ?? join(homedir(), ".papyri", "ingest", "papyri.db");
+}
+
 /**
  * Returns true if `s` is a safe path segment (alphanumeric start, allows
  * `.`, `-`, `_`, `+`). Used to validate pkg/version values read from

@@ -425,32 +425,14 @@ export class Ingester {
       })),
       ...addedRefs.map((r) => ({
         sql: insLink,
-        params: [
-          key.module,
-          key.version,
-          key.kind,
-          key.path,
-          r.module,
-          r.version,
-          r.kind,
-          r.path,
-        ],
+        params: [key.module, key.version, key.kind, key.path, r.module, r.version, r.kind, r.path],
       })),
     ];
     for (const s of removedRefStrs) {
       const [m, v, k, p] = s.split("/");
       stmts.push({
         sql: delLink,
-        params: [
-          key.module,
-          key.version,
-          key.kind,
-          key.path,
-          m ?? "",
-          v ?? "",
-          k ?? "",
-          p ?? "",
-        ],
+        params: [key.module, key.version, key.kind, key.path, m ?? "", v ?? "", k ?? "", p ?? ""],
       });
     }
 

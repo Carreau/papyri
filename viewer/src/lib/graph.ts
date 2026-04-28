@@ -1,23 +1,23 @@
-// Thin wrapper over the papyri.db SQLite graph store.
+// Async wrappers over the cross-link graph (`nodes` / `links` tables).
 //
-// The ingest step writes two tables:
+// Everything routes through `papyri-ingest`'s `GraphDb` interface, so the
+// same code runs against:
+//   • better-sqlite3 (Node SSR / `pnpm serve`)  — `SqliteGraphDb`
+//   • Cloudflare D1   (Workers / `wrangler dev`) — `D1GraphDb`
+//
+// Operations mirror the ingest tables:
 //   nodes  — one row per known key; has_blob=1 means the blob is on disk,
 //            has_blob=0 means it is a placeholder for a not-yet-ingested ref
 //            target (may carry wildcard version "*" or "?").
-//   links  — directed edges (nodes.id source -> nodes.id dest)
+//   links  — directed edges (source nodes.id → dest nodes.id)
 //
-// This module uses the DB for two things:
-//   1. resolveRef:   pick the best on-disk document (has_blob=1) matching a ref.
-//   2. getBackrefs:  return blob-backed documents that link to a given target.
-//
-// better-sqlite3 is a sync API, which matches Astro's SSG build model. We
-// keep a single cached Database connection per process (Astro runs one
-// build process) and degrade gracefully when the DB file is missing
-// (fresh checkout / CI).
-import { existsSync } from "node:fs";
-import type DatabaseType from "better-sqlite3";
-import Database from "better-sqlite3";
-import { ingestDb } from "./paths.ts";
+// Two reader operations:
+//   1. resolveRef  — pick the best on-disk document (has_blob=1) matching a
+//                    ref (exact module/version/kind/path, falling back to
+//                    same module/kind/path on any version).
+//   2. getBackrefs — return blob-backed documents that link to a target.
+
+import type { GraphDb } from "papyri-ingest";
 
 export interface RefTuple {
   pkg: string;
@@ -26,38 +26,11 @@ export interface RefTuple {
   path: string;
 }
 
-// undefined = not yet opened; null = file was absent at open time.
-let _db: DatabaseType.Database | null | undefined;
-
-/**
- * Return a cached read-only handle to the ingest graph DB, or `null` if the
- * file is absent. Callers should treat `null` as "no graph information
- * available" and degrade accordingly.
- */
-export function openGraphDb(): DatabaseType.Database | null {
-  if (_db !== undefined) return _db;
-  const path = ingestDb();
-  if (!existsSync(path)) {
-    _db = null;
-    return null;
-  }
-  try {
-    _db = new Database(path, { readonly: true, fileMustExist: true });
-    return _db;
-  } catch {
-    _db = null;
-    return null;
-  }
-}
-
-/**
- * Close and evict the cached read-only DB handle. The next call to
- * `openGraphDb()` will reopen the file, picking up any writes made since
- * (e.g. after the bundle ingest endpoint updates the graph).
- */
-export function resetGraphDbCache(): void {
-  if (_db) _db.close();
-  _db = undefined;
+interface NodeRow {
+  package: string;
+  version: string;
+  category: string;
+  identifier: string;
 }
 
 /**
@@ -71,20 +44,13 @@ export function resetGraphDbCache(): void {
  * module refs; it is normalised to `"module"` here since the on-disk node
  * uses `kind = "module"`.
  */
-export function resolveRef(ref: RefTuple): RefTuple | null {
-  const db = openGraphDb();
-  if (!db) return null;
-  // Normalise gen-time "api" stub kind to the actual on-disk kind.
+export async function resolveRef(graphDb: GraphDb, ref: RefTuple): Promise<RefTuple | null> {
   const kind = ref.kind === "api" ? "module" : ref.kind;
-  // Exact match first.
-  const exact = db
-    .prepare(
-      "SELECT package, version, category, identifier FROM nodes " +
-        "WHERE has_blob=1 AND package=? AND version=? AND category=? AND identifier=? LIMIT 1"
-    )
-    .get(ref.pkg, ref.ver, kind, ref.path) as
-    | { package: string; version: string; category: string; identifier: string }
-    | undefined;
+  const exact = await graphDb.get<NodeRow>(
+    "SELECT package, version, category, identifier FROM nodes " +
+      "WHERE has_blob=1 AND package=? AND version=? AND category=? AND identifier=? LIMIT 1",
+    [ref.pkg, ref.ver, kind, ref.path],
+  );
   if (exact) {
     return {
       pkg: exact.package,
@@ -93,64 +59,67 @@ export function resolveRef(ref: RefTuple): RefTuple | null {
       path: exact.identifier,
     };
   }
-  // Fall back: any version of the same (pkg, kind, path), pick the newest
-  // by lexicographic sort. Sort in JS so semver-ish strings work even though
-  // SQLite collation is plain text.
-  const rows = db
-    .prepare(
-      "SELECT package, version, category, identifier FROM nodes " +
-        "WHERE has_blob=1 AND package=? AND category=? AND identifier=?"
-    )
-    .all(ref.pkg, kind, ref.path) as Array<{
-    package: string;
-    version: string;
-    category: string;
-    identifier: string;
-  }>;
+  const rows = await graphDb.all<NodeRow>(
+    "SELECT package, version, category, identifier FROM nodes " +
+      "WHERE has_blob=1 AND package=? AND category=? AND identifier=?",
+    [ref.pkg, kind, ref.path],
+  );
   if (rows.length === 0) return null;
   rows.sort((a, b) => b.version.localeCompare(a.version));
   const best = rows[0]!;
-  return {
-    pkg: best.package,
-    ver: best.version,
-    kind: best.category,
-    path: best.identifier,
-  };
+  return { pkg: best.package, ver: best.version, kind: best.category, path: best.identifier };
+}
+
+/**
+ * Batch-resolve a list of refs in one query. Returns a map keyed by the
+ * input ref's `pkg|ver|kind|path` so callers can look up resolutions
+ * synchronously after `await`. Cheaper than N round-trips to D1.
+ */
+export async function resolveRefs(
+  graphDb: GraphDb,
+  refs: RefTuple[],
+): Promise<Map<string, RefTuple>> {
+  // Naive impl: parallel resolves. Good enough until N gets big — D1
+  // batches don't help here because each lookup may need its own fallback
+  // query. Switch to a single VALUES-based join if profiling shows it.
+  const out = new Map<string, RefTuple>();
+  await Promise.all(
+    refs.map(async (r) => {
+      const resolved = await resolveRef(graphDb, r);
+      if (resolved) out.set(refKey(r), resolved);
+    }),
+  );
+  return out;
+}
+
+export function refKey(r: RefTuple): string {
+  return `${r.pkg}|${r.ver}|${r.kind}|${r.path}`;
 }
 
 /**
  * Return the documents that link *to* the given target, as
  * (pkg, version, kind, path) tuples. Sorted lexicographically and
- * deduplicated. Empty list if the DB is missing or the target has no
- * incoming edges.
+ * deduplicated. Empty list if the target has no incoming edges.
  *
  * In addition to exact-version links, also matches wildcard-version stubs
  * ("?" or "*") for the same (package, category, identifier).  These arise
  * from cross-package refs ingested by the TypeScript ingest path, which
  * cannot resolve the version at ingest time.
  */
-export function getBackrefs(target: RefTuple): RefTuple[] {
-  const db = openGraphDb();
-  if (!db) return [];
-  const rows = db
-    .prepare(
-      "SELECT DISTINCT n_src.package, n_src.version, n_src.category, n_src.identifier " +
-        "FROM links l " +
-        "JOIN nodes n_src ON n_src.id = l.source " +
-        "JOIN nodes n_dest ON n_dest.id = l.dest " +
-        "WHERE n_src.has_blob=1 " +
-        "AND n_dest.package=? AND n_dest.identifier=? " +
-        "AND (" +
-        "  (n_dest.version=? AND n_dest.category=?) " +
-        "  OR (n_dest.version IN ('?','*') AND n_dest.category=?)" +
-        ")"
-    )
-    .all(target.pkg, target.path, target.ver, target.kind, target.kind) as Array<{
-    package: string;
-    version: string;
-    category: string;
-    identifier: string;
-  }>;
+export async function getBackrefs(graphDb: GraphDb, target: RefTuple): Promise<RefTuple[]> {
+  const rows = await graphDb.all<NodeRow>(
+    "SELECT DISTINCT n_src.package, n_src.version, n_src.category, n_src.identifier " +
+      "FROM links l " +
+      "JOIN nodes n_src ON n_src.id = l.source " +
+      "JOIN nodes n_dest ON n_dest.id = l.dest " +
+      "WHERE n_src.has_blob=1 " +
+      "AND n_dest.package=? AND n_dest.identifier=? " +
+      "AND (" +
+      "  (n_dest.version=? AND n_dest.category=?) " +
+      "  OR (n_dest.version IN ('?','*') AND n_dest.category=?)" +
+      ")",
+    [target.pkg, target.path, target.ver, target.kind, target.kind],
+  );
   const out: RefTuple[] = rows.map((r) => ({
     pkg: r.package,
     ver: r.version,
@@ -158,7 +127,17 @@ export function getBackrefs(target: RefTuple): RefTuple[] {
     path: r.identifier,
   }));
   out.sort((a, b) =>
-    `${a.pkg}/${a.ver}/${a.kind}/${a.path}`.localeCompare(`${b.pkg}/${b.ver}/${b.kind}/${b.path}`)
+    `${a.pkg}/${a.ver}/${a.kind}/${a.path}`.localeCompare(`${b.pkg}/${b.ver}/${b.kind}/${b.path}`),
   );
   return out;
+}
+
+/** Distinct (pkg, ver) pairs of bundles that have any blob in the graph. */
+export async function listBundlesViaGraph(
+  graphDb: GraphDb,
+): Promise<{ pkg: string; ver: string }[]> {
+  const rows = await graphDb.all<{ package: string; version: string }>(
+    "SELECT DISTINCT package, version FROM nodes WHERE has_blob=1 ORDER BY package, version",
+  );
+  return rows.map((r) => ({ pkg: r.package, ver: r.version }));
 }

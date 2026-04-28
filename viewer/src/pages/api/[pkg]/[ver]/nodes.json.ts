@@ -1,23 +1,17 @@
 // SSR endpoint: browse unique IR nodes in a bundle.
 //
-// Returns up to `limit` (max 100) deduplicated nodes from the bundle,
-// walking modules first, then narrative docs, then examples. Stops as
-// soon as the limit is reached so large bundles are cheap to query.
+// Walks modules first, then narrative docs, then examples; returns up to
+// `limit` (max 100) deduplicated nodes. Stops as soon as the limit is
+// reached so large bundles are cheap to query.
 //
 // Query params:
 //   nodetype  — optional lowercase slug of an IR type name (e.g. "paragraph").
 //               Omit to collect all known node types.
 //   limit     — optional integer, default 100, capped at 100.
-//
-// Response:
-//   { total: number, limit: number,
-//     entries: Array<{ type: string, value: string, html?: string,
-//                      pages: Array<{ label: string, href: string }> }> }
 
 import type { APIRoute } from "astro";
-import { join } from "node:path";
+import type { BlobStore } from "papyri-ingest";
 import {
-  listIngestedBundles,
   listModules,
   loadModule,
   loadCbor,
@@ -27,6 +21,7 @@ import {
   type TypedNode,
 } from "../../../../lib/ir-reader.ts";
 import { listDocs, listExamples } from "../../../../lib/nav.ts";
+import { getBackends } from "../../../../lib/backends.ts";
 import { typeFromSlug } from "../../../../lib/ir-types.ts";
 import { linkForDoc, linkForExample, linkForQualname } from "../../../../lib/links.ts";
 import { renderNode } from "../../../../lib/render-node.ts";
@@ -41,7 +36,6 @@ interface PageRef {
 export interface NodeEntry {
   type: string;
   value: string;
-  /** Pre-rendered HTML from renderNode; always present in API responses. */
   html?: string;
   pages: PageRef[];
 }
@@ -52,24 +46,20 @@ export interface NodesResponse {
   entries: NodeEntry[];
 }
 
-// Deduplication key: use the raw .value string for nodes that carry one
-// (covers all the common leaf types), fall back to truncated JSON otherwise.
 function displayValueFor(n: IRNode): string {
   const v = (n as Record<string, unknown>).value;
   if (typeof v === "string") return v;
   return JSON.stringify(n).slice(0, 120);
 }
 
-export async function collectBundleNodes(
-  bundlePath: string,
+async function collectBundleNodes(
+  blobStore: BlobStore,
   pkg: string,
   ver: string,
   types: ReadonlySet<string>,
-  limit: number
+  limit: number,
 ): Promise<NodesResponse> {
   const valueMap = new Map<string, NodeEntry>();
-  // Parallel map keyed identically to valueMap; stores the first IRNode seen
-  // for each unique (type, value) pair so we can render HTML after collection.
   const nodeMap = new Map<string, IRNode>();
 
   function entryKey(type: string, val: string): string {
@@ -94,29 +84,24 @@ export async function collectBundleNodes(
     }
   }
 
-  // Walk modules first — they're the primary content source.
-  const qualnames = await listModules(bundlePath);
+  const qualnames = await listModules(blobStore, pkg, ver);
   for (const qa of qualnames) {
     if (valueMap.size >= limit) break;
     let doc;
     try {
-      doc = await loadModule(bundlePath, qa);
+      doc = await loadModule(blobStore, pkg, ver, qa);
     } catch {
       continue;
     }
-    addHits(collectNodes(doc, types), {
-      label: qa,
-      href: linkForQualname(pkg, ver, qa),
-    });
+    addHits(collectNodes(doc, types), { label: qa, href: linkForQualname(pkg, ver, qa) });
   }
 
-  // Narrative docs second.
-  const docPaths = await listDocs(bundlePath);
+  const docPaths = await listDocs(blobStore, pkg, ver);
   for (const docPath of docPaths) {
     if (valueMap.size >= limit) break;
     let section;
     try {
-      section = await loadCbor(join(bundlePath, "docs", docPath));
+      section = await loadCbor(blobStore, pkg, ver, "docs", docPath);
     } catch {
       continue;
     }
@@ -126,13 +111,12 @@ export async function collectBundleNodes(
     });
   }
 
-  // Examples last.
-  const exPaths = await listExamples(bundlePath);
+  const exPaths = await listExamples(blobStore, pkg, ver);
   for (const exPath of exPaths) {
     if (valueMap.size >= limit) break;
     let section;
     try {
-      section = await loadCbor(join(bundlePath, "examples", exPath));
+      section = await loadCbor(blobStore, pkg, ver, "examples", exPath);
     } catch {
       continue;
     }
@@ -147,8 +131,6 @@ export async function collectBundleNodes(
     return a.value.length - b.value.length || a.value.localeCompare(b.value);
   });
 
-  // Render HTML for each entry using the original node (no resolveXref: the
-  // node browser shows nodes out of context, so CrossRefs render as unresolved).
   await Promise.all(
     entries.map(async (entry) => {
       const k = entryKey(entry.type, entry.value);
@@ -156,7 +138,7 @@ export async function collectBundleNodes(
       if (originalNode) {
         entry.html = await renderNode(originalNode);
       }
-    })
+    }),
   );
 
   return { total: valueMap.size, limit, entries };
@@ -164,17 +146,14 @@ export async function collectBundleNodes(
 
 export const GET: APIRoute = async ({ params, url }) => {
   const { pkg, ver } = params;
-  const nodetypeSlug = url.searchParams.get("nodetype");
-  const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") || 100)));
-
-  const bundles = await listIngestedBundles();
-  const bundle = bundles.find((b) => b.pkg === pkg && b.version === ver);
-  if (!bundle) {
+  if (!pkg || !ver) {
     return new Response(JSON.stringify({ error: "Bundle not found" }), {
       status: 404,
       headers: { "Content-Type": "application/json" },
     });
   }
+  const nodetypeSlug = url.searchParams.get("nodetype");
+  const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") || 100)));
 
   let types: ReadonlySet<string> = ALL_NODE_TYPES;
   if (nodetypeSlug) {
@@ -188,7 +167,8 @@ export const GET: APIRoute = async ({ params, url }) => {
     types = new Set([typeName]);
   }
 
-  const result = await collectBundleNodes(bundle.path, pkg!, ver!, types, limit);
+  const { blobStore } = await getBackends();
+  const result = await collectBundleNodes(blobStore, pkg, ver, types, limit);
 
   return new Response(JSON.stringify(result), {
     headers: {

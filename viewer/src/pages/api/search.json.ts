@@ -1,24 +1,12 @@
-// SSR endpoint: cross-bundle search.
+// SSR endpoint: cross-bundle qualname search.
 //
-// Complements the per-bundle static `search.json` manifests
-// (`src/pages/[pkg]/[ver]/search.json.ts`) by answering *global* queries
-// at request time. The static manifests stay because they let a bundle
-// page work offline / on a pure-SSG deploy; this endpoint is what a
-// future hosted service uses to search across every ingested package.
-//
-// Query params:
-//   q      — required, substring to match (case-insensitive)
-//   limit  — optional, defaults to 50
-//
-// Response shape:
-//   { hits: Array<{ pkg, version, qualname, href }> }
-//
-// Deliberately simple: no ranking, no fuzzy, no scoring. Swappable for
-// a real index (fts5 over `papyri.db`, or a client-side lunr build) once
-// we know the shape of the query load.
+// Substring match against every ingested bundle's qualname list.
+// Deliberately simple — no ranking, no fuzzy. Swappable for a real index
+// (fts5 / D1 fts) once we know the query load.
 
 import type { APIRoute } from "astro";
 import { listIngestedBundles, listModules } from "../../lib/ir-reader.ts";
+import { getBackends } from "../../lib/backends.ts";
 import { linkForRef } from "../../lib/links.ts";
 import { filterQualnames } from "../../lib/search.ts";
 
@@ -35,12 +23,13 @@ export const GET: APIRoute = async ({ url }) => {
     });
   }
 
-  const bundles = await listIngestedBundles();
+  const { blobStore } = await getBackends();
+  const bundles = await listIngestedBundles(blobStore);
   const hits: Array<{ pkg: string; version: string; qualname: string; href: string }> = [];
 
   for (const b of bundles) {
     if (hits.length >= limit) break;
-    const qualnames = await listModules(b.path);
+    const qualnames = await listModules(blobStore, b.pkg, b.version);
     const perBundle = filterQualnames(qualnames, q, limit - hits.length);
     for (const hit of perBundle) {
       const href = linkForRef({

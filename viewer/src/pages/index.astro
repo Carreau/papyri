@@ -1,17 +1,18 @@
 ---
 import { listIngestedBundles } from "../lib/ir-reader.ts";
+import { getBackends } from "../lib/backends.ts";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import BundleCard from "../components/BundleCard.astro";
 import BundleGridSearch from "../components/BundleGridSearch.tsx";
 
-const ingested = await listIngestedBundles();
+export const prerender = false;
 
-// Small metadata array passed to the filter island so it can match without
-// reading the DOM: just pkg names and summaries (no logos / big data URIs).
-// The island uses this alongside data-attributes on the card elements.
+const { blobStore } = await getBackends();
+const ingested = await listIngestedBundles(blobStore);
+
 const bundlesForFilter = ingested.map((b) => ({
   pkg: b.pkg,
-  summary: "", // filled server-side in BundleCard; island reads data-summary
+  summary: "",
 }));
 ---
 
@@ -25,15 +26,15 @@ const bundlesForFilter = ingested.map((b) => ({
     ingested.length === 0 ? (
       <div class="empty">
         No ingested bundles found. Generate one with
-        <code>papyri gen examples/papyri.toml --no-infer</code>, then ingest it with{" "}
-        <code>papyri ingest ~/.papyri/data/&lt;bundle&gt;</code>.
+        <code>papyri gen examples/papyri.toml --no-infer</code>, then upload it with{" "}
+        <code>papyri upload ~/.papyri/data/&lt;bundle&gt;</code>.
       </div>
     ) : (
       <>
         <BundleGridSearch client:load bundles={bundlesForFilter} gridId="bundle-card-grid" />
         <div class="bundle-card-grid" id="bundle-card-grid">
           {ingested.map((b) => (
-            <BundleCard pkg={b.pkg} version={b.version} bundlePath={b.path} />
+            <BundleCard pkg={b.pkg} version={b.version} />
           ))}
         </div>
       </>

@@ -1,19 +1,17 @@
-import { readdir, readFile } from "node:fs/promises";
-import { extname, join, relative, sep } from "node:path";
+import { extname } from "node:path";
 import { Decoder } from "cbor-x";
-import { listModules, loadCbor, type TypedNode } from "./ir-reader.ts";
+import type { BlobStore } from "papyri-ingest";
+import { listFiles, listModules, loadCbor, type TypedNode } from "./ir-reader.ts";
 import { linkForDoc, linkForExample, linkForLocalRef, linkForRef } from "./links.ts";
 
 // ---------------------------------------------------------------------------
 // Per-bundle view-model. Pages under [pkg]/[ver]/** call `loadBundleNav` to
-// get everything the sidebar + bundle identity block need in one shot. Read
-// lives here so `ir-reader.ts` stays focused on on-disk decoding primitives.
+// get everything the sidebar + bundle identity block need in one shot.
 //
-// §0 of viewer/TODO.md makes the ingest store the single source of truth:
-// `meta.cbor` carries `{module, version, logo, summary, ...}` and the logo
-// file itself is copied into `<bundle>/meta/logo.<ext>`. Older bundles that
-// predate the logo copy step still have the logo in `assets/`; we fall back
-// there so the viewer works against a mixed ingest.
+// The store layout is `<pkg>/<ver>/{meta,docs,examples,module,assets}/...`
+// — the same shape under both the Node FsBlobStore and the Workers
+// R2BlobStore. No fs paths leak out; every read goes through the
+// `BlobStore` passed in.
 // ---------------------------------------------------------------------------
 
 export interface BundleMeta {
@@ -21,7 +19,6 @@ export interface BundleMeta {
   version?: string;
   /** Basename under `meta/` (newer ingest) or `assets/` (older). */
   logo?: string;
-  /** Plain-text first paragraph of the module summary. */
   summary?: string;
   homepage?: string;
   docspage?: string;
@@ -31,63 +28,46 @@ export interface BundleMeta {
   [key: string]: unknown;
 }
 
-/** Sidebar TocTree node view — title + href + children. No CBOR details. */
 export interface TocItem {
   title: string;
-  /** Resolved viewer URL, or null if the ref couldn't be shaped. */
   href: string | null;
   children: TocItem[];
 }
 
-/** A doc/example entry rendered in the sidebar as a flat link. */
 export interface NavEntry {
-  /** Path segment under docs/ or examples/ (e.g. "crossrefs" or
-   *  "simple_plot.py"). Used both for URL and as a fallback label. */
   name: string;
-  /** Resolved viewer URL. */
   href: string;
 }
 
 export interface BundleNav {
   pkg: string;
   version: string;
-  bundlePath: string;
   meta: BundleMeta;
-  /** `data:` URI if we found the logo on disk, else null. */
   logoDataUrl: string | null;
-  /** Walked TocTree (root-level entries). Empty if `meta/toc.cbor` is absent. */
   toc: TocItem[];
   docs: NavEntry[];
   tutorials: NavEntry[];
   examples: NavEntry[];
   qualnames: string[];
-  /**
-   * Viewer URL for the top-level narrative docs index, or null if none exists.
-   * Sourced from the single-root TocTree's own ref (which `readToc` previously
-   * discarded when unwrapping children) or from a bare `index` doc file.
-   */
   docsIndexHref: string | null;
 }
 
-// ---------------------------------------------------------------------------
-// Per-build memoisation. Astro calls into these helpers once per page, and
-// many pages share the same bundle; caching keeps the CBOR round-trip off
-// the hot path. The keys include the bundle path so multiple bundles
-// coexist; a fresh Node process gets a clean map.
-// ---------------------------------------------------------------------------
+// Per-process memo. Keyed by `<pkg>/<ver>` — the BlobStore singleton is
+// stable per request, so caching by bundle id is correct. A fresh worker
+// isolate / Node process gets a clean map.
 const _navCache = new Map<string, Promise<BundleNav>>();
 
-async function readMetaCbor(bundlePath: string): Promise<BundleMeta> {
+async function readMetaCbor(blobStore: BlobStore, pkg: string, ver: string): Promise<BundleMeta> {
   try {
-    const raw = await readFile(join(bundlePath, "meta.cbor"));
+    const raw = await blobStore.getMeta(pkg, ver);
+    if (!raw) return {};
     const dec = new Decoder({ mapsAsObjects: true });
-    const decoded = dec.decode(raw);
+    const decoded = dec.decode(Buffer.from(raw));
     if (decoded && typeof decoded === "object") {
       return decoded as BundleMeta;
     }
   } catch {
-    // Bundles without meta.cbor get an empty view-model; the sidebar still
-    // renders using pkg/version from the URL.
+    // empty view-model on decode error
   }
   return {};
 }
@@ -102,43 +82,38 @@ const LOGO_MIME: Record<string, string> = {
 };
 
 async function logoDataUrl(
-  bundlePath: string,
-  logoName: string | undefined
+  blobStore: BlobStore,
+  pkg: string,
+  ver: string,
+  logoName: string | undefined,
 ): Promise<string | null> {
-  // `meta/logo.*` is what `Ingester._ingest_logo` writes; older ingests
-  // didn't do that, so fall back to whatever basename meta.cbor points at
-  // under `assets/`.
-  const candidates: string[] = [];
-  try {
-    const metaEntries = await readdir(join(bundlePath, "meta"));
-    for (const e of metaEntries) {
-      if (e.startsWith("logo.")) candidates.push(join(bundlePath, "meta", e));
-    }
-  } catch {
-    // No meta dir — fine.
+  // Prefer the canonical `<pkg>/<ver>/meta/logo.<ext>` written by
+  // `Ingester._ingest_logo`; fall back to whatever `meta.logo` points at
+  // under `assets/` for older bundles.
+  const candidates: { kind: "meta" | "assets"; path: string }[] = [];
+
+  const metaKeys = await blobStore.list(`${pkg}/${ver}/meta/`);
+  for (const k of metaKeys) {
+    const base = k.split("/").pop()!;
+    if (base.startsWith("logo.")) candidates.push({ kind: "meta", path: base });
   }
-  if (logoName) {
-    candidates.push(join(bundlePath, "assets", logoName));
-  }
-  for (const path of candidates) {
-    try {
-      const buf = await readFile(path);
-      const ext = extname(path).toLowerCase();
-      const mime = LOGO_MIME[ext] ?? "application/octet-stream";
-      return `data:${mime};base64,${buf.toString("base64")}`;
-    } catch {
-      // Try the next one.
-    }
+  if (logoName) candidates.push({ kind: "assets", path: logoName });
+
+  for (const c of candidates) {
+    const bytes = await blobStore.get({ module: pkg, version: ver, kind: c.kind, path: c.path });
+    if (!bytes) continue;
+    const ext = extname(c.path).toLowerCase();
+    const mime = LOGO_MIME[ext] ?? "application/octet-stream";
+    const b64 = Buffer.from(bytes).toString("base64");
+    return `data:${mime};base64,${b64}`;
   }
   return null;
 }
 
 // ---------------------------------------------------------------------------
-// TocTree walk. `meta/toc.cbor` is either a single TocTree (tag 4021) or a
-// list of TocTree entries (papyri sometimes writes the root as a list). The
-// decoder hands us typed nodes courtesy of the shared extensions in
-// ir-reader.ts.
+// TocTree walk
 // ---------------------------------------------------------------------------
+
 interface RefInfoNode extends TypedNode {
   __type: "RefInfo";
   module: string;
@@ -165,7 +140,7 @@ interface TocTreeNode extends TypedNode {
 function tocRefHref(
   ref: LocalRefNode | RefInfoNode | null,
   pkg: string,
-  version: string
+  version: string,
 ): string | null {
   if (!ref) return null;
   return ref.__type === "RefInfo"
@@ -184,73 +159,31 @@ function walkToc(node: TocTreeNode, pkg: string, version: string): TocItem {
 
 interface ReadTocResult {
   toc: TocItem[];
-  /** Href of the root TocTree node itself (the index doc), if present. */
   rootHref: string | null;
 }
 
-async function readToc(bundlePath: string, pkg: string, version: string): Promise<ReadTocResult> {
+async function readToc(
+  blobStore: BlobStore,
+  pkg: string,
+  ver: string,
+): Promise<ReadTocResult> {
   try {
-    const raw = await loadCbor(join(bundlePath, "meta", "toc.cbor"));
+    const raw = await loadCbor(blobStore, pkg, ver, "meta", "toc.cbor");
     if (Array.isArray(raw)) {
-      return {
-        toc: raw.map((n) => walkToc(n as TocTreeNode, pkg, version)),
-        rootHref: null,
-      };
+      return { toc: raw.map((n) => walkToc(n as TocTreeNode, pkg, ver)), rootHref: null };
     }
     if (raw && (raw as TocTreeNode).__type === "TocTree") {
-      const t = walkToc(raw as TocTreeNode, pkg, version);
-      // Preserve the root's own href (the index doc URL). Previously this was
-      // silently discarded when the root had children, making the index page
-      // unreachable from the sidebar.
+      const t = walkToc(raw as TocTreeNode, pkg, ver);
       const rootHref = t.href;
-      return {
-        toc: t.children.length > 0 ? t.children : [t],
-        rootHref,
-      };
+      return { toc: t.children.length > 0 ? t.children : [t], rootHref };
     }
   } catch {
-    // No toc → empty nav.
+    // No toc.cbor → empty nav.
   }
   return { toc: [], rootHref: null };
 }
 
-// ---------------------------------------------------------------------------
-// File listings for docs/ / examples/ / assets/. Walked recursively so
-// nested layouts (docs/tutorials/*, fig-*.png under assets/) come through.
-// Each entry is a relative POSIX-style path; URL encoding happens at the
-// consumer. Exposed because the assets endpoint (`src/pages/assets/...`)
-// reuses the same walker.
-// ---------------------------------------------------------------------------
-export async function listFilesRecursive(root: string): Promise<string[]> {
-  const out: string[] = [];
-  async function walk(dir: string): Promise<void> {
-    let ents;
-    try {
-      ents = await readdir(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const e of ents) {
-      const full = join(dir, e.name);
-      if (e.isDirectory()) {
-        await walk(full);
-      } else if (e.isFile()) {
-        const rel = relative(root, full);
-        // Normalise to forward slashes for URL shaping (matters on Windows).
-        out.push(rel.split(sep).join("/"));
-      }
-    }
-  }
-  await walk(root);
-  out.sort();
-  return out;
-}
-
-/**
- * Tutorials are doc files that begin with `tutorial_` or live under
- * `docs/tutorials/`. Matches the filename convention documented in
- * `docs/IR.md` and TODO §0.
- */
+/** Tutorials: doc files starting with `tutorial_` or under `tutorials/`. */
 export function isTutorial(docPath: string): boolean {
   const base = docPath.split("/").pop() ?? docPath;
   if (base.startsWith("tutorial_")) return true;
@@ -261,7 +194,7 @@ export function isTutorial(docPath: string): boolean {
 function docsToEntries(
   pkg: string,
   version: string,
-  paths: string[]
+  paths: string[],
 ): { docs: NavEntry[]; tutorials: NavEntry[] } {
   const docs: NavEntry[] = [];
   const tutorials: NavEntry[] = [];
@@ -277,32 +210,41 @@ function examplesToEntries(pkg: string, version: string, paths: string[]): NavEn
   return paths.map((p) => ({ name: p, href: linkForExample(pkg, version, p) }));
 }
 
-export async function listDocs(bundlePath: string): Promise<string[]> {
-  return listFilesRecursive(join(bundlePath, "docs"));
+export async function listDocs(
+  blobStore: BlobStore,
+  pkg: string,
+  ver: string,
+): Promise<string[]> {
+  return listFiles(blobStore, pkg, ver, "docs");
 }
 
-export async function listExamples(bundlePath: string): Promise<string[]> {
-  return listFilesRecursive(join(bundlePath, "examples"));
+export async function listExamples(
+  blobStore: BlobStore,
+  pkg: string,
+  ver: string,
+): Promise<string[]> {
+  return listFiles(blobStore, pkg, ver, "examples");
 }
 
-async function buildNav(pkg: string, version: string, bundlePath: string): Promise<BundleNav> {
+async function buildNav(
+  blobStore: BlobStore,
+  pkg: string,
+  version: string,
+): Promise<BundleNav> {
   const [meta, tocResult, docPaths, examplePaths, qualnames] = await Promise.all([
-    readMetaCbor(bundlePath),
-    readToc(bundlePath, pkg, version),
-    listDocs(bundlePath),
-    listExamples(bundlePath),
-    listModules(bundlePath),
+    readMetaCbor(blobStore, pkg, version),
+    readToc(blobStore, pkg, version),
+    listDocs(blobStore, pkg, version),
+    listExamples(blobStore, pkg, version),
+    listModules(blobStore, pkg, version),
   ]);
-  const url = await logoDataUrl(bundlePath, meta.logo);
+  const url = await logoDataUrl(blobStore, pkg, version, meta.logo);
   const { docs, tutorials } = docsToEntries(pkg, version, docPaths);
   const examples = examplesToEntries(pkg, version, examplePaths);
-  // Prefer the TOC root's href (index doc from meta/toc.cbor); fall back to a
-  // bare `index` file in the flat docs listing for bundles without a TOC.
   const docsIndexHref = tocResult.rootHref ?? docs.find((e) => e.name === "index")?.href ?? null;
   return {
     pkg,
     version,
-    bundlePath,
     meta,
     logoDataUrl: url,
     toc: tocResult.toc,
@@ -315,13 +257,14 @@ async function buildNav(pkg: string, version: string, bundlePath: string): Promi
 }
 
 export async function loadBundleNav(
+  blobStore: BlobStore,
   pkg: string,
   version: string,
-  bundlePath: string
 ): Promise<BundleNav> {
-  const cached = _navCache.get(bundlePath);
+  const id = `${pkg}/${version}`;
+  const cached = _navCache.get(id);
   if (cached) return cached;
-  const p = buildNav(pkg, version, bundlePath);
-  _navCache.set(bundlePath, p);
+  const p = buildNav(blobStore, pkg, version);
+  _navCache.set(id, p);
   return p;
 }

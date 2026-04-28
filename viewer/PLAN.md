@@ -207,15 +207,28 @@ build`) emits the Workers entrypoint at `dist/server/entry.mjs`
       reads bindings via `import { env } from "cloudflare:workers"` —
       dynamically imported and marked `external` for the Node build so
       both adapters compile from the same source.
-- [ ] **M9.2 — async storage + graph layer.** Two-headed abstraction so
-      the same Astro code runs against fs+sqlite (Node) and R2+D1
-      (Workers): - `src/lib/storage.ts` — async `StorageBackend` (`getBlob`,
-      `listKeys(prefix)`, `getMeta`); `NodeFsBackend` wraps the existing
-      `node:fs/promises` calls in `ir-reader.ts` / `nav.ts`, `R2Backend`
-      wraps `env.BLOBS`. - `src/lib/graph.ts` — async `GraphBackend` (`resolveRef`,
-      `getBackrefs`); `Sqlite3Backend` for Node, `D1Backend` for
-      Workers. Pages that consume xrefs (qualname / doc / example)
-      become `await`-aware.
+- [x] **M9.2 — async storage + graph layer.** Read paths share one
+      backend pair with M9.3 — `BlobStore` (`FsBlobStore` / `R2BlobStore`)
+      and `GraphDb` (`SqliteGraphDb` / `D1GraphDb`) from `papyri-ingest`,
+      built per-request by `viewer/src/lib/backends.ts`. `getBackends()`
+      dynamic-imports `cloudflare:workers` to detect the Workers runtime
+      and falls back to fs+sqlite under Node; the `node:fs` /
+      `better-sqlite3` imports are also dynamic so they never enter the
+      Workers bundle. `viewer/src/lib/{ir-reader,graph,nav,image-index,xref}.ts`
+      are async and parameterised on the backend pair; every page
+      (`[...slug]`, `docs/[...doc]`, `examples/[...ex]`, `images/`,
+      `nodes/`, `index`, plus the JSON API endpoints and the asset
+      handler) calls `getBackends()` and passes the pair down. CrossRef
+      resolution batches once per page via `buildXrefResolver(graphDb,
+      doc)` so render components stay synchronous. The static
+      `getStaticPaths` / `output: "static"` model is dropped:
+      `astro.config.mjs` is now `output: "server"`, so newly uploaded
+      bundles appear on the next request without a rebuild. Tested
+      end-to-end on the Node adapter (`astro dev` + `papyri upload` →
+      `/papyri/0.0.9/papyri/` and nested qualnames render). The Cloudflare
+      build was not exercised in this session; the runtime detection +
+      D1/R2 wiring matches the same path that `PUT /api/bundle` already
+      uses successfully.
 - [x] **M9.3 — bundle upload on Workers.** `PUT /api/bundle` runs
       under both adapters from a single source. The endpoint gunzips the
       `.papyri` artifact via `DecompressionStream` (Web Streams, available

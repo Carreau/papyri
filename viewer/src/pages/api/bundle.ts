@@ -7,17 +7,10 @@
 // We gunzip + cbor-decode it, then hand the in-memory Bundle to the ingest
 // pipeline directly — no temporary directory, no fs round-trip.
 //
-// Two backends are supported, picked at request time:
-//
-//   • Cloudflare Workers (`wrangler dev` / deployed). The Astro Cloudflare
-//     adapter exposes the bound R2 bucket + D1 database via
-//     `locals.runtime.env`; we wrap them in `R2BlobStore` + `D1GraphDb` and
-//     hand them to the Ingester. Bundle bytes never touch disk.
-//
-//   • Node SSR (`astro dev` / `pnpm serve`). No runtime env present; the
-//     Ingester falls back to its Node defaults (filesystem under
-//     `ingestDir()` + better-sqlite3) — same code path as before this
-//     refactor.
+// Backend selection happens in `lib/backends.ts`: same {blobStore, graphDb}
+// pair that the read-side pages use, so both halves of the round trip
+// agree on where data lives. Under Cloudflare that's R2 + D1; under Node
+// it's filesystem + better-sqlite3.
 //
 // Expected client command:
 //   papyri pack ~/.papyri/data/numpy_2.3.5
@@ -31,100 +24,36 @@
 //   201  { ok: true, pkg, version }
 //   400  { ok: false, error }   — missing body or bad Bundle metadata
 //   422  { ok: false, error }   — gunzip / decode / ingest failed
-//   500  { ok: false, error }   — backend setup failed (fs / binding error)
+//   500  { ok: false, error }   — backend setup failed
 
 import type { APIRoute } from "astro";
-import {
-  Ingester,
-  decode,
-  R2BlobStore,
-  D1GraphDb,
-  type TypedNode,
-  type R2BucketLike,
-  type D1DatabaseLike,
-} from "papyri-ingest";
-// Embed the canonical schema SQL at build time so the bundled SSR module
-// doesn't need to read it from disk at runtime. Vite inlines the file
-// contents as a string via the `?raw` query, which means
-// `papyri-ingest`'s on-disk `migrations/0000_init.sql` is the single
-// source of truth even after bundling rearranges module locations.
-//
-// Only used by the Node default backend; D1 has its schema applied via
-// `wrangler d1 migrations apply` against the same migrations dir.
-import schemaSql from "papyri-ingest/migrations/0000_init.sql?raw";
+import { Ingester, decode, type TypedNode } from "papyri-ingest";
 import { isSafeSegment } from "../../lib/paths.ts";
-import { resetGraphDbCache } from "../../lib/graph.ts";
+import { getBackends } from "../../lib/backends.ts";
 
 export const prerender = false;
-
-interface WorkersEnv {
-  GRAPH_DB?: D1DatabaseLike;
-  BLOBS?: R2BucketLike;
-}
-
-/**
- * Resolve Cloudflare bindings via the `cloudflare:workers` virtual module.
- *
- * Astro v6 + @astrojs/cloudflare dropped `Astro.locals.runtime.env`; the
- * canonical access is now `import { env } from "cloudflare:workers"`. That
- * module only exists inside the Workers runtime, so we dynamic-import it
- * with `/* @vite-ignore *​/` to keep the Node SSR build from resolving it
- * at bundle time. Returns null under the Node adapter.
- */
-async function loadCfEnv(): Promise<WorkersEnv | null> {
-  try {
-    const mod = (await import(/* @vite-ignore */ "cloudflare:workers")) as {
-      env?: WorkersEnv;
-    };
-    return mod.env ?? null;
-  } catch {
-    return null;
-  }
-}
 
 export const PUT: APIRoute = async ({ request }) => {
   if (!request.body) {
     return respond({ ok: false, error: "request body required (.papyri artifact)" }, 400);
   }
 
-  // Pick the ingest backend. Under the Cloudflare adapter `cloudflare:workers`
-  // resolves and `env` carries the bindings; under the Node adapter the
-  // import fails and we fall back to the Ingester's fs+sqlite defaults.
-  const env = await loadCfEnv();
   let ingester: Ingester;
   try {
-    if (env?.GRAPH_DB && env.BLOBS) {
-      const graphDb = new D1GraphDb(env.GRAPH_DB);
-      // Ensure the graph schema exists. `wrangler d1 migrations apply` is
-      // the canonical bootstrap, but it's easy to forget or to run against
-      // a different `.wrangler/state` than `wrangler dev` reads — both
-      // failure modes surface as "D1_ERROR: no such table: nodes" deep in
-      // ingest. Apply the schema idempotently here so first-write works
-      // on a virgin local D1, and re-applying is a no-op.
-      await ensureD1Schema(graphDb);
-      ingester = new Ingester({
-        backends: {
-          blobStore: new R2BlobStore(env.BLOBS),
-          graphDb,
-        },
-      });
-    } else {
-      ingester = new Ingester({ schemaSql });
-    }
+    const backends = await getBackends();
+    ingester = new Ingester({ backends });
   } catch (err) {
     return respond({ ok: false, error: `failed to open ingest backend: ${err}` }, 500);
   }
 
-  // Decode the artifact: gunzip → CBOR → Bundle Node. DecompressionStream is
-  // available in both Workers and Node 18+, so this works under either
-  // runtime without conditional code.
+  // Decode the artifact: gunzip → CBOR → Bundle Node. DecompressionStream
+  // is in Web Streams (Workers + Node 18+), so this is a single code path.
   let bundle: TypedNode;
   try {
     const decompressed = new Response(request.body.pipeThrough(new DecompressionStream("gzip")));
     const cborBytes = new Uint8Array(await decompressed.arrayBuffer());
     bundle = decode<TypedNode>(cborBytes);
   } catch (err) {
-    await ingester.close();
     return respond({ ok: false, error: `failed to decode .papyri artifact: ${err}` }, 422);
   }
 
@@ -135,83 +64,35 @@ export const PUT: APIRoute = async ({ request }) => {
   const rawPkg = (bundle as Record<string, unknown>)["module"];
   const rawVer = (bundle as Record<string, unknown>)["version"];
   if (typeof rawPkg !== "string" || !rawPkg || !isSafeSegment(rawPkg)) {
-    await ingester.close();
     return respond(
       { ok: false, error: `unsafe or missing package name in Bundle: ${JSON.stringify(rawPkg)}` },
-      400
+      400,
     );
   }
   if (typeof rawVer !== "string" || !rawVer || !isSafeSegment(rawVer)) {
-    await ingester.close();
     return respond(
       { ok: false, error: `unsafe or missing version in Bundle: ${JSON.stringify(rawVer)}` },
-      400
+      400,
     );
   }
 
-  // Hand the bundle to the ingest pipeline. `ingestBundle` consumes the
-  // decoded Bundle directly and writes to whichever blob/graph backend the
-  // Ingester was constructed with.
   let pkg: string;
   let version: string;
   try {
     ({ pkg, version } = await ingester.ingestBundle(bundle));
   } catch (err) {
-    await ingester.close();
     return respond({ ok: false, error: `ingest failed: ${err}` }, 422);
   }
-  await ingester.close();
-
-  // Invalidate the read-only DB handle the rest of the viewer caches so the
-  // next request sees the freshly inserted nodes/links. No-op under Workers
-  // (the read path doesn't keep a cached handle).
-  resetGraphDbCache();
+  // Don't close the Ingester — it wraps the shared singleton backends from
+  // getBackends() (the SQLite handle in particular is reused by every
+  // subsequent read). The Ingester owns no per-request state.
 
   return respond({ ok: true, pkg, version }, 201);
 };
-
-// ---------------------------------------------------------------------------
 
 function respond(body: object, status: number): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "Content-Type": "application/json" },
   });
-}
-
-/**
- * Apply the graph schema idempotently to a D1 database. Mirrors the SQL in
- * `ingest/migrations/0000_init.sql` but with `IF NOT EXISTS` so re-running
- * against a populated DB is a cheap no-op. Single source of truth for the
- * column shape is still that migration file (kept in sync by hand — the
- * schema is small and rarely changes).
- */
-async function ensureD1Schema(db: D1GraphDb): Promise<void> {
-  await db.batch([
-    {
-      sql:
-        "CREATE TABLE IF NOT EXISTS nodes (" +
-        "  id INTEGER PRIMARY KEY," +
-        "  package TEXT NOT NULL," +
-        "  version TEXT NOT NULL," +
-        "  category TEXT NOT NULL," +
-        "  identifier TEXT NOT NULL," +
-        "  has_blob INTEGER NOT NULL DEFAULT 0," +
-        "  digest BLOB," +
-        "  UNIQUE (package, version, category, identifier)" +
-        ")",
-    },
-    {
-      sql:
-        "CREATE TABLE IF NOT EXISTS links (" +
-        "  source INTEGER NOT NULL REFERENCES nodes (id) ON DELETE CASCADE," +
-        "  dest INTEGER NOT NULL REFERENCES nodes (id) ON DELETE CASCADE," +
-        "  PRIMARY KEY (source, dest)" +
-        ")",
-    },
-    { sql: "CREATE INDEX IF NOT EXISTS idx_links_dest ON links (dest)" },
-    {
-      sql: "CREATE INDEX IF NOT EXISTS idx_nodes_pkg_cat_ident ON nodes (package, category, identifier)",
-    },
-  ]);
 }

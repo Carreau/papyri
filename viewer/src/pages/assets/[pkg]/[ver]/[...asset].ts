@@ -1,18 +1,15 @@
-// SSR endpoint that serves files from a bundle's ingest `assets/` dir.
+// SSR endpoint that serves files from a bundle's `assets/` namespace.
+//
 // URL shape (built by `linkForAsset` in `lib/links.ts`):
 //   /assets/<pkg>/<ver>/<filename-with-colons-as-dollars>
 //
-// This is a hybrid SSR route (`prerender = false`) so it works in both
-// `pnpm dev` and when running the built server via the node adapter.
-// Static SSG (`getStaticPaths`) would freeze the asset list at build time
-// and miss bundles ingested after the server starts, causing 404s in dev.
-//
-// Only `assets/` is exposed. `meta/` / `docs/` / `examples/` / `module/` are
-// CBOR blobs decoded by the page routes, not linkable resources.
-import { readFile } from "node:fs/promises";
-import { extname, join } from "node:path";
+// Reads through the active BlobStore so it works under both Node fs and
+// Cloudflare R2. R2 doesn't infer Content-Type, so we map by extension.
+
+import { extname } from "node:path";
 import type { APIRoute } from "astro";
-import { ingestDir } from "../../../../lib/ir-reader.ts";
+import { loadAsset } from "../../../../lib/ir-reader.ts";
+import { getBackends } from "../../../../lib/backends.ts";
 import { slugToQualname } from "../../../../lib/slugs.ts";
 
 const MIME: Record<string, string> = {
@@ -38,19 +35,11 @@ export const GET: APIRoute = async ({ params }) => {
   if (!pkg || !ver || !asset) {
     return new Response("Not found", { status: 404 });
   }
-  // Reverse the URL-safe slug (`$` -> `:`) to recover the real filename;
-  // asset filenames like `fig-papyri.examples:example1-0.png` are legal on
-  // disk but unsafe in URLs.
+  // Reverse the URL-safe slug (`$` -> `:`).
   const filename = slugToQualname(asset);
-  const filePath = join(ingestDir(), pkg, ver, "assets", filename);
-  let buf: Buffer;
-  try {
-    buf = await readFile(filePath);
-  } catch {
-    return new Response("Not found", { status: 404 });
-  }
-  const mime = MIME[extname(filePath).toLowerCase()] ?? "application/octet-stream";
-  return new Response(new Uint8Array(buf), {
-    headers: { "content-type": mime },
-  });
+  const { blobStore } = await getBackends();
+  const bytes = await loadAsset(blobStore, pkg, ver, filename);
+  if (!bytes) return new Response("Not found", { status: 404 });
+  const mime = MIME[extname(filename).toLowerCase()] ?? "application/octet-stream";
+  return new Response(bytes as unknown as BodyInit, { headers: { "content-type": mime } });
 };

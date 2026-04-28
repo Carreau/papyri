@@ -6,12 +6,12 @@ import Head from "../components/Head.astro";
 import SiteHeader from "../components/SiteHeader.astro";
 import BundleSidebar from "../components/BundleSidebar.astro";
 import { loadBundleNav } from "../lib/nav.ts";
+import { getBackends } from "../lib/backends.ts";
 import "../styles/global.css";
 
 interface Props {
   pkg: string;
   ver: string;
-  bundlePath: string;
   title: string;
   activeQualname?: string;
   activeDocPath?: string;
@@ -19,9 +19,9 @@ interface Props {
   hasToc?: boolean;
 }
 
-const { pkg, ver, bundlePath, title, activeQualname, activeDocPath, activeExamplePath, hasToc } =
-  Astro.props;
-const nav = await loadBundleNav(pkg, ver, bundlePath);
+const { pkg, ver, title, activeQualname, activeDocPath, activeExamplePath, hasToc } = Astro.props;
+const { blobStore } = await getBackends();
+const nav = await loadBundleNav(blobStore, pkg, ver);
 ---
 
 <html lang="en">

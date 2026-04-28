@@ -3,22 +3,12 @@ export const prerender = false;
 
 import BundleLayout from "../../../../layouts/BundleLayout.astro";
 import NodesPanel from "../../../../components/NodesPanel.tsx";
-import { listIngestedBundles } from "../../../../lib/ir-reader.ts";
 
 const { pkg, ver } = Astro.params;
 if (!pkg || !ver) return new Response(null, { status: 404 });
-
-const bundles = await listIngestedBundles();
-const bundle = bundles.find((b) => b.pkg === pkg && b.version === ver);
-if (!bundle) return new Response(null, { status: 404 });
 ---
 
-<BundleLayout
-  pkg={pkg}
-  ver={ver}
-  bundlePath={bundle.path}
-  title={`All nodes — ${pkg} ${ver} — Papyri viewer`}
->
+<BundleLayout pkg={pkg} ver={ver} title={`All nodes — ${pkg} ${ver} — Papyri viewer`}>
   <p class="crumb"><a href={`/${pkg}/${ver}/`}>&larr; {pkg} {ver}</a></p>
   <h1>All nodes</h1>
 

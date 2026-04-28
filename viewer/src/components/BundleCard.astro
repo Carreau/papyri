@@ -1,36 +1,21 @@
 ---
 // One card on the landing page. Shows logo, pkg name, version, summary, and
 // counts. The entire card is a single <a> so there are no nested links.
-import { readdir } from "node:fs/promises";
-import { join } from "node:path";
-import { listModules } from "../lib/ir-reader.ts";
 import { loadBundleNav } from "../lib/nav.ts";
+import { getBackends } from "../lib/backends.ts";
 
 interface Props {
   pkg: string;
   version: string;
-  bundlePath: string;
 }
 
-const { pkg, version, bundlePath } = Astro.props;
+const { pkg, version } = Astro.props;
 
-const nav = await loadBundleNav(pkg, version, bundlePath);
-const qualnames = await listModules(bundlePath);
+const { blobStore } = await getBackends();
+const nav = await loadBundleNav(blobStore, pkg, version);
 
-async function countDir(dir: string): Promise<number> {
-  try {
-    const ents = await readdir(dir, { withFileTypes: true });
-    return ents.filter((e) => e.isFile()).length;
-  } catch {
-    return 0;
-  }
-}
-
-const [docCount, exampleCount] = await Promise.all([
-  countDir(join(bundlePath, "docs")),
-  countDir(join(bundlePath, "examples")),
-]);
-
+const docCount = nav.docs.length + nav.tutorials.length;
+const exampleCount = nav.examples.length;
 const summary = typeof nav.meta.summary === "string" ? nav.meta.summary : null;
 const href = `/${pkg}/${version}/`;
 ---
@@ -56,7 +41,7 @@ const href = `/${pkg}/${version}/`;
 
   <div class="bundle-card-counts">
     <div class="bundle-card-count">
-      <span class="bundle-card-count-num">{qualnames.length}</span>
+      <span class="bundle-card-count-num">{nav.qualnames.length}</span>
       <span class="bundle-card-count-label">API</span>
     </div>
     {

@@ -1,21 +1,19 @@
 // SSR endpoint: live list of ingested bundles.
 //
-// This is the first route deliberately marked `prerender = false`. It
-// demonstrates that the viewer's build now produces a server bundle that
-// can answer requests at runtime, reading the ingest store on demand.
-//
-// Unlike the SSG landing page (`src/pages/index.astro`), which freezes
-// the bundle list at build time, this endpoint walks
-// `~/.papyri/ingest/` on every hit. Useful for the future hosted
-// service, where bundles are added / removed out-of-band.
+// Walks the BlobStore on every hit (cached per request via getBackends).
+// Used by the future hosted service where bundles are added / removed
+// out-of-band — and locally by `wrangler dev`, where uploads land in R2
+// during a long-running session.
 
 import type { APIRoute } from "astro";
 import { listIngestedBundles } from "../../lib/ir-reader.ts";
+import { getBackends } from "../../lib/backends.ts";
 
 export const prerender = false;
 
 export const GET: APIRoute = async () => {
-  const bundles = await listIngestedBundles();
+  const { blobStore } = await getBackends();
+  const bundles = await listIngestedBundles(blobStore);
   const body = JSON.stringify({
     bundles: bundles.map((b) => ({ pkg: b.pkg, version: b.version })),
   });

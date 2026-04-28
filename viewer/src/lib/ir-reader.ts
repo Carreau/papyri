@@ -1,90 +1,90 @@
-import { readdir, readFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { join } from "node:path";
-import { decode as decodeIR } from "papyri-ingest";
+// Async readers over the ingest store, backed by `BlobStore`.
+//
+// The store layout is `<pkg>/<ver>/<kind>/<path>` — under both the Node
+// `FsBlobStore` (~/.papyri/ingest) and the Workers `R2BlobStore` (the
+// papyri-viewer-blobs bucket). This file holds the high-level reader
+// helpers used by every page; backend selection happens in
+// `viewer/src/lib/backends.ts`.
+//
+// The on-disk encoding is CBOR with papyri's tag-numbered IR. We delegate
+// decoding to `papyri-ingest`'s `decode()`, which uses a private cbor-x
+// Decoder + post-walk so the global cbor-x extension registry isn't
+// shared with the SSR ingest encoder running in the same process.
+
+import { decode as decodeIR, type BlobStore } from "papyri-ingest";
 import { IR_TYPE_NAMES } from "./ir-types.ts";
 import { linkForAsset } from "./links.ts";
 import { qualnameToSlug, slugToQualname } from "./slugs.ts";
 export { qualnameToSlug, slugToQualname };
 
 // ---------------------------------------------------------------------------
-// Ingest store. Structure: ~/.papyri/ingest/<pkg>/<ver>/{module,docs,...}.
-// The viewer only consumes the ingest store; the gen dir (~/.papyri/data/)
-// is a `papyri` CLI concern. See `viewer/PLAN.md`.
+// Bundle / qualname listings
 // ---------------------------------------------------------------------------
-
-export function ingestDir(): string {
-  return process.env.PAPYRI_INGEST_DIR ?? join(homedir(), ".papyri", "ingest");
-}
 
 export interface IngestedBundle {
   pkg: string;
   version: string;
-  /** Absolute path to `<ingestDir>/<pkg>/<version>/`. */
-  path: string;
 }
 
-export async function listIngestedBundles(root: string = ingestDir()): Promise<IngestedBundle[]> {
-  let pkgs;
-  try {
-    pkgs = await readdir(root, { withFileTypes: true });
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
-    throw err;
-  }
-
+/** Distinct (pkg, version) pairs that have any blob in the store. */
+export async function listIngestedBundles(blobStore: BlobStore): Promise<IngestedBundle[]> {
+  const keys = await blobStore.list("");
+  const seen = new Set<string>();
   const out: IngestedBundle[] = [];
-  for (const p of pkgs) {
-    if (!p.isDirectory()) continue;
-    const pkgPath = join(root, p.name);
-    let vers;
-    try {
-      vers = await readdir(pkgPath, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-    for (const v of vers) {
-      if (!v.isDirectory()) continue;
-      out.push({ pkg: p.name, version: v.name, path: join(pkgPath, v.name) });
-    }
+  for (const k of keys) {
+    const parts = k.split("/");
+    if (parts.length < 3) continue;
+    const pkg = parts[0]!;
+    const version = parts[1]!;
+    const id = `${pkg}/${version}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push({ pkg, version });
   }
   out.sort((a, b) => `${a.pkg}/${a.version}`.localeCompare(`${b.pkg}/${b.version}`));
   return out;
 }
 
-/**
- * List qualnames under a bundle's `module/` directory, without the `.cbor`
- * extension (the ingest store actually doesn't use one; this tolerates both).
- */
-export async function listModules(bundlePath: string): Promise<string[]> {
-  const modDir = join(bundlePath, "module");
-  let ents;
-  try {
-    ents = await readdir(modDir, { withFileTypes: true });
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
-    throw err;
+/** Qualnames under `<pkg>/<ver>/module/`. Sorted. */
+export async function listModules(
+  blobStore: BlobStore,
+  pkg: string,
+  version: string,
+): Promise<string[]> {
+  const prefix = `${pkg}/${version}/module/`;
+  const keys = await blobStore.list(prefix);
+  const out: string[] = [];
+  for (const k of keys) {
+    const rel = k.slice(prefix.length);
+    if (!rel || rel.includes("/")) continue;
+    out.push(rel.endsWith(".cbor") ? rel.slice(0, -5) : rel);
   }
-  const names = ents
-    .filter((e) => e.isFile())
-    .map((e) => (e.name.endsWith(".cbor") ? e.name.slice(0, -5) : e.name));
-  names.sort();
-  return names;
+  out.sort();
+  return out;
+}
+
+/**
+ * Files under `<pkg>/<ver>/<kind>/`, recursive, returned as POSIX-style
+ * paths relative to the kind dir (matching the old `listFilesRecursive`
+ * shape). Used for docs/, examples/, assets/.
+ */
+export async function listFiles(
+  blobStore: BlobStore,
+  pkg: string,
+  version: string,
+  kind: string,
+): Promise<string[]> {
+  const prefix = `${pkg}/${version}/${kind}/`;
+  const keys = await blobStore.list(prefix);
+  const rels = keys.map((k) => k.slice(prefix.length)).filter((r) => r.length > 0);
+  rels.sort();
+  return rels;
 }
 
 // ---------------------------------------------------------------------------
-// CBOR tag-based decoder.
-//
-// The papyri encoder writes each node as CBORTag(tag, [values...]) where the
-// values array is positional, in the order given by `typing.get_type_hints`
-// on the node class. Tag numbers come from `docs/IR.md` § "Node type
-// registry". We translate the positional array back into a typed object
-// here so the rest of the viewer can treat IR nodes as plain TS records.
-// Unknown tags are returned as { __type: "unknown", tag, value } so the UI
-// can degrade to a JSON dump instead of crashing.
+// Decoding helpers
 // ---------------------------------------------------------------------------
 
-// A node we recognised.
 export interface TypedNode {
   __type: string;
   __tag: number;
@@ -99,20 +99,7 @@ export interface UnknownNode {
 
 export type IRNode = TypedNode | UnknownNode;
 
-// Decoding is delegated to `papyri-ingest`'s `decode()`, which uses a private
-// cbor-x Decoder + post-walk (no global `addExtension` calls). This avoids
-// contaminating the shared cbor-x extension registry — the SSR `/api/bundle`
-// PUT handler runs the ingest encoder in the same process, and a global
-// Object-keyed encode handler would break every CBOR encode in that path.
-// FIELD_ORDER (the source of truth) lives in `papyri-ingest/src/encoder.ts`.
-
-/** All IR node type names known to this decoder. */
 export const ALL_NODE_TYPES: ReadonlySet<string> = new Set(IR_TYPE_NAMES);
-
-// ---------------------------------------------------------------------------
-// Typed shapes for the node types M1 actually reads. Everything else is
-// accessed as a `TypedNode` / `UnknownNode` via `__type`.
-// ---------------------------------------------------------------------------
 
 export interface SectionNode {
   __type: "Section";
@@ -123,7 +110,6 @@ export interface SectionNode {
   target: string | null;
 }
 
-/** Safely return the children of a SectionNode, guarding against malformed CBOR. */
 export function sectionChildren(s: SectionNode): IRNode[] {
   return Array.isArray(s.children) ? s.children : [];
 }
@@ -168,62 +154,72 @@ export interface IngestedDoc {
   arbitrary: SectionNode[];
 }
 
-/** Read one module blob from an ingest bundle dir and decode it. */
-export async function loadModule(bundlePath: string, qualname: string): Promise<IngestedDoc> {
-  const primary = join(bundlePath, "module", qualname);
-  let raw: Buffer;
-  try {
-    raw = await readFile(primary);
-  } catch {
-    raw = await readFile(primary + ".cbor");
+/** Decode raw CBOR bytes (re-export of papyri-ingest's decoder). */
+export function decodeCborBytes<T = unknown>(bytes: Uint8Array | Buffer): T {
+  return decodeIR<T>(bytes);
+}
+
+// ---------------------------------------------------------------------------
+// Per-key loaders
+// ---------------------------------------------------------------------------
+
+/** Load a module-page IngestedDoc by qualname. Throws if absent or wrong type. */
+export async function loadModule(
+  blobStore: BlobStore,
+  pkg: string,
+  version: string,
+  qualname: string,
+): Promise<IngestedDoc> {
+  // Ingester writes `module/<qualname>` (no .cbor) on the gen→ingest path,
+  // but older bundles or alternate writers may have used `.cbor`. Try both.
+  let bytes = await blobStore.get({ module: pkg, version, kind: "module", path: qualname });
+  if (!bytes) {
+    bytes = await blobStore.get({
+      module: pkg,
+      version,
+      kind: "module",
+      path: `${qualname}.cbor`,
+    });
   }
-  const obj = decodeIR<IRNode>(raw);
+  if (!bytes) throw new Error(`module not found: ${pkg}/${version}/${qualname}`);
+  const obj = decodeIR<IRNode>(bytes);
   if (obj && (obj as IRNode).__type === "IngestedDoc") {
     return obj as unknown as IngestedDoc;
   }
   throw new Error(`unexpected decode result for ${qualname}: ${typeof obj}`);
 }
 
-/**
- * Generic CBOR loader. Returns the decoded value as-is; callers cast to the
- * shape they expect (IngestedDoc, Section, TocTree, or a plain-object meta
- * dict).
- */
-export async function loadCbor<T = unknown>(path: string): Promise<T> {
-  const raw = await readFile(path);
-  return decodeIR<T>(raw);
-}
-
-/**
- * Decode raw CBOR bytes (same as loadCbor but takes an already-read buffer
- * instead of a path). Used by the ingest pipeline, which reads bytes through
- * a StorageBackend rather than directly from disk.
- */
-export function decodeCborBytes<T = unknown>(bytes: Uint8Array | Buffer): T {
+/** Generic loader: read `<pkg>/<ver>/<kind>/<path>` and CBOR-decode it. */
+export async function loadCbor<T = unknown>(
+  blobStore: BlobStore,
+  pkg: string,
+  version: string,
+  kind: string,
+  path: string,
+): Promise<T> {
+  const bytes = await blobStore.get({ module: pkg, version, kind, path });
+  if (!bytes) throw new Error(`blob not found: ${pkg}/${version}/${kind}/${path}`);
   return decodeIR<T>(bytes);
 }
 
+/** Read raw asset bytes (no decode). Returns null if absent. */
+export async function loadAsset(
+  blobStore: BlobStore,
+  pkg: string,
+  version: string,
+  path: string,
+): Promise<Uint8Array | null> {
+  return blobStore.get({ module: pkg, version, kind: "assets", path });
+}
+
 // ---------------------------------------------------------------------------
-// Generic IR node collection.
-//
-// collectNodes walks a decoded IR tree and returns every node whose __type
-// is in the given set. Callers can then filter/map the results to extract
-// the specific fields they care about.
-//
-//   collectNodes(doc, new Set(["Math", "InlineMath"]))  → all math nodes
-//   collectNodes(doc, new Set(["Code", "InlineCode"]))  → all code nodes
-//   collectNodes(doc, new Set(["Figure", "Image"]))     → all image nodes
+// Generic IR node collection
 // ---------------------------------------------------------------------------
 
-/**
- * Walk a decoded IR tree and return every node whose __type is in `types`.
- * Recurses into all array-typed and object-typed field values so nested
- * structures (Section > Paragraph > InlineMath, etc.) are fully traversed.
- */
 export function collectNodes(
   node: unknown,
   types: ReadonlySet<string>,
-  out: IRNode[] = []
+  out: IRNode[] = [],
 ): IRNode[] {
   if (!node || typeof node !== "object") return out;
   if (Array.isArray(node)) {
@@ -241,8 +237,7 @@ export function collectNodes(
 }
 
 // ---------------------------------------------------------------------------
-// Image collection — domain-specific wrapper around collectNodes that
-// resolves Figure RefInfo references to viewer asset URLs.
+// Image collection
 // ---------------------------------------------------------------------------
 
 export type FoundImgNode =

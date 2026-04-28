@@ -53,7 +53,7 @@ const viteCfg =
     : { build: { rollupOptions: { external: ["cloudflare:workers"] } } };
 
 export default defineConfig({
-  output: "static",
+  output: "server",
   adapter,
   integrations: [react()],
   server: { port: 4321 },

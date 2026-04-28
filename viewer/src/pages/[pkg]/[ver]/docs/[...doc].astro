@@ -1,50 +1,35 @@
 ---
-import { join } from "node:path";
 import {
-  listIngestedBundles,
   loadCbor,
   sectionChildren,
   type IngestedDoc,
 } from "../../../../lib/ir-reader.ts";
 import { buildDocPageView } from "../../../../lib/doc-page.ts";
-import { listDocs } from "../../../../lib/nav.ts";
-import { resolveXref } from "../../../../lib/xref.ts";
+import { getBackends } from "../../../../lib/backends.ts";
+import { buildXrefResolver } from "../../../../lib/xref.ts";
 import IrNode from "../../../../components/IrNode.astro";
 import BundleLayout from "../../../../layouts/BundleLayout.astro";
 
-export async function getStaticPaths() {
-  const bundles = await listIngestedBundles();
-  const paths: Array<{
-    params: { pkg: string; ver: string; doc: string };
-    props: { bundlePath: string; docPath: string };
-  }> = [];
-  for (const b of bundles) {
-    const docs = await listDocs(b.path);
-    for (const d of docs) {
-      paths.push({
-        // `:` is the IR path separator; map to URL `/` so
-        // `whatsnew:index` becomes `/docs/whatsnew/index/`.
-        params: { pkg: b.pkg, ver: b.version, doc: d.split(":").join("/") },
-        props: { bundlePath: b.path, docPath: d },
-      });
-    }
-  }
-  return paths;
+export const prerender = false;
+
+const { pkg, ver, doc: docParam } = Astro.params;
+if (!pkg || !ver || !docParam) {
+  return new Response("Not found", { status: 404 });
 }
+// Reverse the URL path → IR doc path mapping (`/` → `:`).
+const docPath = docParam.split("/").join(":");
 
-const { pkg, ver } = Astro.params;
-const { bundlePath, docPath } = Astro.props as {
-  bundlePath: string;
-  docPath: string;
-};
+const { blobStore, graphDb } = await getBackends();
 
-// Doc blobs are IngestedDoc (tag 4010). The body lives in `arbitrary` as
-// Section children; `_content` is typically empty for narrative docs.
-const doc = (await loadCbor(join(bundlePath, "docs", docPath))) as IngestedDoc;
+let doc: IngestedDoc;
+try {
+  doc = (await loadCbor(blobStore, pkg, ver, "docs", docPath)) as IngestedDoc;
+} catch {
+  return new Response(`Doc ${docPath} not found`, { status: 404 });
+}
 const view = buildDocPageView(doc, docPath);
+const resolveXref = await buildXrefResolver(graphDb, doc);
 
-// Map a section level (0-indexed, where 0 = document title shown as h1) to
-// an HTML heading element. Level 1 → h2, level 2 → h3, etc., clamped to h6.
 function sectionHeading(title: string, level: number): string {
   const tag = `h${Math.min(Math.max(level + 1, 2), 6)}`;
   const safe = title.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -53,9 +38,8 @@ function sectionHeading(title: string, level: number): string {
 ---
 
 <BundleLayout
-  pkg={pkg!}
-  ver={ver!}
-  bundlePath={bundlePath}
+  pkg={pkg}
+  ver={ver}
   title={`${view.pageTitle} — ${pkg} ${ver}`}
   activeDocPath={docPath}
   hasToc={view.tocEntries.length >= 2}
@@ -119,9 +103,6 @@ function sectionHeading(title: string, level: number): string {
   const tocItems = [...document.querySelectorAll<HTMLLIElement>("nav.page-toc li[data-level]")];
   const sections = [...document.querySelectorAll<HTMLElement>("section.doc-section[id]")];
 
-  // Parallel array: for each section element, the id of its enclosing h2 so
-  // we can tell which top-level group a scroll position belongs to. Mirrors
-  // the Astro-side parentH2Id walk.
   const sectionParentH2: string[] = [];
   {
     let currentH2 = sections[0]?.id ?? "";
@@ -146,7 +127,6 @@ function sectionHeading(title: string, level: number): string {
       for (const link of links) {
         link.classList.toggle("is-active", link.getAttribute("href") === "#" + activeId);
       }
-      // Collapse h3+ entries that don't belong to the currently-active h2.
       for (const li of tocItems) {
         const level = Number(li.dataset.level ?? "1");
         if (level <= 1) continue;

@@ -1,32 +1,28 @@
 ---
-import { listIngestedBundles } from "../../../lib/ir-reader.ts";
 import { loadBundleNav } from "../../../lib/nav.ts";
+import { getBackends } from "../../../lib/backends.ts";
 import BundleLayout from "../../../layouts/BundleLayout.astro";
 
-export async function getStaticPaths() {
-  const bundles = await listIngestedBundles();
-  return bundles.map((b) => ({
-    params: { pkg: b.pkg, ver: b.version },
-    props: { bundlePath: b.path },
-  }));
-}
+export const prerender = false;
 
 const { pkg, ver } = Astro.params;
-const { bundlePath } = Astro.props as { bundlePath: string };
-const nav = await loadBundleNav(pkg!, ver!, bundlePath);
+if (!pkg || !ver) return new Response(null, { status: 404 });
+
+const { blobStore } = await getBackends();
+const nav = await loadBundleNav(blobStore, pkg, ver);
 
 const hasDocs = nav.toc.length > 0 || nav.docs.length > 0;
 const hasExamples = nav.examples.length > 0;
 const docsHref = nav.docsIndexHref ?? nav.docs[0]?.href ?? null;
 // Link to the root-package qualname page if it exists, otherwise the first qualname.
-const apiHref = nav.qualnames.includes(pkg!)
+const apiHref = nav.qualnames.includes(pkg)
   ? `/${pkg}/${ver}/${pkg}/`
   : nav.qualnames.length > 0
     ? `/${pkg}/${ver}/${nav.qualnames[0]}/`
     : null;
 ---
 
-<BundleLayout pkg={pkg!} ver={ver!} bundlePath={bundlePath} title={`${pkg} ${ver} — Papyri viewer`}>
+<BundleLayout pkg={pkg} ver={ver} title={`${pkg} ${ver} — Papyri viewer`}>
   <p class="crumb"><a href="/">&larr; bundles</a></p>
   <h1>
     {pkg}

@@ -3,7 +3,7 @@
 // URL. Pulled out of `pages/[pkg]/[ver]/images/index.astro` so the
 // page becomes a flat template over the returned entries.
 
-import { join } from "node:path";
+import type { BlobStore } from "papyri-ingest";
 import {
   collectImages,
   listModules,
@@ -25,9 +25,9 @@ export interface ImgEntry {
 }
 
 interface BundleCtx {
+  blobStore: BlobStore;
   pkg: string;
   ver: string;
-  bundlePath: string;
 }
 
 function addHit(map: Map<string, ImgEntry>, found: FoundImgNode, page: PageRef): void {
@@ -42,50 +42,50 @@ function addHit(map: Map<string, ImgEntry>, found: FoundImgNode, page: PageRef):
 }
 
 async function collectFromModules(ctx: BundleCtx, out: Map<string, ImgEntry>): Promise<void> {
-  const qualnames = await listModules(ctx.bundlePath);
+  const qualnames = await listModules(ctx.blobStore, ctx.pkg, ctx.ver);
   await Promise.all(
     qualnames.map(async (qa) => {
       let doc;
       try {
-        doc = await loadModule(ctx.bundlePath, qa);
+        doc = await loadModule(ctx.blobStore, ctx.pkg, ctx.ver, qa);
       } catch {
         return;
       }
       const href = linkForQualname(ctx.pkg, ctx.ver, qa);
       for (const found of collectImages(doc)) addHit(out, found, { label: qa, href });
-    })
+    }),
   );
 }
 
 async function collectFromDocs(ctx: BundleCtx, out: Map<string, ImgEntry>): Promise<void> {
-  const docPaths = await listDocs(ctx.bundlePath);
+  const docPaths = await listDocs(ctx.blobStore, ctx.pkg, ctx.ver);
   await Promise.all(
     docPaths.map(async (docPath) => {
       let section;
       try {
-        section = await loadCbor(join(ctx.bundlePath, "docs", docPath));
+        section = await loadCbor(ctx.blobStore, ctx.pkg, ctx.ver, "docs", docPath);
       } catch {
         return;
       }
       const href = linkForDoc(ctx.pkg, ctx.ver, docPath);
       for (const found of collectImages(section)) addHit(out, found, { label: docPath, href });
-    })
+    }),
   );
 }
 
 async function collectFromExamples(ctx: BundleCtx, out: Map<string, ImgEntry>): Promise<void> {
-  const exPaths = await listExamples(ctx.bundlePath);
+  const exPaths = await listExamples(ctx.blobStore, ctx.pkg, ctx.ver);
   await Promise.all(
     exPaths.map(async (exPath) => {
       let section;
       try {
-        section = await loadCbor(join(ctx.bundlePath, "examples", exPath));
+        section = await loadCbor(ctx.blobStore, ctx.pkg, ctx.ver, "examples", exPath);
       } catch {
         return;
       }
       const href = linkForExample(ctx.pkg, ctx.ver, exPath);
       for (const found of collectImages(section)) addHit(out, found, { label: exPath, href });
-    })
+    }),
   );
 }
 
@@ -95,11 +95,11 @@ async function collectFromExamples(ctx: BundleCtx, out: Map<string, ImgEntry>): 
  * reference it. Sorted lexicographically by source URL.
  */
 export async function collectBundleImages(
+  blobStore: BlobStore,
   pkg: string,
   ver: string,
-  bundlePath: string
 ): Promise<ImgEntry[]> {
-  const ctx: BundleCtx = { pkg, ver, bundlePath };
+  const ctx: BundleCtx = { blobStore, pkg, ver };
   const map = new Map<string, ImgEntry>();
   await Promise.all([
     collectFromModules(ctx, map),

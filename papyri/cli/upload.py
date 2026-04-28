@@ -44,37 +44,48 @@ def upload(
     server-side; this is the canonical way to ship a bundle into the
     cross-linked graph.
     """
+    import time
+
     from papyri.pack import BundleError, load_artifact, make_artifact_from_dir
 
     ok = True
-    for path in paths:
+    total = len(paths)
+    width = len(str(total))
+    for i, path in enumerate(paths, start=1):
         path = path.expanduser().resolve()
+        prefix = f"[{i:>{width}}/{total}]"
 
         try:
             if path.is_file() and path.suffix == ".papyri":
+                typer.echo(f"{prefix} loading {path.name} …", err=True)
                 data = path.read_bytes()
                 bundle = load_artifact(data)
                 pkg, version = bundle.module, bundle.version
             elif path.is_dir():
+                typer.echo(f"{prefix} packing {path.name} …", err=True)
                 data, bundle = make_artifact_from_dir(path)
                 pkg, version = bundle.module, bundle.version
             else:
                 typer.echo(
-                    f"error: {path} is not a .papyri file or a directory",
+                    f"{prefix} error: {path} is not a .papyri file or a directory",
                     err=True,
                 )
                 ok = False
                 continue
         except BundleError as exc:
-            typer.echo(f"error: {exc}", err=True)
+            typer.echo(f"{prefix} error: {exc}", err=True)
             ok = False
             continue
         except Exception as exc:
-            typer.echo(f"error: failed to load {path}: {exc}", err=True)
+            typer.echo(f"{prefix} error: failed to load {path}: {exc}", err=True)
             ok = False
             continue
 
-        typer.echo(f"uploading {pkg} {version} from {path} …")
+        size_mb = len(data) / (1024 * 1024)
+        typer.echo(
+            f"{prefix} uploading {pkg} {version} ({size_mb:.2f} MiB) → {url}",
+            err=True,
+        )
 
         req = urllib.request.Request(
             url,
@@ -82,12 +93,15 @@ def upload(
             method="PUT",
             headers={"Content-Type": "application/gzip"},
         )
+        t0 = time.monotonic()
         try:
             with urllib.request.urlopen(req) as resp:
                 body = json.loads(resp.read())
+            elapsed = time.monotonic() - t0
             typer.echo(
-                f"  ok: {body.get('pkg')} {body.get('version')} ingested "
-                f"(HTTP {resp.status})"
+                f"{prefix} ok: {body.get('pkg')} {body.get('version')} "
+                f"ingested in {elapsed:.1f}s (HTTP {resp.status})",
+                err=True,
             )
         except urllib.error.HTTPError as exc:
             raw = exc.read()
@@ -96,10 +110,10 @@ def upload(
                 msg = body.get("error", raw.decode(errors="replace"))
             except Exception:
                 msg = raw.decode(errors="replace")
-            typer.echo(f"  error (HTTP {exc.code}): {msg}", err=True)
+            typer.echo(f"{prefix} error (HTTP {exc.code}): {msg}", err=True)
             ok = False
         except urllib.error.URLError as exc:
-            typer.echo(f"  error: {exc.reason}", err=True)
+            typer.echo(f"{prefix} error: {exc.reason}", err=True)
             ok = False
 
     if not ok:

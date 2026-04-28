@@ -41,6 +41,36 @@ import { SqliteGraphDb, type GraphDb, type BatchStmt } from "./graph-db.js";
 
 const DIGEST_SIZE = 16;
 
+// Fields that change across rebuilds without reflecting any user-visible
+// content change. We strip them before computing the content digest so the
+// version-diff "changed" bucket isn't dominated by line-number churn from
+// `inspect.getsourcelines()` shifting under unrelated edits.
+//
+// Currently only `IngestedDoc.item_line` qualifies; add others here if
+// the same problem shows up for other IR fields.
+const VOLATILE_FIELDS_BY_TYPE: Record<string, ReadonlySet<string>> = {
+  IngestedDoc: new Set(["item_line"]),
+};
+
+function stripVolatileFields<T>(node: T): T {
+  if (!node || typeof node !== "object") return node;
+  if (Array.isArray(node)) {
+    return node.map((v) => stripVolatileFields(v)) as unknown as T;
+  }
+  const obj = node as Record<string, unknown>;
+  const t = typeof obj.__type === "string" ? obj.__type : null;
+  const drop = t ? VOLATILE_FIELDS_BY_TYPE[t] : undefined;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (drop?.has(k)) {
+      out[k] = null;
+      continue;
+    }
+    out[k] = stripVolatileFields(v);
+  }
+  return out as T;
+}
+
 // ---------------------------------------------------------------------------
 // Schema bootstrap (Node-mode SQLite)
 // ---------------------------------------------------------------------------
@@ -309,6 +339,7 @@ export class Ingester {
         { module: keyMod, version, kind: "module", path: qa },
         encode(ingestedDoc),
         refs,
+        encode(stripVolatileFields(ingestedDoc)),
       );
       apiCount++;
     }
@@ -348,14 +379,23 @@ export class Ingester {
   //   only way to chain ID-dependent writes.
   // -------------------------------------------------------------------------
 
-  private async _put(key: Key, bytes: Uint8Array, refs: Key[]): Promise<void> {
+  private async _put(
+    key: Key,
+    bytes: Uint8Array,
+    refs: Key[],
+    digestInput?: Uint8Array,
+  ): Promise<void> {
     let oldRefs = new Set<string>();
     if (key.kind !== "assets" && (await this.blobStore.has(key))) {
       oldRefs = new Set((await this._getForwardRefs(key)).map(keyStr));
     }
 
     await this.blobStore.put(key, bytes);
-    const digest = blake2b(bytes, { dkLen: DIGEST_SIZE });
+    // The digest is what powers the version-diff "changed" bucket. Callers
+    // that want the digest to ignore volatile fields (e.g. `item_line` on
+    // IngestedDoc) hand in a normalised re-encoding via `digestInput`;
+    // otherwise we hash the stored bytes directly.
+    const digest = blake2b(digestInput ?? bytes, { dkLen: DIGEST_SIZE });
 
     const newRefSet = new Set(refs.map(keyStr));
     const addedRefs = refs.filter((r) => !oldRefs.has(keyStr(r)));
@@ -602,6 +642,7 @@ export class Ingester {
         { module: keyMod, version, kind: "module", path: qa },
         encode(ingestedDoc),
         refs,
+        encode(stripVolatileFields(ingestedDoc)),
       );
       count++;
     }

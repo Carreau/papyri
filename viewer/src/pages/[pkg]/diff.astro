@@ -1,19 +1,21 @@
 ---
-// Per-package qualname diff between two ingested versions.
+// Per-package content diff between two ingested versions.
 // Query params: ?from=<ver>&to=<ver>
 //
-// Three buckets:
-//   added   — qualnames present in `to` but not in `from`
-//   removed — qualnames present in `from` but not in `to`
-//   changed — qualnames in both, but with a different blob digest
-// "kept" is the count of qualnames whose digest is identical across versions.
+// Reports one block per category — API (modules), narrative docs, and
+// examples. Each block has three buckets:
+//   added   — identifiers present in `to` but not in `from`
+//   removed — identifiers present in `from` but not in `to`
+//   changed — identifiers in both, but with a different content digest
 //
 // Digests come from the graph store (`nodes.digest` — a 16-byte BLAKE2b
-// of the raw CBOR blob bytes, set by the ingester at write time).
+// over the IR bytes, written by the ingester. Volatile fields like
+// `IngestedDoc.item_line` are stripped before hashing, so a rebuild that
+// only shifts source line numbers does NOT show as "changed").
 import { listIngestedPackages } from "../../lib/ir-reader.ts";
 import { listDigests } from "../../lib/graph.ts";
 import { getBackends } from "../../lib/backends.ts";
-import { linkForQualname } from "../../lib/links.ts";
+import { linkForDoc, linkForExample, linkForQualname } from "../../lib/links.ts";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 
 export const prerender = false;
@@ -32,28 +34,68 @@ if (!entry) return new Response(`Package ${pkg} not found`, { status: 404 });
 const valid = (v: string | null) => !!v && entry.versions.includes(v);
 const haveBoth = valid(fromVer) && valid(toVer);
 
-let added: string[] = [];
-let removed: string[] = [];
-let changed: string[] = [];
-let kept = 0;
+interface Bucket {
+  added: string[];
+  removed: string[];
+  changed: string[];
+  kept: number;
+}
 
-if (haveBoth && fromVer && toVer) {
-  const [fromDigests, toDigests] = await Promise.all([
-    listDigests(graphDb, pkg, fromVer, "module"),
-    listDigests(graphDb, pkg, toVer, "module"),
-  ]);
-  const fromKeys = [...fromDigests.keys()];
-  const toKeys = [...toDigests.keys()];
+interface CategoryDiff {
+  label: string;
+  category: string;
+  bucket: Bucket;
+  link: (id: string, ver: string) => string;
+}
+
+function diffMaps(from: Map<string, string>, to: Map<string, string>): Bucket {
+  const fromKeys = [...from.keys()];
+  const toKeys = [...to.keys()];
   const fromSet = new Set(fromKeys);
   const toSet = new Set(toKeys);
-  added = toKeys.filter((q) => !fromSet.has(q)).sort();
-  removed = fromKeys.filter((q) => !toSet.has(q)).sort();
+  const added = toKeys.filter((q) => !fromSet.has(q)).sort();
+  const removed = fromKeys.filter((q) => !toSet.has(q)).sort();
+  const changed: string[] = [];
+  let kept = 0;
   for (const q of toKeys) {
     if (!fromSet.has(q)) continue;
-    if (fromDigests.get(q) !== toDigests.get(q)) changed.push(q);
+    if (from.get(q) !== to.get(q)) changed.push(q);
     else kept++;
   }
   changed.sort();
+  return { added, removed, changed, kept };
+}
+
+const categorySpecs: Array<{
+  label: string;
+  category: string;
+  link: (id: string, ver: string) => string;
+}> = [
+  { label: "API", category: "module", link: (id, v) => linkForQualname(pkg, v, id) },
+  { label: "Docs", category: "docs", link: (id, v) => linkForDoc(pkg, v, id) },
+  { label: "Examples", category: "examples", link: (id, v) => linkForExample(pkg, v, id) },
+];
+
+let totals = { added: 0, removed: 0, changed: 0, kept: 0 };
+let categories: CategoryDiff[] = [];
+
+if (haveBoth && fromVer && toVer) {
+  const pairs = await Promise.all(
+    categorySpecs.flatMap((s) => [
+      listDigests(graphDb, pkg, fromVer, s.category),
+      listDigests(graphDb, pkg, toVer, s.category),
+    ])
+  );
+  categories = categorySpecs.map((s, i) => {
+    const fromMap = pairs[i * 2]!;
+    const toMap = pairs[i * 2 + 1]!;
+    const bucket = diffMaps(fromMap, toMap);
+    totals.added += bucket.added.length;
+    totals.removed += bucket.removed.length;
+    totals.changed += bucket.changed.length;
+    totals.kept += bucket.kept;
+    return { label: s.label, category: s.category, bucket, link: s.link };
+  });
 }
 ---
 
@@ -102,58 +144,78 @@ if (haveBoth && fromVer && toVer) {
     ) : (
       <>
         <p class="lede">
-          <code>{fromVer}</code> → <code>{toVer}</code>: <strong>{added.length}</strong> added,{" "}
-          <strong>{removed.length}</strong> removed, <strong>{changed.length}</strong> changed,{" "}
-          {kept} unchanged.
+          <code>{fromVer}</code> → <code>{toVer}</code>: <strong>{totals.added}</strong> added,{" "}
+          <strong>{totals.removed}</strong> removed, <strong>{totals.changed}</strong> changed,{" "}
+          {totals.kept} unchanged.
         </p>
 
-        <div class="diff-grid">
-          <section>
-            <h2 class="added">Added in {toVer}</h2>
-            {added.length === 0 ? (
-              <p class="muted">none</p>
-            ) : (
-              <ul>
-                {added.map((q) => (
-                  <li>
-                    <a href={linkForQualname(pkg, toVer!, q)}>{q}</a>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-          <section>
-            <h2 class="removed">Removed since {fromVer}</h2>
-            {removed.length === 0 ? (
-              <p class="muted">none</p>
-            ) : (
-              <ul>
-                {removed.map((q) => (
-                  <li>
-                    <a href={linkForQualname(pkg, fromVer!, q)}>{q}</a>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-          <section class="diff-changed">
-            <h2 class="changed">Changed</h2>
-            {changed.length === 0 ? (
-              <p class="muted">none</p>
-            ) : (
-              <ul>
-                {changed.map((q) => (
-                  <li>
-                    <a href={linkForQualname(pkg, toVer!, q)}>{q}</a>
-                    <span class="changed-from">
-                      (was <a href={linkForQualname(pkg, fromVer!, q)}>{fromVer}</a>)
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        </div>
+        {categories.map((c) => {
+          const empty =
+            c.bucket.added.length === 0 &&
+            c.bucket.removed.length === 0 &&
+            c.bucket.changed.length === 0 &&
+            c.bucket.kept === 0;
+          if (empty) return null;
+          return (
+            <section class="diff-category">
+              <h2>
+                {c.label}
+                <span class="muted">
+                  {" "}
+                  · {c.bucket.added.length} added, {c.bucket.removed.length} removed,{" "}
+                  {c.bucket.changed.length} changed, {c.bucket.kept} unchanged
+                </span>
+              </h2>
+              <div class="diff-grid">
+                <section>
+                  <h3 class="added">Added in {toVer}</h3>
+                  {c.bucket.added.length === 0 ? (
+                    <p class="muted">none</p>
+                  ) : (
+                    <ul>
+                      {c.bucket.added.map((id) => (
+                        <li>
+                          <a href={c.link(id, toVer!)}>{id}</a>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+                <section>
+                  <h3 class="removed">Removed since {fromVer}</h3>
+                  {c.bucket.removed.length === 0 ? (
+                    <p class="muted">none</p>
+                  ) : (
+                    <ul>
+                      {c.bucket.removed.map((id) => (
+                        <li>
+                          <a href={c.link(id, fromVer!)}>{id}</a>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+                <section class="diff-changed">
+                  <h3 class="changed">Changed</h3>
+                  {c.bucket.changed.length === 0 ? (
+                    <p class="muted">none</p>
+                  ) : (
+                    <ul>
+                      {c.bucket.changed.map((id) => (
+                        <li>
+                          <a href={c.link(id, toVer!)}>{id}</a>
+                          <span class="changed-from">
+                            (was <a href={c.link(id, fromVer!)}>{fromVer}</a>)
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+              </div>
+            </section>
+          );
+        })}
       </>
     )
   }
@@ -179,6 +241,12 @@ if (haveBoth && fromVer && toVer) {
   .diff-picker select {
     margin-top: 0.25rem;
     padding: 0.3rem 0.5rem;
+  }
+  .diff-category {
+    margin-top: 2rem;
+  }
+  .diff-category > h2 {
+    margin-bottom: 0.75rem;
   }
   .diff-grid {
     display: grid;

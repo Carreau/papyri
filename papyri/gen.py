@@ -16,7 +16,6 @@ import io
 import json
 import logging
 import os
-import shutil
 import site
 import sys
 import tempfile
@@ -37,7 +36,7 @@ from IPython.utils.path import compress_user
 from matplotlib import _pylab_helpers
 from packaging.version import parse
 from rich.logging import RichHandler
-from rich.progress import BarColumn, TextColumn, track
+from rich.progress import BarColumn, TextColumn
 
 log = logging.getLogger("papyri")
 
@@ -304,13 +303,6 @@ def gen_main(
         g.partial_write(p)
     if dry_run:
         temp_dir.cleanup()
-
-
-def pack():
-    target_dir = Path("~/.papyri/data").expanduser()
-    dirs = [d for d in target_dir.glob("*") if d.is_dir()]
-    for d in track(dirs, description=f"packing {len(dirs)} items..."):
-        shutil.make_archive(str(d), "zip", str(d))
 
 
 class DFSCollector:

@@ -16,21 +16,24 @@ def _resolve_debug_path(raw: str, data_dir: Path) -> Path | None:
     Return the resolved Path for *raw*, trying several strategies:
 
     1. Use *raw* directly if it points to an existing file.
-    2. Append '.cbor' if the result exists.
-    3. Treat *raw* as a path relative to *data_dir*, with and without '.cbor'.
+    2. Append '.cbor' or '.papyri' if the result exists.
+    3. Treat *raw* as a path relative to *data_dir*, with the same suffix
+       fallbacks.
     """
     p = Path(raw)
     if p.exists():
         return p
-    with_cbor = Path(raw + ".cbor")
-    if with_cbor.exists():
-        return with_cbor
+    for suffix in (".cbor", ".papyri"):
+        candidate = Path(raw + suffix)
+        if candidate.exists():
+            return candidate
     in_data = data_dir / raw
     if in_data.exists():
         return in_data
-    in_data_cbor = data_dir / (raw + ".cbor")
-    if in_data_cbor.exists():
-        return in_data_cbor
+    for suffix in (".cbor", ".papyri"):
+        in_data_suf = data_dir / (raw + suffix)
+        if in_data_suf.exists():
+            return in_data_suf
     return None
 
 
@@ -91,6 +94,10 @@ def debug(
 
     Tries to decode using the papyri IR tag registry first; falls back to
     plain cbor2 if the file does not contain tagged IR objects.
+
+    A ``.papyri`` artifact (output of ``papyri pack``) is also accepted:
+    the artifact is gunzipped + decoded to a ``Bundle`` Node and pretty-
+    printed in place of the file-tree-walk path.
     """
     import cbor2
     from rich.console import Console
@@ -106,6 +113,28 @@ def debug(
     if resolved is None:
         typer.echo(f"File not found: {path!r}", err=True)
         raise typer.Exit(1)
+
+    if resolved.suffix == ".papyri":
+        from papyri.pack import load_artifact
+
+        try:
+            bundle = load_artifact(resolved.read_bytes())
+        except Exception as e:
+            typer.echo(f"Failed to decode artifact {resolved}: {e}", err=True)
+            raise typer.Exit(1) from None
+        console.print(f"[bold].papyri artifact[/bold] {resolved}")
+        console.print(
+            f"  module          : [cyan]{bundle.module}[/cyan]"
+            f" [dim]{bundle.version}[/dim]"
+        )
+        console.print(f"  pack format ver : [dim]{bundle.pack_format_version}[/dim]")
+        console.print(f"  ir schema ver   : [dim]{bundle.ir_schema_version}[/dim]")
+        console.print(f"  api entries     : {len(bundle.api)}")
+        console.print(f"  narrative pages : {len(bundle.narrative)}")
+        console.print(f"  examples        : {len(bundle.examples)}")
+        console.print(f"  assets          : {len(bundle.assets)}")
+        console.print(f"  toc roots       : {len(bundle.toc)}")
+        return
 
     raw = resolved.read_bytes()
 

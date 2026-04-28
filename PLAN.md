@@ -250,6 +250,43 @@ Follow-ups (not in this phase):
   They still work against the ingest store written by the TypeScript
   pipeline, but the viewer is the user-facing replacement.
 
+### Phase 6 — `papyri pack` and the publishable artifact
+
+The maintainer→service contract is a single deterministic file, not a
+directory of CBOR files. With Phase 5 retiring the Python ingest
+pipeline, the only thing the viewer (and any future hosted service)
+needs to consume from the maintainer's machine is one byte-stable file
+per bundle.
+
+- [x] Add a `Bundle` Node (`papyri/bundle.py`) that carries the typed
+      contents of a DocBundle as fields: `module`, `version`, `summary`,
+      `github_slug`, `tag`, `logo`, `aliases`, `extra`, `api`,
+      `narrative`, `examples`, `assets`, `toc`. `pack_format_version`
+      and `ir_schema_version` are positional fields 0/1 so a consumer
+      can peek compatibility without decoding the rest of the bundle.
+- [x] Add `papyri pack <bundle_dir>` (`papyri/cli/pack.py` +
+      `papyri/pack.py`): validate the bundle directory layout, decode
+      its CBOR contents into a `Bundle` Node, run `Bundle.validate()`,
+      and write a single `.papyri` artifact = canonical-CBOR Bundle,
+      gzipped with `mtime=0`. Verified end-to-end: packing the same
+      bundle twice with perturbed filesystem mtimes produces
+      byte-identical output (sha256 match).
+- [x] Replace `papyri upload` to consume either a `.papyri` artifact
+      directly or a bundle directory (packed on the fly via the same
+      code path). Wire bytes are identical in both cases.
+- [x] Teach `papyri debug` to inspect `.papyri` artifacts: gunzip, decode
+      to `Bundle`, print module/version/format-version + entry counts.
+      Replaces the loss of the `tar -tzf` debug ergonomic.
+- [ ] Phase 6b (next): keep `papyri gen` writing a per-file directory
+      tree as today, but consider switching the on-disk encoding to JSON
+      so that standard tooling (`jq`, `diff`, text grep) and custom
+      maintainer workflows can inspect / massage / verify the
+      intermediate output before `pack` runs. The contract `pack`
+      produces stays the binary `.papyri` artifact; the per-file form is
+      a debugging and customization surface, not a publication format.
+      Explicitly *not* in scope: making `gen` produce a `.papyri`
+      directly — that would close off the inspect-and-modify workflow.
+
 ## Open questions
 
 - Do we want to re-publish to PyPI under a new version once Phase 1 is

@@ -2,18 +2,22 @@
 
 from __future__ import annotations
 
+import gzip
 import io
 import json
-import tarfile
 import urllib.error
 import urllib.request
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import cbor2
 import typer
 from typer.testing import CliRunner
 
-from papyri.cli.upload import _DEFAULT_URL, _make_tarball, upload
+from papyri.bundle import Bundle
+from papyri.cli.upload import _DEFAULT_URL, upload
+from papyri.node_base import TAG_MAP
+from papyri.pack import make_artifact_from_dir
 
 # ---------------------------------------------------------------------------
 # Minimal typer app for test invocation
@@ -26,72 +30,15 @@ runner = CliRunner()
 
 
 # ---------------------------------------------------------------------------
-# _make_tarball
+# Bundle helpers
 # ---------------------------------------------------------------------------
-
-
-def test_make_tarball_creates_valid_gzip(tmp_path):
-    (tmp_path / "papyri.json").write_text('{"module":"mypkg","version":"1.0"}')
-    (tmp_path / "module").mkdir()
-    (tmp_path / "module" / "mypkg.foo.cbor").write_bytes(b"\x00\x01\x02")
-
-    data = _make_tarball(tmp_path)
-
-    assert data[:2] == b"\x1f\x8b", "expected gzip magic bytes"
-    with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tar:
-        names = {m.name for m in tar.getmembers()}
-    assert "papyri.json" in names
-    assert "module/mypkg.foo.cbor" in names
-
-
-def test_make_tarball_contents_correct(tmp_path):
-    payload = b"hello bundle"
-    (tmp_path / "papyri.json").write_bytes(payload)
-
-    data = _make_tarball(tmp_path)
-
-    with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tar:
-        f = tar.extractfile(tar.getmember("papyri.json"))
-        assert f is not None
-        assert f.read() == payload
-
-
-def test_make_tarball_no_leading_slash_in_arcnames(tmp_path):
-    (tmp_path / "a.txt").write_bytes(b"x")
-
-    data = _make_tarball(tmp_path)
-
-    with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tar:
-        for m in tar.getmembers():
-            assert not m.name.startswith("/"), f"absolute path in archive: {m.name}"
-
-
-# ---------------------------------------------------------------------------
-# CLI validation
-# ---------------------------------------------------------------------------
-
-
-def test_upload_missing_dir(tmp_path):
-    result = runner.invoke(_app, [str(tmp_path / "nonexistent")])
-    assert result.exit_code == 1
-    assert "not a directory" in result.output
-
-
-def test_upload_dir_without_papyri_json(tmp_path):
-    result = runner.invoke(_app, [str(tmp_path)])
-    assert result.exit_code == 1
-    assert "papyri.json" in result.output
 
 
 def _make_bundle(root: Path, pkg: str = "mypkg", version: str = "1.0") -> Path:
     root.mkdir(parents=True, exist_ok=True)
     (root / "papyri.json").write_text(json.dumps({"module": pkg, "version": version}))
+    (root / "module").mkdir()
     return root
-
-
-# ---------------------------------------------------------------------------
-# Successful upload
-# ---------------------------------------------------------------------------
 
 
 def _mock_response(body: dict, status: int = 201) -> MagicMock:
@@ -103,18 +50,41 @@ def _mock_response(body: dict, status: int = 201) -> MagicMock:
     return resp
 
 
-def test_upload_success(tmp_path):
+# ---------------------------------------------------------------------------
+# CLI validation
+# ---------------------------------------------------------------------------
+
+
+def test_upload_missing_path(tmp_path):
+    result = runner.invoke(_app, [str(tmp_path / "nonexistent")])
+    assert result.exit_code == 1
+    assert "not a .papyri file or a directory" in result.output
+
+
+def test_upload_dir_without_papyri_json(tmp_path):
+    tmp_path.mkdir(exist_ok=True)
+    result = runner.invoke(_app, [str(tmp_path)])
+    assert result.exit_code == 1
+    # BundleError surfaces structural problems.
+    assert "papyri.json" in result.output or "module/" in result.output
+
+
+# ---------------------------------------------------------------------------
+# Successful upload from a directory (packs on the fly).
+# ---------------------------------------------------------------------------
+
+
+def test_upload_dir_success(tmp_path):
     bundle = _make_bundle(tmp_path / "mypkg_1.0")
     resp = _mock_response({"ok": True, "pkg": "mypkg", "version": "1.0"}, 201)
 
     with patch("urllib.request.urlopen", return_value=resp) as mock_open:
         result = runner.invoke(_app, [str(bundle)])
 
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     assert "mypkg" in result.output
     assert "1.0" in result.output
 
-    # Verify the request was a PUT with the right content-type and default URL.
     call_args = mock_open.call_args
     req: urllib.request.Request = call_args[0][0]
     assert req.get_method() == "PUT"
@@ -136,7 +106,8 @@ def test_upload_custom_url(tmp_path):
     assert req.full_url == "http://example.com/api/bundle"
 
 
-def test_upload_sends_valid_tarball(tmp_path):
+def test_upload_sends_a_papyri_artifact(tmp_path):
+    """The wire bytes are a gzip-wrapped CBOR Bundle, not a tarball."""
     bundle = _make_bundle(tmp_path / "mypkg_1.0")
     resp = _mock_response({"ok": True, "pkg": "mypkg", "version": "1.0"})
     captured: list[bytes] = []
@@ -151,14 +122,41 @@ def test_upload_sends_valid_tarball(tmp_path):
 
     assert captured, "urlopen was never called"
     data = captured[0]
-    assert isinstance(data, bytes)
-    with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tar:
-        names = {m.name for m in tar.getmembers()}
-    assert "papyri.json" in names
+    assert data[:2] == b"\x1f\x8b", "expected gzip magic"
+    decoded = cbor2.loads(gzip.decompress(data))
+    assert isinstance(decoded, cbor2.CBORTag)
+    assert decoded.tag == TAG_MAP[Bundle]
+
+
+def test_upload_dir_and_artifact_send_identical_bytes(tmp_path):
+    """
+    Uploading <dir> and uploading <dir-packed-into-.papyri> must result in
+    the same bytes on the wire — the artifact contract is the same in both
+    cases.
+    """
+    bundle = _make_bundle(tmp_path / "mypkg_1.0")
+    artifact_bytes, _ = make_artifact_from_dir(bundle)
+    artifact_path = tmp_path / "mypkg-1.0.papyri"
+    artifact_path.write_bytes(artifact_bytes)
+
+    resp = _mock_response({"ok": True, "pkg": "mypkg", "version": "1.0"})
+    captured: list[bytes] = []
+
+    def fake_urlopen(req: urllib.request.Request):
+        assert isinstance(req.data, bytes)
+        captured.append(req.data)
+        return resp
+
+    with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        runner.invoke(_app, [str(bundle)])
+        runner.invoke(_app, [str(artifact_path)])
+
+    assert len(captured) == 2
+    assert captured[0] == captured[1]
 
 
 # ---------------------------------------------------------------------------
-# Multiple bundles
+# Multiple inputs.
 # ---------------------------------------------------------------------------
 
 

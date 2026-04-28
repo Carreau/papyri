@@ -13,4 +13,6 @@ export type { Key } from "./graphstore.js";
 export { decode, encode, generatedDocToIngested, FIELD_ORDER } from "./encoder.js";
 export type { IRNode, TypedNode, UnknownNode } from "./encoder.js";
 
+export { assertBundle, explodeBundleToDir } from "./bundle.js";
+
 export { collectForwardRefs, collectForwardRefsFromSection } from "./visitor.js";

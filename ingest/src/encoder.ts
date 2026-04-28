@@ -130,6 +130,30 @@ export const FIELD_ORDER: Readonly<Record<number, { name: string; fields: readon
   4062: { name: "Image", fields: ["url", "alt"] },
   4063: { name: "CitationReference", fields: ["label"] },
   4064: { name: "Citation", fields: ["label", "children"] },
+  // Bundle (tag 4070): top-level publishable artifact written by `papyri pack`.
+  // Source of truth: papyri/bundle.py.  Field order MUST match the Python
+  // class declaration; pack_format_version + ir_schema_version come first
+  // so consumers can peek compatibility cheaply.
+  4070: {
+    name: "Bundle",
+    fields: [
+      "pack_format_version",
+      "ir_schema_version",
+      "module",
+      "version",
+      "summary",
+      "github_slug",
+      "tag",
+      "logo",
+      "aliases",
+      "extra",
+      "api",
+      "narrative",
+      "examples",
+      "assets",
+      "toc",
+    ],
+  },
 } as const;
 
 const TUPLE_TAG = 4444;
@@ -165,6 +189,11 @@ function buildTyped(tag: number, value: unknown): IRNode {
 /** Recursively convert raw cbor-x Tag instances to TypedNode objects. */
 function processRaw(val: unknown): unknown {
   if (!val || typeof val !== "object") return val;
+  // CBOR byte strings decode to Uint8Array (Buffer is a subclass). They must
+  // pass through unchanged — Object.entries() on a Buffer would expand it
+  // into a `{0: byte, 1: byte, ...}` plain object, corrupting binary fields
+  // like Bundle.assets values.
+  if (val instanceof Uint8Array) return val;
   if (Array.isArray(val)) return val.map(processRaw);
   if (val instanceof Tag) {
     const tag = val.tag as number;

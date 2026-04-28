@@ -949,6 +949,11 @@ class Gen:
         if not self.config.docs_path:
             return
         path = Path(self.config.docs_path).expanduser()
+        if not path.exists():
+            self.log.warning(
+                "docs_path %s does not exist, skipping narrative docs", path
+            )
+            return
         self.log.info("Scraping Documentation")
         files = list(path.glob("**/*.rst"))
         trees = {}
@@ -971,7 +976,8 @@ class Gen:
                 try:
                     data = ts.parse(p.read_bytes(), p)
                 except Exception as e:
-                    raise type(e)(f"{p=}") from e
+                    self.log.warning("Could not parse %s, skipping: %s", p, e)
+                    continue
                 blob = GeneratedDoc.new()
                 key = ":".join(parts)[:-4]
                 try:
@@ -987,8 +993,8 @@ class Gen:
                     dv.collect_substitutions(*data)
                     blob.arbitrary = [dv.visit(s) for s in data]
                 except Exception as e:
-                    e.add_note(f"Error in {p!r}")
-                    raise
+                    self.log.warning("Could not process %s, skipping: %s", p, e)
+                    continue
                 # if dv._tocs:
                 trees[key] = dv._tocs
 

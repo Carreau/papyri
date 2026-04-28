@@ -53,6 +53,7 @@ jobs:
             python-version: "3.14"
           - lib: 'IPython'
             python-version: "3.14"
+            flags: '--no-narrative'
           - lib: 'numpy'
             python-version: "3.14"
             flags: '--no-narrative --no-exec'

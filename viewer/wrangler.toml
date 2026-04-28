@@ -1,0 +1,62 @@
+# Cloudflare Workers configuration for the papyri viewer.
+#
+# Status: M9.0 scaffolding (see PLAN.md). The viewer does NOT yet run as a
+# Workers application — there is no worker entrypoint, so `wrangler dev`
+# cannot serve the viewer until the @astrojs/cloudflare adapter lands in
+# M9.2. This file exists so the D1 schema can be bootstrapped now (`wrangler
+# d1 migrations apply --local`) and so the eventual Workers build has a
+# stable place to declare its bindings.
+#
+# Storage model under M9: D1 holds the graph (nodes + links tables, schema
+# in migrations/), R2 holds CBOR blobs + assets keyed by the same
+# `<pkg>/<ver>/<kind>/<path>` shape used today on disk. The store starts
+# empty; the only populator is the Workers-side `PUT /api/bundle` handler
+# (M9.3) which receives a `papyri gen` bundle and writes directly into
+# D1 + R2.
+
+name = "papyri-viewer"
+compatibility_date = "2026-04-27"
+compatibility_flags = ["nodejs_compat"]
+
+# `pnpm build:cf` (PAPYRI_ADAPTER=cloudflare astro build) emits the
+# worker entrypoint at `dist/_worker.js/index.js` and pre-rendered
+# HTML / client assets under `dist/`. The @astrojs/cloudflare adapter
+# wires those into wrangler at dev/deploy time, so `main` and `assets`
+# are intentionally NOT set here — declaring them eagerly fails the
+# build (`main doesn't point to an existing file`) because the cloudflare
+# vite plugin validates them before the build emits anything.
+#
+# Run `pnpm wrangler:dev` after `pnpm build:cf` and wrangler will pick
+# up the adapter's wrangler config from the build output.
+
+# ----------------------------------------------------------------------------
+# D1 — graph store. Replaces the on-disk SQLite file.
+#
+# `migrations_dir` points at `ingest/migrations/` so the same SQL files
+# initialise both the Node-mode SQLite store (read by
+# `ingest/src/graphstore.ts` at `new GraphStore()` time) and the D1
+# database. Apply locally:
+#
+#   pnpm wrangler d1 migrations apply papyri-viewer-graph --local
+#
+# `database_id` is a placeholder that miniflare ignores in --local mode.
+# When provisioning a real remote D1 database (`wrangler d1 create
+# papyri-viewer-graph`), replace it with the UUID printed by that command
+# and check the result in.
+# ----------------------------------------------------------------------------
+[[d1_databases]]
+binding = "GRAPH_DB"
+database_name = "papyri-viewer-graph"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "../ingest/migrations"
+
+# ----------------------------------------------------------------------------
+# R2 — blob store. Replaces the per-bundle directory tree under
+# `<ingest>/<pkg>/<ver>/`. R2 keys mirror that on-disk relative path
+# verbatim so a key like `numpy/2.3.5/module/numpy.linspace` round-trips
+# unchanged. The bucket starts empty; objects are PUT by the Workers-side
+# bundle ingest handler (M9.3).
+# ----------------------------------------------------------------------------
+[[r2_buckets]]
+binding = "BLOBS"
+bucket_name = "papyri-viewer-blobs"

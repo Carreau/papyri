@@ -48,6 +48,13 @@ export interface IngestOptions {
   check?: boolean;
   /** Custom ingest directory (defaults to ~/.papyri/ingest). */
   ingestDir?: string;
+  /**
+   * Schema SQL to use when creating a fresh papyri.db. Forwarded to the
+   * GraphStore constructor. Required when this code is loaded from a
+   * Vite-bundled chunk (the viewer's SSR `PUT /api/bundle` handler);
+   * the CLI can leave it unset and rely on the on-disk migrations dir.
+   */
+  schemaSql?: string;
 }
 
 function defaultIngestDir(): string {
@@ -83,7 +90,7 @@ export class Ingester {
 
   constructor(opts: IngestOptions = {}) {
     this.ingestDir = opts.ingestDir ?? defaultIngestDir();
-    this.gstore = new GraphStore(this.ingestDir);
+    this.gstore = new GraphStore(this.ingestDir, { schemaSql: opts.schemaSql });
   }
 
   // -------------------------------------------------------------------------

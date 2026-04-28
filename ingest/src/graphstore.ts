@@ -9,8 +9,9 @@
  * SQLite: <root>/papyri.db  (nodes + links tables)
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { blake2b } from "@noble/hashes/blake2b.js";
 import DatabaseType from "better-sqlite3";
 import Database from "better-sqlite3";
@@ -38,28 +39,56 @@ export function keyStr(k: Key): string {
 
 // ---------------------------------------------------------------------------
 // Schema
+//
+// Single source of truth: `ingest/migrations/*.sql`. The Cloudflare D1
+// path applies the same files via `wrangler d1 migrations apply`
+// (`viewer/wrangler.toml` points `migrations_dir = "../ingest/migrations"`).
+//
+// Two consumers, two ways the schema can reach the GraphStore constructor:
+//
+//   1. The `papyri-ingest` CLI runs from `dist/cli.js` → `dist/graphstore.js`.
+//      `import.meta.url` points at the actual file on disk, so the lazy
+//      disk loader below resolves `../migrations/*.sql` correctly.
+//
+//   2. The viewer's SSR bundle is produced by Vite, which inlines
+//      `graphstore.ts` into `dist/server/chunks/<hash>.mjs`. There the
+//      `import.meta.url` is a chunk path with no sibling `migrations/`
+//      dir. To handle that, callers can pass `schemaSql` explicitly
+//      (e.g. via Vite's `?raw` import) and skip the disk loader.
 // ---------------------------------------------------------------------------
 
-const SCHEMA = `
-CREATE TABLE nodes(
-    id         INTEGER PRIMARY KEY,
-    package    TEXT NOT NULL,
-    version    TEXT NOT NULL,
-    category   TEXT NOT NULL,
-    identifier TEXT NOT NULL,
-    has_blob   INTEGER NOT NULL DEFAULT 0,
-    digest     BLOB,
-    UNIQUE(package, version, category, identifier)
-);
-CREATE TABLE links(
-    source INTEGER NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
-    dest   INTEGER NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
-    PRIMARY KEY (source, dest)
-);
-CREATE INDEX idx_links_dest ON links(dest);
-CREATE INDEX idx_nodes_pkg_cat_ident
-    ON nodes(package, category, identifier);
-`.trim();
+function migrationsDir(): string {
+  // Resolved lazily because this module is loaded transitively by viewer
+  // code that runs inside the Cloudflare prerender miniflare worker,
+  // where `import.meta.url` is not always a `file:` URL. The
+  // `new GraphStore()` constructor that needs this path never runs in
+  // that context.
+  const here = dirname(fileURLToPath(import.meta.url));
+  return join(here, "..", "migrations");
+}
+
+function loadSchemaFromDisk(): string {
+  const dir = migrationsDir();
+  const files = readdirSync(dir)
+    .filter((f) => f.endsWith(".sql"))
+    .sort(); // lexicographic so 0000_*.sql lands before 0001_*.sql
+  return files.map((f) => readFileSync(join(dir, f), "utf8")).join("\n");
+}
+
+function splitStatements(sql: string): string[] {
+  // SQLite `--` line comments are stripped before splitting so a comment
+  // ending in `;` doesn't confuse the splitter. We don't use string
+  // literals containing `--` or `;` in the migrations themselves; if that
+  // ever changes, swap this for a real tokenizer.
+  const stripped = sql
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("--"))
+    .join("\n");
+  return stripped
+    .split(";")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
 
 const PRAGMAS = [
   "PRAGMA foreign_keys = 1",
@@ -73,11 +102,22 @@ const PRAGMAS = [
 // GraphStore
 // ---------------------------------------------------------------------------
 
+export interface GraphStoreOptions {
+  /**
+   * Schema SQL applied when the SQLite file is first created. Combined
+   * `migrations/*.sql` content; statements are split on `;` and exec'd
+   * in order. Pass this when the caller's runtime can't reach the
+   * on-disk migrations dir — e.g. a Vite-bundled SSR worker. The CLI
+   * can omit it; the disk loader handles `dist/cli.js` correctly.
+   */
+  schemaSql?: string;
+}
+
 export class GraphStore {
   private db: DatabaseType.Database;
   private root: string;
 
-  constructor(ingestDir: string) {
+  constructor(ingestDir: string, options: GraphStoreOptions = {}) {
     this.root = ingestDir;
     const dbPath = join(ingestDir, "papyri.db");
     const isNew = !existsSync(dbPath);
@@ -87,10 +127,8 @@ export class GraphStore {
     for (const p of PRAGMAS) this.db.exec(p);
 
     if (isNew) {
-      for (const stmt of SCHEMA.split(";")) {
-        const s = stmt.trim();
-        if (s) this.db.exec(s);
-      }
+      const sql = options.schemaSql ?? loadSchemaFromDisk();
+      for (const stmt of splitStatements(sql)) this.db.exec(stmt);
     }
   }
 

@@ -1,7 +1,7 @@
 # Papyri plan
 
 This document captures the agreed scope and ordered work. Future sessions
-(human or agent) should treat this as the source of truth; check items off
+(human or agent) should treat this as the source of truth. Check items off
 and update the "Open questions" section as answers arrive.
 
 ## Why this project exists
@@ -25,392 +25,108 @@ service ingests many and serves them from one place.
 - **`papyri upload`**: ships the bundle to a viewer instance's
   `/api/bundle` endpoint, which runs the TypeScript ingest pipeline
   server-side to wire bundles into the cross-linked graph.
-- **`viewer/`**: TypeScript/Astro renderer. Works locally for development
-  and is being built with the centralized service in mind — it is the intended
+- **`viewer/`**: TypeScript web renderer. Works locally for development and
+  is being built with the centralized service in mind — it is the intended
   rendering frontend for the hosted service, not just a local debug tool.
-- **`ingest/`**: TypeScript `papyri-ingest` package that performs ingestion.
-  Replaces the removed Python `papyri ingest` CLI.
+- **`ingest/`**: TypeScript `papyri-ingest` package — the canonical
+  ingestion engine, invoked by the viewer's upload endpoint.
 
 The viewer lives in-tree while the IR is still in flux; co-locating producer
 and consumer lets us iterate across breaking changes in one PR. Splitting into
-a sibling repo remains an option once the IR schema stabilises.
+a separate repo remains an option once the IR schema stabilizes.
 
 The boundary between the two halves:
 
-- `~/.papyri/data/<pkg>_<ver>/` — per-bundle IR (JSON + CBOR blobs,
-  `papyri.json`, `toc.json`, `module/*.json`, `docs/`, `examples/`,
-  `assets/`).
-- `~/.papyri/ingest/papyri.db` — SQLite cross-link graph (schema in
-  `papyri/graphstore.py`).
-
-**Note:** the on-disk format is not pure JSON. `graphstore.py`,
-`crosslink.py`, `node_base.py`, and `take2.py` encode parts of the IR using
-CBOR via the `cbor2` package. Any future JS consumer needs a CBOR library
-(e.g. `cbor-x`) in addition to JSON parsing. Documenting and, if feasible,
-converging on a single encoding is part of Phase 2.
+- `~/.papyri/data/<pkg>_<ver>/` — per-bundle IR (`papyri.json`, `toc.json`,
+  `module/`, `docs/`, `examples/`, `assets/`). The per-file encoding is an
+  implementation detail; do not assume JSON or CBOR exclusively.
+- Storage is abstracted: the viewer and ingest pipeline must not assume a
+  specific on-disk layout or wire encoding. The current implementation uses
+  SQLite for the cross-link graph and a filesystem store for blobs; the
+  hosted service will use different backends (e.g. Cloudflare D1 + R2).
 
 ## Python version
 
 - Minimum: **Python 3.14**. `requires-python = ">=3.14"`.
-- CI matrix: `3.14` only to start. Add newer versions later; don't carry
-  legacy ones.
-- Local dev may only have 3.13 in some environments; CI is the source of
-  truth for "does it work on 3.14".
+- CI matrix: `3.14` only. Add newer versions later; don't carry legacy ones.
 
-## Dependency pins
+## Dependency notes
 
-- RST parsing uses `tree-sitter-language-pack` (the maintained successor
-  of the abandoned `tree_sitter_languages`) on top of `tree-sitter >= 0.24`.
-  Don't reintroduce `tree_sitter_languages`.
+- RST parsing currently uses `tree-sitter-language-pack` on top of
+  `tree-sitter >= 0.24`. May switch to `tree-sitter-rst` directly from
+  PyPI. Do not reintroduce `tree_sitter_languages`.
 - `numpy`, `scipy`, `astropy`, `IPython` in the CI matrix drift frequently;
-  the current numpy test failure is a canonical-path change for
-  `numpy:array`. Either xfail with a reason or pin each matrix entry to a
-  known-good version.
+  pin each matrix entry to a known-good version or xfail with a reason.
 
-## Ordered phases
+## Open work
 
-### Phase 0 — landed
+### Phase 6b — gen-side encoding
 
-- [x] README: current-state banner, known breakage, install workaround.
+Keep `papyri gen` writing a per-file directory tree as today, but consider
+switching the on-disk encoding to JSON so that standard tooling (`jq`,
+`diff`, text grep) and custom maintainer workflows can inspect and verify the
+intermediate output before `pack` runs. The contract `pack` produces stays
+the binary `.papyri` artifact; the per-file form is a debugging and
+customization surface, not a publication format.
 
-### Phase 1 — scope cuts and baseline
+Explicitly *not* in scope: making `gen` produce a `.papyri` directly —
+that would close off the inspect-and-modify workflow.
 
-- [x] Land the big removal PR (stale scaffolds, unused renderers, dead CLI
-      commands, JupyterLab extension, and their workflows / assets).
-- [x] Trim `papyri/__init__.py` of dead CLI commands and their imports.
-- [x] Trim `pyproject.toml` and `requirements.txt` dependencies to match.
-      Note: `rich` is retained because `papyri/gen.py`, `papyri/crosslink.py`,
-      `papyri/misc.py`, and `papyri/utils.py` use `rich.progress` /
-      `rich.logging` in the core pipeline (not as a docstring renderer).
-      Stripping it is a bigger refactor and is not required for Phase 1.
-- [x] Bump `requires-python` to `>=3.14`; update CI to 3.14.
-- [x] Update the linter workflow (`lint.yml`) to 3.14 and keep
-      `black` + `flake8` + `mypy`. (Later migrated to `ruff` + `mypy`.)
-- [x] Verify `papyri gen examples/papyri.toml --no-infer` and
-      `papyri ingest ~/.papyri/data/papyri_<ver>` still work end-to-end.
-      (Verified locally on 3.11 via `--ignore-requires-python`; CI on
-      3.14 is the source of truth.)
-- [x] Update README to remove references to deleted commands and reflect
-      the new scope.
+### Viewer — M9 (Cloudflare Workers)
 
-### Phase 2 — IR surface stabilization
-
-- [x] Document the IR format in `docs/IR.md`: on-disk layout, JSON schema
-      per file type, CBOR-encoded fields, `graphstore` SQLite schema.
-      Followup: JSON-Schema fragments per node + an `IR-CHANGELOG.md`.
-- [x] Decide whether to move everything to a single encoding (all JSON, or
-      all CBOR) vs documenting the hybrid. Done: gen-side bundles use CBOR
-      for IR blobs; `papyri.json` / `toc.json` remain JSON as small
-      configuration metadata.  **Ingest-side storage format is not
-      mandated** — CBOR is used today as a space-saving measure before
-      uploading to a central service, but the graphstore must not assume
-      CBOR.  A future implementation (e.g. TypeScript) may use a different
-      encoding.
-- [x] Add a `papyri describe <qualname>` (or reuse `find`) as a
-      maintainer-side debug command that prints an IR entry without a
-      renderer. Implemented in `papyri/cli/describe.py` (registered
-      onto the Typer app in `papyri/__init__.py`); accepts shorthand
-      (`numpy.linspace`), kind-prefixed, and full `pkg/ver/kind/id`
-      forms, plus `--kind` / `--package` / `--version` filters.
-- [x] Replace `tree_sitter_languages` with direct `tree-sitter-rst`
-      from PyPI (on top of `tree-sitter >= 0.24`). Python grammar was
-      never used from `tree_sitter_languages`, so no
-      `tree-sitter-python` dependency was needed.
-- [x] Fix circular import between `papyri/take2.py` and `papyri/myst_ast.py`
-      so tests collect cleanly in isolation. Done by merging `myst_ast.py`
-      into `take2.py`; M-prefixed classes still exist pending a rename pass.
-- [x] Resolve or xfail the known test failures. All prior xfails have
-      been fixed (no `strict=False` xfails remaining):
-      - `test_nodes.py::test_parse_blocks[numpy.linspace…]` — assertion
-        switched from exact count to `>= 1` so numpy docstring drift
-        doesn't break the test.
-      - `test_gen.py::test_numpy[numpy…]` — updated to numpy 2.x paths
-        (`_core` submodule) and dropped the undocumented
-        `numpy.core._multiarray_tests:npy_sinh` entry.
-      - `test_gen.py::test_self_2` — rewritten to assert `item_file`
-        resolution instead of indexing into `papyri.__init__.__doc__`.
-      - `test_gen.py::test_infer` — uses `pytest.importorskip("scipy")`
-        so environments without scipy skip rather than fail.
-      - `test_signatures.py::test_f1[function_with_annotation5]` and
-        `test_gen.py::test_self` — expected annotation strings updated
-        to Python 3.14's `X | Y` / `X | None` union format (was
-        `Union[X, Y]` / `Optional[X]`).
-
-### Phase 3 — Web viewer (in-tree under `viewer/`)
-
-Tracked in [`viewer/PLAN.md`](viewer/PLAN.md). Summary:
-
-- Lives in `viewer/` as an Astro + React + TypeScript app (see
-  `viewer/PLAN.md` for the tech rationale).
-- Reads the IR directly from the ingest store (`~/.papyri/ingest/`) and
-  the SQLite graph; no new intermediate format.
-- Milestones tracked in [`viewer/PLAN.md`](viewer/PLAN.md) "Milestones".
-- CI: `.github/workflows/viewer.yml` runs `pnpm --filter papyri-viewer
-  run check` and `pnpm build`; `.github/workflows/lint.yml` runs the
-  ESLint + Prettier checks; `.github/workflows/ingest.yml` covers the
-  sibling `papyri-ingest` workspace package.
-- Originally planned as a separate sibling repo; now in-tree while the IR
-  is still in flux. Splitting out remains an option once the IR schema
-  stabilizes in Phase 2.
-
-### Phase 4 — Narrative docs (IPython as reference target)
-
-The skeleton already exists: `papyri gen` parses `.rst` files from
-`docs_path`, `papyri ingest` converts `toc.json → toc.cbor`, and the
-viewer has `docs/[...doc].astro` + sidebar TOC rendering. The gaps are
-robustness and coverage holes.
-
-**Phase A — make it build** (current focus)
-
-- [x] Harden `toc.py:make_tree()` to not crash when there is no `index`
-      root document. Fall back to a flat listing of all collected docs.
-      IPython and other packages may root the docs tree at a key other
-      than `"index"` or may have an empty toctree graph.
-      Done: falls back to any unreferenced node, or the first key, with
-      a log warning.
-- [x] Fix `tree.py:_toctree_handler`: remove `assert not argument` (some
-      builds pass a title); skip empty and comment lines; silently drop
-      `:glob:` entries (we don't expand globs at gen time).
-      Done: argument is silently ignored; blank/comment lines and glob
-      patterns skipped; malformed entries logged as warnings.
-- [x] Fix `tree.py:GenVisitor.visit_Section`: section target refs are
-      currently registered against the hardcoded
-      `RefInfo("papyri", "0.0.8", "docs", …)` regardless of which package
-      is being built. Pass the real `(module, version)` pair through
-      `GenVisitor` and use them here.
-      Done: replaced with `LocalRef("docs", target)`, which inherits
-      module/version from the bundle context at render time.
-- [x] Update `examples/IPython.toml`: add `narrative_exclude` patterns
-      to skip auto-generated API stubs (`api/generated/`) and Sphinx
-      build artefacts that are not human-authored prose.
-      Done: `api/generated`, `_build`, `config/api` are excluded.
-
-**Phase B — make it useful in the viewer**
-
-- [x] Fix narrative page `<h1>`: extract the first heading from
-      `doc.arbitrary[0].title` instead of displaying the raw key
-      (`config:details`).
-      Done: `displayTitle = sections[0]?.title || doc.qa || docPath`.
-      First section's h2 is suppressed when its title became the h1 to
-      avoid duplication.
-- [x] Add `id=` anchors to headings so within-doc navigation works.
-      Done: `<section id={sectionId(s)}>` where `sectionId` prefers the
-      RST target label and falls back to a slugified title. Added
-      `scroll-margin-top` so fixed headers don't obscure jump targets.
-- [x] Add a within-doc mini-TOC (sidebar or top-of-page) listing `<h2>`
-      headings for long narrative pages.
-      Done: `<nav class="doc-toc">` rendered above sections when ≥ 2
-      titled sections remain after the h1 section.
-
-**Phase C — `:doc:` cross-links**
-
-- [x] Handle the `:doc:` Sphinx role in `GenVisitor`: emit a `CrossRef`
-      with `kind="docs"` instead of verbatim text.
-- [x] Resolve those refs in `IngestVisitor` (map to `Key(pkg, ver,
-      "docs", path)`).
-- [x] Warn and skip Sphinx-only directives that are not meaningful
-      outside the Sphinx build environment: `.. autofunction::`,
-      `.. autoclass::`, `.. automodule::`, `.. ipython::`.
-      Emits `log.warning` and returns `[]` (no output node).
-
-### Phase 5 — Retire the Python ingest pipeline
-
-The TypeScript `papyri-ingest` package and the viewer's `/api/bundle`
-upload endpoint now own the ingestion path. `papyri upload` is the
-maintainer-side entry point. Phase 5 retires the redundant Python
-pipeline that used to populate `~/.papyri/ingest/` directly.
-
-- [x] Remove the `papyri ingest`, `papyri relink`, and `papyri drop`
-      CLI commands. Their files under `papyri/cli/` are deleted; the
-      Typer registration in `papyri/__init__.py` no longer references
-      them.
-- [x] Delete the `Ingester` class plus `find_all_refs`,
-      `load_one_uningested`, the module-level `drop`/`main`/`relink`
-      entry points, and `IngestedDoc.process` /
-      `IngestedDoc.all_forward_refs` from `papyri/crosslink.py`.
-      `IngestedDoc` itself stays as a read-time CBOR container (tag
-      4010) used by `papyri find` / `describe` / `diff` / `debug`.
-- [x] Delete `IngestVisitor` from `papyri/tree.py`. `GenVisitor`,
-      `DirectiveVisiter`, and `TreeVisitor` are unaffected.
-- [x] Repoint the inline-role-resolution tests in `test_parse.py` at
-      `DirectiveVisiter` (their actual subject) instead of the deleted
-      `IngestVisitor`.
-- [x] Update `Readme.md` and module docstrings to describe the new
-      gen → upload → server-side-ingest pipeline.
-
-Follow-ups (not in this phase):
-
-- Rename `crosslink.py` to something that reflects its new read-only
-  role (`ingested_doc.py`?), or fold `IngestedDoc` into `nodes.py`.
-- Audit `papyri/graphstore.py`: the write-side methods (`put`,
-  `put_meta`) are no longer called by the Python side. Decide whether
-  to slim it to a read-only interface or leave the writers for
-  programmatic use.
-- Decide the future of `papyri find` / `describe` / `diff` / `debug`.
-  They still work against the ingest store written by the TypeScript
-  pipeline, but the viewer is the user-facing replacement.
-
-### Phase 6 — `papyri pack` and the publishable artifact
-
-The maintainer→service contract is a single deterministic file, not a
-directory of CBOR files. With Phase 5 retiring the Python ingest
-pipeline, the only thing the viewer (and any future hosted service)
-needs to consume from the maintainer's machine is one byte-stable file
-per bundle.
-
-- [x] Add a `Bundle` Node (`papyri/bundle.py`) that carries the typed
-      contents of a DocBundle as fields: `module`, `version`, `summary`,
-      `github_slug`, `tag`, `logo`, `aliases`, `extra`, `api`,
-      `narrative`, `examples`, `assets`, `toc`. `pack_format_version`
-      and `ir_schema_version` are positional fields 0/1 so a consumer
-      can peek compatibility without decoding the rest of the bundle.
-- [x] Add `papyri pack <bundle_dir>` (`papyri/cli/pack.py` +
-      `papyri/pack.py`): validate the bundle directory layout, decode
-      its CBOR contents into a `Bundle` Node, run `Bundle.validate()`,
-      and write a single `.papyri` artifact = canonical-CBOR Bundle,
-      gzipped with `mtime=0`. Verified end-to-end: packing the same
-      bundle twice with perturbed filesystem mtimes produces
-      byte-identical output (sha256 match).
-- [x] Replace `papyri upload` to consume either a `.papyri` artifact
-      directly or a bundle directory (packed on the fly via the same
-      code path). Wire bytes are identical in both cases.
-- [x] Teach `papyri debug` to inspect `.papyri` artifacts: gunzip, decode
-      to `Bundle`, print module/version/format-version + entry counts.
-      Replaces the loss of the `tar -tzf` debug ergonomic.
-- [ ] Phase 6b (next): keep `papyri gen` writing a per-file directory
-      tree as today, but consider switching the on-disk encoding to JSON
-      so that standard tooling (`jq`, `diff`, text grep) and custom
-      maintainer workflows can inspect / massage / verify the
-      intermediate output before `pack` runs. The contract `pack`
-      produces stays the binary `.papyri` artifact; the per-file form is
-      a debugging and customization surface, not a publication format.
-      Explicitly *not* in scope: making `gen` produce a `.papyri`
-      directly — that would close off the inspect-and-modify workflow.
+Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
 
 ## Open questions
 
-- Do we want to re-publish to PyPI under a new version once Phase 1 is
-  done, or keep it as "install from git" only for the foreseeable future?
-  **Still open.**
-
-## Cross-version page change detection (landed)
-
-`graphstore.put` records a 16-byte BLAKE2b fingerprint of every
-canonical (re-encoded) blob in a new `nodes.digest` column. One query
-method is exposed on `GraphStore`:
-
-- `diff_versions(package, version_a, version_b)` — returns the added /
-  removed / modified pages between two ingested versions, identified by
-  `(category, identifier)`. Identical-digest pages are omitted; callers
-  that only care about one category filter the returned list.
-
-The digest is computed **post-encoder** so it reflects the canonical
-form of the IR, not whatever bytes gen happened to write — which means
-re-ingesting yields stable digests even before the gen pipeline is fully
-canonicalized. The digest column is part of the schema for new
-databases; existing databases need to be dropped (`papyri drop`) and
-re-ingested.
-
-CLI surfacing: `papyri diff <pkg> <va> <vb> [--summary]` prints the
-added / removed / modified buckets.
-
-The next iteration is a **semantic digest** (signature + section titles
-+ collapsed text, ignoring source positions) so the viewer can
-distinguish trivial whitespace churn from real content change. Add it as
-a second column rather than replacing the raw digest. "Unchanged since
-which version?" is deferred — it needs a clear story for version
-ordering before it's worth wiring up.
+- Do we want to re-publish to PyPI under a new version, or keep it as
+  "install from git" only for the foreseeable future? **Still open.**
 
 ## Follow-ups (not yet scheduled)
 
 - **Directive handlers should not read global state.** `:ghpull:` and
-  `:ghissue:` currently pull the GitHub slug from a module-level
-  `_GITHUB_SLUG` in `tree.py`, set at gen start via `set_github_slug()`.
-  That works for a single sequential `papyri gen` run but is a hazard
-  for any future parallel/per-project codepath (the last setter wins).
-  The registry should pass the active `Config` (or a narrower
-  "directive context" carrying the relevant `[meta]` keys) into the
-  handler call itself, so handlers can be pure functions of
-  `(value, ctx)` again.
-- **Per-reference version resolution in `crosslink.py`.** See
-  the TODO "Open code smells" section. A related dead assertion
-  (`tree.py`, comparing a
-  string to a list so the raise never fired) has been removed; the
-  underlying "local reference should carry an explicit version"
-  invariant still needs a real enforcement point once cross-package
-  version data is threaded through.
+  `:ghissue:` pull the GitHub slug from a module-level `_GITHUB_SLUG` in
+  `tree.py`, set at gen start via `set_github_slug()`. The registry should
+  pass the active `Config` into the handler call so handlers are pure
+  functions of `(value, ctx)`.
+- **Per-reference version resolution.** Local references should carry
+  explicit versions; the invariant needs an enforcement point once
+  cross-package version data is threaded through.
 - **Configurable doctest `optionflags`.** `ExampleBlockExecutor` hardcodes
-  `doctest.ELLIPSIS`. Projects that need `NORMALIZE_WHITESPACE` or
-  `IGNORE_EXCEPTION_DETAIL` have no knob. A `[global].doctest_optionflags`
-  config key would suffice.
-- **Module-docstring parse failures.** The visible ``"To remove in the
-  future -- <qa>"`` placeholder has been replaced by the same empty
-  shell used for modules with no docstring, so nothing leaks into
-  rendered output. A proper sentinel that distinguishes "unparseable"
-  from "genuinely empty" at render time is still a follow-up — the
-  remaining ``ndoc-placeholder`` TODO in `gen.py` marks where it
-  would plug in.
-- Static export hardening for `viewer/dist/` deployment (the current
-  build works; `viewer/DEPLOY.md` documents ready-to-use GitHub Actions
-  workflows for GitHub Pages and Cloudflare Pages, plus SSR upgrade paths
-  for other hosts — no hosting platform is locked in yet).
-- Dark-adapted Shiki theme + dark-mode-aware KaTeX glyphs. The current
-  M5 dark mode keeps the `github-light` Shiki palette on a dark
-  surface, which is readable but not ideal.
-- Per-bundle → global search. The current manifest is `<pkg>/<ver>/
-  search.json`; a cross-bundle index would enable "find `linspace`
-  across numpy and scipy".
-- Cross-package ingest correctness: `papyri/crosslink.py` still has
-  TODOs around version resolution for `Figure`/`RefInfo` across packages.
-  See `TODO` "Open code smells".
-- **`normalise_ref` validation could move to gen.**
-  `ingest()` silently drops files whose `qa` fails `normalise_ref()`
-  when `--check` is passed (`crosslink.py` ~line 379).  Since
-  `normalise_ref` depends only on the qa string (no cross-package data),
-  the check could be enforced at gen time so the bundle is
-  self-consistent before it leaves the maintainer's machine.
-- **`mod_root == root` assertion could move to gen.**
-  `ingest()` asserts that every API item's root module matches the
-  bundle's declared root (`crosslink.py` ~line 412).  Gen already knows
-  both values; moving the check there makes the contract explicit and
-  surfaces mistakes earlier.
-- **Builtin ref resolution belongs at gen time, not ingest.**
-  `resolve_()` currently has a special-case branch that recognises Python
-  builtins (`int`, `str`, `list`, …) and returns a `missing` RefInfo for
-  them.  This is gen-specific knowledge that does not belong in the
-  ingest resolver.  The correct model: ship a **Python-builtins bundle
-  shim** — a minimal DocBundle (generated once, checked in or published)
-  that registers every builtin as a proper `RefInfo`.  `papyri gen` emits
-  references to builtins as ordinary cross-refs; ingest resolves them
-  against the shim bundle exactly like any other package.  No special
-  casing in `resolve_()` at ingest time.
+  `doctest.ELLIPSIS`. A `[global].doctest_optionflags` config key would suffice.
+- **Module-docstring parse failures.** A sentinel distinguishing "unparseable"
+  from "genuinely empty" at render time is needed — the `ndoc-placeholder`
+  TODO in `gen.py` marks where it would plug in.
+- **Per-bundle → global search.** The current manifest is per-bundle; a
+  cross-bundle index would enable "find `linspace` across numpy and scipy".
+- **`normalise_ref` validation could move to gen.** Since `normalise_ref`
+  depends only on the qa string (no cross-package data), the check could be
+  enforced at gen time so the bundle is self-consistent before upload.
+- **`mod_root == root` assertion could move to gen.** Gen already knows both
+  values; moving the check surfaces mistakes earlier.
+- **Builtin ref resolution belongs at gen time.** Ship a Python-builtins
+  bundle shim — a minimal DocBundle that registers every builtin as a proper
+  `RefInfo`. `papyri gen` emits references to builtins as ordinary cross-refs;
+  ingest resolves them against the shim exactly like any other package. No
+  special-casing in the ingest resolver.
 - **Core invariant: gen owns all ref classification; ingest only links.**
-  A well-formed DocBundle must satisfy:
-  - `LocalRef` means *this bundle*, always.  Gen is responsible for
-    converting every relative ref, alias, and local name within the
-    bundle to a `LocalRef` before writing the IR.  A `LocalRef` is never
-    ambiguous and never cross-bundle.
+  - `LocalRef` means *this bundle*, always. Gen converts every relative ref,
+    alias, and local name to a `LocalRef` before writing the IR.
   - Every cross-bundle reference is a `RefInfo` with a fully qualified
-    `(package, version, kind, path)`.  No fuzzy strings, no unresolved
-    aliases survive gen.  This includes builtins (resolved via the shim
-    bundle at gen time).
-  Ingest then has a clearly bounded job:
-  1. Resolve every `LocalRef` to a full key within the current bundle's
-     namespace.  Because `LocalRef` is always intra-bundle, resolution
-     cannot fail on a well-formed bundle; a failure here is a gen bug.
-  2. For every `RefInfo` in the IR: record a live link if the target key
-     is already in the graphstore (`has_blob=1`), or a dangling ref if
-     not (`has_blob=0`, edge stored immediately).  When the target bundle
-     is ingested later, `put()` flips the node to `has_blob=1` — no
-     re-processing pass needed.  Incremental ingest across bundles works
-     correctly in any order.
-  3. Optionally run a **check pass** that asserts every `LocalRef`
-     resolved and that all `RefInfo` targets are at least registered.
-  A two-step ingest (build a ref map from all bundle metadata first,
-  then resolve) is an optimisation to avoid `has_blob=0` intermediate
-  state, not a correctness requirement.
-- **RST substitutions are gen-time-only (done).**
-  `SubstitutionDef` and `SubstitutionRef` nodes are resolved inside
-  `ts.parse()` before any IR is written.  The IR must never contain
-  either node type.  Non-`replace::` substitution types (image, unicode)
-  are warned and dropped; support can be added per demand.
+    `(package, version, kind, path)`. No fuzzy strings, no unresolved aliases.
+  - Ingest: resolve `LocalRef`s to full keys; record live or dangling
+    `RefInfo` links. A two-step ingest (build a ref map from all bundle
+    metadata first) is an optimisation, not a correctness requirement.
+- Rename `crosslink.py` to something that reflects its current read-only role
+  (`ingested_doc.py`?), or fold `IngestedDoc` into `nodes.py`.
+- Audit `papyri/graphstore.py`: the write-side methods are no longer called
+  by the Python side. Decide whether to slim it to a read-only interface.
+- Decide the future of `papyri find` / `describe` / `diff` / `debug`: they
+  work against the store written by the TypeScript pipeline, but the viewer
+  is the user-facing replacement.
+- **RST substitution invariant.** The IR must never contain `SubstitutionDef`
+  or `SubstitutionRef` nodes. Non-`replace::` substitution types (image,
+  unicode) are warned and dropped; support can be added per demand.
+- Static export hardening for `viewer/dist/` deployment.
+- Dark-adapted Shiki theme + dark-mode-aware KaTeX glyphs.
+- Cross-package ingest correctness: TODOs around version resolution for
+  `Figure`/`RefInfo` across packages (see `crosslink.py`).

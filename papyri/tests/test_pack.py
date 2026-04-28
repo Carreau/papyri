@@ -216,11 +216,10 @@ def test_pack_rejects_papyri_json_missing_keys(tmp_path):
     bundle_dir.mkdir()
     (bundle_dir / "module").mkdir()
     (bundle_dir / "papyri.json").write_text("{}")
+    # Fail-fast: only the first missing key ("module") is reported.
     with pytest.raises(BundleError) as excinfo:
         read_bundle_dir(bundle_dir)
-    problems = "\n".join(excinfo.value.problems)
-    assert "module" in problems
-    assert "version" in problems
+    assert "module" in excinfo.value.problems[0]
 
 
 def test_pack_rejects_module_with_non_cbor_file(tmp_path):
@@ -249,15 +248,16 @@ def test_pack_rejects_invalid_papyri_json(tmp_path):
     assert any("valid JSON" in p for p in excinfo.value.problems)
 
 
-def test_bundle_error_collects_multiple_problems(tmp_path):
-    """All issues are reported at once, not one at a time."""
+def test_bundle_error_is_fail_fast(tmp_path):
+    """Validation stops at the first problem; only one is reported."""
     bundle_dir = tmp_path / "mypkg_1.0"
     bundle_dir.mkdir()
-    # Missing papyri.json AND missing module dir AND a stray top-level file.
+    # Multiple defects are present, but read_bundle_dir must abort on
+    # the first one rather than try to keep going.
     (bundle_dir / "junk").write_text("x")
     with pytest.raises(BundleError) as excinfo:
         read_bundle_dir(bundle_dir)
-    assert len(excinfo.value.problems) >= 2
+    assert len(excinfo.value.problems) == 1
 
 
 # ---------------------------------------------------------------------------

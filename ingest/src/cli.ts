@@ -77,7 +77,7 @@ const ingester = new Ingester({ ingestDir, check });
 
 const start = performance.now();
 try {
-  ingester.ingest(bundlePath, { check });
+  await ingester.ingest(bundlePath, { check });
 } catch (err) {
   console.error(`error: ${err instanceof Error ? err.message : String(err)}`);
   if (err instanceof Error && err.stack) {
@@ -85,7 +85,7 @@ try {
   }
   process.exit(1);
 } finally {
-  ingester.close();
+  await ingester.close();
 }
 
 const elapsed = ((performance.now() - start) / 1000).toFixed(2);

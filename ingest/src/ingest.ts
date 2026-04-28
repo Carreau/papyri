@@ -1,33 +1,107 @@
 /**
  * Ingester — TypeScript equivalent of papyri/crosslink.py's Ingester class.
  *
- * Reads a gen bundle (from `papyri gen`) and writes its contents into the
- * cross-link graph store (~/.papyri/ingest/).
+ * Accepts either a `papyri gen` bundle directory (`ingest(dirPath)`) or a
+ * decoded `Bundle` Node from a `.papyri` artifact (`ingestBundle(node)`),
+ * and writes its contents into the cross-link graph store via the
+ * `BlobStore` + `GraphDb` abstractions.
+ *
+ * Two backends are supported:
+ *   • Node fs + better-sqlite3 — default. The CLI and the Node-adapter
+ *     viewer use this path; the constructor builds them from `ingestDir` /
+ *     `schemaSql` for backwards compat.
+ *   • Cloudflare R2 + D1 — explicit. The Workers-adapter viewer passes
+ *     pre-built backends via the `backends` option so the same Ingester
+ *     code runs unchanged.
  *
  * What this does vs the Python version
  * -------------------------------------
  * The Python Ingester runs an IngestVisitor pass that resolves unresolved
  * CrossRef nodes against the set of all already-ingested qualnames. This
  * TypeScript version skips that cross-ref resolution pass for now: nodes are
- * stored as-is and the viewer falls back to SQLite graph lookups for any
- * ref that isn't already fully resolved. Forward-ref links are still recorded
- * in the graph so back-references work.
- *
- * This is intentional for the first TypeScript implementation; the resolution
- * pass can be added later without changing the on-disk format.
+ * stored as-is and the viewer falls back to graph lookups for any ref that
+ * isn't already fully resolved. Forward-ref links are still recorded in the
+ * graph so back-references work.
  */
 
-import { readdirSync, readFileSync, existsSync } from "node:fs";
-import { join, basename, extname } from "node:path";
+import { readdirSync, readFileSync, existsSync, mkdirSync } from "node:fs";
+import { join, basename, extname, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { encode as cborEncode } from "cbor-x";
+import { blake2b } from "@noble/hashes/blake2b.js";
+import Database from "better-sqlite3";
 import { decode, encode, generatedDocToIngested } from "./encoder.js";
 import type { TypedNode } from "./encoder.js";
-import { GraphStore } from "./graphstore.js";
+import { assertBundle } from "./bundle.js";
 import type { Key } from "./graphstore.js";
+import { keyStr } from "./graphstore.js";
 import { collectForwardRefs, collectForwardRefsFromSection } from "./visitor.js";
+import { FsBlobStore, type BlobStore } from "./blob-store.js";
+import { SqliteGraphDb, type GraphDb, type BatchStmt } from "./graph-db.js";
+
+const DIGEST_SIZE = 16;
 
 // ---------------------------------------------------------------------------
-// Bundle metadata (papyri.json)
+// Schema bootstrap (Node-mode SQLite)
+// ---------------------------------------------------------------------------
+
+const PRAGMAS = [
+  "PRAGMA foreign_keys = 1",
+  "PRAGMA journal_mode = WAL",
+  "PRAGMA synchronous = NORMAL",
+  "PRAGMA cache_size = -65536",
+  "PRAGMA mmap_size = 268435456",
+];
+
+function migrationsDir(): string {
+  return join(dirname(fileURLToPath(import.meta.url)), "..", "migrations");
+}
+
+function loadSchemaFromDisk(): string {
+  const dir = migrationsDir();
+  const files = readdirSync(dir)
+    .filter((f) => f.endsWith(".sql"))
+    .sort();
+  return files.map((f) => readFileSync(join(dir, f), "utf8")).join("\n");
+}
+
+function splitStatements(sql: string): string[] {
+  const stripped = sql
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("--"))
+    .join("\n");
+  return stripped
+    .split(";")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+/**
+ * Build Node-mode backends (filesystem blob store + better-sqlite3 graph
+ * db). Applies migrations on first init. Used by `Ingester` when the
+ * caller provides `ingestDir` instead of explicit backends.
+ */
+function openNodeBackends(
+  ingestDir: string,
+  schemaSql?: string,
+): { blobStore: BlobStore; graphDb: GraphDb } {
+  mkdirSync(ingestDir, { recursive: true });
+  const dbPath = join(ingestDir, "papyri.db");
+  const isNew = !existsSync(dbPath);
+  const db = new Database(dbPath);
+  for (const p of PRAGMAS) db.prepare(p).run();
+  if (isNew) {
+    const sql = schemaSql ?? loadSchemaFromDisk();
+    for (const stmt of splitStatements(sql)) db.prepare(stmt).run();
+  }
+  return {
+    blobStore: new FsBlobStore(ingestDir),
+    graphDb: new SqliteGraphDb(db),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Bundle metadata (papyri.json) — directory-based path
 // ---------------------------------------------------------------------------
 
 interface PapyriMeta {
@@ -46,15 +120,25 @@ interface PapyriMeta {
 export interface IngestOptions {
   /** Mirror Python's --check: skip qualnames that don't pass normalise_ref. */
   check?: boolean;
-  /** Custom ingest directory (defaults to ~/.papyri/ingest). */
+  /**
+   * Custom Node ingest directory (defaults to ~/.papyri/ingest). Ignored
+   * when `backends` is set.
+   */
   ingestDir?: string;
   /**
-   * Schema SQL to use when creating a fresh papyri.db. Forwarded to the
-   * GraphStore constructor. Required when this code is loaded from a
-   * Vite-bundled chunk (the viewer's SSR `PUT /api/bundle` handler);
-   * the CLI can leave it unset and rely on the on-disk migrations dir.
+   * Schema SQL applied to a freshly created papyri.db. Forwarded from the
+   * Vite-bundled SSR endpoint (which embeds the migrations file via
+   * `?raw`); the CLI can leave it unset and rely on the on-disk migrations
+   * dir. Ignored when `backends` is set.
    */
   schemaSql?: string;
+  /**
+   * Pre-built async backends. Pass these in environments where the default
+   * Node fs + SQLite backends are not available — e.g. the viewer's
+   * Cloudflare Workers build, which supplies `R2BlobStore` + `D1GraphDb`
+   * built from `locals.runtime.env` bindings.
+   */
+  backends?: { blobStore: BlobStore; graphDb: GraphDb };
 }
 
 function defaultIngestDir(): string {
@@ -63,45 +147,40 @@ function defaultIngestDir(): string {
   return join(process.env["HOME"] ?? "/root", ".papyri", "ingest");
 }
 
-/**
- * Mirror Python's `normalise_ref`: accept only identifiers whose first
- * component starts with a letter/underscore and whose parts are valid Python
- * identifiers (allowing dots and colons as separators).
- *
- * A simplified version: reject empty strings, strings starting with digits,
- * or strings containing characters outside [A-Za-z0-9_.:].
- */
-function normaliseRef(qa: string): string {
-  // Strip trailing .cbor if present (should already be stripped by caller).
-  return qa;
-}
-
 function isValidQa(qa: string): boolean {
   if (!qa) return false;
-  // Reject if the first character is a digit.
   if (/^\d/.test(qa)) return false;
-  // Allow letters, digits, underscores, dots, colons (method qualifiers).
   return /^[A-Za-z_][A-Za-z0-9_.:<>]*$/.test(qa);
 }
 
 export class Ingester {
-  private gstore: GraphStore;
-  private ingestDir: string;
+  private blobStore: BlobStore;
+  private graphDb: GraphDb;
 
   constructor(opts: IngestOptions = {}) {
-    this.ingestDir = opts.ingestDir ?? defaultIngestDir();
-    this.gstore = new GraphStore(this.ingestDir, { schemaSql: opts.schemaSql });
+    if (opts.backends) {
+      this.blobStore = opts.backends.blobStore;
+      this.graphDb = opts.backends.graphDb;
+    } else {
+      const dir = opts.ingestDir ?? defaultIngestDir();
+      const b = openNodeBackends(dir, opts.schemaSql);
+      this.blobStore = b.blobStore;
+      this.graphDb = b.graphDb;
+    }
   }
 
   // -------------------------------------------------------------------------
   // Public API
   // -------------------------------------------------------------------------
 
-  /** Ingest a single gen bundle directory into the graph store. */
-  ingest(bundlePath: string, opts: IngestOptions = {}): void {
+  /**
+   * Ingest a `papyri gen` bundle directory. Synchronous fs reads under the
+   * hood — Node-only path. The viewer's Workers build uses `ingestBundle`
+   * instead.
+   */
+  async ingest(bundlePath: string, opts: IngestOptions = {}): Promise<void> {
     const check = opts.check ?? false;
 
-    // Read bundle metadata.
     const metaPath = join(bundlePath, "papyri.json");
     if (!existsSync(metaPath)) {
       throw new Error(`papyri.json not found in ${bundlePath}`);
@@ -110,7 +189,6 @@ export class Ingester {
     const { module: root, version } = meta;
     const aliases: Record<string, string> = meta.aliases ?? {};
 
-    // Strip aliases from the meta dict that gets stored (mirrors Python).
     const metaForStore: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(meta)) {
       if (k !== "aliases") metaForStore[k] = v;
@@ -118,137 +196,366 @@ export class Ingester {
 
     console.log(`Ingesting ${basename(bundlePath)} (${root} ${version})...`);
 
-    this._ingestExamples(bundlePath, root, version);
-    this._ingestAssets(bundlePath, root, version, aliases);
-    const storedLogoName = this._ingestLogo(bundlePath, root, version, meta.logo ?? null);
+    await this._ingestExamplesDir(bundlePath, root, version);
+    await this._ingestAssetsDir(bundlePath, root, version, aliases);
+    const storedLogoName = await this._ingestLogoDir(bundlePath, root, version, meta.logo ?? null);
     if (storedLogoName !== null) metaForStore["logo"] = storedLogoName;
 
-    this._ingestNarrativeDocs(bundlePath, root, version);
-    this._ingestApiDocs(bundlePath, root, version, check);
+    await this._ingestNarrativeDir(bundlePath, root, version);
+    await this._ingestApiDir(bundlePath, root, version, check);
 
-    // Write per-bundle meta.cbor.
-    this.gstore.putMeta(root, version, cborEncode(metaForStore) as Uint8Array);
+    await this.blobStore.putMeta(root, version, cborEncode(metaForStore) as Uint8Array);
 
     console.log(`Done ingesting ${basename(bundlePath)}.`);
   }
 
-  close(): void {
-    this.gstore.close();
+  /**
+   * Ingest a decoded `Bundle` Node directly — no filesystem round-trip.
+   * Used by the viewer's PUT /api/bundle handler under both Node and
+   * Cloudflare Workers.
+   */
+  async ingestBundle(node: unknown): Promise<{ pkg: string; version: string }> {
+    assertBundle(node);
+    const bundle = node;
+    const root = bundle.module;
+    const version = bundle.version;
+    const aliases = (bundle.aliases ?? {}) as Record<string, string>;
+
+    let exCount = 0;
+    for (const [name, section] of Object.entries(bundle.examples ?? {})) {
+      const refs = collectForwardRefsFromSection(section);
+      await this._put(
+        { module: root, version, kind: "examples", path: name },
+        encode(section),
+        refs,
+      );
+      exCount++;
+    }
+    if (exCount > 0) console.log(`  examples: ${exCount} files`);
+
+    let asCount = 0;
+    for (const [name, raw] of Object.entries(bundle.assets ?? {})) {
+      const bytes = toUint8(raw);
+      await this._put({ module: root, version, kind: "assets", path: name }, bytes, []);
+      asCount++;
+    }
+    if (asCount > 0) console.log(`  assets: ${asCount} files`);
+
+    await this._put(
+      { module: root, version, kind: "meta", path: "aliases.cbor" },
+      cborEncode(aliases) as Uint8Array,
+      [],
+    );
+
+    let storedLogoName: string | null = null;
+    if (bundle.logo) {
+      const assets = (bundle.assets ?? {}) as Record<string, unknown>;
+      const logoBytes = assets[bundle.logo];
+      if (logoBytes !== undefined) {
+        const ext = extname(bundle.logo);
+        const destName = ext ? `logo${ext}` : "logo";
+        await this._put(
+          { module: root, version, kind: "meta", path: destName },
+          toUint8(logoBytes),
+          [],
+        );
+        storedLogoName = destName;
+      }
+    }
+
+    let docCount = 0;
+    for (const [name, genDoc] of Object.entries(bundle.narrative ?? {})) {
+      const g = genDoc as TypedNode;
+      if (g.__type !== "GeneratedDoc") {
+        console.warn(`  docs: skipping ${name} (unexpected type ${g.__type})`);
+        continue;
+      }
+      const ingestedDoc = generatedDocToIngested(g, name);
+      const refs = collectForwardRefs(ingestedDoc);
+      await this._put(
+        { module: root, version, kind: "docs", path: name },
+        encode(ingestedDoc),
+        refs,
+      );
+      docCount++;
+    }
+    if (docCount > 0) console.log(`  docs: ${docCount} pages`);
+
+    if (Array.isArray(bundle.toc) && bundle.toc.length > 0) {
+      await this._put(
+        { module: root, version, kind: "meta", path: "toc.cbor" },
+        encode(bundle.toc),
+        [],
+      );
+    }
+
+    let apiCount = 0;
+    for (const [qa, genDoc] of Object.entries(bundle.api ?? {})) {
+      const g = genDoc as TypedNode;
+      if (g.__type !== "GeneratedDoc") {
+        console.warn(`  module: skipping ${qa} (unexpected type ${g.__type})`);
+        continue;
+      }
+      const modRoot = qa.split(/[.:]/, 1)[0];
+      if (modRoot !== root) {
+        console.warn(`  module: skipping ${qa} (root ${modRoot} != bundle root ${root})`);
+        continue;
+      }
+      const ingestedDoc = generatedDocToIngested(g, qa);
+      const refs = collectForwardRefs(ingestedDoc);
+      const keyQa = qa.includes(":") ? qa.split(":")[0]! : qa;
+      const keyMod = keyQa.split(".")[0] ?? root;
+      await this._put(
+        { module: keyMod, version, kind: "module", path: qa },
+        encode(ingestedDoc),
+        refs,
+      );
+      apiCount++;
+    }
+    if (apiCount > 0) console.log(`  module: ${apiCount} pages`);
+
+    const metaForStore: Record<string, unknown> = { module: root, version };
+    if (bundle.summary) metaForStore["summary"] = bundle.summary;
+    if (bundle.github_slug) metaForStore["github_slug"] = bundle.github_slug;
+    if (bundle.tag) metaForStore["tag"] = bundle.tag;
+    if (storedLogoName !== null) metaForStore["logo"] = storedLogoName;
+    else if (bundle.logo) metaForStore["logo"] = bundle.logo;
+    for (const [k, v] of Object.entries((bundle.extra ?? {}) as Record<string, unknown>)) {
+      if (!(k in metaForStore)) metaForStore[k] = v;
+    }
+    await this.blobStore.putMeta(root, version, cborEncode(metaForStore) as Uint8Array);
+
+    return { pkg: root, version };
+  }
+
+  async close(): Promise<void> {
+    await this.graphDb.close();
   }
 
   // -------------------------------------------------------------------------
-  // Private per-section ingest helpers
+  // Core write — single path used by both `ingest()` and `ingestBundle()`.
+  //
+  // Atomicity contract:
+  //   On SQLite (`SqliteGraphDb`) the whole `batch` runs inside one
+  //   transaction. On D1 it runs as a single `db.batch([...])` call which
+  //   is atomic per the D1 contract. Either way: all nodes + links for one
+  //   `_put` either land together or not at all.
+  //
+  //   To stay D1-compatible we never read from the DB inside `batch`: we
+  //   resolve source/dest ids inline via subqueries
+  //   (`SELECT id FROM nodes WHERE …`) so each link insert is self-contained.
+  //   D1 batches do not surface intermediate query results, so this is the
+  //   only way to chain ID-dependent writes.
   // -------------------------------------------------------------------------
 
-  private _ingestExamples(bundlePath: string, root: string, version: string): void {
+  private async _put(key: Key, bytes: Uint8Array, refs: Key[]): Promise<void> {
+    let oldRefs = new Set<string>();
+    if (key.kind !== "assets" && (await this.blobStore.has(key))) {
+      oldRefs = new Set((await this._getForwardRefs(key)).map(keyStr));
+    }
+
+    await this.blobStore.put(key, bytes);
+    const digest = blake2b(bytes, { dkLen: DIGEST_SIZE });
+
+    const newRefSet = new Set(refs.map(keyStr));
+    const addedRefs = refs.filter((r) => !oldRefs.has(keyStr(r)));
+    const removedRefStrs = [...oldRefs].filter((s) => !newRefSet.has(s));
+
+    const insNode =
+      "INSERT OR IGNORE INTO nodes(package, version, category, identifier) VALUES (?, ?, ?, ?)";
+    const updBlob =
+      "UPDATE nodes SET has_blob=1, digest=? WHERE package=? AND version=? AND category=? AND identifier=?";
+    const insLink =
+      "INSERT OR IGNORE INTO links(source, dest) VALUES (" +
+      "(SELECT id FROM nodes WHERE package=? AND version=? AND category=? AND identifier=?), " +
+      "(SELECT id FROM nodes WHERE package=? AND version=? AND category=? AND identifier=?)" +
+      ")";
+    const delLink =
+      "DELETE FROM links WHERE source = " +
+      "(SELECT id FROM nodes WHERE package=? AND version=? AND category=? AND identifier=?) " +
+      "AND dest = " +
+      "(SELECT id FROM nodes WHERE package=? AND version=? AND category=? AND identifier=?)";
+
+    const stmts: BatchStmt[] = [
+      { sql: insNode, params: [key.module, key.version, key.kind, key.path] },
+      { sql: updBlob, params: [digest, key.module, key.version, key.kind, key.path] },
+      ...addedRefs.map((r) => ({
+        sql: insNode,
+        params: [r.module, r.version, r.kind, r.path],
+      })),
+      ...addedRefs.map((r) => ({
+        sql: insLink,
+        params: [
+          key.module,
+          key.version,
+          key.kind,
+          key.path,
+          r.module,
+          r.version,
+          r.kind,
+          r.path,
+        ],
+      })),
+    ];
+    for (const s of removedRefStrs) {
+      const [m, v, k, p] = s.split("/");
+      stmts.push({
+        sql: delLink,
+        params: [
+          key.module,
+          key.version,
+          key.kind,
+          key.path,
+          m ?? "",
+          v ?? "",
+          k ?? "",
+          p ?? "",
+        ],
+      });
+    }
+
+    await this.graphDb.batch(stmts);
+  }
+
+  private async _getForwardRefs(key: Key): Promise<Key[]> {
+    const rows = await this.graphDb.all<{
+      package: string;
+      version: string;
+      category: string;
+      identifier: string;
+    }>(
+      "SELECT n_dest.package, n_dest.version, n_dest.category, n_dest.identifier " +
+        "FROM links " +
+        "JOIN nodes AS n_src ON links.source = n_src.id " +
+        "JOIN nodes AS n_dest ON links.dest = n_dest.id " +
+        "WHERE n_src.package=? AND n_src.version=? AND n_src.category=? AND n_src.identifier=?",
+      [key.module, key.version, key.kind, key.path],
+    );
+    return rows.map((r) => ({
+      module: r.package,
+      version: r.version,
+      kind: r.category,
+      path: r.identifier,
+    }));
+  }
+
+  // -------------------------------------------------------------------------
+  // Per-section helpers (directory-based ingest path)
+  // -------------------------------------------------------------------------
+
+  private async _ingestExamplesDir(
+    bundlePath: string,
+    root: string,
+    version: string,
+  ): Promise<void> {
     const examplesDir = join(bundlePath, "examples");
     if (!existsSync(examplesDir)) return;
 
     const files = readdirSync(examplesDir, { withFileTypes: true }).filter((e) => e.isFile());
     let count = 0;
     for (const f of files) {
-      const filePath = join(examplesDir, f.name);
-      const raw = readFileSync(filePath);
+      const raw = readFileSync(join(examplesDir, f.name));
       const section = decode<TypedNode>(raw);
-      const forwardRefs = collectForwardRefsFromSection(section);
-      const key: Key = { module: root, version, kind: "examples", path: f.name };
-      // Re-encode to ensure canonical form (consistent digest).
-      this.gstore.put(key, encode(section), forwardRefs);
+      const refs = collectForwardRefsFromSection(section);
+      await this._put(
+        { module: root, version, kind: "examples", path: f.name },
+        encode(section),
+        refs,
+      );
       count++;
     }
     if (count > 0) console.log(`  examples: ${count} files`);
   }
 
-  private _ingestAssets(
+  private async _ingestAssetsDir(
     bundlePath: string,
     root: string,
     version: string,
     aliases: Record<string, string>,
-  ): void {
+  ): Promise<void> {
     const assetsDir = join(bundlePath, "assets");
-    if (!existsSync(assetsDir)) return;
-
-    const files = readdirSync(assetsDir, { withFileTypes: true }).filter((e) => e.isFile());
-    let count = 0;
-    for (const f of files) {
-      const raw = readFileSync(join(assetsDir, f.name));
-      const key: Key = { module: root, version, kind: "assets", path: f.name };
-      this.gstore.put(key, raw, []);
-      count++;
+    if (existsSync(assetsDir)) {
+      const files = readdirSync(assetsDir, { withFileTypes: true }).filter((e) => e.isFile());
+      let count = 0;
+      for (const f of files) {
+        const raw = new Uint8Array(readFileSync(join(assetsDir, f.name)));
+        await this._put({ module: root, version, kind: "assets", path: f.name }, raw, []);
+        count++;
+      }
+      if (count > 0) console.log(`  assets: ${count} files`);
     }
-    if (count > 0) console.log(`  assets: ${count} files`);
 
-    // Store aliases.cbor under meta/.
-    const aliasBytes = cborEncode(aliases) as Uint8Array;
-    const aliasKey: Key = { module: root, version, kind: "meta", path: "aliases.cbor" };
-    this.gstore.put(aliasKey, aliasBytes, []);
+    await this._put(
+      { module: root, version, kind: "meta", path: "aliases.cbor" },
+      cborEncode(aliases) as Uint8Array,
+      [],
+    );
   }
 
-  /**
-   * Copy the bundle logo (if any) into meta/logo.<ext> so the viewer can
-   * fetch it at a stable URL. Returns the stored basename or null.
-   */
-  private _ingestLogo(
+  private async _ingestLogoDir(
     bundlePath: string,
     root: string,
     version: string,
     logoName: string | null,
-  ): string | null {
+  ): Promise<string | null> {
     if (!logoName) return null;
     const src = join(bundlePath, "assets", logoName);
     if (!existsSync(src)) return null;
-
     const ext = extname(logoName);
     const destName = ext ? `logo${ext}` : "logo";
-    const raw = readFileSync(src);
-    const key: Key = { module: root, version, kind: "meta", path: destName };
-    this.gstore.put(key, raw, []);
+    const raw = new Uint8Array(readFileSync(src));
+    await this._put({ module: root, version, kind: "meta", path: destName }, raw, []);
     return destName;
   }
 
-  private _ingestNarrativeDocs(bundlePath: string, root: string, version: string): void {
+  private async _ingestNarrativeDir(
+    bundlePath: string,
+    root: string,
+    version: string,
+  ): Promise<void> {
     const docsDir = join(bundlePath, "docs");
-    if (!existsSync(docsDir)) return;
-
-    const files = readdirSync(docsDir, { withFileTypes: true }).filter((e) => e.isFile());
-    let count = 0;
-    for (const f of files) {
-      const filePath = join(docsDir, f.name);
-      const raw = readFileSync(filePath);
-
-      let genDoc: TypedNode;
-      try {
-        genDoc = decode<TypedNode>(raw);
-      } catch (e) {
-        console.warn(`  docs: skipping ${f.name} (decode error: ${e})`);
-        continue;
+    if (existsSync(docsDir)) {
+      const files = readdirSync(docsDir, { withFileTypes: true }).filter((e) => e.isFile());
+      let count = 0;
+      for (const f of files) {
+        const raw = readFileSync(join(docsDir, f.name));
+        let genDoc: TypedNode;
+        try {
+          genDoc = decode<TypedNode>(raw);
+        } catch (e) {
+          console.warn(`  docs: skipping ${f.name} (decode error: ${e})`);
+          continue;
+        }
+        if (genDoc.__type !== "GeneratedDoc") {
+          console.warn(`  docs: skipping ${f.name} (unexpected type ${genDoc.__type})`);
+          continue;
+        }
+        const qa = f.name;
+        const ingestedDoc = generatedDocToIngested(genDoc, qa);
+        const refs = collectForwardRefs(ingestedDoc);
+        await this._put(
+          { module: root, version, kind: "docs", path: qa },
+          encode(ingestedDoc),
+          refs,
+        );
+        count++;
       }
-
-      if (genDoc.__type !== "GeneratedDoc") {
-        console.warn(`  docs: skipping ${f.name} (unexpected type ${genDoc.__type})`);
-        continue;
-      }
-
-      // qa for narrative docs is the filename (no extension, matches Python).
-      const qa = f.name;
-      const ingestedDoc = generatedDocToIngested(genDoc, qa);
-      const forwardRefs = collectForwardRefs(ingestedDoc);
-      const key: Key = { module: root, version, kind: "docs", path: qa };
-      this.gstore.put(key, encode(ingestedDoc), forwardRefs);
-      count++;
+      if (count > 0) console.log(`  docs: ${count} pages`);
     }
-    if (count > 0) console.log(`  docs: ${count} pages`);
 
-    // Copy toc.cbor if present.
     const tocPath = join(bundlePath, "toc.cbor");
     if (existsSync(tocPath)) {
-      const tocRaw = readFileSync(tocPath);
-      const tocKey: Key = { module: root, version, kind: "meta", path: "toc.cbor" };
-      this.gstore.put(tocKey, tocRaw, []);
+      const tocRaw = new Uint8Array(readFileSync(tocPath));
+      await this._put({ module: root, version, kind: "meta", path: "toc.cbor" }, tocRaw, []);
     }
   }
 
-  private _ingestApiDocs(bundlePath: string, root: string, version: string, check: boolean): void {
+  private async _ingestApiDir(
+    bundlePath: string,
+    root: string,
+    version: string,
+    check: boolean,
+  ): Promise<void> {
     const moduleDir = join(bundlePath, "module");
     if (!existsSync(moduleDir)) return;
 
@@ -260,23 +567,16 @@ export class Ingester {
     let skipped = 0;
 
     for (const f of files) {
-      // Strip .cbor extension to get the qualname.
       const qa = f.name.endsWith(".cbor") ? f.name.slice(0, -5) : f.name;
-
-      if (check && !isValidQa(normaliseRef(qa))) {
+      if (check && !isValidQa(qa)) {
         skipped++;
         continue;
       }
-
-      // Verify the qualname's root module matches the bundle root. Qualnames
-      // are `module.path:attr` for nested modules and `module:attr` for
-      // top-level attributes, so split on either delimiter.
       const modRoot = qa.split(/[.:]/, 1)[0];
       if (modRoot !== root) {
         console.warn(`  module: skipping ${qa} (root ${modRoot} != bundle root ${root})`);
         continue;
       }
-
       const raw = readFileSync(join(moduleDir, f.name));
       let genDoc: TypedNode;
       try {
@@ -285,29 +585,41 @@ export class Ingester {
         console.warn(`  module: skipping ${qa} (decode error: ${e})`);
         continue;
       }
-
       if (genDoc.__type !== "GeneratedDoc") {
         console.warn(`  module: skipping ${qa} (unexpected type ${genDoc.__type})`);
         continue;
       }
-
       const ingestedDoc = generatedDocToIngested(genDoc, qa);
       docs.push({ qa, ingestedDoc });
     }
 
-    // Validate + write.
     let count = 0;
     for (const { qa, ingestedDoc } of docs) {
-      const forwardRefs = collectForwardRefs(ingestedDoc);
-      // Strip method qualifier (e.g. "numpy.foo:classmethod") for the Key path.
+      const refs = collectForwardRefs(ingestedDoc);
       const keyQa = qa.includes(":") ? qa.split(":")[0]! : qa;
-      const modRoot = keyQa.split(".")[0] ?? root;
-      const key: Key = { module: modRoot, version, kind: "module", path: qa };
-      this.gstore.put(key, encode(ingestedDoc), forwardRefs);
+      const keyMod = keyQa.split(".")[0] ?? root;
+      await this._put(
+        { module: keyMod, version, kind: "module", path: qa },
+        encode(ingestedDoc),
+        refs,
+      );
       count++;
     }
 
     if (skipped > 0) console.log(`  module: skipped ${skipped} (normalise_ref check)`);
     if (count > 0) console.log(`  module: ${count} pages`);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function toUint8(v: unknown): Uint8Array {
+  if (v instanceof Uint8Array) return v;
+  if (v && typeof v === "object" && "byteLength" in (v as object)) {
+    const b = v as ArrayBufferView;
+    return new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
+  }
+  throw new Error(`expected bytes, got ${typeof v}`);
 }

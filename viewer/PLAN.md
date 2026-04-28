@@ -216,13 +216,27 @@ build`) emits the Workers entrypoint at `dist/server/entry.mjs`
       `getBackrefs`); `Sqlite3Backend` for Node, `D1Backend` for
       Workers. Pages that consume xrefs (qualname / doc / example)
       become `await`-aware.
-- [ ] **M9.3 — bundle upload on Workers.** Port `PUT /api/bundle` to
-      the Workers runtime: stream the tarball, decompress + untar
-      in-Worker (no `child_process.spawn`), call a Workers-compatible
-      variant of `Ingester` that writes through `BLOBS.put` and
-      `GRAPH_DB.prepare(...).bind(...).run()` instead of better-sqlite3 + fs. This is the only path that puts data into D1 + R2; until it
-      lands the dev server boots empty. The current Node-mode handler
-      keeps existing for `pnpm serve` while the Workers path stabilises.
+- [x] **M9.3 — bundle upload on Workers.** `PUT /api/bundle` runs
+      under both adapters from a single source. The endpoint gunzips the
+      `.papyri` artifact via `DecompressionStream` (Web Streams, available
+      in both runtimes), CBOR-decodes the Bundle Node, and hands it to
+      `Ingester.ingestBundle(node)` — no temp dir, no `tar` spawn. Backend
+      selection happens at request time: under the Cloudflare adapter
+      `import { env } from "cloudflare:workers"` resolves and the endpoint
+      builds `R2BlobStore(env.BLOBS)` + `D1GraphDb(env.GRAPH_DB)` and
+      passes them to the Ingester via the new `backends` option; under
+      the Node adapter the dynamic import fails and the Ingester falls
+      back to its fs+sqlite defaults (unchanged behaviour for
+      `pnpm serve`). Storage abstraction lives in
+      `ingest/src/{blob-store,graph-db}.ts`: `BlobStore` (`FsBlobStore` /
+      `R2BlobStore`) and `GraphDb` (`SqliteGraphDb` / `D1GraphDb`). The
+      write path uses subquery-based link inserts (`INSERT INTO links
+      VALUES ((SELECT id FROM nodes WHERE …), …)`) so a single
+      `db.batch([…])` is atomic on both SQLite and D1 — D1 batches don't
+      surface intermediate query results, so we can't read-then-write
+      inside one. Unblocks `papyri upload` against `wrangler dev`. The
+      viewer's read paths (`src/lib/graph.ts`, `src/lib/ir-reader.ts`)
+      are still Node-only — that's M9.2.
 - [ ] **M9.4 — CI smoke + cutover.** A workflow that runs `wrangler dev`
       against an empty store, hits a few routes, then `papyri upload`s a
       fixture bundle and checks that pages now resolve. Decide cutover:

@@ -1,0 +1,30 @@
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-format
+        name: ruff format (Python)
+        language: system
+        entry: ruff format papyri/
+        pass_filenames: false
+        files: ^papyri/
+
+      - id: ruff-lint
+        name: ruff lint (Python)
+        language: system
+        entry: ruff check --fix papyri/
+        pass_filenames: false
+        files: ^papyri/
+
+      - id: prettier-viewer
+        name: prettier (viewer TS/Astro)
+        language: system
+        entry: pnpm --dir viewer run format
+        pass_filenames: false
+        files: ^viewer/src/
+
+      - id: prettier-ingest
+        name: prettier (ingest TS)
+        language: system
+        entry: pnpm --dir ingest run format
+        pass_filenames: false
+        files: ^ingest/src/|^ingest/tests/

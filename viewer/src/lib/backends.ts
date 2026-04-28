@@ -26,6 +26,9 @@ import {
   type R2BucketLike,
   type D1DatabaseLike,
 } from "papyri-ingest";
+// Type-only import; erased at compile time, so the Workers bundle never
+// pulls in the native better-sqlite3 addon.
+import type BetterSqlite3 from "better-sqlite3";
 
 interface WorkersEnv {
   GRAPH_DB?: D1DatabaseLike;
@@ -93,7 +96,7 @@ async function nodeBackends(): Promise<Backends> {
   const path = await import(/* @vite-ignore */ "node:path");
   const os = await import(/* @vite-ignore */ "node:os");
   const sqliteMod = (await import(/* @vite-ignore */ "better-sqlite3")) as {
-    default: new (path: string, opts?: object) => unknown;
+    default: typeof BetterSqlite3;
   };
   const Database = sqliteMod.default;
 
@@ -101,10 +104,7 @@ async function nodeBackends(): Promise<Backends> {
   const dbPath = path.join(ingestDir, "papyri.db");
 
   fs.mkdirSync(ingestDir, { recursive: true });
-  const db = new Database(dbPath) as {
-    prepare(sql: string): { run(...args: unknown[]): unknown; get(...a: unknown[]): unknown };
-    close(): void;
-  };
+  const db = new Database(dbPath) as BetterSqlite3.Database;
   // Apply schema idempotently (matches the Workers branch). The Ingester
   // also bootstraps schema for fresh DBs; we duplicate the IF NOT EXISTS
   // form here so the read-side viewer doesn't depend on a write happening

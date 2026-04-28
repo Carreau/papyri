@@ -1,10 +1,8 @@
-"""``papyri upload`` — tar and upload DocBundle directories to a viewer ingest endpoint."""
+"""``papyri upload`` — push a ``.papyri`` artifact (or a DocBundle directory) to a viewer ingest endpoint."""
 
 from __future__ import annotations
 
-import io
 import json
-import tarfile
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -19,7 +17,11 @@ def upload(
     paths: Annotated[
         list[Path],
         typer.Argument(
-            help="Paths to DocBundle directories (output of `papyri gen`).",
+            help=(
+                "Paths to upload. Each path is either a ``.papyri`` artifact "
+                "(produced by ``papyri pack``) or a DocBundle directory "
+                "(packed on the fly, output unchanged from ``papyri gen``)."
+            ),
         ),
     ],
     url: Annotated[
@@ -32,45 +34,47 @@ def upload(
     ] = _DEFAULT_URL,
 ) -> None:
     """
-    Tar each DocBundle directory and upload it to the viewer ingest endpoint.
+    Send each ``.papyri`` artifact (or pack a DocBundle directory on the
+    fly) to the viewer ingest endpoint.
 
-    Reads each bundle directory produced by ``papyri gen`` (typically
-    ``~/.papyri/data/<pkg>_<version>/``), packs it as a gzip-compressed tar
-    archive, and PUTs the archive to the viewer's ``/api/bundle`` endpoint.
-
-    The endpoint runs the full ingest pipeline server-side; this is the
-    canonical way to ship a bundle into the cross-linked graph.
+    Bundle directories are passed through ``papyri.pack.make_artifact_from_dir``
+    so the bytes on the wire are identical to what ``papyri pack`` would
+    produce — same validation, same byte-reproducibility guarantees.
+    The viewer's ``/api/bundle`` endpoint runs the full ingest pipeline
+    server-side; this is the canonical way to ship a bundle into the
+    cross-linked graph.
     """
+    from papyri.pack import BundleError, load_artifact, make_artifact_from_dir
+
     ok = True
     for path in paths:
         path = path.expanduser().resolve()
-        if not path.is_dir():
-            typer.echo(f"error: {path} is not a directory", err=True)
-            ok = False
-            continue
-
-        meta_path = path / "papyri.json"
-        if not meta_path.exists():
-            typer.echo(
-                f"error: {path} does not contain papyri.json — is this a DocBundle?",
-                err=True,
-            )
-            ok = False
-            continue
 
         try:
-            meta = json.loads(meta_path.read_text())
-            pkg = meta.get("module", "<unknown>")
-            version = meta.get("version", "<unknown>")
+            if path.is_file() and path.suffix == ".papyri":
+                data = path.read_bytes()
+                bundle = load_artifact(data)
+                pkg, version = bundle.module, bundle.version
+            elif path.is_dir():
+                data, bundle = make_artifact_from_dir(path)
+                pkg, version = bundle.module, bundle.version
+            else:
+                typer.echo(
+                    f"error: {path} is not a .papyri file or a directory",
+                    err=True,
+                )
+                ok = False
+                continue
+        except BundleError as exc:
+            typer.echo(f"error: {exc}", err=True)
+            ok = False
+            continue
         except Exception as exc:
-            typer.echo(
-                f"warning: could not read papyri.json in {path}: {exc}", err=True
-            )
-            pkg = version = "<unknown>"
+            typer.echo(f"error: failed to load {path}: {exc}", err=True)
+            ok = False
+            continue
 
         typer.echo(f"uploading {pkg} {version} from {path} …")
-
-        data = _make_tarball(path)
 
         req = urllib.request.Request(
             url,
@@ -100,12 +104,3 @@ def upload(
 
     if not ok:
         raise typer.Exit(1)
-
-
-def _make_tarball(path: Path) -> bytes:
-    """Return a gzip-compressed tar archive of *path* with contents at the root."""
-    buf = io.BytesIO()
-    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
-        for item in sorted(path.rglob("*")):
-            tar.add(item, arcname=str(item.relative_to(path)))
-    return buf.getvalue()

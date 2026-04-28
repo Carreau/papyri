@@ -90,7 +90,7 @@ jobs:
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
       with:
         name: doc-bundles-${{matrix.lib}}
-        path: ~/.papyri/data/*.zip
+        path: ~/.papyri/data/*.papyri
     - name: Convert .coverage sql to xml for upload
       run: |
         coverage report
@@ -163,7 +163,7 @@ jobs:
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
       with:
         name: doc-bundles-IPython-main
-        path: ~/.papyri/data/*.zip
+        path: ~/.papyri/data/*.papyri
     - name: Convert .coverage sql to xml for upload
       run: |
         coverage report
@@ -273,15 +273,10 @@ jobs:
         ls -al
     - name: Upload bundles to viewer
       run: |
-        bundle_dirs=()
-        for z in ~/.papyri/data/*.zip; do
-          d="${z%.zip}"
-          mkdir -p "$d"
-          unzip -o "$z" -d "$d"
-          bundle_dirs+=("$d")
-        done
-        if [ ${#bundle_dirs[@]} -gt 0 ]; then
-          coverage run -a -m papyri upload "${bundle_dirs[@]}"
+        shopt -s nullglob
+        artifacts=(~/.papyri/data/*.papyri)
+        if [ ${#artifacts[@]} -gt 0 ]; then
+          coverage run -a -m papyri upload "${artifacts[@]}"
         fi
     - name: Verify bundles via viewer API
       run: |

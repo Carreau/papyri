@@ -1,36 +1,38 @@
-// SSR endpoint: receive a raw `papyri gen` bundle via HTTP PUT and ingest it
+// SSR endpoint: receive a `.papyri` artifact via HTTP PUT and ingest it
 // into the cross-link graph store.
 //
-// The client tars up a gen bundle directory (the output of `papyri gen`,
-// typically `~/.papyri/data/<pkg>_<version>/`) and streams it here. The
-// `papyri.json` file inside the archive identifies the package and version,
-// so the URL carries no path parameters.
+// The client (`papyri upload`) produces a `.papyri` artifact via
+// `papyri pack` and streams it here. The artifact is a gzipped canonical-CBOR
+// `Bundle` Node (tag 4070) that carries the entire DocBundle as typed fields.
+// We gunzip + cbor-decode it, materialise its contents back to a per-file
+// directory tree (the layout `papyri gen` writes natively), and run the same
+// `Ingester` pipeline against that staging dir.
 //
-// This endpoint is the network-callable replacement for the local
-// `papyri-ingest` / `papyri ingest` CLI: it runs the same ingest pipeline
-// (the sibling `ingest/` workspace package) directly against the uploaded
-// bundle, so maintainers don't need a local ingest step before uploading.
+// This is the network-callable replacement for the local
+// `papyri-ingest` / `papyri ingest` CLI: the ingest pipeline (the sibling
+// `ingest/` workspace package) runs server-side, so maintainers don't need a
+// local ingest step before uploading.
 //
 // Expected client command:
-//   tar czf - -C ~/.papyri/data/numpy_2.3.5 . \
-//     | curl -X PUT http://localhost:4321/api/bundle \
-//            -H "Content-Type: application/gzip" \
-//            --data-binary @-
+//   papyri pack ~/.papyri/data/numpy_2.3.5
+//   curl -X PUT http://localhost:4321/api/bundle \
+//        -H "Content-Type: application/gzip" \
+//        --data-binary @numpy-2.3.5.papyri
+//
+// (or just `papyri upload <bundle_dir-or-.papyri>` which does both steps.)
 //
 // Responses:
 //   201  { ok: true, pkg, version }
-//   400  { ok: false, error }   — missing body or bad papyri.json
-//   422  { ok: false, error }   — tar extraction or ingest failed
+//   400  { ok: false, error }   — missing body or bad Bundle metadata
+//   422  { ok: false, error }   — gunzip / decode / ingest failed
 //   500  { ok: false, error }   — filesystem error before ingest started
 
 import type { APIRoute } from "astro";
-import { mkdir, readFile, rm } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
+import { gunzipSync } from "node:zlib";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { spawn } from "node:child_process";
-import { pipeline } from "node:stream/promises";
-import { Readable } from "node:stream";
-import { Ingester } from "papyri-ingest";
+import { Ingester, decode, explodeBundleToDir, type TypedNode } from "papyri-ingest";
 // Embed the canonical schema SQL at build time so the bundled SSR module
 // doesn't need to read it from disk at runtime. Vite inlines the file
 // contents as a string via the `?raw` query, which means
@@ -45,12 +47,9 @@ export const prerender = false;
 
 export const PUT: APIRoute = async ({ request }) => {
   if (!request.body) {
-    return respond({ ok: false, error: "request body required (tar.gz of gen bundle)" }, 400);
+    return respond({ ok: false, error: "request body required (.papyri artifact)" }, 400);
   }
 
-  // Stage inside the ingest root so the temp dir lives next to the final
-  // destination (avoids cross-filesystem surprises if the ingest dir is on a
-  // separate volume).
   const root = ingestDir();
   const tmpDir = join(root, `.ingest-tmp-${randomUUID()}`);
 
@@ -60,17 +59,23 @@ export const PUT: APIRoute = async ({ request }) => {
     return respond({ ok: false, error: `cannot create staging directory: ${err}` }, 500);
   }
 
+  // Decode the artifact: gunzip → CBOR → Bundle Node.
+  let bundle: TypedNode;
   try {
-    await extractTarGz(request.body, tmpDir);
+    const gzipped = new Uint8Array(await request.arrayBuffer());
+    const cborBytes = gunzipSync(gzipped);
+    bundle = decode<TypedNode>(cborBytes);
   } catch (err) {
     await rm(tmpDir, { recursive: true, force: true });
-    return respond({ ok: false, error: `extraction failed: ${err}` }, 422);
+    return respond({ ok: false, error: `failed to decode .papyri artifact: ${err}` }, 422);
   }
 
+  // Materialise the Bundle to a directory tree the Ingester understands.
   let pkg: string;
   let version: string;
   try {
-    ({ pkg, version } = await readGenMeta(tmpDir));
+    await explodeBundleToDir(bundle, tmpDir);
+    ({ pkg, version } = readBundleMeta(bundle));
   } catch (err) {
     await rm(tmpDir, { recursive: true, force: true });
     return respond({ ok: false, error: String(err) }, 400);
@@ -106,68 +111,22 @@ function respond(body: object, status: number): Response {
   });
 }
 
-async function readGenMeta(bundleDir: string): Promise<{ pkg: string; version: string }> {
-  let raw: string;
-  try {
-    raw = await readFile(join(bundleDir, "papyri.json"), "utf8");
-  } catch (err) {
-    throw new Error(`cannot read papyri.json: ${err}`);
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (err) {
-    throw new Error(`papyri.json is not valid JSON: ${err}`);
-  }
-
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("papyri.json does not contain an object");
-  }
-
-  const meta = parsed as Record<string, unknown>;
-  const rawPkg = meta["module"];
-  const rawVer = meta["version"];
+function readBundleMeta(bundle: TypedNode): { pkg: string; version: string } {
+  const rawPkg = (bundle as Record<string, unknown>)["module"];
+  const rawVer = (bundle as Record<string, unknown>)["version"];
 
   if (typeof rawPkg !== "string" || !rawPkg) {
-    throw new Error("papyri.json missing 'module' field");
+    throw new Error("Bundle missing 'module' field");
   }
   if (typeof rawVer !== "string" || !rawVer) {
-    throw new Error("papyri.json missing 'version' field");
+    throw new Error("Bundle missing 'version' field");
   }
   if (!isSafeSegment(rawPkg)) {
-    throw new Error(`unsafe package name in papyri.json: ${JSON.stringify(rawPkg)}`);
+    throw new Error(`unsafe package name in Bundle: ${JSON.stringify(rawPkg)}`);
   }
   if (!isSafeSegment(rawVer)) {
-    throw new Error(`unsafe version in papyri.json: ${JSON.stringify(rawVer)}`);
+    throw new Error(`unsafe version in Bundle: ${JSON.stringify(rawVer)}`);
   }
 
   return { pkg: rawPkg, version: rawVer };
-}
-
-async function extractTarGz(body: ReadableStream<Uint8Array>, dest: string): Promise<void> {
-  const child = spawn("tar", ["xz", "--no-same-owner", "-C", dest], {
-    stdio: ["pipe", "ignore", "pipe"],
-  });
-
-  const stderrChunks: Buffer[] = [];
-  child.stderr?.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
-
-  const done = new Promise<void>((resolve, reject) => {
-    child.on("close", (code) => {
-      if (code === 0) {
-        resolve();
-      } else {
-        const msg = Buffer.concat(stderrChunks).toString().trim();
-        reject(new Error(`tar exited with code ${code}: ${msg}`));
-      }
-    });
-    child.on("error", (err) => reject(new Error(`failed to spawn tar: ${err.message}`)));
-  });
-
-  // body is a WHATWG ReadableStream; Readable.fromWeb converts it to a Node
-  // Readable so pipeline() can handle backpressure correctly.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await pipeline(Readable.fromWeb(body as any), child.stdin!);
-  await done;
 }

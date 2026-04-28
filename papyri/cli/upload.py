@@ -38,8 +38,8 @@ def upload(
     ``~/.papyri/data/<pkg>_<version>/``), packs it as a gzip-compressed tar
     archive, and PUTs the archive to the viewer's ``/api/bundle`` endpoint.
 
-    The endpoint runs the full ingest pipeline server-side, so no local
-    ``papyri ingest`` step is needed after uploading.
+    The endpoint runs the full ingest pipeline server-side; this is the
+    canonical way to ship a bundle into the cross-linked graph.
     """
     ok = True
     for path in paths:

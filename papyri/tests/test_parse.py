@@ -472,21 +472,20 @@ def test_tilde_prefix_explicit_text_unchanged(role):
     "role",
     ["class", "func", "meth", "any", None],
 )
-def test_ingest_visitor_inline_role_resolves(role):
+def test_directive_visiter_inline_role_resolves(role):
     """
-    ``IngestVisitor.replace_InlineRole`` must delegate to the parent class
-    resolve path and produce a ``CrossRef`` when the target is in
-    ``known_refs``.
+    ``DirectiveVisiter.replace_InlineRole`` must produce a ``CrossRef`` when
+    the target is in ``known_refs``.
 
     Regression: the method was a no-op stub that returned the original
     ``InlineRole`` unchanged, so cross-links to other packages (e.g.
     ``numpy.sin``) in module-level docstrings were never wired up.
     """
     from papyri.nodes import CrossRef, InlineRole, RefInfo
-    from papyri.tree import IngestVisitor
+    from papyri.tree import DirectiveVisiter
 
     target = RefInfo("numpy", "1.0", "api", "numpy.sin")
-    visitor = IngestVisitor(
+    visitor = DirectiveVisiter(
         "papyri.examples",
         frozenset({target}),
         frozenset(),
@@ -511,11 +510,11 @@ def test_resolve_colon_notation_path_via_dot_notation():
     known_refs contains RefInfo(path="numpy:sin").
     """
     from papyri.nodes import CrossRef, InlineRole, RefInfo
-    from papyri.tree import IngestVisitor
+    from papyri.tree import DirectiveVisiter
 
-    # Mirrors what find_all_refs() actually produces: kind="module", colon path.
+    # Mirrors what a populated graph store produces: kind="module", colon path.
     target = RefInfo("numpy", "1.26", "module", "numpy:sin")
-    visitor = IngestVisitor(
+    visitor = DirectiveVisiter(
         "papyri.examples",
         frozenset({target}),
         frozenset(),

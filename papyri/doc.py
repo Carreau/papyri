@@ -181,9 +181,9 @@ class GeneratedDoc(Node):
     def slots(self):
         # Order tracks the class declaration above (which is what
         # `Node.cbor()` uses via `get_type_hints`); only the field names
-        # matter to the single caller (`crosslink.py:load_one_uningested`,
-        # which copies attribute by attribute), but matching the
-        # declaration order keeps readers out of a trap.
+        # matter for the attribute-by-attribute copy that ingest readers
+        # do, but matching the declaration order keeps readers out of a
+        # trap.
         return [
             "_content",
             "example_section_data",

@@ -44,10 +44,13 @@ def _check_layout(path: Path) -> list[str]:
 
     meta_path = path / "papyri.json"
     if not meta_path.is_file():
+        raise ValueError("Missing papyri.json")
         problems.append("missing papyri.json")
 
     module_dir = path / "module"
     if not module_dir.is_dir():
+        raise ValueError("Missing module dir")
+
         problems.append("missing module/ directory")
     else:
         for entry in module_dir.iterdir():
@@ -137,10 +140,14 @@ def read_bundle_dir(path: Path) -> Bundle:
         if not any(p.startswith("missing papyri.json") for p in problems)
         else {}
     )
+    assert not problems
 
     api = _decode_dir(path / "module", GeneratedDoc, problems, strip_suffix=".cbor")
+    assert not problems
     narrative = _decode_dir(path / "docs", GeneratedDoc, problems)
+    assert not problems
     examples = _decode_dir(path / "examples", Section, problems)
+    assert not problems
 
     assets: dict[str, bytes] = {}
     assets_dir = path / "assets"

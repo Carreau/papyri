@@ -69,7 +69,6 @@ from .nodes import (
     Section,
     Text,
     TocTree,
-    encoder,
     parse_rst_section,
 )
 from .numpydoc_compat import NumpyDocString
@@ -937,7 +936,7 @@ class Gen:
         for sub in subdirs:
             if (where / sub).exists():
                 (where / sub).rmdir()
-        for f in ("papyri.json", "toc.cbor"):
+        for f in ("papyri.json", "toc.json"):
             if (where / f).exists():
                 (where / f).unlink()
 
@@ -1012,7 +1011,7 @@ class Gen:
 
                 blbs[key] = blob
         for k, b in blbs.items():
-            self.docs[k] = encoder.encode(b)
+            self.docs[k] = b.to_json()
 
         raw_tree = make_tree(trees)
 
@@ -1032,7 +1031,11 @@ class Gen:
 
     def write_narrative(self, where: Path) -> None:
         if self._toc_nodes:
-            (where / "toc.cbor").write_bytes(encoder.encode(self._toc_nodes))
+            (where / "toc.json").write_bytes(
+                json.dumps(
+                    [t.to_dict() for t in self._toc_nodes], indent=2, sort_keys=True
+                ).encode()
+            )
         (where / "docs").mkdir(exist_ok=True)
         for file, v in self.docs.items():
             subf = where / "docs"
@@ -1050,7 +1053,7 @@ class Gen:
         """
         (where / "module").mkdir(exist_ok=True)
         for k, v in self.data.items():
-            (where / "module" / (k + ".cbor")).write_bytes(encoder.encode(v))
+            (where / "module" / (k + ".json")).write_bytes(v.to_json())
 
     def partial_write(self, where):
         self.write_api(where)
@@ -1508,7 +1511,7 @@ class Gen:
                 config=self.config,
             )
             for edoc, figs in examples_data:
-                self.examples.update({k: encoder.encode(v) for k, v in edoc.items()})
+                self.examples.update({k: v.to_json() for k, v in edoc.items()})
                 for name, data in figs:
                     self.put_raw(name, data)
 

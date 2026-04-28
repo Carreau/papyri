@@ -25,8 +25,8 @@ ingests many bundles and serves them from one place with real cross-package
 links (conda-forge model).
 
 The **local viewer** (`viewer/`) is the current reference implementation of
-the rendering side. It is used for development and debugging, **not** as the
-production central service — that is the long-term goal. The architecture is
+the rendering side. It is used for development and debugging, and is being
+designed with the centralized service in mind. The architecture is
 intentionally shaped to support a future hosted service.
 
 ## Repo purpose, short version
@@ -37,13 +37,13 @@ intentionally shaped to support a future hosted service.
   `/api/bundle` endpoint runs the TypeScript ingest pipeline server-side to
   wire bundles into the cross-linked graph.
 - **`ingest/`**: TypeScript `papyri-ingest` package — the canonical
-  ingestion engine, invoked by the viewer's upload endpoint. The Python
-  `papyri ingest` CLI has been removed; do not reintroduce it.
-- **`viewer/`**: TypeScript/Astro renderer. Works locally for development
-  today, and is being designed with the centralized service in mind — it is
-  the intended rendering frontend, not just a debug tool. When building the
-  viewer, think about what the hosted service will need.
-- All Python-side rendering has been removed. Do not add it back.
+  ingestion engine, invoked by the viewer's upload endpoint. There is no
+  `papyri ingest` Python CLI; do not add one.
+- **`viewer/`**: TypeScript web renderer (currently Astro; not locked in).
+  Works locally for development and is being designed with the centralized
+  service in mind. When building the viewer, think about what the hosted
+  service will need.
+- There is no Python-side rendering. Do not add any.
 
 ## Audience
 
@@ -58,12 +58,12 @@ service *could* be built later without a breaking change to the IR.
 ## Ground rules for changes
 
 1. **Stay inside scope.** Before adding or fixing anything, check `PLAN.md`.
-   If a task touches something in the "Out of scope" list, stop and ask the
-   user.
+   If a task is not in the open work or follow-ups, stop and ask the user.
 2. **Small focused PRs.** One logical change per commit.
-3. **Don't re-add removed features.** Dangling references to `render.py`,
-   `rich_render`, `textual`, `ipython`, `jlab`, `install`, `browse`, `serve`,
-   or the JupyterLab extension should be deleted, not restored.
+3. **Don't add Python-side rendering, a `papyri ingest` CLI, or the
+   JupyterLab extension.** Dangling references to `render.py`, `rich_render`,
+   `textual`, `ipython`, `jlab`, `install`, `browse`, or `serve` should be
+   deleted, not restored.
 4. **Python 3.14+ only.** `requires-python = ">=3.14"`. No compat shims for
    older versions.
 5. **Verify locally before committing.** At minimum:
@@ -95,7 +95,7 @@ service *could* be built later without a breaking change to the IR.
    pnpm install --frozen-lockfile   # only needed once / after lockfile changes
    pnpm run format                  # Prettier — rewrites files in place
    pnpm run lint                    # ESLint — fix any errors (warnings are OK)
-   pnpm run check                   # Astro/TS type check — must report 0 errors
+   pnpm run check                   # TS type check — must report 0 errors
    ```
    Re-stage any files Prettier rewrites before committing.
 
@@ -107,30 +107,27 @@ service *could* be built later without a breaking change to the IR.
    GitHub Actions silently rejects workflow YAML it can't parse, so the
    only safety net is `actionlint` locally. `shellcheck` must be on
    `PATH` — without it, `actionlint` skips the shell-script rule and
-   misses what CI catches (this exact gap leaked the SC2012 fix in
-   commit `3164f37`).
+   misses what CI catches.
 
    CI enforces all of the above via `.github/workflows/lint.yml` — a
    failing commit blocks the PR.
 7. **Do not commit anything under `~/.papyri/`.** That's user data, not
    repo content.
-7. **Viewer design should anticipate the hosted service.** When working on
+8. **Viewer design should anticipate the hosted service.** When working on
    `viewer/`, consider what a centralized multi-bundle service will need (URL
-   structure, bundle switching, cross-package search). Don't add server
-   infrastructure, auth, or upload endpoints yet — but don't make design
-   choices that would require a rewrite when those land.
+   structure, bundle switching, cross-package search). The storage and graph
+   layers must be abstracted so the same code runs against local backends
+   (filesystem + SQLite) and cloud backends (R2 + D1).
 
 ## Known environmental gotchas
 
-- RST parsing uses `tree-sitter-language-pack` (the maintained successor
-  of the abandoned `tree_sitter_languages`) on top of `tree-sitter >= 0.24`.
-  Get the parser via `get_parser("rst")`. Don't re-add `tree_sitter_languages`.
-- `test_take2.py` has a `take2` ↔ `myst_ast` circular import that only
-  manifests when collected in isolation (`pytest papyri/tests/test_take2.py`).
-  The full-module collection path hides it.
-- The IR uses **CBOR** (`cbor2`) in some places and JSON in others. Do not
-  assume "the IR is JSON". See `graphstore.py`, `crosslink.py`,
-  `node_base.py`, `take2.py`.
+- RST parsing currently uses `tree-sitter-language-pack` on top of
+  `tree-sitter >= 0.24`. Get the parser via `get_parser("rst")`. Do not
+  reintroduce `tree_sitter_languages`. A switch to `tree-sitter-rst`
+  directly from PyPI is possible; check `PLAN.md` for the current decision.
+- The IR encoding is mixed: some fields use CBOR (`cbor2`), others use JSON.
+  Do not assume "the IR is JSON". See `node_base.py`, `take2.py`. The
+  encoding is an implementation detail and may change.
 
 ## Code conventions
 
@@ -144,7 +141,7 @@ service *could* be built later without a breaking change to the IR.
 
 - CLI entry: `papyri/__init__.py` (typer app).
 - IR gen: `papyri/gen.py`.
-- Cross-link / ingest: `papyri/crosslink.py`, `papyri/graphstore.py`.
+- Cross-link read access: `papyri/crosslink.py`, `papyri/graphstore.py`.
 - RST parsing via tree-sitter: `papyri/ts.py`, `papyri/tree.py`.
 - Example TOML configs: `examples/*.toml`.
 - Tests: `papyri/tests/`.
@@ -153,7 +150,6 @@ service *could* be built later without a breaking change to the IR.
 
 - When a task is ambiguous, read `PLAN.md`, then ask the user. Don't guess
   scope.
-- Update `PLAN.md` when you finish a phase item (check the box) or discover
-  a new constraint. Treat `PLAN.md` as a living document.
-- Commit messages: imperative mood, explain *why*. Reference the phase from
-  `PLAN.md` if relevant (e.g. "Phase 1: remove HTML renderer").
+- Update `PLAN.md` when you complete an open work item or discover a new
+  constraint. Treat `PLAN.md` as a living document.
+- Commit messages: imperative mood, explain *why*.

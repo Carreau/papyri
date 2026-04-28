@@ -155,11 +155,13 @@ def read_bundle_dir(path: Path) -> Bundle:
         try:
             decoded = encoder.decode(toc_path.read_bytes())
         except Exception as exc:
+            raise
             problems.append(f"toc.cbor failed to decode: {exc}")
             decoded = []
         if isinstance(decoded, list) and all(isinstance(t, TocTree) for t in decoded):
             toc = decoded
         elif decoded:
+            raise
             problems.append("toc.cbor did not decode to list[TocTree]")
 
     if problems:

@@ -102,6 +102,15 @@ jobs:
     - name: Check TypeScript (Astro)
       if: always()
       run: pnpm --filter papyri-viewer run check
+    - name: Lint with ESLint (ingest)
+      if: always()
+      run: pnpm --filter papyri-ingest run lint
+    - name: Format check with Prettier (ingest)
+      if: always()
+      run: pnpm --filter papyri-ingest run format:check
+    - name: Check TypeScript (ingest)
+      if: always()
+      run: pnpm --filter papyri-ingest run check
 
   actionlint:
     # No paths filter: invalid workflow YAML is silently rejected by GitHub

@@ -6,7 +6,7 @@ logo = "../papyri-logo.png"
 docs_path = "~/dev/papyri/docs"
 execute_doctests = true
 exec_failure = 'raise'
-exclude= ["papyri.utils:FullQual","papyri.utils:Cannonical" ]
+exclude= ["papyri.utils:FullQual","papyri.utils:Canonical" ]
 [global.directives]
 mydirective='papyri.examples:_mydirective_handler'
  

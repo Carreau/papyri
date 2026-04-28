@@ -36,14 +36,11 @@ jobs:
           node-version: 22
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
+      # Lint / format / type-check live in `.github/workflows/lint.yml`
+      # (alongside the viewer checks); this workflow runs only the build
+      # and unit-test steps.
       - name: Install deps
         run: pnpm install --frozen-lockfile
-      - name: Type check
-        run: pnpm --filter papyri-ingest run check
-      - name: Format check
-        run: pnpm --filter papyri-ingest run format:check
-      - name: Lint
-        run: pnpm --filter papyri-ingest run lint
       - name: Unit tests
         run: pnpm --filter papyri-ingest run test
       - name: Build

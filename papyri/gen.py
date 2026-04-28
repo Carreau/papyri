@@ -79,7 +79,7 @@ from .toc import make_tree
 from .tokens import _add_classes, parse_script
 from .tree import GenVisitor
 from .utils import (
-    Cannonical,
+    Canonical,
     FullQual,
     dedent_but_first,
     full_qual,
@@ -455,13 +455,13 @@ class DFSCollector:
     def visit_FunctionType(self, fun, stack):
         pass
 
-    def compute_aliases(self) -> tuple[dict[FullQual, Cannonical], list[Any]]:
+    def compute_aliases(self) -> tuple[dict[FullQual, Canonical], list[Any]]:
         aliases = {}
         not_found = []
         for k, v in self.aliases.items():
             if [item for item in v if item != k]:
-                if shorter := find_cannonical(k, v):
-                    aliases[FullQual(k)] = Cannonical(shorter)
+                if shorter := find_canonical(k, v):
+                    aliases[FullQual(k)] = Canonical(shorter)
                 else:
                     not_found.append((k, v))
         return aliases, not_found
@@ -1695,9 +1695,9 @@ class Gen:
             for k, v in collected.items():
                 self.log.info(f"    {k}:{v}")
 
-        aliases: dict[FullQual, Cannonical]
+        aliases: dict[FullQual, Canonical]
         aliases, _not_found = collector.compute_aliases()
-        rev_aliases: dict[Cannonical, FullQual] = {v: k for k, v in aliases.items()}
+        rev_aliases: dict[Canonical, FullQual] = {v: k for k, v in aliases.items()}
 
         known_refs = frozenset(
             {
@@ -1923,7 +1923,7 @@ def is_private(path):
     return any(p.startswith("_") and not p.startswith("__") for p in path.split("."))
 
 
-def find_cannonical(qa: str, aliases: list[str]):
+def find_canonical(qa: str, aliases: list[str]):
     """
     Given the fully qualified name and a lit of aliases, try to find the canonical one.
 

@@ -40,7 +40,7 @@ from .nodes import (
     Text,
     UnprocessedDirective,
 )
-from .utils import Cannonical, FullQual, full_qual, obj_from_qualname
+from .utils import Canonical, FullQual, full_qual, obj_from_qualname
 
 log = logging.getLogger("papyri")
 
@@ -144,7 +144,7 @@ def resolve_(
     known_refs: frozenset[RefInfo],
     local_refs: frozenset[str],
     ref: str,
-    rev_aliases: dict[Cannonical, FullQual],
+    rev_aliases: dict[Canonical, FullQual],
 ) -> RefInfo:
     """
     Given the current context (qa), and a str (ref), compute the RefInfo object.
@@ -177,12 +177,12 @@ def resolve_(
     hk = hash(known_refs)
     hash(local_refs)
     assert rev_aliases is not None
-    ref = Cannonical(ref)
+    ref = Canonical(ref)
     if ref in rev_aliases:
         new_ref = rev_aliases[ref]
-        # rev_aliases is keyed by Cannonical; the alias target is a
+        # rev_aliases is keyed by Canonical; the alias target is a
         # FullQual. A direct ``new_ref not in rev_aliases`` compared
-        # FullQual against Cannonical keys, so the cycle guard never
+        # FullQual against Canonical keys, so the cycle guard never
         # fired. The recursive call below is already safe (empty
         # rev_aliases), so cycles cannot actually occur here — drop
         # the defensive assert rather than keep a silent no-op.

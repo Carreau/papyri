@@ -94,10 +94,18 @@ export const PUT: APIRoute = async ({ request }) => {
   let ingester: Ingester;
   try {
     if (env?.GRAPH_DB && env.BLOBS) {
+      const graphDb = new D1GraphDb(env.GRAPH_DB);
+      // Ensure the graph schema exists. `wrangler d1 migrations apply` is
+      // the canonical bootstrap, but it's easy to forget or to run against
+      // a different `.wrangler/state` than `wrangler dev` reads — both
+      // failure modes surface as "D1_ERROR: no such table: nodes" deep in
+      // ingest. Apply the schema idempotently here so first-write works
+      // on a virgin local D1, and re-applying is a no-op.
+      await ensureD1Schema(graphDb);
       ingester = new Ingester({
         backends: {
           blobStore: new R2BlobStore(env.BLOBS),
-          graphDb: new D1GraphDb(env.GRAPH_DB),
+          graphDb,
         },
       });
     } else {
@@ -169,4 +177,41 @@ function respond(body: object, status: number): Response {
     status,
     headers: { "Content-Type": "application/json" },
   });
+}
+
+/**
+ * Apply the graph schema idempotently to a D1 database. Mirrors the SQL in
+ * `ingest/migrations/0000_init.sql` but with `IF NOT EXISTS` so re-running
+ * against a populated DB is a cheap no-op. Single source of truth for the
+ * column shape is still that migration file (kept in sync by hand — the
+ * schema is small and rarely changes).
+ */
+async function ensureD1Schema(db: D1GraphDb): Promise<void> {
+  await db.batch([
+    {
+      sql:
+        "CREATE TABLE IF NOT EXISTS nodes (" +
+        "  id INTEGER PRIMARY KEY," +
+        "  package TEXT NOT NULL," +
+        "  version TEXT NOT NULL," +
+        "  category TEXT NOT NULL," +
+        "  identifier TEXT NOT NULL," +
+        "  has_blob INTEGER NOT NULL DEFAULT 0," +
+        "  digest BLOB," +
+        "  UNIQUE (package, version, category, identifier)" +
+        ")",
+    },
+    {
+      sql:
+        "CREATE TABLE IF NOT EXISTS links (" +
+        "  source INTEGER NOT NULL REFERENCES nodes (id) ON DELETE CASCADE," +
+        "  dest INTEGER NOT NULL REFERENCES nodes (id) ON DELETE CASCADE," +
+        "  PRIMARY KEY (source, dest)" +
+        ")",
+    },
+    { sql: "CREATE INDEX IF NOT EXISTS idx_links_dest ON links (dest)" },
+    {
+      sql: "CREATE INDEX IF NOT EXISTS idx_nodes_pkg_cat_ident ON nodes (package, category, identifier)",
+    },
+  ]);
 }

@@ -31,6 +31,12 @@ import { spawn } from "node:child_process";
 import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
 import { Ingester } from "papyri-ingest";
+// Embed the canonical schema SQL at build time so the bundled SSR module
+// doesn't need to read it from disk at runtime. Vite inlines the file
+// contents as a string via the `?raw` query, which means
+// `papyri-ingest`'s on-disk `migrations/0000_init.sql` is the single
+// source of truth even after bundling rearranges module locations.
+import schemaSql from "papyri-ingest/migrations/0000_init.sql?raw";
 import { ingestDir } from "../../lib/ir-reader.ts";
 import { isSafeSegment } from "../../lib/paths.ts";
 import { resetGraphDbCache } from "../../lib/graph.ts";
@@ -73,7 +79,7 @@ export const PUT: APIRoute = async ({ request }) => {
   // Run the ingest pipeline. Ingester writes blobs + graph entries directly
   // into the ingest store under `<ingestDir>/<pkg>/<version>/`, so once it
   // returns the staging dir is disposable.
-  const ingester = new Ingester({ ingestDir: root });
+  const ingester = new Ingester({ ingestDir: root, schemaSql });
   try {
     ingester.ingest(tmpDir);
   } catch (err) {

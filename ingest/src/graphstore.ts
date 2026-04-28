@@ -43,23 +43,31 @@ export function keyStr(k: Key): string {
 // Single source of truth: `ingest/migrations/*.sql`. The Cloudflare D1
 // path applies the same files via `wrangler d1 migrations apply`
 // (`viewer/wrangler.toml` points `migrations_dir = "../ingest/migrations"`).
+//
+// Two consumers, two ways the schema can reach the GraphStore constructor:
+//
+//   1. The `papyri-ingest` CLI runs from `dist/cli.js` → `dist/graphstore.js`.
+//      `import.meta.url` points at the actual file on disk, so the lazy
+//      disk loader below resolves `../migrations/*.sql` correctly.
+//
+//   2. The viewer's SSR bundle is produced by Vite, which inlines
+//      `graphstore.ts` into `dist/server/chunks/<hash>.mjs`. There the
+//      `import.meta.url` is a chunk path with no sibling `migrations/`
+//      dir. To handle that, callers can pass `schemaSql` explicitly
+//      (e.g. via Vite's `?raw` import) and skip the disk loader.
 // ---------------------------------------------------------------------------
 
 function migrationsDir(): string {
-  // Resolved lazily because this module is loaded transitively by
-  // viewer code that runs inside the Cloudflare prerender miniflare
-  // worker, where `import.meta.url` is not always a `file:` URL. The
+  // Resolved lazily because this module is loaded transitively by viewer
+  // code that runs inside the Cloudflare prerender miniflare worker,
+  // where `import.meta.url` is not always a `file:` URL. The
   // `new GraphStore()` constructor that needs this path never runs in
-  // that context — the lazy path keeps module load side-effect-free.
-  //
-  // `src/graphstore.ts` and `dist/graphstore.js` are both siblings of
-  // `migrations/`, so the same relative path resolves at dev time
-  // (vitest / tsx) and after `tsc`.
+  // that context.
   const here = dirname(fileURLToPath(import.meta.url));
   return join(here, "..", "migrations");
 }
 
-function loadSchema(): string {
+function loadSchemaFromDisk(): string {
   const dir = migrationsDir();
   const files = readdirSync(dir)
     .filter((f) => f.endsWith(".sql"))
@@ -94,11 +102,22 @@ const PRAGMAS = [
 // GraphStore
 // ---------------------------------------------------------------------------
 
+export interface GraphStoreOptions {
+  /**
+   * Schema SQL applied when the SQLite file is first created. Combined
+   * `migrations/*.sql` content; statements are split on `;` and exec'd
+   * in order. Pass this when the caller's runtime can't reach the
+   * on-disk migrations dir — e.g. a Vite-bundled SSR worker. The CLI
+   * can omit it; the disk loader handles `dist/cli.js` correctly.
+   */
+  schemaSql?: string;
+}
+
 export class GraphStore {
   private db: DatabaseType.Database;
   private root: string;
 
-  constructor(ingestDir: string) {
+  constructor(ingestDir: string, options: GraphStoreOptions = {}) {
     this.root = ingestDir;
     const dbPath = join(ingestDir, "papyri.db");
     const isNew = !existsSync(dbPath);
@@ -108,7 +127,8 @@ export class GraphStore {
     for (const p of PRAGMAS) this.db.exec(p);
 
     if (isNew) {
-      for (const stmt of splitStatements(loadSchema())) this.db.exec(stmt);
+      const sql = options.schemaSql ?? loadSchemaFromDisk();
+      for (const stmt of splitStatements(sql)) this.db.exec(stmt);
     }
   }
 

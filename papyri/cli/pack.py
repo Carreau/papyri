@@ -45,7 +45,6 @@ def pack(
     ``~/.papyri/data/`` is packed in turn and the artifacts are written
     alongside them.
     """
-    from papyri.pack import BundleError
 
     if bundle_dir is None:
         if output is not None:

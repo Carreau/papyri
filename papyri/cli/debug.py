@@ -1,4 +1,4 @@
-"""``papyri debug`` — inspect a raw CBOR blob from the data or ingest tree."""
+"""``papyri debug`` — inspect a raw IR file from the data or ingest tree."""
 
 from __future__ import annotations
 
@@ -23,14 +23,14 @@ def _resolve_debug_path(raw: str, data_dir: Path) -> Path | None:
     p = Path(raw)
     if p.exists():
         return p
-    for suffix in (".cbor", ".papyri"):
+    for suffix in (".json", ".cbor", ".papyri"):
         candidate = Path(raw + suffix)
         if candidate.exists():
             return candidate
     in_data = data_dir / raw
     if in_data.exists():
         return in_data
-    for suffix in (".cbor", ".papyri"):
+    for suffix in (".json", ".cbor", ".papyri"):
         in_data_suf = data_dir / (raw + suffix)
         if in_data_suf.exists():
             return in_data_suf
@@ -53,8 +53,10 @@ def _print_data_context(rel: Path, console: Console | None = None) -> None:
         pkg, ver = bundle, ""
     kind = parts[1] if len(parts) > 1 else ""
     identifier = "/".join(parts[2:])
-    if identifier.endswith(".cbor"):
-        identifier = identifier[:-5]
+    for _suf in (".json", ".cbor"):
+        if identifier.endswith(_suf):
+            identifier = identifier[: -len(_suf)]
+            break
     _con.print("\n[bold]Bundle context[/bold]")
     _con.print(f"  package : [cyan]{pkg}[/cyan]")
     if ver:
@@ -70,10 +72,11 @@ def debug(
         str,
         typer.Argument(
             help=(
-                "Path to a .cbor file to inspect. "
+                "Path to a bundle IR file to inspect (.json for data-tree files, "
+                ".cbor for ingest-tree files, .papyri for packed artifacts). "
                 "Can be an absolute/relative path, or a shorthand relative to "
                 "~/.papyri/data/ (e.g. 'numpy_2.3.5/module/numpy.linspace'). "
-                "The .cbor extension is added automatically when absent."
+                "The extension is added automatically when absent."
             )
         ),
     ],
@@ -136,18 +139,28 @@ def debug(
         console.print(f"  toc roots       : {len(bundle.toc)}")
         return
 
+    import json as _json
+
     raw = resolved.read_bytes()
 
-    try:
-        obj = encoder.decode(raw)
-        rich_pprint(obj)
-    except Exception:
+    if resolved.suffix == ".json":
         try:
-            obj = cbor2.loads(raw)
+            obj = _json.loads(raw)
             rich_pprint(obj)
         except Exception as e:
             typer.echo(f"Failed to decode {resolved}: {e}", err=True)
             raise typer.Exit(1) from None
+    else:
+        try:
+            obj = encoder.decode(raw)
+            rich_pprint(obj)
+        except Exception:
+            try:
+                obj = cbor2.loads(raw)
+                rich_pprint(obj)
+            except Exception as e:
+                typer.echo(f"Failed to decode {resolved}: {e}", err=True)
+                raise typer.Exit(1) from None
 
     # Show bundle context when the file is inside the data tree.
     try:

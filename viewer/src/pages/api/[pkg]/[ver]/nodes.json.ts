@@ -62,6 +62,10 @@ async function collectBundleNodes(
   const valueMap = new Map<string, NodeEntry>();
   const nodeMap = new Map<string, IRNode>();
 
+  const typesLabel = types === ALL_NODE_TYPES ? "<all>" : [...types].join(",");
+  const overallStart = performance.now();
+  console.log(`[nodes] scan start pkg=${pkg} ver=${ver} types=${typesLabel} limit=${limit}`);
+
   function entryKey(type: string, val: string): string {
     return `${type}\0${val}`;
   }
@@ -87,43 +91,58 @@ async function collectBundleNodes(
   const qualnames = await listModules(blobStore, pkg, ver);
   for (const qa of qualnames) {
     if (valueMap.size >= limit) break;
+    const t0 = performance.now();
     let doc;
     try {
       doc = await loadModule(blobStore, pkg, ver, qa);
     } catch {
+      console.log(`[nodes]   module ${qa} (load failed, skipped)`);
       continue;
     }
     addHits(collectNodes(doc, types), { label: qa, href: linkForQualname(pkg, ver, qa) });
+    console.log(
+      `[nodes]   module ${qa} ${(performance.now() - t0).toFixed(1)}ms hits=${valueMap.size}`
+    );
   }
 
   const docPaths = await listDocs(blobStore, pkg, ver);
   for (const docPath of docPaths) {
     if (valueMap.size >= limit) break;
+    const t0 = performance.now();
     let section;
     try {
       section = await loadCbor(blobStore, pkg, ver, "docs", docPath);
     } catch {
+      console.log(`[nodes]   doc ${docPath} (load failed, skipped)`);
       continue;
     }
     addHits(collectNodes(section, types), {
       label: docPath,
       href: linkForDoc(pkg, ver, docPath),
     });
+    console.log(
+      `[nodes]   doc ${docPath} ${(performance.now() - t0).toFixed(1)}ms hits=${valueMap.size}`
+    );
   }
 
   const exPaths = await listExamples(blobStore, pkg, ver);
   for (const exPath of exPaths) {
     if (valueMap.size >= limit) break;
+    const t0 = performance.now();
     let section;
     try {
       section = await loadCbor(blobStore, pkg, ver, "examples", exPath);
     } catch {
+      console.log(`[nodes]   example ${exPath} (load failed, skipped)`);
       continue;
     }
     addHits(collectNodes(section, types), {
       label: exPath,
       href: linkForExample(pkg, ver, exPath),
     });
+    console.log(
+      `[nodes]   example ${exPath} ${(performance.now() - t0).toFixed(1)}ms hits=${valueMap.size}`
+    );
   }
 
   const entries = [...valueMap.values()].sort((a, b) => {
@@ -139,6 +158,11 @@ async function collectBundleNodes(
         entry.html = await renderNode(originalNode);
       }
     })
+  );
+
+  console.log(
+    `[nodes] scan done pkg=${pkg} ver=${ver} total=${valueMap.size} ` +
+      `${(performance.now() - overallStart).toFixed(1)}ms`
   );
 
   return { total: valueMap.size, limit, entries };

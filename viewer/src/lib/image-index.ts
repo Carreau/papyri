@@ -2,6 +2,13 @@
 // example, collects every Figure / Image IR node, and groups by source
 // URL. Pulled out of `pages/[pkg]/[ver]/images/index.astro` so the
 // page becomes a flat template over the returned entries.
+//
+// NOTE: this scan structure (walk modules → docs → examples, collect-and-
+// dedupe by key) is duplicated in `pages/api/[pkg]/[ver]/nodes.json.ts`.
+// The two should likely be unified behind a shared `walkBundle(ctx, visit)`
+// helper that takes a per-document visitor; right now they diverge in
+// concurrency (this file uses Promise.all, nodes.json uses sequential with
+// an early-exit limit) and in the per-document hit shape.
 
 import type { BlobStore } from "papyri-ingest";
 import {
@@ -43,50 +50,56 @@ function addHit(map: Map<string, ImgEntry>, found: FoundImgNode, page: PageRef):
 
 async function collectFromModules(ctx: BundleCtx, out: Map<string, ImgEntry>): Promise<void> {
   const qualnames = await listModules(ctx.blobStore, ctx.pkg, ctx.ver);
-  await Promise.all(
-    qualnames.map(async (qa) => {
-      let doc;
-      try {
-        doc = await loadModule(ctx.blobStore, ctx.pkg, ctx.ver, qa);
-      } catch {
-        return;
-      }
-      const href = linkForQualname(ctx.pkg, ctx.ver, qa);
-      for (const found of collectImages(doc)) addHit(out, found, { label: qa, href });
-    })
-  );
+  console.log(`[images]  modules: ${qualnames.length} to scan`);
+  for (const qa of qualnames) {
+    const t0 = performance.now();
+    let doc;
+    try {
+      doc = await loadModule(ctx.blobStore, ctx.pkg, ctx.ver, qa);
+    } catch {
+      console.log(`[images]   module ${qa} (load failed, skipped)`);
+      continue;
+    }
+    const href = linkForQualname(ctx.pkg, ctx.ver, qa);
+    for (const found of collectImages(doc)) addHit(out, found, { label: qa, href });
+    console.log(`[images]   module ${qa} ${(performance.now() - t0).toFixed(1)}ms`);
+  }
 }
 
 async function collectFromDocs(ctx: BundleCtx, out: Map<string, ImgEntry>): Promise<void> {
   const docPaths = await listDocs(ctx.blobStore, ctx.pkg, ctx.ver);
-  await Promise.all(
-    docPaths.map(async (docPath) => {
-      let section;
-      try {
-        section = await loadCbor(ctx.blobStore, ctx.pkg, ctx.ver, "docs", docPath);
-      } catch {
-        return;
-      }
-      const href = linkForDoc(ctx.pkg, ctx.ver, docPath);
-      for (const found of collectImages(section)) addHit(out, found, { label: docPath, href });
-    })
-  );
+  console.log(`[images]  docs: ${docPaths.length} to scan`);
+  for (const docPath of docPaths) {
+    const t0 = performance.now();
+    let section;
+    try {
+      section = await loadCbor(ctx.blobStore, ctx.pkg, ctx.ver, "docs", docPath);
+    } catch {
+      console.log(`[images]   doc ${docPath} (load failed, skipped)`);
+      continue;
+    }
+    const href = linkForDoc(ctx.pkg, ctx.ver, docPath);
+    for (const found of collectImages(section)) addHit(out, found, { label: docPath, href });
+    console.log(`[images]   doc ${docPath} ${(performance.now() - t0).toFixed(1)}ms`);
+  }
 }
 
 async function collectFromExamples(ctx: BundleCtx, out: Map<string, ImgEntry>): Promise<void> {
   const exPaths = await listExamples(ctx.blobStore, ctx.pkg, ctx.ver);
-  await Promise.all(
-    exPaths.map(async (exPath) => {
-      let section;
-      try {
-        section = await loadCbor(ctx.blobStore, ctx.pkg, ctx.ver, "examples", exPath);
-      } catch {
-        return;
-      }
-      const href = linkForExample(ctx.pkg, ctx.ver, exPath);
-      for (const found of collectImages(section)) addHit(out, found, { label: exPath, href });
-    })
-  );
+  console.log(`[images]  examples: ${exPaths.length} to scan`);
+  for (const exPath of exPaths) {
+    const t0 = performance.now();
+    let section;
+    try {
+      section = await loadCbor(ctx.blobStore, ctx.pkg, ctx.ver, "examples", exPath);
+    } catch {
+      console.log(`[images]   example ${exPath} (load failed, skipped)`);
+      continue;
+    }
+    const href = linkForExample(ctx.pkg, ctx.ver, exPath);
+    for (const found of collectImages(section)) addHit(out, found, { label: exPath, href });
+    console.log(`[images]   example ${exPath} ${(performance.now() - t0).toFixed(1)}ms`);
+  }
 }
 
 /**
@@ -101,10 +114,14 @@ export async function collectBundleImages(
 ): Promise<ImgEntry[]> {
   const ctx: BundleCtx = { blobStore, pkg, ver };
   const map = new Map<string, ImgEntry>();
-  await Promise.all([
-    collectFromModules(ctx, map),
-    collectFromDocs(ctx, map),
-    collectFromExamples(ctx, map),
-  ]);
+  const overallStart = performance.now();
+  console.log(`[images] scan start pkg=${pkg} ver=${ver}`);
+  await collectFromModules(ctx, map);
+  await collectFromDocs(ctx, map);
+  await collectFromExamples(ctx, map);
+  console.log(
+    `[images] scan done pkg=${pkg} ver=${ver} unique=${map.size} ` +
+      `${(performance.now() - overallStart).toFixed(1)}ms`
+  );
   return [...map.values()].sort((a, b) => a.img.src.localeCompare(b.img.src));
 }

@@ -3,7 +3,10 @@ import { defineMiddleware } from "astro:middleware";
 // Routes that must remain reachable without a session, otherwise users
 // can never reach the login form to authenticate. Any new public route
 // (e.g. a future signup page) needs an explicit entry here.
-const PUBLIC_PREFIXES = ["/login", "/api/auth/"];
+// `/api/bundle` is the upload endpoint hit by `papyri upload`; it has its
+// own bearer-token check (PAPYRI_API_TOKEN) and must stay reachable without
+// a session cookie.
+const PUBLIC_PREFIXES = ["/login", "/api/auth/", "/api/bundle"];
 
 function isPublic(pathname: string): boolean {
   return PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(p));

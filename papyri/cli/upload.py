@@ -46,6 +46,14 @@ def upload(
             ),
         ),
     ] = None,
+    verbose: Annotated[
+        bool,
+        typer.Option(
+            "--verbose",
+            "-v",
+            help="Show per-step packing progress when building a bundle on the fly.",
+        ),
+    ] = False,
 ) -> None:
     """
     Send each ``.papyri`` artifact (or pack a DocBundle directory on the
@@ -73,6 +81,11 @@ def upload(
         path = path.expanduser().resolve()
         prefix = f"[{i:>{width}}/{total}]"
 
+        log = (
+            (lambda msg, _p=prefix: typer.echo(f"{_p} {msg}", err=True))
+            if verbose
+            else None
+        )
         try:
             if path.is_file() and path.suffix == ".papyri":
                 typer.echo(f"{prefix} loading {path.name} …", err=True)
@@ -81,7 +94,7 @@ def upload(
                 pkg, version = bundle.module, bundle.version
             elif path.is_dir():
                 typer.echo(f"{prefix} packing {path.name} …", err=True)
-                data, bundle = make_artifact_from_dir(path)
+                data, bundle = make_artifact_from_dir(path, log=log)
                 pkg, version = bundle.module, bundle.version
             else:
                 typer.echo(

@@ -29,11 +29,22 @@
 import type { APIRoute } from "astro";
 import { Ingester, decode, type TypedNode } from "papyri-ingest";
 import { isSafeSegment } from "../../lib/paths.ts";
-import { getBackends } from "../../lib/backends.ts";
+import { getBackends, getUploadToken } from "../../lib/backends.ts";
 
 export const prerender = false;
 
 export const PUT: APIRoute = async ({ request }) => {
+  // Token auth: if PAPYRI_UPLOAD_TOKEN is configured, every PUT must carry
+  // "Authorization: Bearer <token>".  When the env var is absent the check is
+  // skipped entirely — that's intentional for local development.
+  const expectedToken = await getUploadToken();
+  if (expectedToken) {
+    const auth = request.headers.get("Authorization") ?? "";
+    if (auth !== `Bearer ${expectedToken}`) {
+      return respond({ ok: false, error: "unauthorized" }, 401, { "WWW-Authenticate": "Bearer" });
+    }
+  }
+
   if (!request.body) {
     return respond({ ok: false, error: "request body required (.papyri artifact)" }, 400);
   }
@@ -90,9 +101,9 @@ export const PUT: APIRoute = async ({ request }) => {
   return respond({ ok: true, pkg, version }, 201);
 };
 
-function respond(body: object, status: number): Response {
+function respond(body: object, status: number, extra?: Record<string, string>): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...extra },
   });
 }

@@ -29,9 +29,23 @@ def upload(
         typer.Option(
             "--url",
             "-u",
-            help="URL of the viewer ingest endpoint.",
+            envvar="PAPYRI_UPLOAD_URL",
+            help="URL of the viewer ingest endpoint.  Overridden by $PAPYRI_UPLOAD_URL.",
         ),
     ] = _DEFAULT_URL,
+    token: Annotated[
+        str | None,
+        typer.Option(
+            "--token",
+            "-t",
+            envvar="PAPYRI_UPLOAD_TOKEN",
+            help=(
+                "Bearer token for /api/bundle authentication.  "
+                "Overridden by $PAPYRI_UPLOAD_TOKEN.  "
+                "Omit when the viewer has no token configured (local dev)."
+            ),
+        ),
+    ] = None,
 ) -> None:
     """
     Send each ``.papyri`` artifact (or pack a DocBundle directory on the
@@ -43,6 +57,10 @@ def upload(
     The viewer's ``/api/bundle`` endpoint runs the full ingest pipeline
     server-side; this is the canonical way to ship a bundle into the
     cross-linked graph.
+
+    Authentication: if the viewer has ``PAPYRI_UPLOAD_TOKEN`` configured,
+    set the same value here (via ``--token`` or ``$PAPYRI_UPLOAD_TOKEN``)
+    so the request is accepted.
     """
     import time
 
@@ -87,12 +105,10 @@ def upload(
             err=True,
         )
 
-        req = urllib.request.Request(
-            url,
-            data=data,
-            method="PUT",
-            headers={"Content-Type": "application/gzip"},
-        )
+        headers: dict[str, str] = {"Content-Type": "application/gzip"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        req = urllib.request.Request(url, data=data, method="PUT", headers=headers)
         t0 = time.monotonic()
         try:
             with urllib.request.urlopen(req) as resp:

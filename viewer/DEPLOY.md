@@ -17,6 +17,73 @@ bucket with static website hosting, etc.).
 > swapped for the matching adapter (`@astrojs/cloudflare`,
 > `@astrojs/netlify`, `@astrojs/vercel`, etc.).
 
+## Authentication
+
+`PUT /api/bundle` is the **only endpoint that mutates state** (D1 graph and R2
+blobs).  All other routes are read-only.  A simple bearer-token guard protects
+it; the check is opt-in so local development needs no configuration.
+
+### How it works
+
+The viewer reads `PAPYRI_UPLOAD_TOKEN` from the environment at request time.
+
+- **Token present**: every `PUT /api/bundle` must carry
+  `Authorization: Bearer <token>`.  Any other value — or a missing header —
+  gets a `401 Unauthorized` response.
+- **Token absent**: the check is skipped entirely.  No auth is required.
+  This is the safe default for local `pnpm dev` / `pnpm serve` sessions.
+
+### Cloudflare Workers deployment
+
+Store the token as a [Wrangler secret](https://developers.cloudflare.com/workers/configuration/secrets/)
+so it is never committed to the repository:
+
+```sh
+# One-time setup — Wrangler prompts for the value interactively.
+wrangler secret put PAPYRI_UPLOAD_TOKEN
+```
+
+Rotate by running the same command again.  Delete with
+`wrangler secret delete PAPYRI_UPLOAD_TOKEN`.
+
+### Local `wrangler dev` (miniflare)
+
+Create `viewer/.dev.vars` (already gitignored by Cloudflare's default
+`.gitignore`; add it to yours if needed):
+
+```
+PAPYRI_UPLOAD_TOKEN=your-secret-here
+```
+
+### Node dev server (`pnpm serve`)
+
+Set the environment variable before starting the server:
+
+```sh
+export PAPYRI_UPLOAD_TOKEN=your-secret-here
+pnpm serve
+```
+
+### Configuring `papyri upload`
+
+Pass the same token to the client via environment variable or flag:
+
+```sh
+# Recommended: set once in the shell / CI secret store.
+export PAPYRI_UPLOAD_TOKEN=your-secret-here
+export PAPYRI_UPLOAD_URL=https://your-worker.example.com/api/bundle
+
+papyri upload ~/.papyri/data/numpy_2.3.5/
+
+# Or pass inline (takes precedence over env var):
+papyri upload --token your-secret-here \
+              --url https://your-worker.example.com/api/bundle \
+              ~/.papyri/data/numpy_2.3.5/
+```
+
+In CI, store the token as a repository secret and inject it as
+`PAPYRI_UPLOAD_TOKEN` in the workflow environment.
+
 ## Architecture
 
 ```

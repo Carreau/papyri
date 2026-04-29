@@ -60,3 +60,21 @@ migrations_dir = "../ingest/migrations"
 [[r2_buckets]]
 binding = "BLOBS"
 bucket_name = "papyri-viewer-blobs"
+
+# ----------------------------------------------------------------------------
+# PAPYRI_UPLOAD_TOKEN — upload authentication secret.
+#
+# When set, PUT /api/bundle requires an "Authorization: Bearer <token>"
+# header.  Omitting the variable disables the check (safe for local dev).
+#
+# Set for a deployed Worker:
+#   wrangler secret put PAPYRI_UPLOAD_TOKEN
+#   # (Wrangler prompts for the value; it is never stored in this file.)
+#
+# Set for local wrangler dev (.dev.vars is gitignored):
+#   echo 'PAPYRI_UPLOAD_TOKEN=your-secret-here' >> .dev.vars
+#
+# Configure the client to match:
+#   export PAPYRI_UPLOAD_TOKEN=your-secret-here   # papyri upload reads this
+#   export PAPYRI_UPLOAD_URL=https://your-worker.example.com/api/bundle
+# ----------------------------------------------------------------------------

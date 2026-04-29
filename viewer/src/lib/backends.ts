@@ -33,6 +33,7 @@ import type BetterSqlite3 from "better-sqlite3";
 interface WorkersEnv {
   GRAPH_DB?: D1DatabaseLike;
   BLOBS?: R2BucketLike;
+  PAPYRI_UPLOAD_TOKEN?: string;
 }
 
 export interface Backends {
@@ -142,4 +143,21 @@ export async function getBackends(): Promise<Backends> {
   }
   if (!_nodeCached) _nodeCached = nodeBackends();
   return _nodeCached;
+}
+
+/**
+ * Return the expected upload token, or `undefined` when auth is disabled.
+ *
+ * On Workers the value comes from the `PAPYRI_UPLOAD_TOKEN` secret binding
+ * (set via `wrangler secret put PAPYRI_UPLOAD_TOKEN`).
+ * On Node it is read from `process.env.PAPYRI_UPLOAD_TOKEN`.
+ *
+ * When the returned value is `undefined` the caller must skip auth entirely —
+ * disabling the check is intentional for local development.
+ */
+export async function getUploadToken(): Promise<string | undefined> {
+  const cf = await loadCfEnv();
+  // cf is non-null whenever cloudflare:workers resolved (Workers runtime).
+  if (cf !== null) return cf.PAPYRI_UPLOAD_TOKEN || undefined;
+  return process.env.PAPYRI_UPLOAD_TOKEN || undefined;
 }

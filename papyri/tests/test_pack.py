@@ -222,12 +222,12 @@ def test_pack_rejects_papyri_json_missing_keys(tmp_path):
     assert "module" in excinfo.value.problems[0]
 
 
-def test_pack_rejects_module_with_non_cbor_file(tmp_path):
+def test_pack_rejects_module_with_non_json_file(tmp_path):
     bundle_dir = _make_minimal_bundle_dir(tmp_path / "mypkg_1.0")
     (bundle_dir / "module" / "stray.txt").write_text("oops")
     with pytest.raises(BundleError) as excinfo:
         read_bundle_dir(bundle_dir)
-    assert any(".cbor" in p for p in excinfo.value.problems)
+    assert any(".json" in p for p in excinfo.value.problems)
 
 
 def test_pack_rejects_unexpected_toplevel_entry(tmp_path):

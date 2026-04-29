@@ -160,7 +160,7 @@ jobs:
         bundle="${bundles[0]}"
         echo "Bundle: $bundle"
         test -d "$bundle/docs" || { echo "docs/ missing"; exit 1; }
-        test -f "$bundle/toc.cbor" || { echo "toc.cbor missing"; exit 1; }
+        test -f "$bundle/toc.json" || { echo "toc.json missing"; exit 1; }
         n=$(find "$bundle/docs" -type f | wc -l)
         echo "Narrative doc count: $n"
         test "$n" -gt 5 || { echo "expected >5 narrative docs, got $n"; exit 1; }

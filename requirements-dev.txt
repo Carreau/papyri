@@ -3,6 +3,7 @@ pytest-cov
 matplotlib
 coverage
 pipdeptree
+pre-commit
 ruff
 mypy
 scipy

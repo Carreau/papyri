@@ -8,6 +8,7 @@ import logging
 from collections import Counter, defaultdict
 from collections.abc import Callable
 from functools import lru_cache
+from pathlib import Path
 from textwrap import indent
 from typing import Any, cast
 
@@ -26,6 +27,8 @@ from .nodes import (
     Code,
     CrossRef,
     Directive,
+    Figure,
+    Image,
     InlineCode,
     InlineMath,
     InlineRole,
@@ -600,6 +603,8 @@ class DirectiveVisiter(TreeReplacer):
         version,
         config=None,
         module: str | None = None,
+        doc_path: Path | None = None,
+        asset_store: Callable[[str, bytes], None] | None = None,
     ):
         """
         qa: str
@@ -649,6 +654,9 @@ class DirectiveVisiter(TreeReplacer):
         # collect_substitutions() before visiting; can be pre-seeded with
         # config-level global substitutions.
         self._substitutions: dict[str, list] = {}
+        # Set at gen time to enable ``.. image::`` resolution from the filesystem.
+        self._doc_path: Path | None = doc_path
+        self._asset_store: Callable[[str, bytes], None] | None = asset_store
 
     def collect_substitutions(self, *sections: Section) -> None:
         """Pre-scan sections for SubstitutionDef nodes to build the substitution map.
@@ -765,6 +773,49 @@ class DirectiveVisiter(TreeReplacer):
 
         acc = [ListItem(False, [Paragraph([line])]) for line in lls]
         return [BulletList(ordered=False, start=1, spread=False, children=acc)]
+
+    def _image_handler(
+        self, argument: str, options: dict, content: str
+    ) -> list[Figure | Image]:
+        """Handle ``.. image:: <uri>`` directives.
+
+        External URIs (http/https) become an ``Image`` node.  Local paths are
+        read from disk, stored via ``_asset_store``, and emitted as a ``Figure``
+        node pointing at the bundle's ``assets/`` directory so the renderer can
+        serve the bytes it already has.
+        """
+        uri = (argument or "").strip()
+        alt = (options or {}).get("alt", "") if isinstance(options, dict) else ""
+
+        if uri.startswith(("http://", "https://")):
+            return [Image(url=uri, alt=alt)]
+
+        if self._doc_path is None or self._asset_store is None:
+            log.warning(
+                "image directive: cannot embed local path %r in %s - "
+                "no doc_path/asset_store available (external URLs only)",
+                uri,
+                self.qa,
+            )
+            return [Image(url=uri, alt=alt)]
+
+        img_path = (self._doc_path / uri).resolve()
+        if not img_path.is_file():
+            log.warning(
+                "image directive: %s not found (resolved from %s) in %s",
+                img_path,
+                self._doc_path,
+                self.qa,
+            )
+            return [Image(url=uri, alt=alt)]
+
+        asset_name = img_path.name
+        self._asset_store(asset_name, img_path.read_bytes())
+        return [
+            Figure(
+                RefInfo.from_untrusted(self.module, self.version, "assets", asset_name)
+            )
+        ]
 
     def replace_UnprocessedDirective(self, directive: UnprocessedDirective):
         meth = getattr(self, "_" + directive.name + "_handler", None)

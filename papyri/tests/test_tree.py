@@ -15,6 +15,8 @@ import pytest
 
 from papyri.nodes import (
     CrossRef,
+    Figure,
+    Image,
     LocalRef,
     RefInfo,
     UnprocessedDirective,
@@ -207,3 +209,84 @@ def test_replace_unprocessed_directive_drops_sphinx_only(caplog):
         out = v.replace_UnprocessedDirective(ud)
     assert out == []
     assert any("Sphinx-only" in r.getMessage() for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# _image_handler
+# ---------------------------------------------------------------------------
+
+
+def test_image_handler_external_url():
+    v = _make_visitor()
+    out = v._image_handler("https://example.com/img.png", {"alt": "logo"}, "")
+    assert len(out) == 1
+    assert isinstance(out[0], Image)
+    assert out[0].url == "https://example.com/img.png"
+    assert out[0].alt == "logo"
+
+
+def test_image_handler_external_url_no_alt():
+    v = _make_visitor()
+    out = v._image_handler("https://example.com/img.png", {}, "")
+    assert isinstance(out[0], Image)
+    assert out[0].alt == ""
+
+
+def test_image_handler_local_without_doc_path_warns(caplog):
+    v = _make_visitor()
+    with caplog.at_level("WARNING", logger="papyri"):
+        out = v._image_handler("images/foo.png", {}, "")
+    assert isinstance(out[0], Image)
+    assert out[0].url == "images/foo.png"
+    assert any("doc_path" in r.getMessage() for r in caplog.records)
+
+
+def test_image_handler_local_file_stored(tmp_path):
+    img_dir = tmp_path / "docs"
+    img_dir.mkdir()
+    img_file = img_dir / "logo.png"
+    img_file.write_bytes(b"\x89PNG fake")
+
+    stored: dict[str, bytes] = {}
+
+    def store(name: str, data: bytes) -> None:
+        stored[name] = data
+
+    v = DirectiveVisiter(
+        qa="pkg.mod",
+        known_refs=frozenset(),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+        doc_path=img_dir,
+        asset_store=store,
+    )
+    out = v._image_handler("logo.png", {"alt": "the logo"}, "")
+    assert len(out) == 1
+    assert isinstance(out[0], Figure)
+    assert out[0].value.path == "logo.png"
+    assert out[0].value.kind == "assets"
+    assert stored["logo.png"] == b"\x89PNG fake"
+
+
+def test_image_handler_missing_file_warns(tmp_path, caplog):
+    stored: dict[str, bytes] = {}
+
+    def store(name: str, data: bytes) -> None:
+        stored[name] = data
+
+    v = DirectiveVisiter(
+        qa="pkg.mod",
+        known_refs=frozenset(),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+        doc_path=tmp_path,
+        asset_store=store,
+    )
+    with caplog.at_level("WARNING", logger="papyri"):
+        out = v._image_handler("missing.png", {}, "")
+    assert isinstance(out[0], Image)
+    assert out[0].url == "missing.png"
+    assert stored == {}
+    assert any("not found" in r.getMessage() for r in caplog.records)

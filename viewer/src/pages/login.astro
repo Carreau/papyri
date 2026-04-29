@@ -1,0 +1,18 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import LoginForm from "../components/LoginForm.tsx";
+
+// Redirect if already logged in
+const sessionToken = Astro.cookies.get("papyri_session_token");
+if (sessionToken) {
+  return Astro.redirect("/");
+}
+---
+
+<BaseLayout title="Login - Papyri Viewer">
+  <div style="max-width: 800px; margin: 0 auto;">
+    <h1>Papyri Viewer - Login</h1>
+    <p style="color: #666;">Enter your credentials to access the documentation viewer.</p>
+    <LoginForm client:load />
+  </div>
+</BaseLayout>

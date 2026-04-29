@@ -60,18 +60,6 @@ The boundary between the two halves:
 
 ## Open work
 
-### Phase 6b — gen-side encoding
-
-Keep `papyri gen` writing a per-file directory tree as today, but consider
-switching the on-disk encoding to JSON so that standard tooling (`jq`,
-`diff`, text grep) and custom maintainer workflows can inspect and verify the
-intermediate output before `pack` runs. The contract `pack` produces stays
-the binary `.papyri` artifact; the per-file form is a debugging and
-customization surface, not a publication format.
-
-Explicitly *not* in scope: making `gen` produce a `.papyri` directly —
-that would close off the inspect-and-modify workflow.
-
 ### Viewer — M9 (Cloudflare Workers)
 
 Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).

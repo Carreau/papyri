@@ -52,7 +52,7 @@ async function loadCfEnv(): Promise<WorkersEnv | null> {
   }
 }
 
-// D1 schema bootstrap — idempotent. Mirrors `ingest/migrations/0000_init.sql`
+// D1 schema bootstrap — idempotent. Mirrors `ingest/migrations/*.sql`
 // with `IF NOT EXISTS` so re-running against a populated DB is a cheap
 // no-op. Run once per worker isolate via the latch below.
 let _d1SchemaApplied = false;
@@ -83,6 +83,16 @@ async function ensureD1Schema(graphDb: GraphDb): Promise<void> {
     { sql: "CREATE INDEX IF NOT EXISTS idx_links_dest ON links (dest)" },
     {
       sql: "CREATE INDEX IF NOT EXISTS idx_nodes_pkg_cat_ident ON nodes (package, category, identifier)",
+    },
+    {
+      sql:
+        "CREATE TABLE IF NOT EXISTS bundles (" +
+        "  module TEXT NOT NULL," +
+        "  version TEXT NOT NULL," +
+        "  bundle_size_bytes INTEGER NOT NULL," +
+        "  ingested_at INTEGER NOT NULL," +
+        "  PRIMARY KEY (module, version)" +
+        ")",
     },
   ]);
   _d1SchemaApplied = true;
@@ -117,6 +127,7 @@ async function nodeBackends(): Promise<Backends> {
     "CREATE TABLE IF NOT EXISTS links (source INTEGER NOT NULL REFERENCES nodes (id) ON DELETE CASCADE, dest INTEGER NOT NULL REFERENCES nodes (id) ON DELETE CASCADE, PRIMARY KEY (source, dest))",
     "CREATE INDEX IF NOT EXISTS idx_links_dest ON links (dest)",
     "CREATE INDEX IF NOT EXISTS idx_nodes_pkg_cat_ident ON nodes (package, category, identifier)",
+    "CREATE TABLE IF NOT EXISTS bundles (module TEXT NOT NULL, version TEXT NOT NULL, bundle_size_bytes INTEGER NOT NULL, ingested_at INTEGER NOT NULL, PRIMARY KEY (module, version))",
   ]) {
     db.prepare(sql).run();
   }

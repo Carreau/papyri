@@ -67,7 +67,7 @@ def make_tree(data):
     data = {k: [i[1] for i in v] for k, v in data.items()}
     c = {k: 0 for k in data}
     if not c:
-        return {}
+        return None, {}
     # Prefer "index" as the root (standard Sphinx layout), but fall back to
     # the first key that is not referenced by any other node (i.e. a true
     # root in the toctree graph). This handles packages whose entry point is
@@ -80,4 +80,4 @@ def make_tree(data):
         candidates = [k for k in c if k not in referenced]
         root = candidates[0] if candidates else next(iter(c))
         log.warning("toc: no 'index' root found; using %r as tree root instead", root)
-    return _tree(root, data, c)
+    return root, _tree(root, data, c)

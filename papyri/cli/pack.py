@@ -63,11 +63,7 @@ def pack(
             raise typer.Exit(1)
         ok = True
         for target in targets:
-            try:
-                _pack_one(target, _DEFAULT_DATA_DIR)
-            except BundleError as exc:
-                typer.echo(f"error packing {target}: {exc}", err=True)
-                ok = False
+            _pack_one(target, _DEFAULT_DATA_DIR)
         if not ok:
             raise typer.Exit(1)
         return

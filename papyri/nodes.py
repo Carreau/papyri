@@ -878,9 +878,16 @@ class Encoder:
     def _type_from_tag(self, tag):
         return self._rev_map[tag.tag]
 
-    def _tag_hook(self, decoder, tag, shareable_index=None):
-        type_ = self._type_from_tag(tag)
+    def _tag_hook(self, *args, **_kwargs):
+        # cbor2 has shifted calling conventions for tag_hook across major
+        # versions: 5.x calls (decoder, tag[, shareable_index]); 6.x calls
+        # (tag, immutable, shareable_index) without the decoder. We don't
+        # use any of the extras, so just pick the CBORTag out of whichever
+        # positional slot it landed in.
+        from cbor2 import CBORTag
 
+        tag = next(a for a in args if isinstance(a, CBORTag))
+        type_ = self._type_from_tag(tag)
         tt = get_type_hints(type_)
         kwds = {k: t for k, t in zip(tt, tag.value, strict=False)}
         return type_(**kwds)

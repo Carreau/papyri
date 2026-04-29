@@ -20,8 +20,26 @@ if (!entry) {
 }
 
 const latestNav = await loadBundleNav(blobStore, pkg, entry.latest);
-const summary = typeof latestNav.meta.summary === "string" ? latestNav.meta.summary : null;
-const homepage = typeof latestNav.meta.homepage === "string" ? latestNav.meta.homepage : null;
+const meta = latestNav.meta;
+const summary = typeof meta.summary === "string" ? meta.summary : null;
+const homepage = typeof meta.homepage === "string" ? meta.homepage : null;
+const docspage = typeof meta.docspage === "string" ? meta.docspage : null;
+const githubSlug = typeof meta.github_slug === "string" ? meta.github_slug : null;
+const latestTag = typeof meta.tag === "string" ? meta.tag : null;
+
+// Derive PyPI URL. meta.pypi may be a bare name or a full URL.
+const pypiRaw = typeof meta.pypi === "string" ? meta.pypi : null;
+const pypiUrl = pypiRaw
+  ? pypiRaw.startsWith("http")
+    ? pypiRaw
+    : `https://pypi.org/project/${pypiRaw}/`
+  : `https://pypi.org/project/${pkg}/`;
+const pypiName = pypiRaw && !pypiRaw.startsWith("http") ? pypiRaw : pkg;
+
+const githubUrl = githubSlug ? `https://github.com/${githubSlug}` : null;
+const githubIssuesUrl = githubUrl ? `${githubUrl}/issues` : null;
+const githubPrsUrl = githubUrl ? `${githubUrl}/pulls` : null;
+const condaForgeUrl = `https://anaconda.org/conda-forge/${pkg}`;
 
 // Gather counts per version. listModules is cheap; nav would be heavier.
 const rows = await Promise.all(
@@ -47,77 +65,213 @@ const defaultTo = entry.versions[0]!;
     <div>
       <h1>{pkg}</h1>
       {summary ? <p class="lede">{summary}</p> : null}
-      {
-        homepage ? (
-          <p class="package-homepage">
-            <a href={homepage} rel="noreferrer">
-              {homepage}
-            </a>
-          </p>
-        ) : null
-      }
     </div>
   </header>
 
-  <section>
-    <h2>Versions</h2>
-    <table class="versions-table">
-      <thead>
-        <tr>
-          <th>Version</th>
-          <th class="num">API items</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {
-          rows.map((r) => (
-            <tr>
-              <td>
-                <a href={`/${pkg}/${r.version}/`}>{r.version}</a>
-                {r.version === entry.latest ? <span class="badge">latest</span> : null}
-              </td>
-              <td class="num">{r.qualnameCount}</td>
-              <td>
-                <a href={`/${pkg}/${r.version}/`}>browse →</a>
-              </td>
-            </tr>
-          ))
-        }
-      </tbody>
-    </table>
-  </section>
+  <!-- External links row -->
+  <div class="link-pills">
+    <a class="link-pill" href={pypiUrl} rel="noreferrer noopener" target="_blank">
+      <svg class="pill-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path
+          d="M12.001 0C5.926 0 6.289 2.685 6.289 2.685l.007 2.782h5.814v.836H3.912S0 5.857 0 12.01c0 6.153 3.402 5.932 3.402 5.932h2.032v-2.852s-.109-3.402 3.346-3.402h5.762s3.239.052 3.239-3.13V3.132S18.302 0 12.001 0zm-3.21 1.818a1.039 1.039 0 0 1 1.04 1.04 1.039 1.039 0 0 1-1.04 1.038 1.039 1.039 0 0 1-1.039-1.039 1.039 1.039 0 0 1 1.04-1.04z"
+        ></path>
+        <path
+          d="M12.043 24c6.075 0 5.712-2.685 5.712-2.685l-.007-2.782h-5.814v-.836h8.198S24 18.143 24 11.99c0-6.153-3.402-5.932-3.402-5.932h-2.032v2.852s.109 3.402-3.346 3.402h-5.762s-3.239-.052-3.239 3.13v5.426S5.698 24 12 24zm3.21-1.818a1.039 1.039 0 0 1-1.04-1.04 1.039 1.039 0 0 1 1.04-1.038 1.039 1.039 0 0 1 1.039 1.039 1.039 1.039 0 0 1-1.04 1.04z"
+        ></path>
+      </svg>
+      PyPI{pypiName !== pkg ? `: ${pypiName}` : ""}
+    </a>
 
-  {
-    entry.versions.length >= 2 ? (
-      <section class="diff-picker">
-        <h2>Compare versions</h2>
-        <form method="get" action={`/${pkg}/diff`}>
-          <label>
-            From
-            <select name="from">
-              {entry.versions.map((v) => (
-                <option value={v} selected={v === defaultFrom}>
-                  {v}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            To
-            <select name="to">
-              {entry.versions.map((v) => (
-                <option value={v} selected={v === defaultTo}>
-                  {v}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button type="submit">Compare</button>
-        </form>
+    {
+      githubUrl ? (
+        <a class="link-pill" href={githubUrl} rel="noreferrer noopener" target="_blank">
+          <svg class="pill-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0 1 12 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z" />
+          </svg>
+          {githubSlug}
+        </a>
+      ) : null
+    }
+
+    {
+      (docspage ?? homepage) ? (
+        <a class="link-pill" href={docspage ?? homepage!} rel="noreferrer noopener" target="_blank">
+          <svg class="pill-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 1.5L18.5 9H13V3.5zM6 20V4h5v7h7v9H6z" />
+          </svg>
+          {docspage ? "Documentation" : "Homepage"}
+        </a>
+      ) : null
+    }
+
+    <a
+      class="link-pill link-pill--secondary"
+      href={condaForgeUrl}
+      rel="noreferrer noopener"
+      target="_blank"
+    >
+      <svg class="pill-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path
+          d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 2a8 8 0 1 1 0 16A8 8 0 0 1 12 4zm0 3a5 5 0 1 0 0 10A5 5 0 0 0 12 7zm0 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6z"
+        ></path>
+      </svg>
+      conda-forge
+    </a>
+  </div>
+
+  <div class="package-body">
+    <div class="package-main">
+      <section>
+        <h2>Versions</h2>
+        <table class="versions-table">
+          <thead>
+            <tr>
+              <th>Version</th>
+              <th class="num">API items</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {
+              rows.map((r) => (
+                <tr>
+                  <td>
+                    <a href={`/${pkg}/${r.version}/`}>{r.version}</a>
+                    {r.version === entry.latest ? <span class="badge">latest</span> : null}
+                  </td>
+                  <td class="num">{r.qualnameCount}</td>
+                  <td>
+                    <a href={`/${pkg}/${r.version}/`}>browse →</a>
+                  </td>
+                </tr>
+              ))
+            }
+          </tbody>
+        </table>
       </section>
-    ) : null
-  }
+
+      {
+        entry.versions.length >= 2 ? (
+          <section class="diff-picker">
+            <h2>Compare versions</h2>
+            <form method="get" action={`/${pkg}/diff`}>
+              <label>
+                From
+                <select name="from">
+                  {entry.versions.map((v) => (
+                    <option value={v} selected={v === defaultFrom}>
+                      {v}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                To
+                <select name="to">
+                  {entry.versions.map((v) => (
+                    <option value={v} selected={v === defaultTo}>
+                      {v}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button type="submit">Compare</button>
+            </form>
+          </section>
+        ) : null
+      }
+    </div>
+
+    <!-- Package info sidebar -->
+    <aside class="package-info-sidebar">
+      <section class="info-card">
+        <h3>Latest release</h3>
+        <div class="info-row">
+          <span class="info-label">Version</span>
+          <span class="info-value">
+            <a href={`/${pkg}/${entry.latest}/`}>{entry.latest}</a>
+          </span>
+        </div>
+        {
+          latestTag ? (
+            <div class="info-row">
+              <span class="info-label">Tag</span>
+              <span class="info-value info-mono">
+                {githubUrl ? (
+                  <a
+                    href={`${githubUrl}/releases/tag/${latestTag}`}
+                    rel="noreferrer noopener"
+                    target="_blank"
+                  >
+                    {latestTag}
+                  </a>
+                ) : (
+                  latestTag
+                )}
+              </span>
+            </div>
+          ) : null
+        }
+        <div class="info-row">
+          <span class="info-label">Bundles</span>
+          <span class="info-value">{entry.versions.length}</span>
+        </div>
+      </section>
+
+      {
+        githubUrl ? (
+          <section class="info-card">
+            <h3>
+              <a href={githubUrl} rel="noreferrer noopener" target="_blank">
+                GitHub
+              </a>
+            </h3>
+            <div class="info-row">
+              <span class="info-label">Stars</span>
+              <span class="info-value info-placeholder" title="Live data not available locally">
+                —
+              </span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Open issues</span>
+              <span class="info-value info-placeholder">
+                <a href={githubIssuesUrl!} rel="noreferrer noopener" target="_blank">
+                  view →
+                </a>
+              </span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Open PRs</span>
+              <span class="info-value info-placeholder">
+                <a href={githubPrsUrl!} rel="noreferrer noopener" target="_blank">
+                  view →
+                </a>
+              </span>
+            </div>
+          </section>
+        ) : null
+      }
+
+      <section class="info-card">
+        <h3>
+          <a href={pypiUrl} rel="noreferrer noopener" target="_blank">PyPI</a>
+        </h3>
+        <div class="info-row">
+          <span class="info-label">Downloads</span>
+          <span class="info-value info-placeholder" title="Live data not available locally">—</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">License</span>
+          <span class="info-value info-placeholder" title="Live data not available locally">—</span>
+        </div>
+      </section>
+
+      <section class="info-card">
+        <h3>Maintainers</h3>
+        <p class="info-placeholder-block">Not available locally</p>
+      </section>
+    </aside>
+  </div>
 </BaseLayout>
 
 <style>
@@ -125,7 +279,7 @@ const defaultTo = entry.versions[0]!;
     display: flex;
     gap: 1.25rem;
     align-items: flex-start;
-    margin-bottom: 2rem;
+    margin-bottom: 1.25rem;
   }
   .package-logo {
     width: 64px;
@@ -133,10 +287,69 @@ const defaultTo = entry.versions[0]!;
     object-fit: contain;
     border-radius: 8px;
   }
-  .package-homepage {
-    font-size: 0.9rem;
-    margin: 0.25rem 0 0;
+  .package-header h1 {
+    margin: 0 0 0.25rem;
   }
+  .package-header .lede {
+    margin: 0;
+    color: var(--fg-muted);
+  }
+
+  /* External link pills */
+  .link-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 2rem;
+  }
+  .link-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0.75rem;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    text-decoration: none;
+    transition:
+      background 0.1s,
+      border-color 0.1s;
+  }
+  .link-pill:hover {
+    background: var(--surface-alt);
+    border-color: var(--accent);
+    text-decoration: none;
+    color: var(--accent);
+  }
+  .link-pill--secondary {
+    opacity: 0.75;
+  }
+  .pill-icon {
+    width: 14px;
+    height: 14px;
+    fill: currentColor;
+    flex-shrink: 0;
+  }
+
+  /* Two-column layout for main content + sidebar */
+  .package-body {
+    display: grid;
+    grid-template-columns: 1fr 18rem;
+    gap: 2rem;
+    align-items: start;
+  }
+  @media (max-width: 700px) {
+    .package-body {
+      grid-template-columns: 1fr;
+    }
+    .package-info-sidebar {
+      order: -1;
+    }
+  }
+
   .versions-table {
     width: 100%;
     border-collapse: collapse;
@@ -177,5 +390,60 @@ const defaultTo = entry.versions[0]!;
   .diff-picker select {
     margin-top: 0.25rem;
     padding: 0.3rem 0.5rem;
+  }
+
+  /* Info sidebar cards */
+  .package-info-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  .info-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+  }
+  .info-card h3 {
+    margin: 0 0 0.6rem;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--fg-muted);
+  }
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.2rem 0;
+    font-size: 0.9rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .info-row:last-child {
+    border-bottom: none;
+  }
+  .info-label {
+    color: var(--fg-muted);
+    flex-shrink: 0;
+  }
+  .info-value {
+    font-weight: 500;
+    text-align: right;
+  }
+  .info-mono {
+    font-family: var(--mono);
+    font-size: 0.8rem;
+  }
+  .info-placeholder {
+    color: var(--fg-muted);
+    font-weight: normal;
+    font-style: italic;
+  }
+  .info-placeholder-block {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--fg-muted);
+    font-style: italic;
   }
 </style>

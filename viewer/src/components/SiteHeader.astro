@@ -3,6 +3,10 @@
 // bundle index. Right side is reserved for utilities (theme toggle today;
 // global search later).
 import ThemeToggle from "./ThemeToggle.tsx";
+import UserMenu from "./UserMenu.tsx";
+import { isAuthenticated } from "../lib/auth.ts";
+
+const authenticated = isAuthenticated(Astro);
 ---
 
 <header class="site-header">
@@ -13,6 +17,7 @@ import ThemeToggle from "./ThemeToggle.tsx";
   <div class="site-header-spacer"></div>
   <div class="site-header-tools">
     <slot name="tools" />
+    {authenticated && <UserMenu client:load />}
     <ThemeToggle client:load />
   </div>
 </header>

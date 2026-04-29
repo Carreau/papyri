@@ -4,8 +4,11 @@ import { getBackends } from "../lib/backends.ts";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import BundleCard from "../components/BundleCard.astro";
 import BundleGridSearch from "../components/BundleGridSearch.tsx";
+import { redirectToLoginIfNotAuthenticated } from "../lib/auth.ts";
 
 export const prerender = false;
+
+redirectToLoginIfNotAuthenticated(Astro);
 
 const { blobStore } = await getBackends();
 const packages = await listIngestedPackages(blobStore);

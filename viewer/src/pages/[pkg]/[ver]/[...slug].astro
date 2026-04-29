@@ -12,11 +12,8 @@ import { buildXrefResolver } from "../../../lib/xref.ts";
 import IrNode from "../../../components/IrNode.astro";
 import Signature from "../../../components/Signature.astro";
 import BundleLayout from "../../../layouts/BundleLayout.astro";
-import { redirectToLoginIfNotAuthenticated } from "../../../lib/auth.ts";
 
 export const prerender = false;
-
-redirectToLoginIfNotAuthenticated(Astro);
 
 const { pkg, ver, slug } = Astro.params;
 

@@ -17,11 +17,8 @@ import { listDigests } from "../../lib/graph.ts";
 import { getBackends } from "../../lib/backends.ts";
 import { linkForDoc, linkForExample, linkForQualname } from "../../lib/links.ts";
 import BaseLayout from "../../layouts/BaseLayout.astro";
-import { redirectToLoginIfNotAuthenticated } from "../../lib/auth.ts";
 
 export const prerender = false;
-
-redirectToLoginIfNotAuthenticated(Astro);
 
 const { pkg } = Astro.params;
 if (!pkg) return new Response("Not found", { status: 404 });

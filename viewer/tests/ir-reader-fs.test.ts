@@ -2,10 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  listIngestedBundles,
-  listModules,
-} from "../src/lib/ir-reader.ts";
+import { FsBlobStore } from "papyri-ingest";
+import { listIngestedBundles, listModules } from "../src/lib/ir-reader.ts";
 
 describe("fs-facing helpers", () => {
   let dir: string;
@@ -17,25 +15,43 @@ describe("fs-facing helpers", () => {
   });
 
   it("listIngestedBundles: [] on empty/missing, discovers <pkg>/<ver>", async () => {
-    expect(await listIngestedBundles(join(dir, "nope"))).toEqual([]);
-    expect(await listIngestedBundles(dir)).toEqual([]);
-    await mkdir(join(dir, "numpy", "1.26.4"), { recursive: true });
-    await mkdir(join(dir, "numpy", "2.0.0"), { recursive: true });
-    await mkdir(join(dir, "scipy", "1.13.0"), { recursive: true });
-    await writeFile(join(dir, "stray.txt"), "nope"); // must be skipped
-    const got = await listIngestedBundles(dir);
+    // Empty store returns [].
+    expect(await listIngestedBundles(new FsBlobStore(join(dir, "nope")))).toEqual([]);
+    expect(await listIngestedBundles(new FsBlobStore(dir))).toEqual([]);
+
+    // Create a minimal blob per bundle so FsBlobStore.list("") picks them up.
+    const dummy = new Uint8Array([0]);
+    for (const [pkg, ver] of [
+      ["numpy", "1.26.4"],
+      ["numpy", "2.0.0"],
+      ["scipy", "1.13.0"],
+    ]) {
+      await mkdir(join(dir, pkg, ver, "module"), { recursive: true });
+      await writeFile(join(dir, pkg, ver, "module", "placeholder"), dummy);
+    }
+    // A stray file at the top level must be ignored (parts.length < 3).
+    await writeFile(join(dir, "stray.txt"), "nope");
+
+    const got = await listIngestedBundles(new FsBlobStore(dir));
     expect(got.map((b) => `${b.pkg}/${b.version}`)).toEqual([
-      "numpy/1.26.4", "numpy/2.0.0", "scipy/1.13.0",
+      "numpy/1.26.4",
+      "numpy/2.0.0",
+      "scipy/1.13.0",
     ]);
   });
 
   it("listModules: missing module/ -> [], files listed, .cbor stripped", async () => {
-    expect(await listModules(dir)).toEqual([]);
-    const modDir = join(dir, "module");
+    const store = new FsBlobStore(dir);
+    expect(await listModules(store, "pkg", "1.0")).toEqual([]);
+
+    const modDir = join(dir, "pkg", "1.0", "module");
     await mkdir(modDir, { recursive: true });
     await writeFile(join(modDir, "numpy.fft$fft"), "x");
     await writeFile(join(modDir, "numpy.linalg$svd.cbor"), "x");
-    await mkdir(join(modDir, "subdir")); // ignored
-    expect(await listModules(dir)).toEqual(["numpy.fft$fft", "numpy.linalg$svd"]);
+    // Subdirectories are ignored (rel.includes("/")).
+    await mkdir(join(modDir, "subdir"));
+    await writeFile(join(modDir, "subdir", "ignored"), "x");
+
+    expect(await listModules(store, "pkg", "1.0")).toEqual(["numpy.fft$fft", "numpy.linalg$svd"]);
   });
 });

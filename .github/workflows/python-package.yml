@@ -53,6 +53,7 @@ jobs:
             python-version: "3.14"
           - lib: 'IPython'
             python-version: "3.14"
+            flags: '--no-narrative'
           - lib: 'numpy'
             python-version: "3.14"
             flags: '--no-narrative --no-exec'
@@ -82,11 +83,14 @@ jobs:
         pipdeptree -r
     - name: Gen ${{matrix.lib}}
       run: |
-        uv pip install --system ${{matrix.lib}}
+        rm -rf ~/.papyri/data/*
+        if [ "${{ matrix.lib }}" != "papyri" ]; then
+          uv pip install --system "${{ matrix.lib }}"
+        fi
         coverage run -a -m papyri gen examples/${{matrix.lib}}.toml ${{matrix.flags}}
         sleep 1 # time for coverage to write its stuff
         papyri pack
-        ls ~/.papyri/data
+        tree ~/.papyri/data
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
       with:
         name: doc-bundles-${{matrix.lib}}

@@ -949,6 +949,11 @@ class Gen:
         if not self.config.docs_path:
             return
         path = Path(self.config.docs_path).expanduser()
+        if not path.exists():
+            self.log.warning(
+                "docs_path %s does not exist, skipping narrative docs", path
+            )
+            return
         self.log.info("Scraping Documentation")
         files = list(path.glob("**/*.rst"))
         trees = {}
@@ -971,7 +976,8 @@ class Gen:
                 try:
                     data = ts.parse(p.read_bytes(), p)
                 except Exception as e:
-                    raise type(e)(f"{p=}") from e
+                    self.log.warning("Could not parse %s, skipping: %s", p, e)
+                    continue
                 blob = GeneratedDoc.new()
                 key = ":".join(parts)[:-4]
                 try:
@@ -986,20 +992,18 @@ class Gen:
                     )
                     dv.collect_substitutions(*data)
                     blob.arbitrary = [dv.visit(s) for s in data]
+                    trees[key] = dv._tocs
+                    blob.item_file = None
+                    blob.item_line = None
+                    blob.item_type = None
+                    blob.aliases = []
+                    blob.example_section_data = Section([], None)
+                    blob.see_also = []
+                    blob.signature = None
+                    blob.validate()
                 except Exception as e:
-                    e.add_note(f"Error in {p!r}")
-                    raise
-                # if dv._tocs:
-                trees[key] = dv._tocs
-
-                blob.item_file = None
-                blob.item_line = None
-                blob.item_type = None
-                blob.aliases = []
-                blob.example_section_data = Section([], None)
-                blob.see_also = []
-                blob.signature = None
-                blob.validate()
+                    self.log.warning("Could not process %s, skipping: %s", p, e)
+                    continue
                 titles = [s.title for s in blob.arbitrary if s.title]
                 title = f"<No Title {key}>" if not titles else titles[0]
                 title_map[key] = title
@@ -1065,7 +1069,7 @@ class Gen:
 
     def write_assets(self, where: Path) -> None:
         assets = where / "assets"
-        assets.mkdir()
+        assets.mkdir(exist_ok=True)
         for k, v in self.bdata.items():
             (assets / k).write_bytes(v)
 
@@ -1809,71 +1813,76 @@ class Gen:
                 assert isinstance(lr1, str)
             lr: frozenset[str] = frozenset(_local_refs)
             doc_blob.local_refs = sorted(lr)
-            dv = GenVisitor(
-                qa,
-                known_refs,
-                local_refs=lr,
-                aliases={},
-                version=self.version,
-                config=self.config.directives,
-            )
-            dv.collect_substitutions(
-                *arbitrary,
-                *doc_blob._content.values(),
-                *[
-                    doc_blob.content[s]
-                    for s in ["Extended Summary", "Summary", "Notes", *sections_]
-                    if s in doc_blob.content
-                ],
-            )
-            doc_blob.arbitrary = [dv.visit(s) for s in arbitrary]
-            doc_blob.example_section_data = dv.visit(doc_blob.example_section_data)
-            doc_blob._content = {k: dv.visit(v) for (k, v) in doc_blob._content.items()}
-
-            for section in ["Extended Summary", "Summary", "Notes", *sections_]:
-                if section in doc_blob.content:
-                    doc_blob.content[section] = dv.visit(doc_blob.content[section])
-
-            doc_blob.see_also = list(
-                sorted(set(doc_blob.see_also), key=lambda sa: sa.name.value)
-            )
-
-            for sa in doc_blob.see_also:
-                from .tree import resolve_
-
-                r = resolve_(
+            try:
+                dv = GenVisitor(
                     qa,
                     known_refs,
-                    frozenset(),
-                    sa.name.value,
-                    rev_aliases=rev_aliases,
+                    local_refs=lr,
+                    aliases={},
+                    version=self.version,
+                    config=self.config.directives,
                 )
-                assert isinstance(r, RefInfo)
-                if r.kind == "module":
-                    sa.name.reference = r
-                else:
-                    imp = GenVisitor._import_solver(sa.name.value)
-                    if imp:
-                        self.log.debug(
-                            "TODO: see also resolve for %s in %s, %s",
-                            sa.name.value,
-                            qa,
-                            imp,
-                        )
+                dv.collect_substitutions(
+                    *arbitrary,
+                    *doc_blob._content.values(),
+                    *[
+                        doc_blob.content[s]
+                        for s in ["Extended Summary", "Summary", "Notes", *sections_]
+                        if s in doc_blob.content
+                    ],
+                )
+                doc_blob.arbitrary = [dv.visit(s) for s in arbitrary]
+                doc_blob.example_section_data = dv.visit(doc_blob.example_section_data)
+                doc_blob._content = {
+                    k: dv.visit(v) for (k, v) in doc_blob._content.items()
+                }
 
-            # end processing
-            assert not isinstance(doc_blob._content, str), doc_blob._content
-            try:
+                for section in ["Extended Summary", "Summary", "Notes", *sections_]:
+                    if section in doc_blob.content:
+                        doc_blob.content[section] = dv.visit(doc_blob.content[section])
+
+                doc_blob.see_also = list(
+                    sorted(set(doc_blob.see_also), key=lambda sa: sa.name.value)
+                )
+
+                for sa in doc_blob.see_also:
+                    from .tree import resolve_
+
+                    r = resolve_(
+                        qa,
+                        known_refs,
+                        frozenset(),
+                        sa.name.value,
+                        rev_aliases=rev_aliases,
+                    )
+                    assert isinstance(r, RefInfo)
+                    if r.kind == "module":
+                        sa.name.reference = r
+                    else:
+                        imp = GenVisitor._import_solver(sa.name.value)
+                        if imp:
+                            self.log.debug(
+                                "TODO: see also resolve for %s in %s, %s",
+                                sa.name.value,
+                                qa,
+                                imp,
+                            )
+
+                # end processing
+                assert not isinstance(doc_blob._content, str), doc_blob._content
                 doc_blob.validate()
-            except Exception as e:
-                e.add_note(f"Error in {qa}")
-                raise
-            self.log.debug(doc_blob.signature)
-            self.put(qa, doc_blob)
-            if figs:
-                self.log.debug("Found %s figures", len(figs))
-            for name, data in figs:
-                self.put_raw(name, data)
+                self.log.debug(doc_blob.signature)
+                self.put(qa, doc_blob)
+                if figs:
+                    self.log.debug("Found %s figures", len(figs))
+                for name, data in figs:
+                    self.put_raw(name, data)
+            except Exception as _post_err:
+                if self.config.early_error:
+                    raise
+                self.log.warning(
+                    "Error post-processing %s, skipping: %s", qa, _post_err
+                )
         if error_collector._unexpected_errors:
             self.log.info(
                 "ERRORS:"

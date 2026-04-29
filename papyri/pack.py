@@ -25,78 +25,65 @@ _OPTIONAL_DIRS = ("docs", "examples", "assets")
 class BundleError(ValueError):
     """A bundle directory is malformed.
 
-    Carries a ``problems`` list so the user sees every issue at once instead
-    of fixing them one at a time.
+    Validation is fail-fast: the first problem encountered is raised
+    immediately. ``problems`` is kept as a single-element list so callers
+    that previously iterated it still work.
     """
 
-    def __init__(self, problems: list[str]) -> None:
-        self.problems = list(problems)
-        super().__init__(
-            "bundle is not well-formed:\n  - " + "\n  - ".join(self.problems)
-        )
+    def __init__(self, problem: str) -> None:
+        self.problems = [problem]
+        super().__init__(f"bundle is not well-formed: {problem}")
 
 
-def _check_layout(path: Path) -> list[str]:
-    problems: list[str] = []
-
+def _check_layout(path: Path) -> None:
     if not path.is_dir():
-        return [f"{path} is not a directory"]
+        raise BundleError(f"{path} is not a directory")
 
     meta_path = path / "papyri.json"
     if not meta_path.is_file():
-        problems.append("missing papyri.json")
+        raise BundleError("missing papyri.json")
 
     module_dir = path / "module"
     if not module_dir.is_dir():
-        problems.append("missing module/ directory")
-    else:
-        for entry in module_dir.iterdir():
-            if not entry.is_file():
-                problems.append(f"module/{entry.name} is not a regular file")
-            elif entry.suffix != ".cbor":
-                problems.append(f"module/{entry.name} does not have .cbor suffix")
+        raise BundleError("missing module/ directory")
+    for entry in module_dir.iterdir():
+        if not entry.is_file():
+            raise BundleError(f"module/{entry.name} is not a regular file")
+        if entry.suffix != ".cbor":
+            raise BundleError(f"module/{entry.name} does not have .cbor suffix")
 
     for sub in _OPTIONAL_DIRS:
         d = path / sub
         if not d.exists():
             continue
         if not d.is_dir():
-            problems.append(f"{sub} exists but is not a directory")
-            continue
-        problems.extend(
-            f"{sub}/{entry.name} is not a regular file"
-            for entry in d.iterdir()
-            if not entry.is_file()
-        )
+            raise BundleError(f"{sub} exists but is not a directory")
+        for entry in d.iterdir():
+            if not entry.is_file():
+                raise BundleError(f"{sub}/{entry.name} is not a regular file")
 
-    problems.extend(
-        f"unexpected top-level entry: {entry.name}"
-        for entry in path.iterdir()
-        if entry.name not in _ALLOWED_TOPLEVEL
-    )
-
-    return problems
+    for entry in path.iterdir():
+        if entry.name not in _ALLOWED_TOPLEVEL:
+            raise BundleError(f"unexpected top-level entry: {entry.name}")
 
 
-def _read_meta(path: Path, problems: list[str]) -> dict[str, Any]:
+def _read_meta(path: Path) -> dict[str, Any]:
     try:
         meta = json.loads((path / "papyri.json").read_text())
     except Exception as exc:
-        problems.append(f"papyri.json is not valid JSON: {exc}")
-        return {}
+        raise BundleError(f"papyri.json is not valid JSON: {exc}") from exc
     if not isinstance(meta, dict):
-        problems.append("papyri.json is not a JSON object")
-        return {}
+        raise BundleError("papyri.json is not a JSON object")
     for key in ("module", "version"):
         if key not in meta:
-            problems.append(f"papyri.json is missing required key {key!r}")
-        elif not isinstance(meta[key], str):
-            problems.append(f"papyri.json[{key!r}] is not a string")
+            raise BundleError(f"papyri.json is missing required key {key!r}")
+        if not isinstance(meta[key], str):
+            raise BundleError(f"papyri.json[{key!r}] is not a string")
     return meta
 
 
 def _decode_dir(
-    path: Path, expected_type: type, problems: list[str], strip_suffix: str = ""
+    path: Path, expected_type: type, strip_suffix: str = ""
 ) -> dict[str, Any]:
     out: dict[str, Any] = {}
     if not path.is_dir():
@@ -107,14 +94,14 @@ def _decode_dir(
         try:
             value = encoder.decode(entry.read_bytes())
         except Exception as exc:
-            problems.append(f"{path.name}/{entry.name} failed to decode: {exc}")
-            continue
+            raise BundleError(
+                f"{path.name}/{entry.name} failed to decode: {exc}"
+            ) from exc
         if not isinstance(value, expected_type):
-            problems.append(
+            raise BundleError(
                 f"{path.name}/{entry.name} decoded to "
                 f"{type(value).__name__}, expected {expected_type.__name__}"
             )
-            continue
         key = entry.name
         if strip_suffix and key.endswith(strip_suffix):
             key = key[: -len(strip_suffix)]
@@ -125,22 +112,17 @@ def _decode_dir(
 def read_bundle_dir(path: Path) -> Bundle:
     """Read a DocBundle directory and construct a typed ``Bundle``.
 
-    Raises ``BundleError`` with every problem encountered, not just the
-    first one.
+    Fail-fast: raises ``BundleError`` on the first problem encountered.
     """
     from .doc import GeneratedDoc
     from .nodes import Section, TocTree
 
-    problems = _check_layout(path)
-    meta = (
-        _read_meta(path, problems)
-        if not any(p.startswith("missing papyri.json") for p in problems)
-        else {}
-    )
+    _check_layout(path)
+    meta = _read_meta(path)
 
-    api = _decode_dir(path / "module", GeneratedDoc, problems, strip_suffix=".cbor")
-    narrative = _decode_dir(path / "docs", GeneratedDoc, problems)
-    examples = _decode_dir(path / "examples", Section, problems)
+    api = _decode_dir(path / "module", GeneratedDoc, strip_suffix=".cbor")
+    narrative = _decode_dir(path / "docs", GeneratedDoc)
+    examples = _decode_dir(path / "examples", Section)
 
     assets: dict[str, bytes] = {}
     assets_dir = path / "assets"
@@ -155,15 +137,11 @@ def read_bundle_dir(path: Path) -> Bundle:
         try:
             decoded = encoder.decode(toc_path.read_bytes())
         except Exception as exc:
-            problems.append(f"toc.cbor failed to decode: {exc}")
-            decoded = []
+            raise BundleError(f"toc.cbor failed to decode: {exc}") from exc
         if isinstance(decoded, list) and all(isinstance(t, TocTree) for t in decoded):
             toc = decoded
         elif decoded:
-            problems.append("toc.cbor did not decode to list[TocTree]")
-
-    if problems:
-        raise BundleError(problems)
+            raise BundleError("toc.cbor did not decode to list[TocTree]")
 
     known = {"module", "version", "summary", "github_slug", "tag", "logo", "aliases"}
     extra = {

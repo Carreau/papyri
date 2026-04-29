@@ -45,7 +45,6 @@ def pack(
     ``~/.papyri/data/`` is packed in turn and the artifacts are written
     alongside them.
     """
-    from papyri.pack import BundleError
 
     if bundle_dir is None:
         if output is not None:
@@ -63,11 +62,7 @@ def pack(
             raise typer.Exit(1)
         ok = True
         for target in targets:
-            try:
-                _pack_one(target, _DEFAULT_DATA_DIR)
-            except BundleError as exc:
-                typer.echo(f"error packing {target}: {exc}", err=True)
-                ok = False
+            _pack_one(target, _DEFAULT_DATA_DIR)
         if not ok:
             raise typer.Exit(1)
         return

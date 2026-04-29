@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Encoder, Tag } from "cbor-x";
+import { FsBlobStore } from "papyri-ingest";
 
 const tg = (tag: number, fields: unknown[]) => new Tag(fields, tag);
 const enc = new Encoder({ useRecords: false });
@@ -10,18 +11,30 @@ const enc = new Encoder({ useRecords: false });
 // IngestedDoc (4010) fields, in declared order (see ir-reader FIELD_ORDER).
 const mkDoc = (qa: string, o: Record<string, unknown> = {}) =>
   tg(4010, [
-    {}, [], o.item_file ?? null, o.item_line ?? null, o.item_type ?? null,
-    [], null, [], o.signature ?? null, [], qa, o.arbitrary ?? [],
+    {},
+    [],
+    o.item_file ?? null,
+    o.item_line ?? null,
+    o.item_type ?? null,
+    [],
+    null,
+    [],
+    o.signature ?? null,
+    [],
+    qa,
+    o.arbitrary ?? [],
   ]);
 
-const bytesFull = enc.encode(mkDoc("pkg.mod:foo", {
-  item_file: "foo.py", item_line: 42, item_type: "function",
-  signature: tg(4029, ["function", [], tg(4031, []), "foo"]),
-}));
-const bytesBar = enc.encode(mkDoc("pkg:bar"));
-const bytesUnknown = enc.encode(
-  mkDoc("pkg:qux", { arbitrary: [tg(9999, ["mystery"])] }),
+const bytesFull = enc.encode(
+  mkDoc("pkg.mod:foo", {
+    item_file: "foo.py",
+    item_line: 42,
+    item_type: "function",
+    signature: tg(4029, ["function", [], tg(4031, []), "foo"]),
+  })
 );
+const bytesBar = enc.encode(mkDoc("pkg:bar"));
+const bytesUnknown = enc.encode(mkDoc("pkg:qux", { arbitrary: [tg(9999, ["mystery"])] }));
 
 let loadModule: typeof import("../src/lib/ir-reader.ts").loadModule;
 beforeAll(async () => {
@@ -37,37 +50,41 @@ describe("loadModule (CBOR roundtrip)", () => {
     await rm(dir, { recursive: true, force: true });
   });
 
-  const writeBlob = async (name: string, bytes: Uint8Array) => {
-    const b = join(dir, "pkg", "1.0");
-    await mkdir(join(b, "module"), { recursive: true });
-    await writeFile(join(b, "module", name), bytes);
-    return b;
+  // Writes a blob at <dir>/pkg/1.0/module/<name> and returns an FsBlobStore
+  // rooted at <dir>.
+  const writeBlob = async (name: string, bytes: Uint8Array): Promise<FsBlobStore> => {
+    const moduleDir = join(dir, "pkg", "1.0", "module");
+    await mkdir(moduleDir, { recursive: true });
+    await writeFile(join(moduleDir, name), bytes);
+    return new FsBlobStore(dir);
   };
 
   it("decodes an IngestedDoc (tag 4010) with nested tagged children", async () => {
-    const bundle = await writeBlob("pkg.mod$foo", bytesFull);
-    const out = await loadModule(bundle, "pkg.mod$foo");
+    const store = await writeBlob("pkg.mod:foo", bytesFull);
+    const out = await loadModule(store, "pkg", "1.0", "pkg.mod:foo");
     expect(out.__type).toBe("IngestedDoc");
     expect(out.__tag).toBe(4010);
     expect(out.qa).toBe("pkg.mod:foo");
     expect(out.item_file).toBe("foo.py");
     expect(out.item_line).toBe(42);
-    const s = out.signature as { __type: string; target_name: string; return_annotation: { __type: string } };
+    const s = out.signature as {
+      __type: string;
+      target_name: string;
+      return_annotation: { __type: string };
+    };
     expect(s.__type).toBe("SignatureNode");
     expect(s.target_name).toBe("foo");
     expect(s.return_annotation.__type).toBe("Empty");
   });
 
   it("falls back to .cbor when the bare filename is absent", async () => {
-    const bundle = await writeBlob("pkg$bar.cbor", bytesBar);
-    expect((await loadModule(bundle, "pkg$bar")).qa).toBe("pkg:bar");
+    const store = await writeBlob("pkg:bar.cbor", bytesBar);
+    expect((await loadModule(store, "pkg", "1.0", "pkg:bar")).qa).toBe("pkg:bar");
   });
 
   it("wraps unregistered inner tags as UnknownNode", async () => {
-    // Tags outside FIELD_ORDER are surfaced as { __type: "unknown", __tag,
-    // value } so the UI can degrade to a JSON dump rather than crash.
-    const bundle = await writeBlob("pkg$qux", bytesUnknown);
-    const out = await loadModule(bundle, "pkg$qux");
+    const store = await writeBlob("pkg:qux", bytesUnknown);
+    const out = await loadModule(store, "pkg", "1.0", "pkg:qux");
     const arb = out.arbitrary as unknown[];
     expect(arb).toHaveLength(1);
     const inner = arb[0] as { __type: string; __tag: number; value: unknown };

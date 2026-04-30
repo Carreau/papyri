@@ -15,6 +15,7 @@ import pytest
 
 from papyri.directives import make_image_handler
 from papyri.nodes import (
+    Admonition,
     CrossRef,
     Figure,
     Image,
@@ -337,3 +338,40 @@ def test_image_handler_via_visitor_dispatch(tmp_path):
     assert isinstance(out[0], Figure)
     assert out[0].value.path == "shot.png"
     assert stored["shot.png"] == b"\x89PNG fake"
+
+
+# ---------------------------------------------------------------------------
+# seealso directive
+# ---------------------------------------------------------------------------
+
+
+def test_seealso_directive_produces_admonition():
+    v = _make_visitor()
+    ud = UnprocessedDirective(
+        name="seealso",
+        args="",
+        options={},
+        value="Some related topic.",
+        children=[],
+        raw=".. seealso::\n\n   Some related topic.",
+    )
+    out = v.replace_UnprocessedDirective(ud)
+    assert len(out) == 1
+    assert isinstance(out[0], Admonition)
+    assert out[0].kind == "seealso"
+
+
+def test_seealso_directive_empty_content_produces_admonition():
+    v = _make_visitor()
+    ud = UnprocessedDirective(
+        name="seealso",
+        args="",
+        options={},
+        value="",
+        children=[],
+        raw=".. seealso::",
+    )
+    out = v.replace_UnprocessedDirective(ud)
+    assert len(out) == 1
+    assert isinstance(out[0], Admonition)
+    assert out[0].kind == "seealso"

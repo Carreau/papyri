@@ -2,7 +2,6 @@
 import BaseLayout from "../layouts/BaseLayout.astro";
 import LoginForm from "../components/LoginForm.tsx";
 
-// Redirect if already logged in
 const sessionToken = Astro.cookies.get("papyri_session_token");
 if (sessionToken) {
   return Astro.redirect("/");
@@ -10,9 +9,53 @@ if (sessionToken) {
 ---
 
 <BaseLayout title="Login - Papyri Viewer">
-  <div style="max-width: 800px; margin: 0 auto;">
-    <h1>Papyri Viewer - Login</h1>
-    <p style="color: #666;">Enter your credentials to access the documentation viewer.</p>
-    <LoginForm client:load />
+  <div class="login-page">
+    <div class="login-card">
+      <header class="login-card-header">
+        <span class="login-card-mark" aria-hidden="true">&para;</span>
+        <h1>Sign in to Papyri</h1>
+        <p>Enter your credentials to access the documentation viewer.</p>
+      </header>
+      <LoginForm client:load />
+    </div>
   </div>
 </BaseLayout>
+
+<style>
+  .login-page {
+    min-height: calc(100vh - 120px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 16px;
+  }
+  .login-card {
+    width: 100%;
+    max-width: 380px;
+    background: var(--surface, #fff);
+    border: 1px solid var(--border, #e5e5e5);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+    padding: 32px 28px;
+  }
+  .login-card-header {
+    text-align: center;
+    margin-bottom: 24px;
+  }
+  .login-card-mark {
+    display: inline-block;
+    font-size: 32px;
+    line-height: 1;
+    color: var(--accent, #0066cc);
+    margin-bottom: 8px;
+  }
+  .login-card-header h1 {
+    font-size: 20px;
+    margin: 0 0 6px 0;
+  }
+  .login-card-header p {
+    font-size: 13px;
+    color: var(--muted, #666);
+    margin: 0;
+  }
+</style>

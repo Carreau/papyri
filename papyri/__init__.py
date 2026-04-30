@@ -66,7 +66,7 @@ from .cli.gen import gen
 from .cli.pack import pack
 from .cli.upload import upload
 
-__version__ = "0.0.9"
+__version__ = "0.0.10"
 
 logo = r"""
   ___                    _

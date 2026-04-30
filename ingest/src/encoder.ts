@@ -121,7 +121,7 @@ export const FIELD_ORDER: Readonly<Record<number, { name: string; fields: readon
   4053: { name: "BulletList", fields: ["ordered", "start", "spread", "children"] },
   4054: { name: "ListItem", fields: ["spread", "children"] },
   4055: { name: "AdmonitionTitle", fields: ["children"] },
-  4056: { name: "Admonition", fields: ["children", "kind"] },
+  4056: { name: "Admonition", fields: ["kind", "children"] },
   4057: { name: "InlineMath", fields: ["value"] },
   4058: { name: "Math", fields: ["value"] },
   4059: { name: "Blockquote", fields: ["children"] },

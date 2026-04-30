@@ -997,7 +997,6 @@ class Gen:
                     )
                     dv.collect_substitutions(*data)
                     blob.arbitrary = [dv.visit(s) for s in data]
-                    trees[key] = dv._tocs
                     blob.item_file = None
                     blob.item_line = None
                     blob.item_type = None
@@ -1007,8 +1006,15 @@ class Gen:
                     blob.signature = None
                     blob.validate()
                 except Exception as e:
+                    raise
                     self.log.warning("Could not process %s, skipping: %s", p, e)
                     continue
+                # Only register the toctree references after the doc validates
+                # — otherwise a failed doc can still seed `trees` with itself
+                # as a root (no fallback elsewhere can recover the missing
+                # entry, so the rendered toc loses everything reachable only
+                # from that root, including the doc itself).
+                trees[key] = dv._tocs
                 titles = [s.title for s in blob.arbitrary if s.title]
                 title = f"<No Title {key}>" if not titles else titles[0]
                 title_map[key] = title

@@ -95,6 +95,7 @@ def make_image_handler(
     asset_store: Callable[[str, bytes], None] | None,
     module: str,
     version: str,
+    doc_root: Path | None = None,
 ) -> Callable:
     """Return an ``.. image::`` directive handler bound to the given asset context.
 
@@ -102,16 +103,22 @@ def make_image_handler(
     handler signature and can be registered in ``DirectiveVisiter._handlers``
     like any other handler.
 
-    Local paths are resolved relative to *doc_path*, read from disk, stored via
-    *asset_store*, and represented as a ``Figure`` node so the viewer can serve
-    them alongside matplotlib-generated figures.  External URLs (http/https) and
-    any path that cannot be resolved produce an ``Image`` node instead.
+    Path resolution rules:
+
+    - ``http://`` / ``https://`` URIs → ``Image`` node (no download).
+    - Paths starting with ``/`` → resolved relative to *doc_root* (Sphinx
+      absolute-path convention, e.g. ``/_images/foo.png``).  Falls back to
+      an ``Image`` node with a warning when *doc_root* is ``None``.
+    - All other paths → resolved relative to *doc_path* (sibling-relative).
+      Falls back to an ``Image`` node with a warning when *doc_path* is
+      ``None``.
 
     Parameters
     ----------
     doc_path
         Directory of the RST or Python source file being processed.  Used to
-        resolve relative image paths.  ``None`` disables local-file embedding.
+        resolve relative image paths.  ``None`` disables local-file embedding
+        for relative paths.
     asset_store
         Callable ``(name, data)`` that stores raw bytes under *name* in the
         bundle's ``assets/`` directory.  ``None`` disables local-file embedding.
@@ -119,6 +126,10 @@ def make_image_handler(
         Root module name for the bundle (used to build the ``RefInfo``).
     version
         Bundle version string (used to build the ``RefInfo``).
+    doc_root
+        Root of the documentation tree.  Used to resolve ``/``-prefixed
+        (Sphinx-absolute) paths such as ``/_images/foo.png``.  ``None``
+        disables resolution of those paths.
     """
 
     def image_handler(
@@ -130,20 +141,31 @@ def make_image_handler(
         if uri.startswith(("http://", "https://")):
             return [Image(url=uri, alt=alt)]
 
-        if doc_path is None or asset_store is None:
-            log.warning(
-                "image directive: cannot embed local path %r - "
-                "no doc_path/asset_store available (external URLs only)",
-                uri,
-            )
-            return [Image(url=uri, alt=alt)]
+        # Sphinx absolute paths (e.g. ``/_images/foo.png``) are relative to the
+        # documentation root, not the current file's directory.
+        if uri.startswith("/"):
+            if doc_root is None or asset_store is None:
+                log.warning(
+                    "image directive: cannot embed root-relative path %r - "
+                    "no doc_root/asset_store available",
+                    uri,
+                )
+                return [Image(url=uri, alt=alt)]
+            img_path = (doc_root / uri.lstrip("/")).resolve()
+        else:
+            if doc_path is None or asset_store is None:
+                log.warning(
+                    "image directive: cannot embed local path %r - "
+                    "no doc_path/asset_store available (external URLs only)",
+                    uri,
+                )
+                return [Image(url=uri, alt=alt)]
+            img_path = (doc_path / uri).resolve()
 
-        img_path = (doc_path / uri).resolve()
         if not img_path.is_file():
             log.warning(
-                "image directive: %s not found (resolved from %s)",
+                "image directive: %s not found",
                 img_path,
-                doc_path,
             )
             return [Image(url=uri, alt=alt)]
 

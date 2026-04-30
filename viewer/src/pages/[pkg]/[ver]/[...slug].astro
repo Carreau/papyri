@@ -95,7 +95,6 @@ const crumbs = qualnameAncestors(qualname).map((qa) => ({
   label: qualnameLabel(qa),
   href: linkForQualname(pkg, ver, qa),
 }));
-
 ---
 
 <BundleLayout pkg={pkg} ver={ver} title={`${qualname} — Papyri viewer`} activeQualname={qualname}>

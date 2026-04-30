@@ -990,6 +990,7 @@ class Gen:
                         module=self._meta.get("module"),
                         doc_path=p.parent,
                         asset_store=self.put_raw,
+                        doc_root=path,
                     )
                     dv.collect_substitutions(*data)
                     blob.arbitrary = [dv.visit(s) for s in data]

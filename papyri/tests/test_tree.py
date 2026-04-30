@@ -269,6 +269,39 @@ def test_image_handler_missing_file_warns(tmp_path, caplog):
     assert any("not found" in r.getMessage() for r in caplog.records)
 
 
+def test_image_handler_root_relative_path_stored(tmp_path):
+    """``/_images/foo.png`` is resolved relative to doc_root, not doc_path."""
+    doc_root = tmp_path / "docs"
+    images_dir = doc_root / "_images"
+    images_dir.mkdir(parents=True)
+    (images_dir / "unicode_completion.png").write_bytes(b"\x89PNG fake")
+
+    # doc_path is a subdirectory - the file is NOT there.
+    doc_path = doc_root / "reference"
+    doc_path.mkdir()
+
+    stored: dict[str, bytes] = {}
+    h = make_image_handler(
+        doc_path, stored.__setitem__, "pkg", "1.0", doc_root=doc_root
+    )
+    out = h("/_images/unicode_completion.png", {}, "")
+    assert len(out) == 1
+    assert isinstance(out[0], Figure)
+    assert out[0].value.path == "unicode_completion.png"
+    assert stored["unicode_completion.png"] == b"\x89PNG fake"
+
+
+def test_image_handler_root_relative_no_doc_root_warns(caplog):
+    stored: dict[str, bytes] = {}
+    h = make_image_handler(None, stored.__setitem__, "pkg", "1.0", doc_root=None)
+    with caplog.at_level("WARNING", logger="papyri"):
+        out = h("/_images/foo.png", {}, "")
+    assert isinstance(out[0], Image)
+    assert out[0].url == "/_images/foo.png"
+    assert stored == {}
+    assert any("doc_root" in r.getMessage() for r in caplog.records)
+
+
 def test_image_handler_registered_in_visitor(tmp_path):
     """The visitor's _handlers dict should contain an image handler by default."""
     v = _make_visitor()

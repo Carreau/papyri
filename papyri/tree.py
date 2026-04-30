@@ -604,6 +604,7 @@ class DirectiveVisiter(TreeReplacer):
         module: str | None = None,
         doc_path: Path | None = None,
         asset_store: Callable[[str, bytes], None] | None = None,
+        doc_root: Path | None = None,
     ):
         """
         qa: str
@@ -658,7 +659,9 @@ class DirectiveVisiter(TreeReplacer):
         # and win over this default.
         self._handlers.setdefault(
             "image",
-            make_image_handler(doc_path, asset_store, self.module, self.version),
+            make_image_handler(
+                doc_path, asset_store, self.module, self.version, doc_root
+            ),
         )
 
     def collect_substitutions(self, *sections: Section) -> None:

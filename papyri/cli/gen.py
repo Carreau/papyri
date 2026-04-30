@@ -48,6 +48,12 @@ def gen(
         "--only",
         help="Restrict generation to these qualified names (repeatable).",
     ),
+    upload: bool = typer.Option(
+        False,
+        "--upload",
+        is_flag=True,
+        help="After generation, upload the bundle to a viewer instance.",
+    ),
 ) -> None:
     """
     Generate documentation IR for a given package.
@@ -69,7 +75,7 @@ def gen(
     here = os.getcwd()
 
     with TemporaryWorkingDirectory():
-        gen_main(
+        bundle_path = gen_main(
             infer=infer,
             exec_=exec,
             target_file=join(here, file),
@@ -84,3 +90,8 @@ def gen(
             fail_unseen_error=fail_unseen_error,
             limit_to=only,
         )
+
+        if upload and bundle_path:
+            from papyri.cli.upload import upload as upload_func
+
+            upload_func([bundle_path])

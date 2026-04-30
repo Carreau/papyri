@@ -640,6 +640,7 @@ class DirectiveVisiter(TreeReplacer):
             "versionadded": versionadded_handler,
             "versionchanged": versionchanged_handler,
             "deprecated": deprecated_handler,
+            "code-block": self._code_handler,
         }
 
         for k, v in (config or {}).items():
@@ -737,6 +738,30 @@ class DirectiveVisiter(TreeReplacer):
     ) -> list[Code]:
         return [Code(content)]
 
+    def _resolve_doc_path(self, path: str) -> str:
+        """Resolve a toctree entry to a doc key (':' separator).
+
+        Toctree entries are paths relative to the current document's
+        directory; a leading '/' anchors to the source root. The doc key
+        joins directory parts with ':' (see ``collect_narrative_docs``).
+        """
+        if path.endswith(".rst"):
+            path = path[:-4]
+        if path.startswith("/"):
+            parts = [p for p in path.lstrip("/").split("/") if p]
+        else:
+            parent_parts = self.qa.split(":")[:-1] if ":" in self.qa else []
+            parts = parent_parts + [p for p in path.split("/") if p]
+        return ":".join(parts)
+
+    def _toctree_crossref(self, text: str, path: str) -> CrossRef:
+        return CrossRef(
+            text,
+            reference=LocalRef("docs", self._resolve_doc_path(path)),
+            kind="exists",
+            anchor=None,
+        )
+
     def _toctree_handler(self, argument, options, content):
         # argument is ignored (rare cases like ``.. toctree:: My Title``).
         toc = []
@@ -761,24 +786,10 @@ class DirectiveVisiter(TreeReplacer):
                 except ValueError:
                     continue
                 toc.append([title, url])
-                link = CrossRef(
-                    title,
-                    reference=RefInfo(module="", version="", kind="?", path=url),
-                    kind="exists",
-                    anchor=None,
-                )
-                RESOLVER.add_reference(link, url)
-                lls.append(link)
+                lls.append(self._toctree_crossref(title, url))
             elif "<" not in line:
                 toc.append([None, line])
-                link = CrossRef(
-                    line,
-                    reference=RefInfo(module="", version="", kind="?", path=line),
-                    kind="exists",
-                    anchor=None,
-                )
-                RESOLVER.add_reference(link, line)
-                lls.append(link)
+                lls.append(self._toctree_crossref(line, line))
             # Lines with "<" but not ending ">" are malformed — skip with a warning.
             else:
                 log.warning("toctree: skipping malformed entry %r", line)

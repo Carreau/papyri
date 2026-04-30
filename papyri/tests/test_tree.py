@@ -164,7 +164,51 @@ def test_toctree_title_form_parsed():
     crossref = para.children[0]
     assert isinstance(crossref, CrossRef)
     assert crossref.value == "Getting Started"
+    assert isinstance(crossref.reference, LocalRef)
+    assert crossref.reference.kind == "docs"
     assert crossref.reference.path == "intro"
+
+
+def test_toctree_resolves_relative_to_current_doc():
+    # toctree entries are paths relative to the current doc's directory.
+    # For doc key "whatsnew:index" (= whatsnew/index.rst), entry "version9"
+    # must resolve to "whatsnew:version9" so the viewer can render a link.
+    v = DirectiveVisiter(
+        qa="whatsnew:index",
+        known_refs=frozenset(),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+    )
+    out = v._toctree_handler(argument=None, options={}, content="version9\nversion8")
+    paths = [item.children[0].children[0].reference.path for item in out[0].children]
+    assert paths == ["whatsnew:version9", "whatsnew:version8"]
+
+
+def test_toctree_absolute_path_anchored_at_root():
+    v = DirectiveVisiter(
+        qa="whatsnew:index",
+        known_refs=frozenset(),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+    )
+    out = v._toctree_handler(argument=None, options={}, content="/install/quickstart")
+    crossref = out[0].children[0].children[0].children[0]
+    assert crossref.reference.path == "install:quickstart"
+
+
+def test_toctree_strips_rst_extension():
+    v = DirectiveVisiter(
+        qa="whatsnew:index",
+        known_refs=frozenset(),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+    )
+    out = v._toctree_handler(argument=None, options={}, content="version9.rst")
+    crossref = out[0].children[0].children[0].children[0]
+    assert crossref.reference.path == "whatsnew:version9"
 
 
 def test_toctree_argument_is_silently_ignored():

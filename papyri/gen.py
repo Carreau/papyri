@@ -208,7 +208,7 @@ def gen_main(
     fail_early: bool,
     fail_unseen_error: bool,
     limit_to: list[str],
-) -> None:
+) -> Path | None:
     """
     Main entry point to generate DocBundle files.
 
@@ -246,7 +246,8 @@ def gen_main(
 
     Returns
     -------
-    None
+    Path | None
+        Path to the generated DocBundle directory, or None if dry_run is True.
 
     """
     if limit_to is None:
@@ -291,7 +292,7 @@ def gen_main(
     if narrative:
         g.collect_narrative_docs()
 
-    p = target_dir / (g.root + "_" + g.version)
+    p: Path = target_dir / (g.root + "_" + g.version)
     p.mkdir(exist_ok=True)
 
     g.log.info("Saving current Doc bundle to %s", p)
@@ -302,6 +303,8 @@ def gen_main(
         g.partial_write(p)
     if dry_run:
         temp_dir.cleanup()
+        return None
+    return p
 
 
 class DFSCollector:

@@ -24,7 +24,7 @@ try {
   return new Response(`Doc ${docPath} not found`, { status: 404 });
 }
 const view = buildDocPageView(doc, docPath);
-const resolveXref = await buildXrefResolver(graphDb, doc);
+const resolveXref = await buildXrefResolver(graphDb, doc, pkg, ver);
 
 function sectionHeading(title: string, level: number): string {
   const tag = `h${Math.min(Math.max(level + 1, 2), 6)}`;

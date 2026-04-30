@@ -94,4 +94,8 @@ def gen(
         if upload and bundle_path:
             from papyri.cli.upload import upload as upload_func
 
-            upload_func([bundle_path])
+            url = os.environ.get(
+                "PAPYRI_UPLOAD_URL", "http://localhost:4321/api/bundle"
+            )
+            token = os.environ.get("PAPYRI_UPLOAD_TOKEN")
+            upload_func([bundle_path], url=url, token=token)

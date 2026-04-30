@@ -5,7 +5,7 @@ transformation that are easy to pin and have historically regressed.
 Covered surfaces:
 - ``py_doc_handler`` (:doc: role → LocalRef("docs", path))
 - ``DelayedResolver`` (target/reference unification)
-- ``_toctree_handler`` (blank lines, comments, glob, malformed entries)
+- ``_toctree_handler`` (blank lines, comments, glob, hidden, malformed entries, LocalRef links)
 - ``_SPHINX_ONLY_DIRECTIVES`` (silent drop via warning)
 """
 
@@ -159,7 +159,7 @@ def test_toctree_title_form_parsed():
     items = out[0].children
     assert len(items) == 1
     # Inside the ListItem, the Paragraph wraps a CrossRef whose display value
-    # is the title and whose reference path is "intro".
+    # is the title and whose reference is a LocalRef docs link.
     para = items[0].children[0]
     crossref = para.children[0]
     assert isinstance(crossref, CrossRef)
@@ -231,7 +231,8 @@ def test_toctree_malformed_entry_warns(caplog):
 
 def test_toctree_not_hidden_produces_crossref_links():
     # Without the hidden option the handler must return a BulletList whose
-    # items each wrap a CrossRef that points to the referenced page.
+    # items each wrap a CrossRef with a LocalRef("docs", ...) reference so
+    # the viewer can construct a link to the page.
     v = _make_visitor()
     content = "intro\nadvanced"
     out = v._toctree_handler(argument=None, options={}, content=content)
@@ -242,7 +243,29 @@ def test_toctree_not_hidden_produces_crossref_links():
         para = item.children[0]
         crossref = para.children[0]
         assert isinstance(crossref, CrossRef)
+        assert isinstance(crossref.reference, LocalRef)
+        assert crossref.reference.kind == "docs"
         assert crossref.reference.path == expected_path
+
+
+def test_toctree_nested_path_uses_colon_separator():
+    # Toctree entries like "whatsnew/index" must become LocalRef("docs",
+    # "whatsnew:index") so the viewer's linkForDoc produces the correct URL.
+    v = _make_visitor()
+    out = v._toctree_handler(argument=None, options={}, content="whatsnew/index")
+    crossref = out[0].children[0].children[0].children[0]
+    assert isinstance(crossref.reference, LocalRef)
+    assert crossref.reference.path == "whatsnew:index"
+
+
+def test_toctree_titled_nested_path_uses_colon_separator():
+    v = _make_visitor()
+    out = v._toctree_handler(
+        argument=None, options={}, content="What's New <whatsnew/index>"
+    )
+    crossref = out[0].children[0].children[0].children[0]
+    assert isinstance(crossref.reference, LocalRef)
+    assert crossref.reference.path == "whatsnew:index"
 
 
 def test_toctree_hidden_returns_no_visible_output():

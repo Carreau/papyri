@@ -87,14 +87,21 @@ when they are not understood they are currently rendered raw, but will be an err
    Also:
 
       - That
+
       - Or this
+        
       - Or that. 
 
       
 
 .. currentmodule:: not handled
 
-.. seealso:: not handled
+.. seealso:: In progress II
+
+   numpy:
+      the module
+   numpy.linspace:
+      something else
 
 .. highlight:: not handled
 

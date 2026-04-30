@@ -48,7 +48,7 @@ def admonition_helper(name, argument, options, content):
     assert not options
     if content:
         inner = parse(content.encode(), qa="")
-        assert len(inner) == 1
+        assert len(inner) == 1, (inner, name, argument, options, content)
 
         assert isinstance(inner[0], Section)
 

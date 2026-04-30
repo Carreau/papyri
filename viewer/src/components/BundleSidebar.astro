@@ -5,6 +5,12 @@
 // qualname list.
 import BundleSearch from "./BundleSearch.tsx";
 import { linkForDoc, linkForQualname } from "../lib/links.ts";
+import {
+  qualnameAncestors,
+  qualnameDepth,
+  qualnameLabel,
+  qualnameParent,
+} from "../lib/qualname.ts";
 import type { BundleNav, NavEntry, TocItem } from "../lib/nav.ts";
 
 interface Props {
@@ -18,10 +24,10 @@ const { nav, activeQualname, activeDocPath, activeExamplePath } = Astro.props;
 const bundleHref = `/${nav.pkg}/${nav.version}/`;
 const summary = typeof nav.meta.summary === "string" ? nav.meta.summary : null;
 
-// Build a tree-style flat list for the API section. Always shows depth-1
-// modules; when a module at depth n is active, expands its ancestors and
-// shows the active module's children (depth n+1). Items with `:` are class
-// members, not modules — they're excluded here and only reachable via search.
+// Flat tree for the API section. Always shows depth-1 entries; for any
+// ancestor of the active qualname, expands to show its direct children
+// (siblings of the active node and the branches of each ancestor). Class
+// members are included via the `:` separator.
 interface ApiTreeItem {
   qualname: string;
   label: string;
@@ -31,29 +37,19 @@ interface ApiTreeItem {
 }
 
 function buildApiTreeItems(qualnames: string[], active: string | undefined): ApiTreeItem[] {
-  const modules = qualnames.filter((qa) => !qa.includes(":"));
-
-  // Ancestors of the active module — the set of qualnames that prefix it.
-  const activePath = new Set<string>();
-  if (active) {
-    const parts = active.split(".");
-    for (let i = 1; i <= parts.length; i++) {
-      activePath.add(parts.slice(0, i).join("."));
-    }
-  }
-
+  const activePath = new Set<string>(active ? qualnameAncestors(active) : []);
   const items: ApiTreeItem[] = [];
-  for (const qa of modules) {
-    const parts = qa.split(".");
-    const depth = parts.length;
-    // Depth-1 entries are always shown. Deeper entries are shown only when
-    // their direct parent is on the active path (ancestor or active itself).
-    const show = depth === 1 || activePath.has(parts.slice(0, -1).join("."));
+  for (const qa of [...qualnames].sort()) {
+    const parent = qualnameParent(qa);
+    // Show roots (no parent) and direct children of any node on the active
+    // path — that gives ancestors, their siblings at each level, the active
+    // node, and the active node's direct children.
+    const show = parent === null || activePath.has(parent);
     if (!show) continue;
     items.push({
       qualname: qa,
-      label: parts[parts.length - 1],
-      depth,
+      label: qualnameLabel(qa),
+      depth: qualnameDepth(qa),
       isActive: qa === active,
       isAncestor: activePath.has(qa) && qa !== active,
     });

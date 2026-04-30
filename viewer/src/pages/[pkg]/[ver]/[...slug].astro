@@ -9,6 +9,9 @@ import { getBackrefs } from "../../../lib/graph.ts";
 import { getBackends } from "../../../lib/backends.ts";
 import { buildQualnamePageView } from "../../../lib/qualname-page.ts";
 import { buildXrefResolver } from "../../../lib/xref.ts";
+import { linkForQualname } from "../../../lib/links.ts";
+import { loadBundleNav } from "../../../lib/nav.ts";
+import { qualnameAncestors, qualnameLabel } from "../../../lib/qualname.ts";
 import IrNode from "../../../components/IrNode.astro";
 import Signature from "../../../components/Signature.astro";
 import BundleLayout from "../../../layouts/BundleLayout.astro";
@@ -35,11 +38,87 @@ const backrefs = await getBackrefs(graphDb, { pkg, ver, kind: "module", path: qu
 const view = buildQualnamePageView(doc, backrefs, pkg);
 const hasBackrefs = view.internalBackrefs.length > 0 || view.externalBackrefs.length > 0;
 const resolveXref = await buildXrefResolver(graphDb, doc);
+
+// Direct children for the on-page Members TOC. Qualnames use `:` to separate
+// the module path from in-module objects, and `.` after `:` for class
+// members. Examples:
+//   `pkg.sub`               — submodule of `pkg`
+//   `pkg.sub:func`          — function/class/attr inside module `pkg.sub`
+//   `pkg.sub:Cls.method`    — method on class `pkg.sub:Cls`
+const nav = await loadBundleNav(blobStore, pkg, ver);
+const isClassPage = qualname.includes(":");
+interface MemberGroup {
+  title: string;
+  items: { qualname: string; label: string; href: string }[];
+}
+const submodules: MemberGroup["items"] = [];
+const moduleMembers: MemberGroup["items"] = [];
+const classMembers: MemberGroup["items"] = [];
+
+if (isClassPage) {
+  const prefix = `${qualname}.`;
+  for (const qa of nav.qualnames) {
+    if (!qa.startsWith(prefix)) continue;
+    const rest = qa.slice(prefix.length);
+    if (rest.length === 0 || rest.includes(".") || rest.includes(":")) continue;
+    classMembers.push({ qualname: qa, label: rest, href: linkForQualname(pkg, ver, qa) });
+  }
+} else {
+  const dotPrefix = `${qualname}.`;
+  const colonPrefix = `${qualname}:`;
+  for (const qa of nav.qualnames) {
+    if (qa.startsWith(dotPrefix)) {
+      const rest = qa.slice(dotPrefix.length);
+      if (rest.length === 0 || rest.includes(".") || rest.includes(":")) continue;
+      submodules.push({ qualname: qa, label: rest, href: linkForQualname(pkg, ver, qa) });
+    } else if (qa.startsWith(colonPrefix)) {
+      const rest = qa.slice(colonPrefix.length);
+      if (rest.length === 0 || rest.includes(".") || rest.includes(":")) continue;
+      moduleMembers.push({ qualname: qa, label: rest, href: linkForQualname(pkg, ver, qa) });
+    }
+  }
+}
+const byLabel = (a: { label: string }, b: { label: string }) => a.label.localeCompare(b.label);
+submodules.sort(byLabel);
+moduleMembers.sort(byLabel);
+classMembers.sort(byLabel);
+const memberGroups: MemberGroup[] = isClassPage
+  ? [{ title: "Members", items: classMembers }]
+  : [
+      { title: "Submodules", items: submodules },
+      { title: "Members", items: moduleMembers },
+    ];
+const hasMembers = memberGroups.some((g) => g.items.length > 0);
+
+const crumbs = qualnameAncestors(qualname).map((qa) => ({
+  qualname: qa,
+  label: qualnameLabel(qa),
+  href: linkForQualname(pkg, ver, qa),
+}));
 ---
 
 <BundleLayout pkg={pkg} ver={ver} title={`${qualname} — Papyri viewer`} activeQualname={qualname}>
   <p class="crumb">
     <a href="/">bundles</a> / <a href={`/${pkg}/${ver}/`}>{pkg} {ver}</a>
+    {
+      crumbs.map((c, i) =>
+        i === crumbs.length - 1 ? (
+          <Fragment>
+            {" / "}
+            <span aria-current="page">
+              <code>{c.label}</code>
+            </span>
+          </Fragment>
+        ) : (
+          <Fragment>
+            {" / "}
+            <a href={c.href} title={c.qualname}>
+              <code>{c.label}</code>
+            </a>
+          </Fragment>
+        )
+      )
+    }
   </p>
 
   <header class="qa-header">
@@ -60,6 +139,29 @@ const resolveXref = await buildXrefResolver(graphDb, doc);
       <section class="signature">
         <h2>Signature</h2>
         <Signature signature={doc.signature} />
+      </section>
+    ) : null
+  }
+
+  {
+    hasMembers ? (
+      <section class="doc-section doc-section-members">
+        {memberGroups.map((group) =>
+          group.items.length > 0 ? (
+            <Fragment>
+              <h2>{group.title}</h2>
+              <ul class="qualnames members-toc">
+                {group.items.map((m) => (
+                  <li>
+                    <a href={m.href} title={m.qualname}>
+                      <code>{m.label}</code>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </Fragment>
+          ) : null
+        )}
       </section>
     ) : null
   }

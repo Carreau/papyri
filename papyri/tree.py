@@ -233,10 +233,16 @@ def resolve_(
         if ref.startswith("."):
             if (found := qa + ref) in k_path_map:
                 return k_path_map[found]
+            # ~.Foo.Bar.Baz style: dot is a "start from root" hint, the
+            # remainder is an absolute path.
+            if (abs_ref := ref[1:]) in k_path_map:
+                return k_path_map[abs_ref]
             else:
                 root = qa.split(".")[0]
                 sub1 = root_start(root, keyset)
-                subset = endswith(ref, sub1)
+                # endswith needs the ref without the leading dot so that
+                # "pkg.mod.Name".endswith("mod.Name") matches correctly.
+                subset = endswith(abs_ref, sub1)
                 if len(subset) == 1:
                     return k_path_map[next(iter(subset))]
                     # return RefInfo(None, None, "exists", next(iter(subset)))

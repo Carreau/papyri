@@ -11,12 +11,41 @@ export const prerender = false;
 const { pkg } = Astro.params;
 if (!pkg) return new Response("Not found", { status: 404 });
 
-const { blobStore } = await getBackends();
+const { blobStore, graphDb } = await getBackends();
 const packages = await listIngestedPackages(blobStore);
 const entry: IngestedPackage | undefined = packages.find((p) => p.pkg === pkg);
 
 if (!entry) {
   return new Response(`Package ${pkg} not found`, { status: 404 });
+}
+
+// Per-bundle size + ingest time, recorded at upload by the ingest pipeline.
+const bundleMetaRows = await graphDb.all<{
+  version: string;
+  bundle_size_bytes: number;
+  ingested_at: number;
+}>("SELECT version, bundle_size_bytes, ingested_at FROM bundles WHERE module=?", [pkg]);
+const bundleMeta = new Map<string, { size: number; ingestedAt: number }>();
+for (const r of bundleMetaRows) {
+  bundleMeta.set(r.version, { size: r.bundle_size_bytes, ingestedAt: r.ingested_at });
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let v = n / 1024;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return `${v.toFixed(v >= 10 ? 0 : 1)} ${units[i]}`;
+}
+
+function formatTimestamp(secs: number): string {
+  // ingested_at is seconds since epoch (see ingest.ts).
+  const d = new Date(secs * 1000);
+  return d.toISOString().replace("T", " ").slice(0, 16) + " UTC";
 }
 
 const latestNav = await loadBundleNav(blobStore, pkg, entry.latest);
@@ -43,10 +72,15 @@ const condaForgeUrl = `https://anaconda.org/conda-forge/${pkg}`;
 
 // Gather counts per version. listModules is cheap; nav would be heavier.
 const rows = await Promise.all(
-  entry.versions.map(async (v) => ({
-    version: v,
-    qualnameCount: (await listModules(blobStore, pkg, v)).length,
-  }))
+  entry.versions.map(async (v) => {
+    const meta = bundleMeta.get(v);
+    return {
+      version: v,
+      qualnameCount: (await listModules(blobStore, pkg, v)).length,
+      size: meta?.size ?? null,
+      ingestedAt: meta?.ingestedAt ?? null,
+    };
+  })
 );
 
 // Default diff comparison: latest vs second-latest if available.
@@ -128,6 +162,8 @@ const defaultTo = entry.versions[0]!;
             <tr>
               <th>Version</th>
               <th class="num">API items</th>
+              <th class="num">Size</th>
+              <th>Uploaded</th>
               <th></th>
             </tr>
           </thead>
@@ -140,6 +176,10 @@ const defaultTo = entry.versions[0]!;
                     {r.version === entry.latest ? <span class="badge">latest</span> : null}
                   </td>
                   <td class="num">{r.qualnameCount}</td>
+                  <td class="num">{r.size != null ? formatBytes(r.size) : "—"}</td>
+                  <td class="muted">
+                    {r.ingestedAt != null ? formatTimestamp(r.ingestedAt) : "—"}
+                  </td>
                   <td>
                     <a href={`/${pkg}/${r.version}/`}>browse →</a>
                   </td>
@@ -364,6 +404,11 @@ const defaultTo = entry.versions[0]!;
   .versions-table td.num {
     text-align: right;
     font-variant-numeric: tabular-nums;
+  }
+  .versions-table td.muted {
+    color: var(--fg-muted);
+    font-variant-numeric: tabular-nums;
+    font-size: 0.85rem;
   }
   .badge {
     margin-left: 0.5rem;

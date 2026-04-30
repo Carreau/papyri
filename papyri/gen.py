@@ -1013,7 +1013,7 @@ class Gen:
         for k, b in blbs.items():
             self.docs[k] = b.to_json()
 
-        raw_tree = make_tree(trees)
+        root, raw_tree = make_tree(trees)
 
         def _build_toc(tree: dict) -> list[TocTree]:
             result = []
@@ -1027,7 +1027,20 @@ class Gen:
                 )
             return result
 
-        self._toc_nodes = _build_toc(raw_tree)
+        nodes = _build_toc(raw_tree)
+        # Prepend the root (typically "index") as the first sibling so the
+        # narrative entry point is visible in the rendered toc rather than
+        # only reachable by clicking the "Docs" header.
+        if root is not None and root in self.docs:
+            nodes.insert(
+                0,
+                TocTree(
+                    children=[],
+                    title=title_map.get(root, root),
+                    ref=LocalRef("docs", root),
+                ),
+            )
+        self._toc_nodes = nodes
 
     def write_narrative(self, where: Path) -> None:
         if self._toc_nodes:

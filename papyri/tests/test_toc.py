@@ -42,7 +42,7 @@ def test_dotdotcount_rejects_non_leading():
 
 def test_make_tree_empty_input_returns_empty_dict():
     # No entries collected — must not crash, must return an empty tree.
-    assert make_tree({}) == {}
+    assert make_tree({}) == (None, {})
 
 
 def test_make_tree_prefers_index_root():
@@ -52,7 +52,8 @@ def test_make_tree_prefers_index_root():
         "tutorial": [],
         "api": [],
     }
-    tree = make_tree(data)
+    root, tree = make_tree(data)
+    assert root == "index"
     assert set(tree.keys()) == {"tutorial", "api"}
 
 
@@ -64,7 +65,8 @@ def test_make_tree_falls_back_to_unreferenced_root(caplog):
         "api": [],
     }
     with caplog.at_level("WARNING", logger="papyri"):
-        tree = make_tree(data)
+        root, tree = make_tree(data)
+    assert root == "whatsnew"
     assert set(tree.keys()) == {"tutorial", "api"}
     # The fallback must say so — otherwise a silent choice makes debugging hard.
     assert any("no 'index' root found" in r.getMessage() for r in caplog.records)

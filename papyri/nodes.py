@@ -853,6 +853,8 @@ FlowContent: TypeAlias = (
     | FieldList
     | Comment
     | Citation
+    | Image
+    | Figure
 )
 
 ListContent: TypeAlias = ListItem

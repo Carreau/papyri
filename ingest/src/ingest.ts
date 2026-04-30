@@ -244,7 +244,10 @@ export class Ingester {
    * Used by the viewer's PUT /api/bundle handler under both Node and
    * Cloudflare Workers.
    */
-  async ingestBundle(node: unknown): Promise<{ pkg: string; version: string }> {
+  async ingestBundle(
+    node: unknown,
+    bundleSizeBytes?: number,
+  ): Promise<{ pkg: string; version: string }> {
     assertBundle(node);
     const bundle = node;
     const root = bundle.module;
@@ -355,6 +358,16 @@ export class Ingester {
       if (!(k in metaForStore)) metaForStore[k] = v;
     }
     await this.blobStore.putMeta(root, version, cborEncode(metaForStore) as Uint8Array);
+
+    if (bundleSizeBytes !== undefined) {
+      const now = Math.floor(Date.now() / 1000);
+      await this.graphDb.run(
+        "INSERT INTO bundles(module, version, bundle_size_bytes, ingested_at) VALUES (?, ?, ?, ?)" +
+          " ON CONFLICT(module, version) DO UPDATE SET" +
+          " bundle_size_bytes=excluded.bundle_size_bytes, ingested_at=excluded.ingested_at",
+        [root, version, bundleSizeBytes, now],
+      );
+    }
 
     return { pkg: root, version };
   }

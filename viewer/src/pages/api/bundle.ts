@@ -59,9 +59,16 @@ export const PUT: APIRoute = async ({ request }) => {
 
   // Decode the artifact: gunzip → CBOR → Bundle Node. DecompressionStream
   // is in Web Streams (Workers + Node 18+), so this is a single code path.
+  // Read the compressed bytes into a buffer first so we can record the
+  // on-wire size before decompressing.
   let bundle: TypedNode;
+  let bundleSizeBytes = 0;
   try {
-    const decompressed = new Response(request.body.pipeThrough(new DecompressionStream("gzip")));
+    const compressedBuffer = await request.arrayBuffer();
+    bundleSizeBytes = compressedBuffer.byteLength;
+    const decompressed = new Response(
+      new Blob([compressedBuffer]).stream().pipeThrough(new DecompressionStream("gzip"))
+    );
     const cborBytes = new Uint8Array(await decompressed.arrayBuffer());
     bundle = decode<TypedNode>(cborBytes);
   } catch (err) {
@@ -90,7 +97,7 @@ export const PUT: APIRoute = async ({ request }) => {
   let pkg: string;
   let version: string;
   try {
-    ({ pkg, version } = await ingester.ingestBundle(bundle));
+    ({ pkg, version } = await ingester.ingestBundle(bundle, bundleSizeBytes));
   } catch (err) {
     return respond({ ok: false, error: `ingest failed: ${err}` }, 422);
   }

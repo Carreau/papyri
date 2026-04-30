@@ -640,6 +640,7 @@ class DirectiveVisiter(TreeReplacer):
             "versionadded": versionadded_handler,
             "versionchanged": versionchanged_handler,
             "deprecated": deprecated_handler,
+            "code-block": self._code_handler,
         }
 
         for k, v in (config or {}).items():

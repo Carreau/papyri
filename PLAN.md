@@ -83,6 +83,48 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
 
 ## Follow-ups (not yet scheduled)
 
+- **Missing block directives for numpy / scipy / IPython builds.**
+  Audited 2026-04-30. The following directives are encountered when running
+  `papyri gen` against these packages but have no handler; they fall through
+  to a raw `Directive` node in the IR.
+
+  *High priority* (very common; materially degrades output):
+  - `code-block` — the primary RST code-fence directive. The
+    `_code-block_handler` method name is invalid Python (hyphen), so it can
+    never be wired up via the `"_" + name + "_handler"` convention. Must be
+    added to the `_handlers` dict in `DirectiveVisiter.__init__`, delegating
+    to the existing `_code_handler` logic.
+  - `rubric` — unnumbered section heading (`.. rubric:: References`). Used
+    in all three packages for headings that must not appear in the TOC. Should
+    produce a lightweight `Section`-like node or an `Admonition`.
+
+  *Medium priority* (structural / ref-resolution impact):
+  - `only` — conditional content (`.. only:: html`). Content inside should be
+    included at gen time (papyri targets HTML) or dropped with a log message.
+  - `currentmodule` — `.. currentmodule:: numpy`. Sphinx directive that shifts
+    the implicit module prefix for subsequent cross-refs. Gen has no hook for
+    it; refs in sections that follow it silently fail to resolve.
+  - `seealso` — block-level "See Also" admonition in RST narrative docs.
+    Should be handled like `note` / `warning` (via `admonition_helper`).
+  - `testsetup` / `testcleanup` / `testcode` / `testoutput` — doctest
+    infrastructure directives used in numpy / scipy narrative docs. Should be
+    added to `_SPHINX_ONLY_DIRECTIVES` (silently dropped), not emitted as IR
+    nodes.
+
+  *Low priority* (infrequent or render-only):
+  - `highlight` — sets the default code-highlight language for a section.
+    Safe to ignore or silently drop.
+  - `plot` — matplotlib's plot directive; requires a live matplotlib build.
+    Add to `_SPHINX_ONLY_DIRECTIVES`.
+  - `literalinclude` — includes a source file verbatim. Needs filesystem
+    access at gen time; drop with a warning for now.
+  - `list-table` / `csv-table` — structured table directives (scipy). No IR
+    table node exists yet; emit verbatim `Code` as a stopgap.
+  - `function` / `class` / `method` / `attribute` / `data` / `exception` /
+    `module` (Sphinx py-domain, no `auto` prefix) — appear in handwritten
+    numpy / scipy API reference `.rst` pages. Could be added to
+    `_SPHINX_ONLY_DIRECTIVES` or given lightweight handlers.
+
 - **Directive handlers should not read global state.** `:ghpull:` and
   `:ghissue:` pull the GitHub slug from a module-level `_GITHUB_SLUG` in
   `tree.py`, set at gen start via `set_github_slug()`. The registry should

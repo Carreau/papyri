@@ -34,7 +34,7 @@ try {
 const backrefs = await getBackrefs(graphDb, { pkg, ver, kind: "module", path: qualname });
 const view = buildQualnamePageView(doc, backrefs, pkg);
 const hasBackrefs = view.internalBackrefs.length > 0 || view.externalBackrefs.length > 0;
-const resolveXref = await buildXrefResolver(graphDb, doc);
+const resolveXref = await buildXrefResolver(graphDb, doc, pkg, ver);
 ---
 
 <BundleLayout pkg={pkg} ver={ver} title={`${qualname} — Papyri viewer`} activeQualname={qualname}>

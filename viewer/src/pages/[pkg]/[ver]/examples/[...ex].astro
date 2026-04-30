@@ -19,7 +19,7 @@ try {
 } catch {
   return new Response(`Example ${examplePath} not found`, { status: 404 });
 }
-const resolveXref = await buildXrefResolver(graphDb, section);
+const resolveXref = await buildXrefResolver(graphDb, section, pkg, ver);
 
 const children = sectionChildren(section);
 ---

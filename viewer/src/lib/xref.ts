@@ -17,12 +17,13 @@
 
 import type { GraphDb } from "papyri-ingest";
 import { resolveRefs, refKey, type RefTuple } from "./graph.ts";
-import { linkForRef } from "./links.ts";
+import { linkForLocalRef, linkForRef } from "./links.ts";
 import { collectNodes, type IRNode } from "./ir-reader.ts";
 
 export interface XRefShape {
   value?: string;
   reference?: {
+    __type?: string;
     module?: string;
     version?: string;
     kind?: string;
@@ -38,7 +39,10 @@ export function collectXrefs(node: unknown): RefTuple[] {
   const out: RefTuple[] = [];
   for (const n of collectNodes(node, new Set(["CrossRef"]))) {
     const ref = (n as IRNode as XRefShape).reference;
-    if (!ref || !ref.module || !ref.path || !ref.kind) continue;
+    if (!ref || !ref.path || !ref.kind) continue;
+    // LocalRef carries no (module, version) — it's resolved by the page
+    // context (current pkg/ver) without a graph lookup.
+    if (ref.__type === "LocalRef" || !ref.module) continue;
     if (ref.module === "current-module" || ref.kind === "to-resolve") continue;
     out.push({
       pkg: ref.module,
@@ -54,8 +58,17 @@ export function collectXrefs(node: unknown): RefTuple[] {
  * Build a sync xref resolver for a doc. Runs one batched
  * `resolveRefs(graphDb, …)` and returns a closure that components can
  * call inside the render tree.
+ *
+ * `pkg`/`ver` give the page's bundle context so `LocalRef` references
+ * (e.g. toctree entries, `:doc:` roles) can be linked without a graph
+ * lookup.
  */
-export async function buildXrefResolver(graphDb: GraphDb, doc: unknown): Promise<XRefResolver> {
+export async function buildXrefResolver(
+  graphDb: GraphDb,
+  doc: unknown,
+  pkg: string,
+  ver: string
+): Promise<XRefResolver> {
   const refs = collectXrefs(doc);
   const resolved = await resolveRefs(graphDb, refs);
   return (raw: unknown) => {
@@ -63,7 +76,13 @@ export async function buildXrefResolver(graphDb: GraphDb, doc: unknown): Promise
     if (!n) return null;
     const label = n.value ?? "";
     const ref = n.reference;
-    if (!ref || !ref.module || !ref.path || !ref.kind) return null;
+    if (!ref || !ref.path || !ref.kind) return null;
+    // LocalRef → resolve directly against the page's pkg/ver.
+    if (ref.__type === "LocalRef" || !ref.module) {
+      const url = linkForLocalRef({ kind: ref.kind, path: ref.path }, pkg, ver);
+      if (!url) return null;
+      return { url, label };
+    }
     if (ref.module === "current-module" || ref.kind === "to-resolve") return null;
     const k = refKey({
       pkg: ref.module,

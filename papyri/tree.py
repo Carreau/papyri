@@ -8,12 +8,14 @@ import logging
 from collections import Counter, defaultdict
 from collections.abc import Callable
 from functools import lru_cache
+from pathlib import Path
 from textwrap import indent
 from typing import Any, cast
 
 from .directives import (
     block_math_handler,
     deprecated_handler,
+    make_image_handler,
     note_handler,
     versionadded_handler,
     versionchanged_handler,
@@ -600,6 +602,8 @@ class DirectiveVisiter(TreeReplacer):
         version,
         config=None,
         module: str | None = None,
+        doc_path: Path | None = None,
+        asset_store: Callable[[str, bytes], None] | None = None,
     ):
         """
         qa: str
@@ -649,6 +653,13 @@ class DirectiveVisiter(TreeReplacer):
         # collect_substitutions() before visiting; can be pre-seeded with
         # config-level global substitutions.
         self._substitutions: dict[str, list] = {}
+        # Register the default ``.. image::`` handler unless the caller already
+        # provided one via *config*.  Config-supplied handlers are applied above
+        # and win over this default.
+        self._handlers.setdefault(
+            "image",
+            make_image_handler(doc_path, asset_store, self.module, self.version),
+        )
 
     def collect_substitutions(self, *sections: Section) -> None:
         """Pre-scan sections for SubstitutionDef nodes to build the substitution map.

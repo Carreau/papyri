@@ -988,6 +988,8 @@ class Gen:
                         version=self._meta["version"],
                         config=self.config.directives,
                         module=self._meta.get("module"),
+                        doc_path=p.parent,
+                        asset_store=self.put_raw,
                     )
                     dv.collect_substitutions(*data)
                     blob.arbitrary = [dv.visit(s) for s in data]
@@ -1830,6 +1832,12 @@ class Gen:
             lr: frozenset[str] = frozenset(_local_refs)
             doc_blob.local_refs = sorted(lr)
             try:
+                _src_file = find_file(target_item)
+                _doc_path = (
+                    Path(_src_file).parent
+                    if _src_file and not _src_file.endswith("<string>")
+                    else None
+                )
                 dv = GenVisitor(
                     qa,
                     known_refs,
@@ -1837,6 +1845,8 @@ class Gen:
                     aliases={},
                     version=self.version,
                     config=self.config.directives,
+                    doc_path=_doc_path,
+                    asset_store=self.put_raw,
                 )
                 dv.collect_substitutions(
                     *arbitrary,

@@ -13,8 +13,11 @@ from __future__ import annotations
 
 import pytest
 
+from papyri.directives import make_image_handler
 from papyri.nodes import (
     CrossRef,
+    Figure,
+    Image,
     LocalRef,
     RefInfo,
     UnprocessedDirective,
@@ -207,3 +210,97 @@ def test_replace_unprocessed_directive_drops_sphinx_only(caplog):
         out = v.replace_UnprocessedDirective(ud)
     assert out == []
     assert any("Sphinx-only" in r.getMessage() for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# make_image_handler (directives.py)
+# ---------------------------------------------------------------------------
+
+
+def test_image_handler_external_url():
+    h = make_image_handler(None, None, "pkg", "1.0")
+    out = h("https://example.com/img.png", {"alt": "logo"}, "")
+    assert len(out) == 1
+    assert isinstance(out[0], Image)
+    assert out[0].url == "https://example.com/img.png"
+    assert out[0].alt == "logo"
+
+
+def test_image_handler_external_url_no_alt():
+    h = make_image_handler(None, None, "pkg", "1.0")
+    out = h("https://example.com/img.png", {}, "")
+    assert isinstance(out[0], Image)
+    assert out[0].alt == ""
+
+
+def test_image_handler_local_without_doc_path_warns(caplog):
+    h = make_image_handler(None, None, "pkg", "1.0")
+    with caplog.at_level("WARNING", logger="papyri"):
+        out = h("images/foo.png", {}, "")
+    assert isinstance(out[0], Image)
+    assert out[0].url == "images/foo.png"
+    assert any("doc_path" in r.getMessage() for r in caplog.records)
+
+
+def test_image_handler_local_file_stored(tmp_path):
+    img_dir = tmp_path / "docs"
+    img_dir.mkdir()
+    (img_dir / "logo.png").write_bytes(b"\x89PNG fake")
+
+    stored: dict[str, bytes] = {}
+    h = make_image_handler(img_dir, stored.__setitem__, "pkg", "1.0")
+
+    out = h("logo.png", {"alt": "the logo"}, "")
+    assert len(out) == 1
+    assert isinstance(out[0], Figure)
+    assert out[0].value.path == "logo.png"
+    assert out[0].value.kind == "assets"
+    assert stored["logo.png"] == b"\x89PNG fake"
+
+
+def test_image_handler_missing_file_warns(tmp_path, caplog):
+    stored: dict[str, bytes] = {}
+    h = make_image_handler(tmp_path, stored.__setitem__, "pkg", "1.0")
+    with caplog.at_level("WARNING", logger="papyri"):
+        out = h("missing.png", {}, "")
+    assert isinstance(out[0], Image)
+    assert out[0].url == "missing.png"
+    assert stored == {}
+    assert any("not found" in r.getMessage() for r in caplog.records)
+
+
+def test_image_handler_registered_in_visitor(tmp_path):
+    """The visitor's _handlers dict should contain an image handler by default."""
+    v = _make_visitor()
+    assert "image" in v._handlers
+
+
+def test_image_handler_via_visitor_dispatch(tmp_path):
+    """End-to-end: visitor dispatches an image UnprocessedDirective to the handler."""
+    img_dir = tmp_path / "docs"
+    img_dir.mkdir()
+    (img_dir / "shot.png").write_bytes(b"\x89PNG fake")
+
+    stored: dict[str, bytes] = {}
+    v = DirectiveVisiter(
+        qa="pkg.mod",
+        known_refs=frozenset(),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+        doc_path=img_dir,
+        asset_store=stored.__setitem__,
+    )
+    ud = UnprocessedDirective(
+        name="image",
+        args="shot.png",
+        options={"alt": "screenshot"},
+        value="",
+        children=[],
+        raw=".. image:: shot.png",
+    )
+    out = v.replace_UnprocessedDirective(ud)
+    assert len(out) == 1
+    assert isinstance(out[0], Figure)
+    assert out[0].value.path == "shot.png"
+    assert stored["shot.png"] == b"\x89PNG fake"

@@ -130,6 +130,19 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   `tree.py`, set at gen start via `set_github_slug()`. The registry should
   pass the active `Config` into the handler call so handlers are pure
   functions of `(value, ctx)`.
+- **Stateful directives need a proper context-injection API.** The
+  `make_image_handler` factory is a workable stopgap: it closes over
+  `doc_path`, `asset_store`, `module`, and `version` to give the handler
+  access to bundle state. But any future directive that needs similar
+  context (e.g. one that resolves paths, emits assets, or reads config)
+  must repeat this factory pattern. A cleaner design would define an
+  explicit `DirectiveContext` object (carrying at minimum `doc_path`,
+  `asset_store`, `module`, `version`, and the active `Config`) and pass
+  it as a second argument to every handler: `handler(argument, options,
+  content, ctx)`. Handlers that need no context simply ignore it; those
+  that do have a typed, discoverable surface instead of an ad-hoc closure.
+  This overlaps with the "no global state" item above and should be tackled
+  together.
 - **Per-reference version resolution.** Local references should carry
   explicit versions; the invariant needs an enforcement point once
   cross-package version data is threaded through.

@@ -90,6 +90,10 @@ def deprecated_handler(argument, options, content):
     return admonition_helper("deprecated", argument, options, content)
 
 
+def seealso_handler(argument, options, content):
+    return admonition_helper("seealso", argument, options, content)
+
+
 def make_image_handler(
     doc_path: Path | None,
     asset_store: Callable[[str, bytes], None] | None,

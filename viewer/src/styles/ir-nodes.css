@@ -271,3 +271,13 @@ figure.fig img {
   border-radius: 4px;
   background: var(--surface);
 }
+/* Tighten paragraphs inside list items. Default <p> margins make
+   single-paragraph <li>s look excessively spaced; collapse the margin
+   entirely when the <p> stands alone, and keep a small gap between
+   stacked paragraphs in multi-paragraph items. */
+li > p {
+  margin-block: 0.25em;
+}
+li > p:only-child {
+  margin-block: 0;
+}

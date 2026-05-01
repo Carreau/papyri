@@ -185,3 +185,95 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
 - Dark-adapted Shiki theme + dark-mode-aware KaTeX glyphs.
 - Cross-package ingest correctness: TODOs around version resolution for
   `Figure`/`RefInfo` across packages (see `crosslink.py`).
+
+## Codebase cleanup follow-ups (audited 2026-05-01)
+
+Items below come from a full-tree review (Python / TS ingest / viewer). Each
+is intended to be its own small PR. Items already covered elsewhere in this
+file are cross-referenced rather than duplicated.
+
+### Python (`papyri/`)
+
+- **LRU-cache `ts.parse()` results** (`gen.py:534/555/979/1349/1610`). The
+  parser is invoked many times per gen run; even if duplication is rare, an
+  LRU around `ts.parse()` is cheap insurance and removes a per-call cost. Note
+  the contrasting case in `tree.py:54` where `@lru_cache` was *removed*
+  because mutated nodes broke equality — `ts.parse()` operates on raw strings
+  and produces fresh trees, so it does not have that hazard.
+- **Decompose `Gen.collect_api_docs`** (`gen.py:1667–1978`, ~280 lines).
+  Split into module-walk / doc-extract / IR-emit so each step is testable in
+  isolation.
+- **Directive handler registry redesign** (`tree.py:597–821`). Replace the
+  `"_" + name + "_handler"` string-key convention with an explicit registry
+  dict. The current scheme cannot express directive names containing
+  hyphens (e.g. `code-block`) without ad-hoc wiring. Combine with the
+  "no global state" / `DirectiveContext` work already listed above.
+- **Replace assertion-based arg validation in `Node.__init__`**
+  (`node_base.py:31`). Use `TypeError`/`ValueError` so behaviour does not
+  change under `python -O`.
+- **Document the two serialization paths.** `node_serializer.py` (CBOR-side,
+  internally tagged) and `serde.py` (generic dataclass round-trip, JSON or
+  CBOR) coexist and are not duplicates. Add a short module-level comment in
+  each pointing at the other so contributors know which to extend.
+
+(Already tracked above and not repeated here: `_GITHUB_SLUG` global,
+`DirectiveContext` injection, graphstore write-side audit, missing
+directives.)
+
+### TypeScript ingest (`ingest/`)
+
+- **Extract shared schema bootstrap.** `migrationsDir`, `loadSchemaFromDisk`,
+  `splitStatements`, and the `PRAGMAS` constant are duplicated between
+  `ingest/src/ingest.ts:86–107` and `viewer/src/lib/graphstore.ts:60–91`.
+  Move into a shared module (most natural home: a new export from the
+  `papyri-ingest` package consumed by the viewer).
+- **Deduplicate ref resolution.** `_getForwardRefs` (`ingest.ts:455–475`)
+  duplicates `getForwardRefs` / `getBackRefs` (`viewer/src/lib/graphstore.ts:277–322`).
+  Parameterize direction and share the row-mapping helper.
+- **Type-safe key parsing.** `visitor.ts:78/90/122` and
+  `viewer/src/lib/graphstore.ts:215` use `split("/")` with silent `?? ""`
+  fallbacks. Add a `parseKeyStr(s) → Key` helper alongside `keyStr` so any
+  key containing `/` fails loudly instead of silently truncating.
+- **Unify forward-ref collection.** `collectForwardRefs` and
+  `collectForwardRefsFromSection` in `visitor.ts:45–131` walk the same node
+  types with slight differences. Parameterize the input subtrees so the
+  walker is shared; today the `Figure`-handling branch only exists in one of
+  the two.
+- **Async fs in `ingest()`.** `ingest.ts:487–489` uses `readFileSync` inside
+  an async pipeline; switch to `fs/promises` to avoid blocking the loop.
+
+### Viewer (`viewer/`)
+
+- **Extract `walkBundle()` helper.** `src/lib/image-index.ts:1–127` and
+  `src/pages/api/[pkg]/[ver]/nodes.json.ts:51–159` duplicate the
+  module → docs → examples traversal; the file comments themselves
+  acknowledge it. Move into `src/lib/bundle-walk.ts` and have both
+  callers parameterise it with the node types they care about. This is also
+  the natural home for the precomputed-index work (see next item).
+- **Precompute bundle indices at ingest time.** PLAN's M9.2 already notes the
+  `~25s /images/` scan; once `walkBundle` exists, move the work into the
+  ingest pipeline as a `nodes_by_type` table so endpoints query rather than
+  scan. Both the local SQLite and D1 backends benefit equally.
+- **Shared API response utility.** `viewer/src/lib/bundle.ts:111` defines a
+  `respond()` helper, but `bundles.json.ts`, `health.json.ts`,
+  `search.json.ts`, and `nodes.json.ts` each hand-roll
+  `new Response(JSON.stringify(...), …)` with mismatched error shapes (string
+  vs JSON). Extract a small `api-utils.ts` and convert call sites.
+- **CSS dead-code audit.** `global.css` (~1113 lines) + `ir-nodes.css`
+  (~283 lines) carry alternate trees (`.sidebar-flat` vs
+  `.sidebar-qualnames`) and feature-specific blocks (`.bundle-index-card*`)
+  that look stale. Audit and consolidate.
+- **Auth is intentional but minimal.** `middleware.ts` gates everything
+  except `/login`, `/api/auth/`, `/api/bundle` behind a session cookie, and
+  credentials come from `PAPYRI_USERNAME` / `PAPYRI_PASSWORD` env vars
+  (see `api/auth/login.ts`). This is the v0 deploy gate and should stay,
+  but the hardcoded-single-user model is not the long-term answer for a
+  multi-tenant hosted service. Track when M9 / hosting design firms up.
+
+### Cross-cutting
+
+- Several items above (schema loader, ref resolution, key parsing) reflect a
+  larger pattern: `ingest/` and `viewer/` independently maintain near-copies
+  of the graph layer. Once the schema stabilises, consider promoting the
+  shared bits into the `papyri-ingest` package and having the viewer import
+  from it rather than re-implementing.

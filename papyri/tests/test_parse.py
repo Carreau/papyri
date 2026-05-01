@@ -4,7 +4,7 @@ from typing import Any, cast
 import pytest
 
 from papyri import errors
-from papyri.nodes import CitationReference, InlineRole, Paragraph
+from papyri.nodes import CitationReference, InlineCode, InlineRole, Paragraph, Text
 from papyri.ts import Node, TSVisitor, parse, parser
 
 
@@ -190,6 +190,104 @@ def test_backtick_genuine_stray_backtick():
     """
     data = b"See `x`=``data`` for details."
     parse(data, "test_backtick_genuine_stray_backtick")
+
+
+def _flatten_text(paragraph: Paragraph) -> str:
+    """Concatenate the .value of every Text-bearing leaf in a paragraph."""
+    parts: list[str] = []
+    stack: list = list(paragraph.children)
+    while stack:
+        node = stack.pop(0)
+        value = getattr(node, "value", None)
+        if isinstance(value, str):
+            parts.append(value)
+        elif hasattr(node, "children"):
+            stack[:0] = list(node.children or [])
+    return "".join(parts)
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="tree-sitter-rst does not currently process backslash escapes; "
+    "may require an upstream fix.",
+)
+def test_parse_escaped_backtick_in_text():
+    """
+    Per RST spec, ``\\`` inside a paragraph is an escape: the backslash should be
+    consumed and a literal backtick should appear in the resulting text. The
+    current tree-sitter-rst grammar leaves both the backslash and the backtick
+    in place as separate text fragments.
+    """
+    data = b"Use \\` for backticks."
+    [section] = parse(data, "test_parse_escaped_backtick_in_text")
+    [paragraph] = section.children
+    assert isinstance(paragraph, Paragraph)
+    assert all(isinstance(c, Text) for c in paragraph.children), paragraph.children
+    text = _flatten_text(paragraph)
+    assert "\\" not in text, text
+    assert text == "Use ` for backticks."
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="tree-sitter-rst does not currently process backslash escapes; "
+    "may require an upstream fix.",
+)
+def test_parse_multiple_escaped_backticks_in_text():
+    """
+    Multiple ``\\``` escapes in a single paragraph should each yield a literal
+    backtick in the text, with no backslashes left behind.
+    """
+    data = b"Foo \\` bar \\` baz."
+    [section] = parse(data, "test_parse_multiple_escaped_backticks_in_text")
+    [paragraph] = section.children
+    assert isinstance(paragraph, Paragraph)
+    assert all(isinstance(c, Text) for c in paragraph.children), paragraph.children
+    text = _flatten_text(paragraph)
+    assert "\\" not in text, text
+    assert text == "Foo ` bar ` baz."
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="tree-sitter-rst does not currently process backslash escapes; "
+    "may require an upstream fix.",
+)
+def test_parse_escaped_backtick_in_interpreted_text():
+    """
+    Inside interpreted text ``\\``` should embed a literal backtick into the
+    role's value without prematurely terminating the interpreted-text span.
+    """
+    data = b"Some `with \\` backtick` text."
+    [section] = parse(data, "test_parse_escaped_backtick_in_interpreted_text")
+    [paragraph] = section.children
+    assert isinstance(paragraph, Paragraph)
+    roles = [c for c in paragraph.children if isinstance(c, InlineRole)]
+    assert len(roles) == 1, paragraph.children
+    assert "\\" not in roles[0].value, roles[0].value
+    assert roles[0].value == "with ` backtick", roles[0].value
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="tree-sitter-rst does not currently process backslash escapes; "
+    "may require an upstream fix.",
+)
+def test_parse_escaped_backtick_in_inline_literal():
+    """
+    A backslash-escaped backtick inside an inline literal ``\\````\\``` should
+    produce an ``InlineCode`` whose value contains a single literal backtick
+    (no backslash). This is the "literal nodes with the (non-escaped)
+    backticks" case from the issue description.
+    """
+    data = b"Code ``with \\` literal`` here."
+    [section] = parse(data, "test_parse_escaped_backtick_in_inline_literal")
+    [paragraph] = section.children
+    assert isinstance(paragraph, Paragraph)
+    literals = [c for c in paragraph.children if isinstance(c, InlineCode)]
+    assert len(literals) == 1, paragraph.children
+    assert "\\" not in literals[0].value, literals[0].value
+    assert literals[0].value == "with ` literal", literals[0].value
 
 
 def test_parse_reference():

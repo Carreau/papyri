@@ -207,7 +207,7 @@ def _flatten_text(paragraph: Paragraph) -> str:
 
 
 @pytest.mark.xfail(
-    strict=False,
+    strict=True,
     reason="tree-sitter-rst does not currently process backslash escapes; "
     "may require an upstream fix.",
 )
@@ -229,7 +229,7 @@ def test_parse_escaped_backtick_in_text():
 
 
 @pytest.mark.xfail(
-    strict=False,
+    strict=True,
     reason="tree-sitter-rst does not currently process backslash escapes; "
     "may require an upstream fix.",
 )
@@ -249,7 +249,7 @@ def test_parse_multiple_escaped_backticks_in_text():
 
 
 @pytest.mark.xfail(
-    strict=False,
+    strict=True,
     reason="tree-sitter-rst does not currently process backslash escapes; "
     "may require an upstream fix.",
 )
@@ -269,7 +269,7 @@ def test_parse_escaped_backtick_in_interpreted_text():
 
 
 @pytest.mark.xfail(
-    strict=False,
+    strict=True,
     reason="tree-sitter-rst does not currently process backslash escapes; "
     "may require an upstream fix.",
 )

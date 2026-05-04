@@ -386,6 +386,7 @@ class TreeReplacer:
                 "Options",
                 "SeeAlsoItem",
                 "SubstitutionRef",
+                "Target",
                 "Text",
                 "Table",
                 "ThematicBreak",
@@ -613,6 +614,7 @@ class DirectiveVisiter(TreeReplacer):
         doc_path: Path | None = None,
         asset_store: Callable[[str, bytes], None] | None = None,
         doc_root: Path | None = None,
+        doc_targets: dict[str, str] | None = None,
     ):
         """
         qa: str
@@ -660,6 +662,10 @@ class DirectiveVisiter(TreeReplacer):
         self._targets: set[Any] = set()
         self.version = version
         self._tocs: Any = []
+        # Maps RST target label -> doc key for :ref: resolution within the bundle.
+        self.doc_targets: dict[str, str] = (
+            doc_targets if doc_targets is not None else {}
+        )
         # Keyed by RST name with pipes (e.g. '|foo|').  Populated by
         # collect_substitutions() before visiting; can be pre-seeded with
         # config-level global substitutions.
@@ -915,6 +921,16 @@ class DirectiveVisiter(TreeReplacer):
                     title="",
                 )
             ]
+
+        # :ref:`label` — RST cross-reference to a named target within the bundle.
+        # Resolved against doc_targets collected during the first parse pass.
+        if role == "ref" and domain in (None, "std"):
+            label = to_resolve
+            if label in self.doc_targets:
+                doc_key = self.doc_targets[label]
+                return [CrossRef(text, LocalRef("docs", doc_key), "exists")]
+            else:
+                return [directive]
 
         r = self._resolve(loc, to_resolve)
         # this is now likely incorrect as Ref kind should not be exists,

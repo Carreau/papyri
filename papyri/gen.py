@@ -682,8 +682,6 @@ class PapyriDocTestRunner(doctest.DocTestRunner):
             if not isinstance(item, GenCode):
                 if current_code is not None:
                     acc.append(current_code)
-                    acc.append(Text(str(current_code.out)))
-                    acc.append(Text(str(current_code.ce_status)))
                     current_code = None
                 acc.append(item)
             else:
@@ -698,8 +696,6 @@ class PapyriDocTestRunner(doctest.DocTestRunner):
                     )
                 else:
                     acc.append(current_code)
-                    acc.append(Text(str(current_code.out)))
-                    acc.append(Text(str(current_code.ce_status)))
                     assert item is not None
                     current_code = item
 

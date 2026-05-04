@@ -280,9 +280,10 @@ class Code(Node):
     type = "code"
     value: str
     execution_status: str | None
+    out: str
 
-    def __init__(self, value, execution_status=None):
-        super().__init__(value, execution_status)
+    def __init__(self, value, execution_status=None, out=""):
+        super().__init__(value, execution_status, out)
 
 
 @register(4051)

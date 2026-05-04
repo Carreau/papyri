@@ -206,17 +206,10 @@ def _flatten_text(paragraph: Paragraph) -> str:
     return "".join(parts)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="tree-sitter-rst does not currently process backslash escapes; "
-    "may require an upstream fix.",
-)
 def test_parse_escaped_backtick_in_text():
     """
     Per RST spec, ``\\`` inside a paragraph is an escape: the backslash should be
-    consumed and a literal backtick should appear in the resulting text. The
-    current tree-sitter-rst grammar leaves both the backslash and the backtick
-    in place as separate text fragments.
+    consumed and a literal backtick should appear in the resulting text.
     """
     data = b"Use \\` for backticks."
     [section] = parse(data, "test_parse_escaped_backtick_in_text")
@@ -228,11 +221,6 @@ def test_parse_escaped_backtick_in_text():
     assert text == "Use ` for backticks."
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="tree-sitter-rst does not currently process backslash escapes; "
-    "may require an upstream fix.",
-)
 def test_parse_multiple_escaped_backticks_in_text():
     """
     Multiple ``\\``` escapes in a single paragraph should each yield a literal
@@ -250,8 +238,9 @@ def test_parse_multiple_escaped_backticks_in_text():
 
 @pytest.mark.xfail(
     strict=True,
-    reason="tree-sitter-rst does not currently process backslash escapes; "
-    "may require an upstream fix.",
+    reason="py-tree-sitter-rst does not expose escape_sequence nodes inside "
+    "interpreted_text or literal spans; backslash escapes inside those "
+    "contexts are still not processed.",
 )
 def test_parse_escaped_backtick_in_interpreted_text():
     """
@@ -270,8 +259,9 @@ def test_parse_escaped_backtick_in_interpreted_text():
 
 @pytest.mark.xfail(
     strict=True,
-    reason="tree-sitter-rst does not currently process backslash escapes; "
-    "may require an upstream fix.",
+    reason="py-tree-sitter-rst does not expose escape_sequence nodes inside "
+    "interpreted_text or literal spans; backslash escapes inside those "
+    "contexts are still not processed.",
 )
 def test_parse_escaped_backtick_in_inline_literal():
     """

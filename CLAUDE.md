@@ -121,10 +121,9 @@ service *could* be built later without a breaking change to the IR.
 
 ## Known environmental gotchas
 
-- RST parsing currently uses `tree-sitter-language-pack` on top of
-  `tree-sitter >= 0.24`. Get the parser via `get_parser("rst")`. Do not
-  reintroduce `tree_sitter_languages`. A switch to `tree-sitter-rst`
-  directly from PyPI is possible; check `PLAN.md` for the current decision.
+- RST parsing uses `py-tree-sitter-rst` (PyPI) on top of `tree-sitter >= 0.24`.
+  The parser is constructed via `tree_sitter.Parser(tree_sitter.Language(tree_sitter_rst.language()))`.
+  Do not reintroduce `tree_sitter_languages` or `tree-sitter-language-pack`.
 - The IR encoding is mixed: some fields use CBOR (`cbor2`), others use JSON.
   Do not assume "the IR is JSON". See `node_base.py`, `take2.py`. The
   encoding is an implementation detail and may change.

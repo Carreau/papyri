@@ -89,7 +89,7 @@ try:
 except (ImportError, OSError):
     sys.exit("""
             Tree Sitter RST parser not available; reinstall papyri to pull
-            the `tree-sitter` and `tree-sitter-language-pack` wheels from PyPI:
+            the `tree-sitter` and `py-tree-sitter-rst` wheels from PyPI:
 
             $ pip install -e .
             """)

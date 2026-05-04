@@ -67,6 +67,7 @@ from .nodes import (
     Parameters,
     RefInfo,
     Section,
+    Target,
     Text,
     TocTree,
     parse_rst_section,
@@ -943,6 +944,18 @@ class Gen:
             if (where / f).exists():
                 (where / f).unlink()
 
+    @staticmethod
+    def _extract_rst_targets(sections: list[Section]) -> list[str]:
+        """Return all named RST target labels found in a list of sections."""
+        labels: list[str] = []
+        for section in sections:
+            if section.target:
+                labels.append(section.target)
+            labels.extend(
+                child.label for child in section.children if isinstance(child, Target)
+            )
+        return labels
+
     def collect_narrative_docs(self):
         """
         Crawl the filesystem for all docs/rst files
@@ -961,27 +974,45 @@ class Gen:
         trees = {}
         title_map = {}
         blbs = {}
-        with self.progress() as p2:
-            task = p2.add_task("Parsing narrative", total=len(files))
 
-            for p in files:
+        # First pass: parse every RST file and collect targets so that
+        # :ref:`label` can resolve across documents in the same bundle.
+        # doc_targets maps each RST label to the doc key that defines it.
+        parsed_files: list[tuple[Path, str, list[Section]]] = []
+        doc_targets: dict[str, str] = {}
+        for p in files:
+            if any([k in str(p) for k in self.config.narrative_exclude]):
+                continue
+            assert p.is_file()
+            parts = p.relative_to(path).parts
+            assert parts[-1].endswith("rst")
+            try:
+                data = ts.parse(p.read_bytes(), p)
+            except Exception as e:
+                self.log.warning("Could not parse %s, skipping: %s", p, e)
+                continue
+            key = ":".join(parts)[:-4]
+            for label in self._extract_rst_targets(data):
+                if label in doc_targets:
+                    self.log.warning(
+                        "Duplicate RST target %r in %s (already defined in %s)",
+                        label,
+                        key,
+                        doc_targets[label],
+                    )
+                else:
+                    doc_targets[label] = key
+            parsed_files.append((p, key, data))
+
+        # Second pass: visit each document with the full target map available.
+        with self.progress() as p2:
+            task = p2.add_task("Parsing narrative", total=len(parsed_files))
+
+            for p, key, data in parsed_files:
                 p2.update(task, description=compress_user(str(p)).ljust(7))
                 p2.advance(task)
 
-                if any([k in str(p) for k in self.config.narrative_exclude]):
-                    log.debug("Skipping %s - excluded in config file", p)
-                    continue
-
-                assert p.is_file()
-                parts = p.relative_to(path).parts
-                assert parts[-1].endswith("rst")
-                try:
-                    data = ts.parse(p.read_bytes(), p)
-                except Exception as e:
-                    self.log.warning("Could not parse %s, skipping: %s", p, e)
-                    continue
                 blob = GeneratedDoc.new()
-                key = ":".join(parts)[:-4]
                 try:
                     dv = GenVisitor(
                         key,
@@ -994,6 +1025,7 @@ class Gen:
                         doc_path=p.parent,
                         asset_store=self.put_raw,
                         doc_root=path,
+                        doc_targets=doc_targets,
                     )
                     dv.collect_substitutions(*data)
                     blob.arbitrary = [dv.visit(s) for s in data]

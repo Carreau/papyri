@@ -29,6 +29,7 @@ from .nodes import (
     SubstitutionDef,
     SubstitutionRef,
     Table,
+    Target,
     Text,
     ThematicBreak,
     Unimplemented,
@@ -245,12 +246,11 @@ class TSVisitor:
         nacc = []
         for i, a in enumerate(acc):
             if (
-                isinstance(a, Unimplemented)
-                and a.placeholder == "untarget"
-                and len(acc) > i
+                isinstance(a, Target)
+                and i + 1 < len(acc)
                 and isinstance(acc[i + 1], Section)
             ):
-                target_name = a.value[1:-1]
+                target_name = a.label
                 sec = acc[i + 1]
                 acc[i + 1] = Section(
                     children=sec.children,
@@ -671,14 +671,13 @@ class TSVisitor:
         return [BulletList(ordered=True, start=1, spread=False, children=items)]
 
     def visit_target(self, node):
-        # TODO:
-        # raise VisitTargetNotImplementedError()
-        # self.as_text(node)
         if len(node.children) == 2:
             pp, name = node.children
-            # breakpoint()
             if pp.type == ".." and name.type == "name":
-                return [Unimplemented("untarget", self.as_text(name))]
+                raw = self.as_text(name)
+                # raw is "_labelname:" — strip leading _ and trailing :
+                label = raw[1:-1]
+                return [Target(label=label)]
         return [Unimplemented("target", self.as_text(node))]
 
     def visit_attribution(self, node):

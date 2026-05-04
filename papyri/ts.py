@@ -3,7 +3,8 @@ import logging
 from textwrap import dedent, indent
 from typing import Any
 
-from tree_sitter_language_pack import get_parser
+import tree_sitter
+import tree_sitter_rst as _tree_sitter_rst
 
 from . import errors
 from .nodes import (
@@ -27,6 +28,7 @@ from .nodes import (
     Strong,
     SubstitutionDef,
     SubstitutionRef,
+    Table,
     Text,
     ThematicBreak,
     Unimplemented,
@@ -35,7 +37,7 @@ from .nodes import (
     inline_nodes,
 )
 
-parser = get_parser("rst")
+parser = tree_sitter.Parser(tree_sitter.Language(_tree_sitter_rst.language()))
 allowed_adorn = "=-`:.'\"~^_*+#<>"
 
 log = logging.getLogger("papyri")
@@ -610,10 +612,9 @@ class TSVisitor:
                 acc2.append(item)
                 continue
             acc.append(item)
-        if acc[-1] == Text(" "):
+        if acc and acc[-1] == Text(" "):
             acc.pop()
         assert len(acc2) < 2
-        # p = Paragraph(compress_word(acc))
         p = Paragraph(compress_word(acc))
         return [p, *acc2]
 
@@ -870,6 +871,29 @@ class TSVisitor:
         # that is actually used for references
         # assert False, self.as_text(node)
         return [Unimplemented("footnote", self.as_text(node))]
+
+    def visit_escape_sequence(self, node):
+        # RST escape: backslash followed by the escaped character.
+        # `\ ` (backslash-space) is a zero-width separator used to adjoin
+        # inline markup to surrounding text (e.g. ``**word**\ s``); emit
+        # nothing.  All other escapes: drop the backslash, emit the character.
+        text = self.as_text(node)
+        if text == "\\ ":
+            return []
+        return [Text(text[1:]) if len(text) > 1 else Text(text)]
+
+    def _table_text(self, node) -> str:
+        # as_text() starts at start_byte, which is after the leading
+        # indentation of the first line.  Re-add that whitespace so
+        # dedent() can compute the correct common prefix across all lines.
+        col = node.start_point[1]
+        return dedent(" " * col + self.as_text(node))
+
+    def visit_grid_table(self, node):
+        return [Table(self._table_text(node))]
+
+    def visit_simple_table(self, node):
+        return [Table(self._table_text(node))]
 
     def visit_ERROR(self, node):
         """

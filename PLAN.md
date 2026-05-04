@@ -52,9 +52,8 @@ The boundary between the two halves:
 
 ## Dependency notes
 
-- RST parsing currently uses `tree-sitter-language-pack` on top of
-  `tree-sitter >= 0.24`. May switch to `tree-sitter-rst` directly from
-  PyPI. Do not reintroduce `tree_sitter_languages`.
+- RST parsing uses `py-tree-sitter-rst` (PyPI) on top of `tree-sitter >= 0.24`.
+  Do not reintroduce `tree_sitter_languages` or `tree-sitter-language-pack`.
 - `numpy`, `scipy`, `astropy`, `IPython` in the CI matrix drift frequently;
   pin each matrix entry to a known-good version or xfail with a reason.
 

@@ -223,6 +223,18 @@ class Unimplemented(Node):
         return f"<Unimplemented {self.placeholder!r} {self.value!r}>"
 
 
+@register(4065)
+class Table(Node):
+    """Verbatim table content (grid or simple RST table).
+
+    Stored as raw source text for now; a structured cell model can be added
+    later without changing the CBOR tag.
+    """
+
+    type = "table"
+    value: str
+
+
 # ---- Document AST nodes -----------------------------------------------------
 #
 # Previously split into two modules; merged here to eliminate a circular
@@ -545,6 +557,7 @@ class Section(Node):
         | Unimplemented
         | UnimplementedInline
         | Citation
+        | Table
     ]
     # might need to be more complicated like verbatim.
     title: str | None
@@ -605,6 +618,7 @@ class DocParam(Node):
         | Paragraph
         | Code
         | SubstitutionDef
+        | Table
     ]
 
     @property
@@ -855,6 +869,7 @@ FlowContent: TypeAlias = (
     | Citation
     | Image
     | Figure
+    | Table
 )
 
 ListContent: TypeAlias = ListItem

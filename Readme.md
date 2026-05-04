@@ -92,7 +92,7 @@ cd papyri
 pip install -e .
 ```
 
-RST parsing uses `tree-sitter-language-pack` on top of
+RST parsing uses `py-tree-sitter-rst` on top of
 `tree-sitter >= 0.24`; both are pulled in as regular dependencies.
 
 Verify with:

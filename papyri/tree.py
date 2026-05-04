@@ -387,6 +387,7 @@ class TreeReplacer:
                 "SeeAlsoItem",
                 "SubstitutionRef",
                 "Text",
+                "Table",
                 "ThematicBreak",
                 "Unimplemented",
                 "CrossRef",

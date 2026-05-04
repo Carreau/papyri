@@ -9,6 +9,7 @@
 // The inline script is intentionally hand-rolled so it doesn't need to ship
 // through a bundler — Astro emits it verbatim with `is:inline`.
 import { THEME_STORAGE_KEY } from "../lib/theme.ts";
+import { HIDE_TYPES_KEY, HIDE_PRIVATE_KEY } from "../lib/visibility.ts";
 
 export interface Props {
   title: string;
@@ -16,11 +17,14 @@ export interface Props {
 
 const { title } = Astro.props;
 
-// Note: the key here is stringified so edits to THEME_STORAGE_KEY propagate.
+// Note: keys are stringified so edits to the constants propagate automatically.
 const themeInit = `
 try {
   var t = localStorage.getItem(${JSON.stringify(THEME_STORAGE_KEY)});
   if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+  var r = document.documentElement;
+  if (localStorage.getItem(${JSON.stringify(HIDE_TYPES_KEY)}) === '1') r.setAttribute('data-hide-types', '');
+  if (localStorage.getItem(${JSON.stringify(HIDE_PRIVATE_KEY)}) === '1') r.setAttribute('data-hide-private', '');
 } catch (e) {}
 `.trim();
 ---

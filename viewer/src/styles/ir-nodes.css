@@ -281,3 +281,26 @@ li > p {
 li > p:only-child {
   margin-block: 0;
 }
+
+/* ---------------------------------------------------------------------------
+   Client-side visibility toggles.
+
+   Two data-attributes on <html> drive these via attribute selectors so the
+   feature works with zero JS re-render — just a CSS class toggle. The
+   attributes are applied by the inline head script (no flash) and kept in
+   sync by VisibilityToggle.tsx.
+--------------------------------------------------------------------------- */
+
+/* Hide type annotations: the colon+type span, the arrow+return span. */
+html[data-hide-types] .sig-annotation,
+html[data-hide-types] .sig-return,
+html[data-hide-types] .sig-arrow,
+html[data-hide-types] .sig-punct:has(+ .sig-annotation) {
+  display: none;
+}
+
+/* Hide private members (name starts with "_"). Applied to <li> elements that
+   carry the .member-private class emitted by the slug page template. */
+html[data-hide-private] li.member-private {
+  display: none;
+}

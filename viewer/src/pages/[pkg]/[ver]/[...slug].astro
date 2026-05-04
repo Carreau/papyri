@@ -152,7 +152,7 @@ const crumbs = qualnameAncestors(qualname).map((qa) => ({
               <h2>{group.title}</h2>
               <ul class="qualnames members-toc">
                 {group.items.map((m) => (
-                  <li>
+                  <li class={m.label.startsWith("_") ? "member-private" : undefined}>
                     <a href={m.href} title={m.qualname}>
                       <code>{m.label}</code>
                     </a>

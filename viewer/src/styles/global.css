@@ -556,6 +556,35 @@ section.backrefs ul.qualnames {
   gap: 0.5rem;
 }
 
+.visibility-toggles {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-family: var(--sans);
+  color: var(--fg-muted);
+}
+.visibility-label {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+.visibility-label input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+.visibility-label:hover span {
+  color: var(--fg);
+}
+
 .theme-toggle {
   background: var(--surface);
   color: var(--fg);

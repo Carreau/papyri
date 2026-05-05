@@ -16,6 +16,7 @@ import io
 import json
 import logging
 import os
+import shutil
 import site
 import sys
 import tempfile
@@ -293,11 +294,13 @@ def gen_main(
         g.collect_narrative_docs()
 
     p: Path = target_dir / (g.root + "_" + g.version)
+    if not limit_to and p.exists():
+        g.log.info("Removing previous bundle at %s", p)
+        shutil.rmtree(p)
     p.mkdir(exist_ok=True)
 
     g.log.info("Saving current Doc bundle to %s", p)
     if not limit_to:
-        g.clean(p)
         g.write(p)
     else:
         g.partial_write(p)

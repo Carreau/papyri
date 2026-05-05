@@ -184,6 +184,42 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
 - Dark-adapted Shiki theme + dark-mode-aware KaTeX glyphs.
 - Cross-package ingest correctness: TODOs around version resolution for
   `Figure`/`RefInfo` across packages (see `crosslink.py`).
+- **Viewer: Version status banners and link validation warnings** (designed 2026-05-04).
+  Help users understand documentation state with banners and link warnings.
+  
+  *Features to implement:*
+  - **Version status banner** (top of page, dismissible): Show when browsing non-latest,
+    dev, or pre-release versions. Use PEP 440 pattern matching (`.dev`, `rc`, `alpha`,
+    `beta`) to classify versions. Include "Go to latest" link for old versions.
+  - **Unresolved link warnings** (inline + optional report page): Display special styling
+    (strikethrough, error color) on CrossRef nodes where `.exists === false`. Optional
+    `/[pkg]/[ver]/validate` page shows all unresolved refs in a bundle grouped by
+    location and kind.
+  
+  *Design notes:*
+  - Version detection uses string patterns, no IR schema changes needed.
+  - Banner dismissal persists in `sessionStorage` (clears on browser close).
+  - Reuses existing `.admonition` styling patterns and warn/error color tokens.
+  - Link validation leverages `CrossRef.exists` property computed by gen.
+  - Render-time detection only; defer CLI/background validation tooling.
+  
+  *Alternative approaches considered:*
+  - Version detection: metadata flags in bundle (no, for backward compat)
+    vs. config file (no, too complex for multi-project)
+  - Banner placement: sidebar (less discoverable) vs. breadcrumb (easy to miss)
+    vs. floating widget (non-standard) — top-of-page chosen for visibility
+  - Link warnings: inline-only (no overview) vs. report-only (proactive nav needed)
+    vs. prevent-upload (blocks legitimate forward refs) — both chosen for balance
+  - Link validation: ingest-time (slower, redundant) vs. hybrid (complex schema)
+    — render-time chosen for simplicity
+  
+  *Files to create/modify (when implemented):*
+  - `viewer/src/lib/version-utils.ts` — version status classification
+  - `viewer/src/components/VersionBanner.astro` — banner component
+  - `viewer/src/layouts/BundleLayout.astro` — inject banner
+  - `viewer/src/components/CrossRef.tsx` — add unresolved styling
+  - `viewer/src/styles/ir-nodes.css` — `.unresolved-ref` styles
+  - `viewer/src/pages/[pkg]/[ver]/validate.astro` — optional report page
 
 ## Codebase cleanup follow-ups (audited 2026-05-01)
 

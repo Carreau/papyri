@@ -953,12 +953,31 @@ def nest_sections(items) -> list[Section]:
     return acc
 
 
+def _find_error_nodes(node) -> list:
+    """Return all ERROR nodes in the tree via depth-first walk."""
+    results = []
+    if node.is_error:
+        results.append(node)
+    elif node.has_error:
+        for child in node.children:
+            results.extend(_find_error_nodes(child))
+    return results
+
+
 def parse(text: bytes, qa=None) -> list[Section]:
     """
     Parse text using Tree sitter RST, and return a list of serialised section I guess ?
     """
 
     tree = parser.parse(text)
+    for err in _find_error_nodes(tree.root_node):
+        log.error(
+            "Tree-sitter ERROR node at %s..%s in (%s): %r",
+            err.start_point,
+            err.end_point,
+            qa,
+            text[err.start_byte : err.end_byte].decode(errors="replace"),
+        )
     root = Node(tree.root_node)
     res = TSVisitor(text, qa).visit_document(root)
     ns = nest_sections(res)

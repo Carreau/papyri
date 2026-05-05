@@ -5,7 +5,7 @@ transformation that are easy to pin and have historically regressed.
 Covered surfaces:
 - ``py_doc_handler`` (:doc: role → LocalRef("docs", path))
 - ``DelayedResolver`` (target/reference unification)
-- ``_toctree_handler`` (blank lines, comments, glob, malformed entries)
+- ``_toctree_handler`` (blank lines, comments, glob, hidden, malformed entries, LocalRef links)
 - ``_SPHINX_ONLY_DIRECTIVES`` (silent drop via warning)
 """
 
@@ -159,7 +159,7 @@ def test_toctree_title_form_parsed():
     items = out[0].children
     assert len(items) == 1
     # Inside the ListItem, the Paragraph wraps a CrossRef whose display value
-    # is the title and whose reference path is "intro".
+    # is the title and whose reference is a LocalRef docs link.
     para = items[0].children[0]
     crossref = para.children[0]
     assert isinstance(crossref, CrossRef)
@@ -227,6 +227,128 @@ def test_toctree_malformed_entry_warns(caplog):
     # "ok" still makes it through; malformed line is logged and dropped.
     assert len(out[0].children) == 1
     assert any("malformed" in r.getMessage().lower() for r in caplog.records)
+
+
+def test_toctree_not_hidden_produces_crossref_links():
+    # Without the hidden option the handler must return a BulletList whose
+    # items each wrap a CrossRef with a LocalRef("docs", ...) reference so
+    # the viewer can construct a link to the page.
+    v = _make_visitor()
+    content = "intro\nadvanced"
+    out = v._toctree_handler(argument=None, options={}, content=content)
+    assert len(out) == 1
+    items = out[0].children
+    assert len(items) == 2
+    for item, expected_path in zip(items, ["intro", "advanced"], strict=True):
+        para = item.children[0]
+        crossref = para.children[0]
+        assert isinstance(crossref, CrossRef)
+        assert isinstance(crossref.reference, LocalRef)
+        assert crossref.reference.kind == "docs"
+        assert crossref.reference.path == expected_path
+
+
+def test_toctree_nested_path_uses_colon_separator():
+    # Toctree entries like "whatsnew/index" must become LocalRef("docs",
+    # "whatsnew:index") so the viewer's linkForDoc produces the correct URL.
+    v = _make_visitor()
+    out = v._toctree_handler(argument=None, options={}, content="whatsnew/index")
+    crossref = out[0].children[0].children[0].children[0]
+    assert isinstance(crossref.reference, LocalRef)
+    assert crossref.reference.path == "whatsnew:index"
+
+
+def test_toctree_titled_nested_path_uses_colon_separator():
+    v = _make_visitor()
+    out = v._toctree_handler(
+        argument=None, options={}, content="What's New <whatsnew/index>"
+    )
+    crossref = out[0].children[0].children[0].children[0]
+    assert isinstance(crossref.reference, LocalRef)
+    assert crossref.reference.path == "whatsnew:index"
+
+
+def test_toctree_hidden_returns_no_visible_output():
+    # hidden=True suppresses inline rendering while still recording the TOC
+    # data so it can be used for navigation metadata.
+    v = _make_visitor()
+    content = "intro\nadvanced"
+    out = v._toctree_handler(argument=None, options={"hidden": True}, content=content)
+    assert out == []
+    # The toc data is still stored for navigation use.
+    assert len(v._tocs) == 1
+    assert len(v._tocs[0]) == 2
+
+
+def test_toctree_hidden_false_explicit_produces_links():
+    # Passing hidden=False explicitly should behave like the default.
+    v = _make_visitor()
+    out = v._toctree_handler(argument=None, options={"hidden": False}, content="page1")
+    assert len(out) == 1
+    assert len(out[0].children) == 1
+
+
+def test_toctree_maxdepth_option_is_accepted():
+    # maxdepth is a common Sphinx option; the handler must not raise.
+    v = _make_visitor()
+    out = v._toctree_handler(
+        argument=None, options={"maxdepth": 2}, content="chapter1\nchapter2"
+    )
+    assert len(out) == 1
+    assert len(out[0].children) == 2
+
+
+def test_toctree_numbered_option_is_accepted():
+    v = _make_visitor()
+    out = v._toctree_handler(
+        argument=None, options={"numbered": True}, content="chapter1"
+    )
+    assert len(out) == 1
+    assert len(out[0].children) == 1
+
+
+def test_toctree_titlesonly_option_is_accepted():
+    v = _make_visitor()
+    out = v._toctree_handler(
+        argument=None, options={"titlesonly": True}, content="chapter1"
+    )
+    assert len(out) == 1
+    assert len(out[0].children) == 1
+
+
+def test_toctree_includehidden_option_is_accepted():
+    v = _make_visitor()
+    out = v._toctree_handler(
+        argument=None, options={"includehidden": True}, content="chapter1"
+    )
+    assert len(out) == 1
+    assert len(out[0].children) == 1
+
+
+def test_toctree_empty_content_returns_empty_bullet_list():
+    v = _make_visitor()
+    out = v._toctree_handler(argument=None, options={}, content="")
+    assert len(out) == 1
+    assert len(out[0].children) == 0
+
+
+def test_toctree_empty_content_hidden_returns_empty_list():
+    v = _make_visitor()
+    out = v._toctree_handler(argument=None, options={"hidden": True}, content="")
+    assert out == []
+
+
+def test_toctree_hidden_with_maxdepth_returns_no_visible_output():
+    # Combining hidden with maxdepth (common in real Sphinx projects) must
+    # still suppress inline output.
+    v = _make_visitor()
+    out = v._toctree_handler(
+        argument=None,
+        options={"hidden": True, "maxdepth": 1},
+        content="changelog\nlicense",
+    )
+    assert out == []
+    assert len(v._tocs[0]) == 2
 
 
 # ---------------------------------------------------------------------------

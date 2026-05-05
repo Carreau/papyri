@@ -768,7 +768,9 @@ class DirectiveVisiter(TreeReplacer):
         toc = []
         lls = []
 
-        glob = options.get("glob") if isinstance(options, dict) else False
+        opts = options if isinstance(options, dict) else {}
+        glob = opts.get("glob", False)
+        hidden = opts.get("hidden", False)
 
         for line in content.splitlines():
             line = line.strip()
@@ -796,6 +798,11 @@ class DirectiveVisiter(TreeReplacer):
                 log.warning("toctree: skipping malformed entry %r", line)
 
         self._tocs.append(toc)
+
+        # hidden toctrees contribute to navigation metadata but are not
+        # rendered inline on the page.
+        if hidden:
+            return []
 
         acc = [ListItem(False, [Paragraph([line])]) for line in lls]
         return [BulletList(ordered=False, start=1, spread=False, children=acc)]

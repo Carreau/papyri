@@ -721,7 +721,7 @@ class DirectiveVisiter(TreeReplacer):
         status = (
             code.ce_status.value if hasattr(code.ce_status, "value") else code.ce_status
         )
-        return [Code(code_, status)]
+        return [Code(code_, status, code.out)]
 
     def _block_verbatim_helper(self, name: str, argument: str, options: dict, content):
         data = f".. {name}:: {argument}\n"

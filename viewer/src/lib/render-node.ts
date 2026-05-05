@@ -98,12 +98,14 @@ export async function renderNode(node: IRNode, opts: RenderOptions = {}): Promis
     case "Code": {
       const inner = await highlight(String(n.value ?? ""), "python");
       const status = n.execution_status != null ? String(n.execution_status) : null;
+      const out = typeof n.out === "string" && n.out.length > 0 ? n.out : null;
+      const outputHtml = out != null ? `<pre class="code-output">${escapeHtml(out)}</pre>` : "";
       if (status && status !== "none") {
         const icon = execStatusIcon(status);
         const title = execStatusTitle(status);
-        return `<div class="code-block-wrap" data-exec-status="${escapeHtml(status)}"><pre class="code">${inner}</pre><span class="exec-status exec-status--${escapeHtml(status)}" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}">${icon}</span></div>`;
+        return `<div class="code-block-wrap" data-exec-status="${escapeHtml(status)}"><pre class="code">${inner}</pre><span class="exec-status exec-status--${escapeHtml(status)}" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}">${icon}</span></div>${outputHtml}`;
       }
-      return `<pre class="code">${inner}</pre>`;
+      return `<pre class="code">${inner}</pre>${outputHtml}`;
     }
 
     case "Link": {

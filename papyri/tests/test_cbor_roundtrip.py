@@ -103,6 +103,16 @@ def test_roundtrip_code_block():
     out = _roundtrip(c)
     assert isinstance(out, Code)
     assert out.value == "print('hi')\n"
+    assert out.out == ""
+
+
+def test_roundtrip_code_block_with_output():
+    c = Code(value="print('hi')\n", execution_status="success", out="hi\n")
+    out = _roundtrip(c)
+    assert isinstance(out, Code)
+    assert out.value == "print('hi')\n"
+    assert out.execution_status == "success"
+    assert out.out == "hi\n"
 
 
 def test_roundtrip_link_preserves_url():

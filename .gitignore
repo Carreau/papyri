@@ -17,6 +17,11 @@ node_modules
 *.js.map
 *.egg-info/
 
+# Rust / maturin build artifacts
+target/
+Cargo.lock
+*.so
+
 # macOS
 .DS_Store
 

@@ -20,6 +20,12 @@ from .bundle import IR_SCHEMA_VERSION, PACK_FORMAT_VERSION, Bundle
 from .node_base import Node
 from .nodes import encoder
 
+try:
+    from papyri_pack import gzip_compress, read_bundle_json_parallel
+except ImportError:
+    gzip_compress = None
+    read_bundle_json_parallel = None
+
 _ALLOWED_TOPLEVEL = {"papyri.json", "toc.json", "module", "docs", "examples", "assets"}
 _OPTIONAL_DIRS = ("docs", "examples", "assets")
 
@@ -94,6 +100,33 @@ def _decode_dir(
     out: dict[str, Any] = {}
     if not path.is_dir():
         return out
+
+    # Try to use Rust's parallel JSON reader if available
+    if read_bundle_json_parallel is not None:
+        try:
+            json_dicts = read_bundle_json_parallel(str(path))
+            for filename, json_obj in sorted(json_dicts.items()):
+                try:
+                    value = expected_type.from_dict(json_obj)
+                except Exception as exc:
+                    raise BundleError(
+                        f"{path.name}/{filename} failed to decode: {exc}"
+                    ) from exc
+                if not isinstance(value, expected_type):
+                    raise BundleError(
+                        f"{path.name}/{filename} decoded to "
+                        f"{type(value).__name__}, expected {expected_type.__name__}"
+                    )
+                key = filename
+                if strip_suffix and key.endswith(strip_suffix):
+                    key = key[: -len(strip_suffix)]
+                out[key] = value
+            return out
+        except Exception:
+            # Fall back to Python-side reading if Rust extension fails
+            pass
+
+    # Fallback: Python-side JSON reading (sequential)
     for entry in sorted(path.iterdir()):
         if not entry.is_file():
             continue
@@ -219,14 +252,29 @@ def make_artifact(bundle: Bundle, log: Callable[[str], None] | None = None) -> b
     cbor_bytes = encoder.encode(bundle)
     if log:
         log(f"  compressing (gzip, {len(cbor_bytes) / (1024 * 1024):.1f} MiB raw) …")
+
+    # Use Rust's gzip_compress if available (faster), otherwise fall back to Python
+    if gzip_compress is not None:
+        try:
+            data = gzip_compress(cbor_bytes)
+        except Exception:
+            # Fall back to Python-side gzip
+            data = _python_gzip_compress(cbor_bytes)
+    else:
+        data = _python_gzip_compress(cbor_bytes)
+
+    if log:
+        log(f"  compressed → {len(data) / (1024 * 1024):.1f} MiB")
+    return data
+
+
+def _python_gzip_compress(cbor_bytes: bytes) -> bytes:
+    """Python-side gzip compression with deterministic output."""
     buf = io.BytesIO()
     # mtime=0 + no filename → reproducible gzip header.
     with gzip.GzipFile(fileobj=buf, mode="wb", mtime=0, compresslevel=9) as gz:
         gz.write(cbor_bytes)
-    data = buf.getvalue()
-    if log:
-        log(f"  compressed → {len(data) / (1024 * 1024):.1f} MiB")
-    return data
+    return buf.getvalue()
 
 
 def make_artifact_from_dir(

@@ -616,6 +616,7 @@ class DirectiveVisiter(TreeReplacer):
         doc_root: Path | None = None,
         doc_targets: dict[str, str] | None = None,
         external_targets: dict[str, str] | None = None,
+        doc_titles: dict[str, str] | None = None,
     ):
         """
         qa: str
@@ -672,6 +673,11 @@ class DirectiveVisiter(TreeReplacer):
         self.external_targets: dict[str, str] = (
             external_targets if external_targets is not None else {}
         )
+        # Maps doc key (':' separated) -> first section title, populated by
+        # gen's first parse pass. Toctree entries without an explicit title
+        # resolve their display text against this map so the rendered bullet
+        # shows the document's heading rather than the raw path.
+        self.doc_titles: dict[str, str] = doc_titles if doc_titles is not None else {}
         # Keyed by RST name with pipes (e.g. '|foo|').  Populated by
         # collect_substitutions() before visiting; can be pre-seeded with
         # config-level global substitutions.
@@ -803,8 +809,14 @@ class DirectiveVisiter(TreeReplacer):
                 toc.append([title, url])
                 lls.append(self._toctree_crossref(title, url))
             elif "<" not in line:
+                # No explicit title — show the target document's heading
+                # instead of the raw reference path. Falls back to the path
+                # when the title is unknown (e.g. forward reference, or doc
+                # without a top-level title).
+                resolved = self._resolve_doc_path(line)
+                display = self.doc_titles.get(resolved, line)
                 toc.append([None, line])
-                lls.append(self._toctree_crossref(line, line))
+                lls.append(self._toctree_crossref(display, line))
             # Lines with "<" but not ending ">" are malformed — skip with a warning.
             else:
                 log.warning("toctree: skipping malformed entry %r", line)

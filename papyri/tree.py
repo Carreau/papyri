@@ -615,6 +615,7 @@ class DirectiveVisiter(TreeReplacer):
         asset_store: Callable[[str, bytes], None] | None = None,
         doc_root: Path | None = None,
         doc_targets: dict[str, str] | None = None,
+        external_targets: dict[str, str] | None = None,
     ):
         """
         qa: str
@@ -665,6 +666,11 @@ class DirectiveVisiter(TreeReplacer):
         # Maps RST target label -> doc key for :ref: resolution within the bundle.
         self.doc_targets: dict[str, str] = (
             doc_targets if doc_targets is not None else {}
+        )
+        # Maps RST target label -> external URL for named-hyperlink references
+        # of the form ``.. _label: http://...`` referenced via ``label_``.
+        self.external_targets: dict[str, str] = (
+            external_targets if external_targets is not None else {}
         )
         # Keyed by RST name with pipes (e.g. '|foo|').  Populated by
         # collect_substitutions() before visiting; can be pre-seeded with
@@ -941,13 +947,41 @@ class DirectiveVisiter(TreeReplacer):
             else:
                 return [directive]
 
-        # Plain RST hyperlink with angle-bracket syntax (`text <label>`_) where
-        # the target matches a known doc anchor. The original role was None
-        # (remapped to "py" above), so the :ref: branch above never fires.
-        # Check doc_targets here before falling through to Python API resolution.
-        if directive.role is None and to_resolve in self.doc_targets:
-            doc_key = self.doc_targets[to_resolve]
-            return [CrossRef(text, LocalRef("docs", doc_key), "exists")]
+        # Plain RST hyperlink with angle-bracket syntax (``text <label>`_``) or
+        # bare named reference (``label_``) where the target matches a known
+        # doc anchor or recorded external URL. role is None here (remapped to
+        # "py" above) so the :ref: branch never fires for these.
+        #
+        # The bare ``label_`` form keeps its trailing underscore in the value,
+        # so probe both the raw label and the stripped form when looking up
+        # targets. For the display text, use the explicit text from the
+        # angle-bracket form, or the stripped label otherwise.
+        if directive.role is None:
+            if to_resolve.endswith("__"):
+                candidates = [to_resolve, to_resolve[:-2]]
+            elif to_resolve.endswith("_"):
+                candidates = [to_resolve, to_resolve[:-1]]
+            else:
+                candidates = [to_resolve]
+
+            for cand in candidates:
+                display = cand if text == to_resolve else text
+                if cand in self.doc_targets:
+                    return [
+                        CrossRef(
+                            display,
+                            LocalRef("docs", self.doc_targets[cand]),
+                            "exists",
+                        )
+                    ]
+                if cand in self.external_targets:
+                    return [
+                        Link(
+                            children=[Text(display)],
+                            url=self.external_targets[cand],
+                            title="",
+                        )
+                    ]
 
         r = self._resolve(loc, to_resolve)
         # this is now likely incorrect as Ref kind should not be exists,

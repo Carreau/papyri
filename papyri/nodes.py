@@ -389,6 +389,10 @@ class Blockquote(Node):
 class Target(Node):
     type = "target"
     label: str
+    url: str | None
+
+    def __init__(self, label: str, url: str | None = None) -> None:
+        super().__init__(label, url)
 
 
 @register(4062)

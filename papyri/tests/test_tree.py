@@ -22,6 +22,7 @@ from papyri.nodes import (
     Figure,
     Image,
     InlineRole,
+    Link,
     LocalRef,
     Paragraph,
     RefInfo,
@@ -667,6 +668,77 @@ def test_target_node_passes_through_generic_visit():
     assert len(result.children) == 1
     assert isinstance(result.children[0], Target)
     assert result.children[0].label == "my-anchor"
+
+
+# ---------------------------------------------------------------------------
+# External named hyperlink target resolution
+# ---------------------------------------------------------------------------
+
+
+def _make_visitor_with_external(external_targets: dict) -> DirectiveVisiter:
+    return DirectiveVisiter(
+        qa="docs:overview",
+        known_refs=frozenset(),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+        external_targets=external_targets,
+    )
+
+
+def test_named_hyperlink_resolves_to_external_link():
+    # `(X)Emacs`_ — bare named reference whose label points to a recorded URL.
+    v = _make_visitor_with_external({"(X)Emacs": "http://www.gnu.org/software/emacs/"})
+    role = InlineRole(domain=None, role=None, value="(X)Emacs")
+    out = v.replace_InlineRole(role)
+    assert len(out) == 1
+    link = out[0]
+    assert isinstance(link, Link)
+    assert link.url == "http://www.gnu.org/software/emacs/"
+    assert len(link.children) == 1
+    assert isinstance(link.children[0], Text)
+    assert link.children[0].value == "(X)Emacs"
+
+
+def test_named_hyperlink_angle_bracket_uses_display_text():
+    # `Show <target>`_ — angle-bracket form: display text is "Show", target is
+    # "target".
+    v = _make_visitor_with_external({"target": "http://example.com/"})
+    role = InlineRole(domain=None, role=None, value="Show <target>")
+    out = v.replace_InlineRole(role)
+    assert len(out) == 1
+    link = out[0]
+    assert isinstance(link, Link)
+    assert link.url == "http://example.com/"
+    child = link.children[0]
+    assert isinstance(child, Text)
+    assert child.value == "Show"
+
+
+def test_simple_hyperlink_reference_trailing_underscore_resolves():
+    # Bare ``vim_`` reference. visit_reference keeps the trailing ``_`` in the
+    # value because the same shape is also a Python identifier (``np.bool_``).
+    # Resolution must strip it when probing external_targets.
+    v = _make_visitor_with_external({"vim": "http://www.vim.org/"})
+    role = InlineRole(domain=None, role=None, value="vim_")
+    out = v.replace_InlineRole(role)
+    assert len(out) == 1
+    link = out[0]
+    assert isinstance(link, Link)
+    assert link.url == "http://www.vim.org/"
+    child = link.children[0]
+    assert isinstance(child, Text)
+    # Display text should drop the RST ``_`` syntax marker.
+    assert child.value == "vim"
+
+
+def test_named_hyperlink_unknown_label_falls_through():
+    # Unrecorded label must not be silently turned into a Link; falls through
+    # to the existing resolution path (returns directive unchanged).
+    v = _make_visitor_with_external({})
+    role = InlineRole(domain=None, role=None, value="no-such-label")
+    out = v.replace_InlineRole(role)
+    assert len(out) == 1
 
 
 def test_section_with_mixed_children_traverses_target():

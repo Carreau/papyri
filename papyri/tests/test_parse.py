@@ -701,3 +701,40 @@ def test_target_label_stripped_of_underscore_and_colon():
     rst = b".. _my-label:\n\nA section\n---------\n"
     sections = parse(rst, "test_target_label_stripped_of_underscore_and_colon")
     assert sections[0].target == "my-label"
+
+
+def test_named_hyperlink_target_with_url_recorded():
+    # ``.. _label: http://...`` (3-child target). The label/url must end up on
+    # the Target node so gen can register them in external_targets.
+    rst = dedent("""
+    Overview
+    --------
+
+    Some text.
+
+    .. _vim: http://www.vim.org/
+    """).encode()
+    sections = parse(rst, "test_named_hyperlink_target_with_url_recorded")
+    assert len(sections) == 1
+    targets = [c for c in sections[0].children if isinstance(c, Target)]
+    assert len(targets) == 1
+    assert targets[0].label == "vim"
+    assert targets[0].url == "http://www.vim.org/"
+
+
+def test_backtick_quoted_hyperlink_target_with_url_recorded():
+    # ``.. _`Display Name`: http://...`` — backtick-quoted label for names that
+    # contain punctuation or spaces. Backticks must be stripped from the label.
+    rst = dedent("""
+    Overview
+    --------
+
+    Some text.
+
+    .. _`(X)Emacs`: http://www.gnu.org/software/emacs/
+    """).encode()
+    sections = parse(rst, "test_backtick_quoted_hyperlink_target_with_url_recorded")
+    targets = [c for c in sections[0].children if isinstance(c, Target)]
+    assert len(targets) == 1
+    assert targets[0].label == "(X)Emacs"
+    assert targets[0].url == "http://www.gnu.org/software/emacs/"

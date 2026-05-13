@@ -1,6 +1,7 @@
-import { useEffect, useState, type ReactElement } from "react";
+import { useEffect, useRef, useState, type ReactElement } from "react";
 import { linkForQualname } from "../lib/links.ts";
 import { filterQualnames, type SearchHit } from "../lib/search.ts";
+import { getRecentSearches, addRecentSearch, clearRecentSearches } from "../lib/recent-searches.ts";
 
 interface Props {
   pkg: string;
@@ -11,13 +12,15 @@ interface Props {
 //
 // On mount, fetches `/<pkg>/<ver>/search.json` (the manifest emitted by
 // `src/pages/[pkg]/[ver]/search.json.ts`), then filters client-side on each
-// keystroke. The filter helper is pulled out to `lib/search.ts` so it can
-// be unit-tested without hydrating React.
+// keystroke. Shows recent searches when the input is focused but empty.
 export default function BundleSearch({ pkg, ver }: Props): ReactElement {
   const [qualnames, setQualnames] = useState<readonly string[]>([]);
   const [query, setQuery] = useState("");
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [focused, setFocused] = useState(false);
+  const [recents, setRecents] = useState<string[]>([]);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -42,10 +45,44 @@ export default function BundleSearch({ pkg, ver }: Props): ReactElement {
     };
   }, [pkg, ver]);
 
+  // Dismiss the recent-searches panel on outside click.
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setFocused(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
   const hits: SearchHit[] = filterQualnames(qualnames, query, 50);
+  const trimmed = query.trim();
+  const showRecents = focused && trimmed === "" && recents.length > 0;
+  const showResults = trimmed !== "";
+
+  function handleFocus() {
+    setRecents(getRecentSearches());
+    setFocused(true);
+  }
+
+  function applyRecent(q: string) {
+    setQuery(q);
+    setFocused(false);
+  }
+
+  function handleClearRecents(e: React.MouseEvent) {
+    e.preventDefault();
+    clearRecentSearches();
+    setRecents([]);
+  }
+
+  function handleResultClick() {
+    if (trimmed) addRecentSearch(trimmed);
+  }
 
   return (
-    <div className="bundle-search">
+    <div className="bundle-search" ref={containerRef}>
       <input
         type="search"
         placeholder={
@@ -53,24 +90,48 @@ export default function BundleSearch({ pkg, ver }: Props): ReactElement {
         }
         value={query}
         onChange={(e) => setQuery(e.target.value)}
+        onFocus={handleFocus}
         aria-label="Search qualnames"
         disabled={!ready}
         className="bundle-search-input"
       />
       {error ? <p className="bundle-search-error">Failed to load search index: {error}</p> : null}
-      {query.trim() !== "" ? (
+
+      {showRecents && (
+        <div className="recent-searches">
+          <div className="recent-searches-header">
+            <span>Recent</span>
+            <button className="recent-searches-clear" onClick={handleClearRecents}>
+              Clear
+            </button>
+          </div>
+          <ul className="bundle-search-results">
+            {recents.map((r) => (
+              <li key={r}>
+                <button className="recent-searches-item" onClick={() => applyRecent(r)}>
+                  {r}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {showResults && (
         <ul className="bundle-search-results">
           {hits.length === 0 ? (
             <li className="bundle-search-empty">No matches</li>
           ) : (
             hits.map((h) => (
               <li key={h.qualname}>
-                <a href={linkForQualname(pkg, ver, h.qualname)}>{h.qualname}</a>
+                <a href={linkForQualname(pkg, ver, h.qualname)} onClick={handleResultClick}>
+                  {h.qualname}
+                </a>
               </li>
             ))
           )}
         </ul>
-      ) : null}
+      )}
     </div>
   );
 }

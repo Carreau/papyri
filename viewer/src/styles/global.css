@@ -658,6 +658,50 @@ section.backrefs ul.qualnames {
   color: var(--fg-muted);
   font-style: italic;
 }
+.recent-searches {
+  margin-top: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+}
+.recent-searches-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  border-bottom: 1px solid var(--border);
+}
+.recent-searches-clear {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 0;
+}
+.recent-searches-clear:hover {
+  text-decoration: underline;
+}
+.recent-searches .bundle-search-results {
+  border-top: none;
+  margin-top: 0;
+}
+.recent-searches-item {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+  width: 100%;
+}
+.recent-searches-item:hover {
+  text-decoration: underline;
+}
 
 /* ---------------------------------------------------------------------------
    Sidebar components. These live inside .bundle-sidebar.

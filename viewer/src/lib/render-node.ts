@@ -112,6 +112,10 @@ export async function renderNode(node: IRNode, opts: RenderOptions = {}): Promis
       const inner = await renderChildren(asArray(n.children), opts);
       const href = escapeHtml(String(n.url ?? ""));
       const title = n.title ? ` title="${escapeHtml(String(n.title))}"` : "";
+      const isExternal = /^https?:\/\//.test(String(n.url ?? ""));
+      if (isExternal) {
+        return `<a class="ext-link" href="${href}"${title} target="_blank" rel="noreferrer noopener">${inner}</a>`;
+      }
       return `<a href="${href}"${title}>${inner}</a>`;
     }
 

@@ -318,3 +318,22 @@ html[data-hide-types] .sig-punct:has(+ .sig-annotation) {
 html[data-hide-private] li.member-private {
   display: none;
 }
+
+/* External links: open in a new tab and show a small "leave-site" icon.
+   The icon uses a CSS mask so it inherits currentColor and works in both
+   light and dark mode without any theme-specific override. */
+a.ext-link::after {
+  content: "";
+  display: inline-block;
+  width: 0.7em;
+  height: 0.7em;
+  margin-left: 0.25em;
+  vertical-align: middle;
+  opacity: 0.75;
+  background-color: currentColor;
+  /* Feather "external-link" icon scaled to 12×12. */
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M9 6.5V9.5a1 1 0 01-1 1H2.5a1 1 0 01-1-1V4a1 1 0 011-1H5M7.5 1.5h3v3M5 7L10.5 1.5' stroke='black' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M9 6.5V9.5a1 1 0 01-1 1H2.5a1 1 0 01-1-1V4a1 1 0 011-1H5M7.5 1.5h3v3M5 7L10.5 1.5' stroke='black' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+}

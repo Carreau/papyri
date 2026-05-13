@@ -664,7 +664,7 @@ def test_target_before_section_absorbed_into_section_target():
     Some content here.
     """).encode()
 
-    sections = parse(rst)
+    sections = parse(rst, "test_target_before_section_absorbed_into_section_target")
     assert len(sections) == 1
     sec = sections[0]
     assert sec.target == "ipythonzmq"
@@ -687,7 +687,7 @@ def test_standalone_target_stays_as_target_node():
     More text after the anchor.
     """).encode()
 
-    sections = parse(rst)
+    sections = parse(rst, "test_standalone_target_stays_as_target_node")
     assert len(sections) == 1
     target_children = [c for c in sections[0].children if isinstance(c, Target)]
     assert len(target_children) == 1
@@ -699,5 +699,5 @@ def test_target_label_stripped_of_underscore_and_colon():
     # visit_target must strip the leading ``_`` and trailing ``:`` so the
     # stored label is just ``my-label``.
     rst = b".. _my-label:\n\nA section\n---------\n"
-    sections = parse(rst)
+    sections = parse(rst, "test_target_label_stripped_of_underscore_and_colon")
     assert sections[0].target == "my-label"

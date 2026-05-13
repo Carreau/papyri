@@ -256,6 +256,76 @@ def test_toctree_not_hidden_produces_crossref_links():
         assert crossref.reference.path == expected_path
 
 
+def test_toctree_uses_doc_title_for_display_text():
+    # When the bundle knows the target document's title, the rendered bullet
+    # must show that title rather than the raw reference path.
+    v = DirectiveVisiter(
+        qa="pkg.mod",
+        known_refs=frozenset(),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+        doc_titles={"intro": "Getting Started", "advanced": "Advanced Topics"},
+    )
+    out = v._toctree_handler(argument=None, options={}, content="intro\nadvanced")
+    items = out[0].children
+    titles = [item.children[0].children[0].value for item in items]
+    assert titles == ["Getting Started", "Advanced Topics"]
+
+
+def test_toctree_falls_back_to_path_when_title_unknown():
+    # If the target doc is not in the title map (forward ref, missing doc,
+    # untitled doc), the display text remains the raw entry — current
+    # behaviour preserved so partial bundles still render a usable bullet.
+    v = DirectiveVisiter(
+        qa="pkg.mod",
+        known_refs=frozenset(),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+        doc_titles={"intro": "Getting Started"},
+    )
+    out = v._toctree_handler(argument=None, options={}, content="intro\nunknown")
+    items = out[0].children
+    titles = [item.children[0].children[0].value for item in items]
+    assert titles == ["Getting Started", "unknown"]
+
+
+def test_toctree_explicit_title_wins_over_doc_title():
+    # ``Custom <intro>`` form: the author-provided title is the contract,
+    # so it must not be overridden by the destination doc's heading.
+    v = DirectiveVisiter(
+        qa="pkg.mod",
+        known_refs=frozenset(),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+        doc_titles={"intro": "Getting Started"},
+    )
+    out = v._toctree_handler(argument=None, options={}, content="Custom <intro>")
+    crossref = out[0].children[0].children[0].children[0]
+    assert isinstance(crossref, CrossRef)
+    assert crossref.value == "Custom"
+
+
+def test_toctree_doc_title_lookup_uses_resolved_doc_key():
+    # Resolution is path-aware: a relative entry like ``version9`` in the
+    # ``whatsnew/index`` doc resolves to ``whatsnew:version9`` — the title
+    # map must be keyed accordingly.
+    v = DirectiveVisiter(
+        qa="whatsnew:index",
+        known_refs=frozenset(),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+        doc_titles={"whatsnew:version9": "Release 9.0"},
+    )
+    out = v._toctree_handler(argument=None, options={}, content="version9")
+    crossref = out[0].children[0].children[0].children[0]
+    assert crossref.value == "Release 9.0"
+    assert crossref.reference.path == "whatsnew:version9"
+
+
 def test_toctree_nested_path_uses_colon_separator():
     # Toctree entries like "whatsnew/index" must become LocalRef("docs",
     # "whatsnew:index") so the viewer's linkForDoc produces the correct URL.

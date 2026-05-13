@@ -971,9 +971,12 @@ class Gen:
         # First pass: parse every RST file and collect targets so that
         # :ref:`label` can resolve across documents in the same bundle.
         # doc_targets maps each RST label to the doc key that defines it.
+        # doc_titles maps each doc key to its first heading so toctree
+        # entries can render document titles instead of raw paths.
         parsed_files: list[tuple[Path, str, list[Section]]] = []
         doc_targets: dict[str, str] = {}
         external_targets: dict[str, str] = {}
+        doc_titles: dict[str, str] = {}
         for p in files:
             if any([k in str(p) for k in self.config.narrative_exclude]):
                 continue
@@ -986,6 +989,9 @@ class Gen:
                 self.log.warning("Could not parse %s, skipping: %s", p, e)
                 continue
             key = ":".join(parts)[:-4]
+            first_title = next((s.title for s in data if s.title), None)
+            if first_title:
+                doc_titles[key] = first_title
             internal_labels, doc_external = self._extract_rst_targets(data)
             for label in internal_labels:
                 if label in doc_targets:
@@ -1035,6 +1041,7 @@ class Gen:
                         doc_root=path,
                         doc_targets=doc_targets,
                         external_targets=external_targets,
+                        doc_titles=doc_titles,
                     )
                     dv.collect_substitutions(*data)
                     blob.arbitrary = [dv.visit(s) for s in data]

@@ -1,0 +1,26 @@
+[package]
+name = "papyri-rust-viewer"
+version = "0.0.1"
+edition = "2021"
+description = "Prototype Rust viewer for papyri DocBundles"
+
+[dependencies]
+axum = "0.7"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "fs"] }
+tower-http = { version = "0.6", features = ["trace", "fs"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+maud = { version = "0.26", features = ["axum"] }
+ciborium = "0.2"
+flate2 = "1"
+serde = { version = "1", features = ["derive"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+
+[profile.dev]
+opt-level = 0
+
+[profile.release]
+opt-level = 3
+lto = "thin"

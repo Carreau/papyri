@@ -1,0 +1,55 @@
+:root {
+    --fg: #1a1a1a;
+    --bg: #fdfdfc;
+    --muted: #666;
+    --accent: #b54200;
+    --border: #e6e2dc;
+    --code-bg: #f4f1ec;
+    --mono: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif;
+    color: var(--fg);
+    background: var(--bg);
+}
+
+.topbar {
+    display: flex; align-items: baseline; gap: 1rem;
+    padding: .75rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    background: #fff;
+}
+.brand { font-weight: 700; text-decoration: none; color: var(--accent); }
+.module { color: var(--muted); font-family: var(--mono); font-size: .9rem; }
+
+main { max-width: 52rem; margin: 2rem auto; padding: 0 1.5rem; }
+footer { text-align: center; color: var(--muted); font-size: .85rem; padding: 2rem 0; }
+
+h1 { font-size: 1.75rem; margin-top: 0; }
+h1 .version { color: var(--muted); font-weight: 400; font-size: 1rem; font-family: var(--mono); }
+h2 { font-size: 1.25rem; margin-top: 2rem; border-bottom: 1px solid var(--border); padding-bottom: .25rem; }
+h3 { font-size: 1.05rem; }
+
+.summary { color: var(--muted); font-style: italic; }
+.meta { color: var(--muted); font-size: .9rem; }
+
+code { font-family: var(--mono); background: var(--code-bg); padding: .05em .35em; border-radius: 3px; font-size: .92em; }
+pre.code, pre.signature { background: var(--code-bg); padding: .75rem 1rem; border-radius: 4px; overflow-x: auto; font-family: var(--mono); font-size: .9rem; }
+pre.code code { background: transparent; padding: 0; }
+pre.signature .kw { color: var(--accent); }
+pre.signature .name { font-weight: 700; }
+pre.signature .ann { color: #2a6f3a; }
+pre.signature .def { color: #a05a00; }
+
+.entries { list-style: none; padding: 0; }
+.entries li { padding: .35rem 0; border-bottom: 1px solid var(--border); }
+.entries a { text-decoration: none; color: var(--fg); }
+.entries a:hover { color: var(--accent); }
+.tag { font-size: .75rem; background: var(--code-bg); padding: .05em .4em; border-radius: 3px; margin-left: .5rem; color: var(--muted); }
+
+.unknown { color: #b00; font-family: var(--mono); font-size: .8rem; }
+.directive { border-left: 3px solid var(--border); padding-left: 1rem; margin: 1rem 0; }
+.directive-name { color: var(--muted); font-family: var(--mono); font-size: .85rem; }

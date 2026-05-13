@@ -931,7 +931,9 @@ class DirectiveVisiter(TreeReplacer):
 
         # :ref:`label` — RST cross-reference to a named target within the bundle.
         # Resolved against doc_targets collected during the first parse pass.
-        if role == "ref" and domain in (None, "std"):
+        # domain has already been remapped to "py" for None-domain roles so we
+        # match on role alone — "ref" is unambiguous across domains.
+        if role == "ref":
             label = to_resolve
             if label in self.doc_targets:
                 doc_key = self.doc_targets[label]

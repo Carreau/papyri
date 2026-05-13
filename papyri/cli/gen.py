@@ -54,6 +54,12 @@ def gen(
         is_flag=True,
         help="After generation, upload the bundle to a viewer instance.",
     ),
+    pack: bool = typer.Option(
+        False,
+        "--pack",
+        is_flag=True,
+        help="After generation, pack the bundle into a .papyri artifact in the current directory.",
+    ),
 ) -> None:
     """
     Generate documentation IR for a given package.
@@ -90,6 +96,11 @@ def gen(
             fail_unseen_error=fail_unseen_error,
             limit_to=only,
         )
+
+        if pack and bundle_path:
+            from papyri.cli.pack import _pack_one
+
+            _pack_one(bundle_path, None)
 
         if upload and bundle_path:
             from papyri.cli.upload import upload as upload_func

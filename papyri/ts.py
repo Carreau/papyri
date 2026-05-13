@@ -969,14 +969,14 @@ def parse(text: bytes, qa=None) -> list[Section]:
     """
 
     tree = parser.parse(text)
-    for err in _find_error_nodes(tree.root_node):
-        log.error(
-            "Tree-sitter ERROR node at %s..%s in (%s): %r",
-            err.start_point,
-            err.end_point,
-            qa,
-            text[err.start_byte : err.end_byte].decode(errors="replace"),
-        )
+    #    for err in _find_error_nodes(tree.root_node):
+    #        log.error(
+    #            "Tree-sitter ERROR node at %s..%s in (%s): %r",
+    #            err.start_point,
+    #            err.end_point,
+    #            qa,
+    #            text[err.start_byte : err.end_byte].decode(errors="replace"),
+    #        )
     root = Node(tree.root_node)
     res = TSVisitor(text, qa).visit_document(root)
     ns = nest_sections(res)

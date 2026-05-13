@@ -767,7 +767,8 @@ class DefListItem(Node):
         | Admonition
         | Math
         | FieldList
-        | (TocTree | None)
+        | TocTree
+        | Table
     ]
 
     @property

@@ -4,7 +4,14 @@ from typing import Any, cast
 import pytest
 
 from papyri import errors
-from papyri.nodes import CitationReference, InlineCode, InlineRole, Paragraph, Text
+from papyri.nodes import (
+    CitationReference,
+    InlineCode,
+    InlineRole,
+    Paragraph,
+    Target,
+    Text,
+)
 from papyri.ts import Node, TSVisitor, parse, parser
 
 
@@ -638,3 +645,59 @@ def test_admonition_helper_children_is_list(kind):
         f"Admonition.children is a Field sentinel: {admonition.children!r}"
     )
     assert isinstance(admonition.children, list)
+
+
+# ---------------------------------------------------------------------------
+# RST named targets  (.. _label:)
+# ---------------------------------------------------------------------------
+
+
+def test_target_before_section_absorbed_into_section_target():
+    # A ``.. _label:`` immediately before a section heading must be absorbed
+    # into Section.target and must NOT appear as a child node.
+    rst = dedent("""
+    .. _ipythonzmq:
+
+    Decoupled two-process mode
+    --------------------------
+
+    Some content here.
+    """).encode()
+
+    sections = parse(rst)
+    assert len(sections) == 1
+    sec = sections[0]
+    assert sec.target == "ipythonzmq"
+    # The Target node must have been consumed — no Target in children.
+    target_children = [c for c in sec.children if isinstance(c, Target)]
+    assert target_children == []
+
+
+def test_standalone_target_stays_as_target_node():
+    # A ``.. _label:`` that is NOT immediately before a section heading must
+    # remain in the tree as a Target node so renderers can emit an anchor.
+    rst = dedent("""
+    Overview
+    --------
+
+    Some text.
+
+    .. _standalone-anchor:
+
+    More text after the anchor.
+    """).encode()
+
+    sections = parse(rst)
+    assert len(sections) == 1
+    target_children = [c for c in sections[0].children if isinstance(c, Target)]
+    assert len(target_children) == 1
+    assert target_children[0].label == "standalone-anchor"
+
+
+def test_target_label_stripped_of_underscore_and_colon():
+    # The raw tree-sitter text for ``.. _my-label:`` is ``_my-label:``.
+    # visit_target must strip the leading ``_`` and trailing ``:`` so the
+    # stored label is just ``my-label``.
+    rst = b".. _my-label:\n\nA section\n---------\n"
+    sections = parse(rst)
+    assert sections[0].target == "my-label"

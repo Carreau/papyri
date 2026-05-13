@@ -7,6 +7,8 @@ Covered surfaces:
 - ``DelayedResolver`` (target/reference unification)
 - ``_toctree_handler`` (blank lines, comments, glob, hidden, malformed entries, LocalRef links)
 - ``_SPHINX_ONLY_DIRECTIVES`` (silent drop via warning)
+- ``:ref:`` role resolution via doc_targets map
+- ``Target`` leaf-node traversal (no crash when Target appears in section children)
 """
 
 from __future__ import annotations
@@ -19,8 +21,13 @@ from papyri.nodes import (
     CrossRef,
     Figure,
     Image,
+    InlineRole,
     LocalRef,
+    Paragraph,
     RefInfo,
+    Section,
+    Target,
+    Text,
     UnprocessedDirective,
 )
 from papyri.tree import (
@@ -541,3 +548,111 @@ def test_seealso_directive_empty_content_produces_admonition():
     assert len(out) == 1
     assert isinstance(out[0], Admonition)
     assert out[0].kind == "seealso"
+
+
+# ---------------------------------------------------------------------------
+# :ref: role resolution via doc_targets
+# ---------------------------------------------------------------------------
+
+
+def _make_visitor_with_targets(doc_targets: dict) -> DirectiveVisiter:
+    return DirectiveVisiter(
+        qa="docs:overview",
+        known_refs=frozenset(),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+        doc_targets=doc_targets,
+    )
+
+
+def test_ref_role_known_label_emits_crossref_to_localref():
+    # :ref:`ipythonzmq` with that label in doc_targets must produce a CrossRef
+    # pointing at LocalRef("docs", doc_key).
+    v = _make_visitor_with_targets({"ipythonzmq": "overview"})
+    role = InlineRole(domain=None, role="ref", value="ipythonzmq")
+    out = v.replace_InlineRole(role)
+    assert len(out) == 1
+    cr = out[0]
+    assert isinstance(cr, CrossRef)
+    assert isinstance(cr.reference, LocalRef)
+    assert cr.reference.kind == "docs"
+    assert cr.reference.path == "overview"
+    assert cr.value == "ipythonzmq"
+
+
+def test_ref_role_titled_form_uses_explicit_text():
+    # :ref:`custom text <ipythonzmq>` — display text is "custom text",
+    # target label is "ipythonzmq".
+    v = _make_visitor_with_targets({"ipythonzmq": "overview"})
+    role = InlineRole(domain=None, role="ref", value="custom text <ipythonzmq>")
+    out = v.replace_InlineRole(role)
+    assert len(out) == 1
+    cr = out[0]
+    assert isinstance(cr, CrossRef)
+    assert cr.value == "custom text"
+    assert isinstance(cr.reference, LocalRef)
+    assert cr.reference.path == "overview"
+
+
+def test_ref_role_unknown_label_returns_directive_unchanged():
+    # An unresolved :ref: must pass through as an InlineRole rather than crash.
+    v = _make_visitor_with_targets({})
+    role = InlineRole(domain=None, role="ref", value="no-such-label")
+    out = v.replace_InlineRole(role)
+    assert len(out) == 1
+    assert isinstance(out[0], InlineRole)
+
+
+def test_ref_role_cross_doc_resolves_to_correct_doc_key():
+    # Label defined in a different doc within the same bundle.
+    v = _make_visitor_with_targets({"zmq-architecture": "internals:zmq"})
+    role = InlineRole(domain=None, role="ref", value="zmq-architecture")
+    out = v.replace_InlineRole(role)
+    cr = out[0]
+    assert isinstance(cr, CrossRef)
+    assert cr.reference.path == "internals:zmq"
+
+
+# ---------------------------------------------------------------------------
+# Target node traversal (generic_visit leaf)
+# ---------------------------------------------------------------------------
+
+
+def test_target_node_passes_through_generic_visit():
+    # Target has no children attribute; generic_visit must not crash and must
+    # return the node unchanged.
+    v = DirectiveVisiter(
+        qa="docs:overview",
+        known_refs=frozenset(),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+    )
+    # Wrap a Target in a Section so the visitor has a root node with children.
+    target = Target(label="my-anchor")
+    section = Section(children=[target], title="Overview")
+    result = v.visit(section)
+    assert isinstance(result, Section)
+    assert len(result.children) == 1
+    assert isinstance(result.children[0], Target)
+    assert result.children[0].label == "my-anchor"
+
+
+def test_section_with_mixed_children_traverses_target():
+    # Section containing a paragraph, a Target, and another paragraph must
+    # survive generic_visit with all three children intact.
+    v = DirectiveVisiter(
+        qa="docs:overview",
+        known_refs=frozenset(),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+    )
+    p1 = Paragraph([Text("before")])
+    anchor = Target(label="anchor")
+    p2 = Paragraph([Text("after")])
+    section = Section(children=[p1, anchor, p2], title="T")
+    result = v.visit(section)
+    types = [type(c).__name__ for c in result.children]
+    assert types == ["Paragraph", "Target", "Paragraph"]

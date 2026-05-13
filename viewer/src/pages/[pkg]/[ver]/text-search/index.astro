@@ -1,0 +1,16 @@
+---
+export const prerender = false;
+
+import BundleLayout from "../../../../layouts/BundleLayout.astro";
+import TextSearchPanel from "../../../../components/TextSearchPanel.tsx";
+
+const { pkg, ver } = Astro.params;
+if (!pkg || !ver) return new Response(null, { status: 404 });
+---
+
+<BundleLayout pkg={pkg} ver={ver} title={`Text search — ${pkg} ${ver} — Papyri viewer`}>
+  <p class="crumb"><a href={`/${pkg}/${ver}/`}>&larr; {pkg} {ver}</a></p>
+  <h1>Text search</h1>
+
+  <TextSearchPanel client:load pkg={pkg} ver={ver} />
+</BundleLayout>

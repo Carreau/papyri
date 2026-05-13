@@ -614,6 +614,36 @@ def test_ref_role_cross_doc_resolves_to_correct_doc_key():
     assert cr.reference.path == "internals:zmq"
 
 
+def test_plain_hyperlink_angle_bracket_resolves_doc_target():
+    # Plain RST hyperlink `See below <quickstart.shape-manipulation>`_ where the
+    # target matches a known doc anchor. The role is None (no explicit :ref:), so
+    # the existing :ref: branch never fires — this exercises the fallback check.
+    v = _make_visitor_with_targets(
+        {"quickstart.shape-manipulation": "quickstart:shape-manipulation"}
+    )
+    role = InlineRole(
+        domain=None, role=None, value="See below <quickstart.shape-manipulation>"
+    )
+    out = v.replace_InlineRole(role)
+    assert len(out) == 1
+    cr = out[0]
+    assert isinstance(cr, CrossRef)
+    assert cr.value == "See below"
+    assert isinstance(cr.reference, LocalRef)
+    assert cr.reference.kind == "docs"
+    assert cr.reference.path == "quickstart:shape-manipulation"
+
+
+def test_plain_hyperlink_angle_bracket_unresolved_does_not_crash():
+    # If the target is not in doc_targets, the reference falls through to API
+    # resolution; for an unresolvable target it should return the directive
+    # unchanged rather than raise.
+    v = _make_visitor_with_targets({})
+    role = InlineRole(domain=None, role=None, value="See below <no-such-label>")
+    out = v.replace_InlineRole(role)
+    assert len(out) == 1
+
+
 # ---------------------------------------------------------------------------
 # Target node traversal (generic_visit leaf)
 # ---------------------------------------------------------------------------

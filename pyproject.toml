@@ -20,7 +20,7 @@ dependencies = [
     "rich",
     "tomli_w",
     "tree-sitter>=0.24",
-    "py-tree-sitter-rst",
+    "py-tree-sitter-rst>=0.2.2",
     "typer>=0.9",
 ]
 

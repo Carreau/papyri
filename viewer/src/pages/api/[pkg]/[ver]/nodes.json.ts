@@ -12,26 +12,17 @@
 import type { APIRoute } from "astro";
 import type { BlobStore } from "papyri-ingest";
 import {
-  listModules,
-  loadModule,
-  loadCbor,
   collectNodes,
   ALL_NODE_TYPES,
   type IRNode,
   type TypedNode,
 } from "../../../../lib/ir-reader.ts";
-import { listDocs, listExamples } from "../../../../lib/nav.ts";
 import { getBackends } from "../../../../lib/backends.ts";
 import { typeFromSlug } from "../../../../lib/ir-types.ts";
-import { linkForDoc, linkForExample, linkForQualname } from "../../../../lib/links.ts";
 import { renderNode } from "../../../../lib/render-node.ts";
+import { walkBundle, type PageRef } from "../../../../lib/bundle-walk.ts";
 
 export const prerender = false;
-
-interface PageRef {
-  label: string;
-  href: string;
-}
 
 export interface NodeEntry {
   type: string;
@@ -88,62 +79,11 @@ async function collectBundleNodes(
     }
   }
 
-  const qualnames = await listModules(blobStore, pkg, ver);
-  for (const qa of qualnames) {
-    if (valueMap.size >= limit) break;
-    const t0 = performance.now();
-    let doc;
-    try {
-      doc = await loadModule(blobStore, pkg, ver, qa);
-    } catch {
-      console.log(`[nodes]   module ${qa} (load failed, skipped)`);
-      continue;
-    }
-    addHits(collectNodes(doc, types), { label: qa, href: linkForQualname(pkg, ver, qa) });
-    console.log(
-      `[nodes]   module ${qa} ${(performance.now() - t0).toFixed(1)}ms hits=${valueMap.size}`
-    );
-  }
-
-  const docPaths = await listDocs(blobStore, pkg, ver);
-  for (const docPath of docPaths) {
-    if (valueMap.size >= limit) break;
-    const t0 = performance.now();
-    let section;
-    try {
-      section = await loadCbor(blobStore, pkg, ver, "docs", docPath);
-    } catch {
-      console.log(`[nodes]   doc ${docPath} (load failed, skipped)`);
-      continue;
-    }
-    addHits(collectNodes(section, types), {
-      label: docPath,
-      href: linkForDoc(pkg, ver, docPath),
-    });
-    console.log(
-      `[nodes]   doc ${docPath} ${(performance.now() - t0).toFixed(1)}ms hits=${valueMap.size}`
-    );
-  }
-
-  const exPaths = await listExamples(blobStore, pkg, ver);
-  for (const exPath of exPaths) {
-    if (valueMap.size >= limit) break;
-    const t0 = performance.now();
-    let section;
-    try {
-      section = await loadCbor(blobStore, pkg, ver, "examples", exPath);
-    } catch {
-      console.log(`[nodes]   example ${exPath} (load failed, skipped)`);
-      continue;
-    }
-    addHits(collectNodes(section, types), {
-      label: exPath,
-      href: linkForExample(pkg, ver, exPath),
-    });
-    console.log(
-      `[nodes]   example ${exPath} ${(performance.now() - t0).toFixed(1)}ms hits=${valueMap.size}`
-    );
-  }
+  await walkBundle(blobStore, pkg, ver, (doc, page) => {
+    if (valueMap.size >= limit) return false;
+    addHits(collectNodes(doc, types), page);
+    return valueMap.size < limit;
+  });
 
   const entries = [...valueMap.values()].sort((a, b) => {
     if (a.type !== b.type) return a.type.localeCompare(b.type);

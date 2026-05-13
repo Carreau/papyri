@@ -30,6 +30,7 @@ import type { APIRoute } from "astro";
 import { Ingester, decode, type TypedNode } from "papyri-ingest";
 import { isSafeSegment } from "../../lib/paths.ts";
 import { getBackends, getUploadToken } from "../../lib/backends.ts";
+import { respond } from "../../lib/api-utils.ts";
 
 export const prerender = false;
 
@@ -107,10 +108,3 @@ export const PUT: APIRoute = async ({ request }) => {
 
   return respond({ ok: true, pkg, version }, 201);
 };
-
-function respond(body: object, status: number, extra?: Record<string, string>): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json", ...extra },
-  });
-}

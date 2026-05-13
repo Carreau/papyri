@@ -1140,3 +1140,62 @@ section.backrefs ul.qualnames {
 .node-refs li {
   margin: 0.15rem 0;
 }
+
+/* Login form */
+.lf-field {
+  margin-bottom: 14px;
+}
+.lf-field:last-of-type {
+  margin-bottom: 20px;
+}
+.lf-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.lf-input {
+  width: 100%;
+  padding: 10px 12px;
+  box-sizing: border-box;
+  border: 1px solid var(--border, #d0d0d0);
+  border-radius: 6px;
+  font-size: 14px;
+  background: var(--surface, #fff);
+  color: inherit;
+}
+.lf-error {
+  color: #b00020;
+  background: #fdecea;
+  padding: 8px 10px;
+  border-radius: 6px;
+  margin-bottom: 14px;
+  font-size: 13px;
+}
+.lf-submit {
+  width: 100%;
+  padding: 10px;
+  background-color: var(--accent, #0066cc);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+}
+.lf-submit:disabled {
+  background-color: #9bbfe6;
+  cursor: not-allowed;
+}
+.lf-hint {
+  margin-top: 20px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--fg-muted, #666);
+}
+.lf-hint-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}

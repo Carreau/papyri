@@ -115,12 +115,12 @@ function isTocSectionExpanded(item: TocItem): boolean {
           {nav.docsIndexHref ? <a href={nav.docsIndexHref}>Docs</a> : "Docs"}
         </h3>
         {hasToc ? (
-          <ul class="sidebar-toc">
+          <ul class="sidebar-list sidebar-toc">
             {nav.toc.map((item) => (
               <li class={isTocActive(item) ? "is-active" : undefined}>
                 {item.href ? <a href={item.href}>{item.title}</a> : <span>{item.title}</span>}
                 {item.children.length > 0 && isTocSectionExpanded(item) ? (
-                  <ul class="sidebar-toc">
+                  <ul class="sidebar-list sidebar-toc">
                     {item.children.map((child) => (
                       <li class={isTocActive(child) ? "is-active" : undefined}>
                         {child.href ? (
@@ -136,7 +136,7 @@ function isTocSectionExpanded(item: TocItem): boolean {
             ))}
           </ul>
         ) : (
-          <ul class="sidebar-flat">
+          <ul class="sidebar-list sidebar-flat">
             {nav.docs.map((e) => (
               <li class={isDocActive(e.name) ? "is-active" : undefined}>
                 <a href={e.href}>{labelForEntry(e)}</a>
@@ -152,7 +152,7 @@ function isTocSectionExpanded(item: TocItem): boolean {
     nav.tutorials.length > 0 ? (
       <nav class="sidebar-section">
         <h3 class="sidebar-heading">Tutorials</h3>
-        <ul class="sidebar-flat">
+        <ul class="sidebar-list sidebar-flat">
           {nav.tutorials.map((e) => (
             <li class={isDocActive(e.name) ? "is-active" : undefined}>
               <a href={e.href}>{labelForEntry(e)}</a>
@@ -167,7 +167,7 @@ function isTocSectionExpanded(item: TocItem): boolean {
     nav.examples.length > 0 ? (
       <nav class="sidebar-section">
         <h3 class="sidebar-heading">Examples</h3>
-        <ul class="sidebar-flat">
+        <ul class="sidebar-list sidebar-flat">
           {nav.examples.map((e) => (
             <li class={isExampleActive(e.name) ? "is-active" : undefined}>
               <a href={e.href}>{labelForEntry(e)}</a>
@@ -180,7 +180,7 @@ function isTocSectionExpanded(item: TocItem): boolean {
 
   <nav class="sidebar-section">
     <h3 class="sidebar-heading">Browse</h3>
-    <ul class="sidebar-flat">
+    <ul class="sidebar-list sidebar-flat">
       <li><a href={`/${nav.pkg}/${nav.version}/images/`}>Images</a></li>
       <li><a href={`/${nav.pkg}/${nav.version}/nodes/math/`}>Math</a></li>
       <li><a href={`/${nav.pkg}/${nav.version}/nodes/code/`}>Code</a></li>
@@ -191,7 +191,7 @@ function isTocSectionExpanded(item: TocItem): boolean {
   <nav class="sidebar-section sidebar-api">
     <h3 class="sidebar-heading">API</h3>
     <BundleSearch client:load pkg={nav.pkg} ver={nav.version} />
-    <ul class="sidebar-qualnames">
+    <ul class="sidebar-list sidebar-qualnames">
       {
         apiTreeItems.map((item) => (
           <li

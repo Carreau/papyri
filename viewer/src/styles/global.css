@@ -776,24 +776,25 @@ section.backrefs ul.qualnames {
   font-size: 0.8rem;
 }
 
-/* Flat link list — docs, tutorials, examples rendered without hierarchy. */
-.sidebar-flat {
+/* Base styles for sidebar list variants. Each variant overrides font, sizing,
+   and depth handling as needed; they all share the same active-state and link
+   styling. */
+.sidebar-list {
   list-style: none;
   padding: 0;
   margin: 0;
-  font-size: 0.8rem;
 }
-.sidebar-flat li {
+.sidebar-list li {
   padding: 0.15rem 0.25rem;
   border-radius: 3px;
 }
-.sidebar-flat li.is-active {
+.sidebar-list li.is-active {
   border-left: 2px solid var(--accent);
   padding-left: 0.35rem;
   font-weight: 600;
   background: var(--surface-alt);
 }
-.sidebar-flat a {
+.sidebar-list a {
   color: var(--accent);
   text-decoration: none;
   display: block;
@@ -801,38 +802,19 @@ section.backrefs ul.qualnames {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.sidebar-flat a:hover {
+.sidebar-list a:hover {
   text-decoration: underline;
+}
+
+/* Flat link list — docs, tutorials, examples rendered without hierarchy. */
+.sidebar-flat {
+  font-size: 0.8rem;
 }
 
 /* Nested toc. Two levels are enough for papyri's current trees; deeper
    nesting inherits padding from the parent <ul>. */
 .sidebar-toc {
-  list-style: none;
-  padding: 0;
-  margin: 0;
   font-size: 0.8rem;
-}
-.sidebar-toc li {
-  padding: 0.15rem 0.25rem;
-  border-radius: 3px;
-}
-.sidebar-toc li.is-active {
-  border-left: 2px solid var(--accent);
-  padding-left: 0.35rem;
-  font-weight: 600;
-  background: var(--surface-alt);
-}
-.sidebar-toc a {
-  color: var(--accent);
-  text-decoration: none;
-  display: block;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.sidebar-toc a:hover {
-  text-decoration: underline;
 }
 .sidebar-toc ul.sidebar-toc {
   margin-left: 0.75rem;
@@ -842,9 +824,6 @@ section.backrefs ul.qualnames {
    inline on li elements). Depth-1 items have no variable → default indent of
    0.25rem. Each additional level adds 0.75rem. */
 .sidebar-qualnames {
-  list-style: none;
-  padding: 0;
-  margin: 0;
   font-family: var(--mono);
   font-size: 0.75rem;
   overflow-y: auto;
@@ -853,27 +832,12 @@ section.backrefs ul.qualnames {
 .sidebar-qualnames li {
   padding: 0.1rem 0.25rem;
   padding-left: calc((var(--tree-depth, 1) - 1) * 0.75rem + 0.25rem);
-  border-radius: 3px;
 }
 .sidebar-qualnames li.is-active {
-  border-left: 2px solid var(--accent);
   padding-left: calc((var(--tree-depth, 1) - 1) * 0.75rem + 0.1rem);
-  font-weight: 600;
-  background: var(--surface-alt);
 }
 .sidebar-qualnames li.is-ancestor {
   font-weight: 500;
-}
-.sidebar-qualnames a {
-  color: var(--accent);
-  text-decoration: none;
-  display: block;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.sidebar-qualnames a:hover {
-  text-decoration: underline;
 }
 
 /* ---------------------------------------------------------------------------
@@ -1139,4 +1103,63 @@ section.backrefs ul.qualnames {
 }
 .node-refs li {
   margin: 0.15rem 0;
+}
+
+/* Login form */
+.lf-field {
+  margin-bottom: 14px;
+}
+.lf-field:last-of-type {
+  margin-bottom: 20px;
+}
+.lf-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.lf-input {
+  width: 100%;
+  padding: 10px 12px;
+  box-sizing: border-box;
+  border: 1px solid var(--border, #d0d0d0);
+  border-radius: 6px;
+  font-size: 14px;
+  background: var(--surface, #fff);
+  color: inherit;
+}
+.lf-error {
+  color: #b00020;
+  background: #fdecea;
+  padding: 8px 10px;
+  border-radius: 6px;
+  margin-bottom: 14px;
+  font-size: 13px;
+}
+.lf-submit {
+  width: 100%;
+  padding: 10px;
+  background-color: var(--accent, #0066cc);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+}
+.lf-submit:disabled {
+  background-color: #9bbfe6;
+  cursor: not-allowed;
+}
+.lf-hint {
+  margin-top: 20px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--fg-muted, #666);
+}
+.lf-hint-title {
+  font-weight: 600;
+  margin-bottom: 4px;
 }

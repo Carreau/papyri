@@ -941,6 +941,14 @@ class DirectiveVisiter(TreeReplacer):
             else:
                 return [directive]
 
+        # Plain RST hyperlink with angle-bracket syntax (`text <label>`_) where
+        # the target matches a known doc anchor. The original role was None
+        # (remapped to "py" above), so the :ref: branch above never fires.
+        # Check doc_targets here before falling through to Python API resolution.
+        if directive.role is None and to_resolve in self.doc_targets:
+            doc_key = self.doc_targets[to_resolve]
+            return [CrossRef(text, LocalRef("docs", doc_key), "exists")]
+
         r = self._resolve(loc, to_resolve)
         # this is now likely incorrect as Ref kind should not be exists,
         # but things like "local", "api", "gallery..."

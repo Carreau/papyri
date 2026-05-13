@@ -935,7 +935,6 @@ class Gen:
             )
         return labels
 
-
     def collect_narrative_docs(self):
         """
         Crawl the filesystem for all docs/rst files

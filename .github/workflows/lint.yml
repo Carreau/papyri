@@ -93,7 +93,9 @@ jobs:
         cache: "pnpm"
         cache-dependency-path: "pnpm-lock.yaml"
     - name: Install dependencies
-      run: pnpm install --frozen-lockfile
+      run: |
+        pnpm approve-builds better-sqlite3 cbor-extract esbuild sharp workerd
+        pnpm install --frozen-lockfile
     - name: Lint with ESLint (viewer)
       run: pnpm --filter papyri-viewer run lint
     - name: Format check with Prettier (viewer)

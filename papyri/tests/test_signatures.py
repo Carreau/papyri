@@ -4,13 +4,14 @@ of function signature to JSON.
 """
 
 import json
+from collections.abc import Callable
 
 import pytest
 
 from papyri.signature import Signature as SignatureObject
 from papyri.signature import SignatureNode
 
-all_funcs = []
+all_funcs: list[Callable] = []
 
 
 def add(func):

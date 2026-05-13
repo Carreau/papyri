@@ -335,7 +335,9 @@ class TSVisitor:
         """
         full_text = self.as_text(node)
         if "`" not in full_text:
-            # Reference without backticks: plain text or identifier like np.bool_
+            # Reference without backticks: plain text or identifier like np.bool_.
+            # The trailing underscore is RST simple-reference syntax but is also
+            # valid in Python identifiers; resolution strips it conditionally.
             _text = full_text
         else:
             try:
@@ -671,6 +673,7 @@ class TSVisitor:
         return [BulletList(ordered=True, start=1, spread=False, children=items)]
 
     def visit_target(self, node):
+        # Internal anchor target: ``.. _label:``
         if len(node.children) == 2:
             pp, name = node.children
             if pp.type == ".." and name.type == "name":
@@ -678,6 +681,19 @@ class TSVisitor:
                 # raw is "_labelname:" — strip leading _ and trailing :
                 label = raw[1:-1]
                 return [Target(label=label)]
+        # External named hyperlink target: ``.. _label: http://...`` or
+        # ``.. _`Display Name`: http://...``. Tree-sitter-rst gives three
+        # children: ``..``, ``name`` (``_label:`` / ``_`label`:`` / ``__:``)
+        # and ``link``.
+        if len(node.children) == 3:
+            pp, name, link = node.children
+            if pp.type == ".." and name.type == "name" and link.type == "link":
+                raw = self.as_text(name)
+                # Strip leading underscore(s) and trailing colon, then strip
+                # surrounding backticks for quoted labels.
+                label = raw.lstrip("_").rstrip(":").strip("`")
+                url = self.as_text(link).strip()
+                return [Target(label=label, url=url)]
         return [Unimplemented("target", self.as_text(node))]
 
     def visit_attribution(self, node):

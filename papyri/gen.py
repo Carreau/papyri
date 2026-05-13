@@ -924,16 +924,30 @@ class Gen:
         return processed_example_data(example_section_data), doctest_runner.figs
 
     @staticmethod
-    def _extract_rst_targets(sections: list[Section]) -> list[str]:
-        """Return all named RST target labels found in a list of sections."""
+    def _extract_rst_targets(
+        sections: list[Section],
+    ) -> tuple[list[str], dict[str, str]]:
+        """Return RST targets found in a list of sections.
+
+        Yields a tuple ``(internal_labels, external_targets)`` where
+        ``internal_labels`` is the list of named anchors that resolve within
+        the bundle (``.. _label:`` / section-attached) and ``external_targets``
+        maps each named external hyperlink label to its URL
+        (``.. _label: http://...``).
+        """
         labels: list[str] = []
+        external: dict[str, str] = {}
         for section in sections:
             if section.target:
                 labels.append(section.target)
-            labels.extend(
-                child.label for child in section.children if isinstance(child, Target)
-            )
-        return labels
+            for child in section.children:
+                if not isinstance(child, Target):
+                    continue
+                if child.url is None:
+                    labels.append(child.label)
+                elif child.label:
+                    external[child.label] = child.url
+        return labels, external
 
     def collect_narrative_docs(self):
         """
@@ -959,6 +973,7 @@ class Gen:
         # doc_targets maps each RST label to the doc key that defines it.
         parsed_files: list[tuple[Path, str, list[Section]]] = []
         doc_targets: dict[str, str] = {}
+        external_targets: dict[str, str] = {}
         for p in files:
             if any([k in str(p) for k in self.config.narrative_exclude]):
                 continue
@@ -971,7 +986,8 @@ class Gen:
                 self.log.warning("Could not parse %s, skipping: %s", p, e)
                 continue
             key = ":".join(parts)[:-4]
-            for label in self._extract_rst_targets(data):
+            internal_labels, doc_external = self._extract_rst_targets(data)
+            for label in internal_labels:
                 if label in doc_targets:
                     self.log.warning(
                         "Duplicate RST target %r in %s (already defined in %s)",
@@ -981,6 +997,19 @@ class Gen:
                     )
                 else:
                     doc_targets[label] = key
+            for label, url in doc_external.items():
+                # External hyperlink targets are global across the bundle and
+                # the same label may legitimately be redefined per-doc. Last
+                # writer wins, with a debug log so collisions are traceable.
+                if label in external_targets and external_targets[label] != url:
+                    self.log.debug(
+                        "External RST target %r redefined in %s (was %s, now %s)",
+                        label,
+                        key,
+                        external_targets[label],
+                        url,
+                    )
+                external_targets[label] = url
             parsed_files.append((p, key, data))
 
         # Second pass: visit each document with the full target map available.
@@ -1005,6 +1034,7 @@ class Gen:
                         asset_store=self.put_raw,
                         doc_root=path,
                         doc_targets=doc_targets,
+                        external_targets=external_targets,
                     )
                     dv.collect_substitutions(*data)
                     blob.arbitrary = [dv.visit(s) for s in data]

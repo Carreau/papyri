@@ -41,7 +41,7 @@ from rich.progress import BarColumn, TextColumn
 
 log = logging.getLogger("papyri")
 
-from ._progress import TimeElapsedColumn, iter_with_progress, progress_class
+from ._progress import TimeElapsedColumn, progress_class
 from .config_loader import Config, load_configuration
 from .doc import (
     GeneratedDoc,
@@ -921,26 +921,6 @@ class Gen:
             plt.close("all")
 
         return processed_example_data(example_section_data), doctest_runner.figs
-
-    def clean(self, where: Path):
-        """
-        Erase a doc bundle folder.
-        """
-        subdirs = ("module", "assets", "docs", "examples")
-        for i, sub in enumerate(subdirs, start=1):
-            for _, path in iter_with_progress(
-                (where / sub).glob("*"),
-                dummy=self._dummy_progress,
-                description=f"cleaning previous bundle {i}/{len(subdirs)}",
-            ):
-                path.unlink()
-
-        for sub in subdirs:
-            if (where / sub).exists():
-                (where / sub).rmdir()
-        for f in ("papyri.json", "toc.json"):
-            if (where / f).exists():
-                (where / f).unlink()
 
     def collect_narrative_docs(self):
         """

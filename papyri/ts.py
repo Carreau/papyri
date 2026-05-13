@@ -328,38 +328,38 @@ class TSVisitor:
 
     def visit_reference(self, node):
         """
-        RST hyperlink references: `text <target>`_ or `text <target>`__
+        RST hyperlink references.
 
-        Single underscore (_) = named reference to a target definition.
-        Double underscore (__) = anonymous reference to an implicit target.
+        Backticked form (``\\`Display <target>\\`_``): the grammar exposes
+        ``name`` and optional ``uri`` children, plus a trailing ``_`` node
+        carrying either ``\\`_`` (named) or ``\\`__`` (anonymous).
+
+        Bare form (``name_`` / ``name__``): leaf node with no children — the
+        trailing underscore stays in the value and is stripped at resolution
+        time, since the same lexical shape is also a Python identifier such as
+        ``np.bool_``.
         """
-        full_text = self.as_text(node)
-        if "`" not in full_text:
-            # Reference without backticks: plain text or identifier like np.bool_
-            _text = full_text
-        else:
-            try:
-                _text, trailing = (
-                    self.as_text(node)[1:].replace("\n", " ").rsplit("`", maxsplit=1)
-                )
-                if trailing not in ("_", "__"):
-                    log.warning(
-                        "Hyperlink reference has unexpected trailing %r "
-                        "(expected '_' or '__') in (%s); rendering as plain text.",
-                        trailing,
-                        self._qa,
-                    )
-                    return [Text(self.as_text(node))]
-            except (ValueError, IndexError) as e:
-                log.warning(
-                    "Failed to parse hyperlink reference %r in (%s): %s; "
-                    "rendering as plain text.",
-                    full_text,
-                    self._qa,
-                    e,
-                )
-                return [Text(full_text)]
-        return [InlineRole(_text, None, None)]
+        if not node.children:
+            return [InlineRole(self.as_text(node), None, None)]
+
+        by_type = {c.type: c for c in node.children}
+        name = by_type.get("name")
+        if name is None:
+            raise ValueError(
+                f"Hyperlink reference {self.as_text(node)!r} missing 'name' "
+                f"child in ({self._qa}); child types: "
+                f"{[c.type for c in node.children]!r}"
+            )
+
+        name_text = self.as_text(name).replace("\n", " ")
+        uri = by_type.get("uri")
+        if uri is None:
+            return [InlineRole(name_text, None, None)]
+
+        # Preserve the existing ``text <target>`` encoding so replace_InlineRole
+        # splits it back into display + target.
+        uri_text = self.as_text(uri).replace("\n", " ")
+        return [InlineRole(f"{name_text} <{uri_text}>", None, None)]
 
     def visit_interpreted_text(self, node):
         inventory = None

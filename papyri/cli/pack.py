@@ -76,18 +76,36 @@ def pack(
 
 
 def _pack_one(bundle_dir: Path, output: Path | None, verbose: bool = False) -> None:
-    from papyri.pack import make_artifact_from_dir
+    # Use the Rust implementation for speed (no Python deserialization)
+    try:
+        from papyri_pack import pack_bundle_fast
 
-    log = (lambda msg: typer.echo(msg, err=True)) if verbose else None
-    if verbose:
-        typer.echo(f"packing {bundle_dir.name} …", err=True)
-    data, bundle = make_artifact_from_dir(bundle_dir, log=log)
-    default_name = f"{bundle.module}-{bundle.version}.papyri"
-    if output is None:
-        out_path = Path.cwd() / default_name
-    else:
-        output = output.expanduser()
-        out_path = output / default_name if output.is_dir() else output
+        # Determine output path
+        if output is None:
+            out_dir = Path.cwd()
+        else:
+            output = output.expanduser()
+            out_dir = output if output.is_dir() else output.parent
 
-    out_path.write_bytes(data)
-    typer.echo(f"wrote {out_path} ({len(data)} bytes)")
+        # Call Rust implementation directly
+        size, artifact_name = pack_bundle_fast(str(bundle_dir), str(out_dir), verbose)
+        out_path = out_dir / artifact_name
+        typer.echo(f"wrote {out_path} ({size} bytes)")
+
+    except ImportError:
+        # Fallback to Python implementation if Rust extension unavailable
+        from papyri.pack import make_artifact_from_dir
+
+        log = (lambda msg: typer.echo(msg, err=True)) if verbose else None
+        if verbose:
+            typer.echo(f"packing {bundle_dir.name} …", err=True)
+        data, bundle = make_artifact_from_dir(bundle_dir, log=log)
+        default_name = f"{bundle.module}-{bundle.version}.papyri"
+        if output is None:
+            out_path = Path.cwd() / default_name
+        else:
+            output = output.expanduser()
+            out_path = output / default_name if output.is_dir() else output
+
+        out_path.write_bytes(data)
+        typer.echo(f"wrote {out_path} ({len(data)} bytes)")

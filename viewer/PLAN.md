@@ -152,6 +152,13 @@ All milestones through M8 and M9.0–M9.1 are complete. Open milestones:
       handed to `Ingester.ingestBundle(node)` — no temp dir, no `tar`
       spawn. Write path uses subquery-based link inserts so a single
       `db.batch([…])` is atomic on both SQLite and D1.
+- [x] **M9.3b — Raw bundle archive.** Every `PUT /api/bundle` now archives the
+      compressed `.papyri.gz` bytes to `_raw/<pkg>/<ver>.papyri.gz` in the
+      `BLOBS` bucket (R2) or `<ingest-dir>/_raw/` on the filesystem (Node)
+      before ingest runs. `POST /api/reingest` (auth-gated, NDJSON stream)
+      replays the raw archive through a fresh ingest — supports
+      `?pkg=` / `?ver=` to scope to one bundle. `RawStore` interface +
+      `FsRawStore` / `R2RawStore` implementations live in `ingest/src/raw-store.ts`.
 - [ ] **M9.4 — CI smoke + cutover.** A workflow that runs `wrangler dev`
       against an empty store, hits a few routes, then `papyri upload`s a
       fixture bundle and checks that pages now resolve. Decide whether the

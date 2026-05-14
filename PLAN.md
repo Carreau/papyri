@@ -71,6 +71,30 @@ customization surface, not a publication format.
 Explicitly *not* in scope: making `gen` produce a `.papyri` directly —
 that would close off the inspect-and-modify workflow.
 
+### Raw bundle archive (R2 raw zone)
+
+Every bundle received by `PUT /api/bundle` is archived verbatim (the
+compressed `.papyri.gz` bytes as received off the wire) to a `_raw/` prefix
+in the `BLOBS` R2 bucket before the ingest pipeline runs. Key format:
+
+```
+_raw/<pkg>/<ver>.papyri.gz
+```
+
+The `_raw/` prefix is never a valid processed-blob key (those start with a
+letter or digit), so the two namespaces are disjoint in the same bucket — no
+second binding is required.
+
+**Why:** The raw archive is the recovery source-of-truth. If the ingest schema
+changes, a cross-link bug is found, or the processed store (BlobStore + GraphDb)
+needs to be wiped and rebuilt, the `POST /api/reingest` endpoint replays every
+archived bundle through a fresh ingest run without requiring maintainers to
+re-upload. Optional `?pkg=` / `?ver=` query params narrow the scope to one
+package or one specific version.
+
+Local (`FsRawStore`): archives land at `<ingest-dir>/_raw/<pkg>/<ver>.papyri.gz`.
+Workers (`R2RawStore`): same key shape, written to the `BLOBS` R2 bucket.
+
 ### Viewer — M9 (Cloudflare Workers)
 
 Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).

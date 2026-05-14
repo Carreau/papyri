@@ -145,13 +145,68 @@ def upload(
         t0 = time.monotonic()
         try:
             with urllib.request.urlopen(req) as resp:
-                body = json.loads(resp.read())
+                # The server streams NDJSON: one JSON event per line.
+                # Read line-by-line so progress events surface in real
+                # time on the terminal — important when the worker would
+                # otherwise look hung for tens of seconds.
+                # Non-streaming servers (older deploys, or accidentally
+                # buffered ones) still work: the whole body arrives as a
+                # single line and we treat it as a `done` event below.
+                final: dict[str, object] | None = None
+                err_msg: str | None = None
+                for raw_line in resp:
+                    line = raw_line.strip()
+                    if not line:
+                        continue
+                    try:
+                        event = json.loads(line)
+                    except json.JSONDecodeError:
+                        # Likely the legacy buffered shape: a single
+                        # JSON object spanning the whole body. Fall back
+                        # to slurping and parsing once.
+                        try:
+                            event = json.loads(b"".join([line, resp.read()]))
+                        except json.JSONDecodeError as e:
+                            err_msg = f"unparseable server response: {e}"
+                            break
+                    kind = event.get("event")
+                    if kind == "start":
+                        typer.echo(
+                            f"{prefix} server: starting ingest of "
+                            f"{event.get('pkg')} {event.get('version')}",
+                            err=True,
+                        )
+                    elif kind == "progress":
+                        typer.echo(
+                            f"{prefix} {event.get('phase')}: "
+                            f"{event.get('done')}/{event.get('total')}",
+                            err=True,
+                        )
+                    elif kind == "done":
+                        final = event
+                    elif kind == "error":
+                        err_msg = str(event.get("error", "ingest failed"))
+                    elif kind is None and "pkg" in event and "version" in event:
+                        # Legacy non-streaming success shape.
+                        final = event
+                    # Unknown event kinds: ignore forward-compatibly.
             elapsed = time.monotonic() - t0
-            typer.echo(
-                f"{prefix} ok: {body.get('pkg')} {body.get('version')} "
-                f"ingested in {elapsed:.1f}s (HTTP {resp.status})",
-                err=True,
-            )
+            if err_msg is not None:
+                typer.echo(f"{prefix} error: {err_msg}", err=True)
+                ok = False
+            elif final is None:
+                typer.echo(
+                    f"{prefix} error: server stream closed without a "
+                    "done or error event",
+                    err=True,
+                )
+                ok = False
+            else:
+                typer.echo(
+                    f"{prefix} ok: {final.get('pkg')} {final.get('version')} "
+                    f"ingested in {elapsed:.1f}s",
+                    err=True,
+                )
         except urllib.error.HTTPError as exc:
             raw = exc.read()
             try:

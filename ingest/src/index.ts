@@ -5,7 +5,7 @@
  */
 
 export { Ingester } from "./ingest.js";
-export type { IngestOptions } from "./ingest.js";
+export type { IngestOptions, ProgressCallback } from "./ingest.js";
 
 export { GraphStore } from "./graphstore.js";
 export type { Key } from "./graphstore.js";

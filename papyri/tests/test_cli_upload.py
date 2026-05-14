@@ -41,10 +41,32 @@ def _make_bundle(root: Path, pkg: str = "mypkg", version: str = "1.0") -> Path:
     return root
 
 
-def _mock_response(body: dict, status: int = 201) -> MagicMock:
+def _mock_response(body: dict, status: int = 200) -> MagicMock:
+    """Mock an HTTPResponse for ``papyri upload``'s NDJSON streaming path.
+
+    Single-event responses become a one-line stream: the legacy
+    ``{"ok": True, "pkg": ..., "version": ...}`` shape and the new
+    ``{"event": "done", "pkg": ..., "version": ...}`` shape both work
+    via the client's forward-compatible parser.
+    """
+    line = json.dumps(body).encode() + b"\n"
     resp = MagicMock()
-    resp.read.return_value = json.dumps(body).encode()
+    resp.read.return_value = line
     resp.status = status
+    # The client iterates the response file-like to read NDJSON lines.
+    resp.__iter__ = lambda s: iter([line])
+    resp.__enter__ = lambda s: s
+    resp.__exit__ = MagicMock(return_value=False)
+    return resp
+
+
+def _mock_stream_response(events: list[dict], status: int = 200) -> MagicMock:
+    """Mock an NDJSON-streaming HTTPResponse: one event per yielded line."""
+    lines = [json.dumps(e).encode() + b"\n" for e in events]
+    resp = MagicMock()
+    resp.read.return_value = b"".join(lines)
+    resp.status = status
+    resp.__iter__ = lambda s: iter(lines)
     resp.__enter__ = lambda s: s
     resp.__exit__ = MagicMock(return_value=False)
     return resp
@@ -104,6 +126,41 @@ def test_upload_custom_url(tmp_path):
     assert result.exit_code == 0
     req: urllib.request.Request = mock_open.call_args[0][0]
     assert req.full_url == "http://example.com/api/bundle"
+
+
+def test_upload_streams_progress_events(tmp_path):
+    """NDJSON streaming path: progress events surface to stderr, the
+    final `done` event drives the success summary, and an `error`
+    event in the stream causes a non-zero exit."""
+    bundle = _make_bundle(tmp_path / "mypkg_1.0")
+    resp = _mock_stream_response(
+        [
+            {"event": "start", "pkg": "mypkg", "version": "1.0"},
+            {"event": "progress", "phase": "module", "done": 25, "total": 50},
+            {"event": "progress", "phase": "module", "done": 50, "total": 50},
+            {"event": "done", "pkg": "mypkg", "version": "1.0"},
+        ]
+    )
+    with patch("urllib.request.urlopen", return_value=resp):
+        result = runner.invoke(_app, [str(bundle)])
+    assert result.exit_code == 0, result.output
+    assert "module: 25/50" in result.output
+    assert "module: 50/50" in result.output
+    assert "ok: mypkg 1.0" in result.output
+
+
+def test_upload_stream_error_event(tmp_path):
+    bundle = _make_bundle(tmp_path / "mypkg_1.0")
+    resp = _mock_stream_response(
+        [
+            {"event": "start", "pkg": "mypkg", "version": "1.0"},
+            {"event": "error", "error": "ingest failed: boom"},
+        ]
+    )
+    with patch("urllib.request.urlopen", return_value=resp):
+        result = runner.invoke(_app, [str(bundle)])
+    assert result.exit_code == 1
+    assert "ingest failed: boom" in result.output
 
 
 def test_upload_sends_a_papyri_artifact(tmp_path):

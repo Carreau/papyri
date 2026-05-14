@@ -147,6 +147,17 @@ interface PapyriMeta {
 // Ingester
 // ---------------------------------------------------------------------------
 
+/**
+ * Per-section progress callback. Invoked at most once per N writes
+ * (currently per-chunk for `module`, per-item for the smaller sections).
+ * `phase` is one of "examples" | "assets" | "docs" | "module". `done`
+ * and `total` are item counts within the phase. The callback may be
+ * async; ingest awaits it before continuing. Throwing is non-fatal —
+ * ingest swallows errors and proceeds, so a closed stream writer
+ * cannot abort an in-flight ingest.
+ */
+export type ProgressCallback = (phase: string, done: number, total: number) => void | Promise<void>;
+
 export interface IngestOptions {
   /** Mirror Python's --check: skip qualnames that don't pass normalise_ref. */
   check?: boolean;
@@ -247,6 +258,7 @@ export class Ingester {
   async ingestBundle(
     node: unknown,
     bundleSizeBytes?: number,
+    onProgress?: ProgressCallback,
   ): Promise<{ pkg: string; version: string }> {
     assertBundle(node);
     const bundle = node;
@@ -254,8 +266,25 @@ export class Ingester {
     const version = bundle.version;
     const aliases = (bundle.aliases ?? {}) as Record<string, string>;
 
+    // Progress emit helper. Wraps the optional onProgress callback so the
+    // body of ingestBundle stays free of `if (onProgress)` clutter and
+    // callers that don't pass a callback pay only one function call per
+    // emit. Errors from the callback are swallowed so a broken stream
+    // writer (e.g. client disconnect) doesn't abort the ingest itself.
+    const emit = async (phase: string, done: number, total: number) => {
+      if (!onProgress) return;
+      try {
+        await onProgress(phase, done, total);
+      } catch {
+        /* progress is best-effort; never fail an ingest because the
+           callback threw. */
+      }
+    };
+
+    const exEntries = Object.entries(bundle.examples ?? {});
+    const exTotal = exEntries.length;
     let exCount = 0;
-    for (const [name, section] of Object.entries(bundle.examples ?? {})) {
+    for (const [name, section] of exEntries) {
       const refs = collectForwardRefsFromSection(section);
       await this._put(
         { module: root, version, kind: "examples", path: name },
@@ -263,14 +292,18 @@ export class Ingester {
         refs,
       );
       exCount++;
+      await emit("examples", exCount, exTotal);
     }
     if (exCount > 0) console.log(`  examples: ${exCount} files`);
 
+    const asEntries = Object.entries(bundle.assets ?? {});
+    const asTotal = asEntries.length;
     let asCount = 0;
-    for (const [name, raw] of Object.entries(bundle.assets ?? {})) {
+    for (const [name, raw] of asEntries) {
       const bytes = toUint8(raw);
       await this._put({ module: root, version, kind: "assets", path: name }, bytes, []);
       asCount++;
+      await emit("assets", asCount, asTotal);
     }
     if (asCount > 0) console.log(`  assets: ${asCount} files`);
 
@@ -296,8 +329,10 @@ export class Ingester {
       }
     }
 
+    const narrativeEntries = Object.entries(bundle.narrative ?? {});
+    const docTotal = narrativeEntries.length;
     let docCount = 0;
-    for (const [name, genDoc] of Object.entries(bundle.narrative ?? {})) {
+    for (const [name, genDoc] of narrativeEntries) {
       const g = genDoc as TypedNode;
       if (g.__type !== "GeneratedDoc") {
         console.warn(`  docs: skipping ${name} (unexpected type ${g.__type})`);
@@ -311,6 +346,7 @@ export class Ingester {
         refs,
       );
       docCount++;
+      await emit("docs", docCount, docTotal);
     }
     if (docCount > 0) console.log(`  docs: ${docCount} pages`);
 
@@ -368,6 +404,7 @@ export class Ingester {
       );
       apiCount += chunk.length;
       console.log(`  module: ${apiCount}/${apiTotal}`);
+      await emit("module", apiCount, apiTotal);
     }
     if (apiCount > 0) console.log(`  module: ${apiCount} pages (done)`);
 

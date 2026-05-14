@@ -47,7 +47,7 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "GRAPH_DB"
 database_name = "papyri-viewer-graph"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "a981e999-fc04-4d9e-a84c-1ac1a73303b2"
 migrations_dir = "../ingest/migrations"
 
 # ----------------------------------------------------------------------------
@@ -60,6 +60,16 @@ migrations_dir = "../ingest/migrations"
 [[r2_buckets]]
 binding = "BLOBS"
 bucket_name = "papyri-viewer-blobs"
+
+# ----------------------------------------------------------------------------
+# SESSION — KV namespace for Astro sessions. The @astrojs/cloudflare adapter
+# auto-wires a `SESSION` KV binding because Astro 6 defaults sessions to KV
+# on Cloudflare; we don't actively use Astro sessions (auth is cookie-only)
+# but the binding must point at a real namespace or deploy fails.
+# ----------------------------------------------------------------------------
+[[kv_namespaces]]
+binding = "SESSION"
+id = "724668babe5c4780b797dc8fe96c2b56"
 
 # ----------------------------------------------------------------------------
 # PAPYRI_UPLOAD_TOKEN — upload authentication secret.

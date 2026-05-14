@@ -18,4 +18,4 @@ CREATE TABLE bundles (
     bundle_size_bytes INTEGER NOT NULL,
     ingested_at       INTEGER NOT NULL,
     PRIMARY KEY (module, version)
-)
+);

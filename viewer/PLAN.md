@@ -156,6 +156,34 @@ All milestones through M8 and M9.0–M9.1 are complete. Open milestones:
       against an empty store, hits a few routes, then `papyri upload`s a
       fixture bundle and checks that pages now resolve. Decide whether the
       Node `pnpm serve` mode stays as a maintained fallback or is dropped.
+- [ ] **M9.5 — Cut ingest subrequest count per `PUT /api/bundle`.**
+      Workers caps subrequests per invocation: 50 on Free, 1000 on Paid.
+      The current ingest does ~3 subrequests per object (`blobStore.has`
+      + `blobStore.put` + `graphDb.batch`), so even the smallest bundles
+      overflow the Free limit and scipy-sized bundles overflow Paid.
+      Confirmed live against `papyri-viewer.<sub>.workers.dev` with the
+      0.16 MiB astropy bundle, which 422s on Free.
+
+      Concrete reductions to investigate, cheapest first:
+      * Skip the `blobStore.has(key)` round-trip on first ingest of a
+        new `(pkg, version)`. The `bundles` table tells us at request
+        entry whether the version already exists; if not, every `_put`
+        is unambiguously fresh and `oldRefs` is empty.
+      * Coalesce many per-object `db.batch([...])` calls into a few
+        large batches (e.g. batch every N objects, or one batch per
+        `kind`). D1 batches are one subrequest regardless of statement
+        count, so this is the highest-leverage win.
+      * `blobStore.put` is one subrequest per object and is the
+        irreducible floor without queue-based chunking. Run R2 puts
+        in parallel (`Promise.all(chunks)`) — doesn't lower the count
+        but cuts wall time and reduces the chance of hitting the CPU
+        time limit before the subrequest limit.
+
+      Hard ceiling: even after these reductions, a single invocation
+      can't ingest a scipy-sized bundle in one shot on Paid. The full
+      fix is queue-based chunking (split the bundle, enqueue per chunk,
+      consumer worker processes each under the limit). Track separately
+      if/when M9.5 isn't enough.
 
 M9 constraints:
 

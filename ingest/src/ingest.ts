@@ -322,37 +322,52 @@ export class Ingester {
       );
     }
 
-    const apiTotal = Object.keys(bundle.api ?? {}).length;
+    const apiEntries = Object.entries(bundle.api ?? {});
+    const apiTotal = apiEntries.length;
     if (apiTotal > 0) console.log(`  module: starting (${apiTotal} pages)`);
+
+    // Process api pages in parallel chunks. Each `_put` makes 2–3
+    // independent subrequests (R2 has + R2 put + D1 batch); awaiting
+    // them sequentially serialises all that round-trip latency.
+    // `INSERT OR IGNORE` in the D1 statements makes concurrent puts
+    // safe — every key writes its own node row and only references
+    // other keys' rows via subqueries, so two concurrent _puts that
+    // share a referenced node race-but-converge instead of conflict.
+    //
+    // CHUNK_SIZE is a tradeoff: too small leaves latency on the
+    // table; too large saturates the Workers runtime's concurrency
+    // budget and risks hitting unrelated soft limits. 25 is a safe
+    // starting point — tune empirically.
+    const CHUNK_SIZE = 25;
     let apiCount = 0;
-    for (const [qa, genDoc] of Object.entries(bundle.api ?? {})) {
-      const g = genDoc as TypedNode;
-      if (g.__type !== "GeneratedDoc") {
-        console.warn(`  module: skipping ${qa} (unexpected type ${g.__type})`);
-        continue;
-      }
-      const modRoot = qa.split(/[.:]/, 1)[0];
-      if (modRoot !== root) {
-        console.warn(`  module: skipping ${qa} (root ${modRoot} != bundle root ${root})`);
-        continue;
-      }
-      const ingestedDoc = generatedDocToIngested(g, qa);
-      const refs = collectForwardRefs(ingestedDoc);
-      const keyQa = qa.includes(":") ? qa.split(":")[0]! : qa;
-      const keyMod = keyQa.split(".")[0] ?? root;
-      await this._put(
-        { module: keyMod, version, kind: "module", path: qa },
-        encode(ingestedDoc),
-        refs,
-        encode(stripVolatileFields(ingestedDoc)),
+    for (let i = 0; i < apiEntries.length; i += CHUNK_SIZE) {
+      const chunk = apiEntries.slice(i, i + CHUNK_SIZE);
+      await Promise.all(
+        chunk.map(async ([qa, genDoc]) => {
+          const g = genDoc as TypedNode;
+          if (g.__type !== "GeneratedDoc") {
+            console.warn(`  module: skipping ${qa} (unexpected type ${g.__type})`);
+            return;
+          }
+          const modRoot = qa.split(/[.:]/, 1)[0];
+          if (modRoot !== root) {
+            console.warn(`  module: skipping ${qa} (root ${modRoot} != bundle root ${root})`);
+            return;
+          }
+          const ingestedDoc = generatedDocToIngested(g, qa);
+          const refs = collectForwardRefs(ingestedDoc);
+          const keyQa = qa.includes(":") ? qa.split(":")[0]! : qa;
+          const keyMod = keyQa.split(".")[0] ?? root;
+          await this._put(
+            { module: keyMod, version, kind: "module", path: qa },
+            encode(ingestedDoc),
+            refs,
+            encode(stripVolatileFields(ingestedDoc)),
+          );
+        }),
       );
-      apiCount++;
-      // Periodic progress log so the Worker tail shows how far the
-      // ingest got before any per-invocation limit (subrequests, CPU
-      // time, request body size) terminates the request.
-      if (apiCount % 25 === 0) {
-        console.log(`  module: ${apiCount}/${apiTotal}`);
-      }
+      apiCount += chunk.length;
+      console.log(`  module: ${apiCount}/${apiTotal}`);
     }
     if (apiCount > 0) console.log(`  module: ${apiCount} pages (done)`);
 

@@ -43,6 +43,9 @@ jobs:
       - name: Build matrix
         id: build-matrix
         run: |
+          # $CLONE_DIR below is intentionally literal: it's passed through
+          # JSON as a string and eval'd by the install step further down.
+          # shellcheck disable=SC2016
           libs='[
             {
               "lib": "IPython",

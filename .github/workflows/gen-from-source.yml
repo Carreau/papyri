@@ -105,6 +105,8 @@ jobs:
   gen:
     needs: prepare
     runs-on: ubuntu-latest
+    env:
+      COLUMNS: "220"
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}

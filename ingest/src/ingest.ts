@@ -310,19 +310,31 @@ export class Ingester {
       }
     };
 
+    // Small-section chunked parallelism. Same pattern as the api loop:
+    // sequential per-item R2 puts were eating tens of seconds for ~30
+    // assets / ~75 docs even though each individual op is fast. The
+    // ordering inside a section doesn't matter (no cross-item deps),
+    // so we chunk and Promise.all just like the module loop.
+    const SMALL_CHUNK_SIZE = 50;
+
     const exEntries = Object.entries(bundle.examples ?? {});
     const exTotal = exEntries.length;
     let exCount = 0;
-    for (const [name, section] of exEntries) {
-      const refs = collectForwardRefsFromSection(section);
-      await this._put(
-        { module: root, version, kind: "examples", path: name },
-        encode(section),
-        refs,
-        undefined,
-        freshIngest,
+    for (let i = 0; i < exEntries.length; i += SMALL_CHUNK_SIZE) {
+      const chunk = exEntries.slice(i, i + SMALL_CHUNK_SIZE);
+      await Promise.all(
+        chunk.map(async ([name, section]) => {
+          const refs = collectForwardRefsFromSection(section);
+          await this._put(
+            { module: root, version, kind: "examples", path: name },
+            encode(section),
+            refs,
+            undefined,
+            freshIngest,
+          );
+        }),
       );
-      exCount++;
+      exCount += chunk.length;
       await emit("examples", exCount, exTotal);
     }
     if (exCount > 0) console.log(`  [${elapsed()}] examples: ${exCount} files`);
@@ -330,16 +342,21 @@ export class Ingester {
     const asEntries = Object.entries(bundle.assets ?? {});
     const asTotal = asEntries.length;
     let asCount = 0;
-    for (const [name, raw] of asEntries) {
-      const bytes = toUint8(raw);
-      await this._put(
-        { module: root, version, kind: "assets", path: name },
-        bytes,
-        [],
-        undefined,
-        freshIngest,
+    for (let i = 0; i < asEntries.length; i += SMALL_CHUNK_SIZE) {
+      const chunk = asEntries.slice(i, i + SMALL_CHUNK_SIZE);
+      await Promise.all(
+        chunk.map(async ([name, raw]) => {
+          const bytes = toUint8(raw);
+          await this._put(
+            { module: root, version, kind: "assets", path: name },
+            bytes,
+            [],
+            undefined,
+            freshIngest,
+          );
+        }),
       );
-      asCount++;
+      asCount += chunk.length;
       await emit("assets", asCount, asTotal);
     }
     if (asCount > 0) console.log(`  [${elapsed()}] assets: ${asCount} files`);
@@ -373,22 +390,27 @@ export class Ingester {
     const narrativeEntries = Object.entries(bundle.narrative ?? {});
     const docTotal = narrativeEntries.length;
     let docCount = 0;
-    for (const [name, genDoc] of narrativeEntries) {
-      const g = genDoc as TypedNode;
-      if (g.__type !== "GeneratedDoc") {
-        console.warn(`  docs: skipping ${name} (unexpected type ${g.__type})`);
-        continue;
-      }
-      const ingestedDoc = generatedDocToIngested(g, name);
-      const refs = collectForwardRefs(ingestedDoc);
-      await this._put(
-        { module: root, version, kind: "docs", path: name },
-        encode(ingestedDoc),
-        refs,
-        undefined,
-        freshIngest,
+    for (let i = 0; i < narrativeEntries.length; i += SMALL_CHUNK_SIZE) {
+      const chunk = narrativeEntries.slice(i, i + SMALL_CHUNK_SIZE);
+      await Promise.all(
+        chunk.map(async ([name, genDoc]) => {
+          const g = genDoc as TypedNode;
+          if (g.__type !== "GeneratedDoc") {
+            console.warn(`  docs: skipping ${name} (unexpected type ${g.__type})`);
+            return;
+          }
+          const ingestedDoc = generatedDocToIngested(g, name);
+          const refs = collectForwardRefs(ingestedDoc);
+          await this._put(
+            { module: root, version, kind: "docs", path: name },
+            encode(ingestedDoc),
+            refs,
+            undefined,
+            freshIngest,
+          );
+        }),
       );
-      docCount++;
+      docCount += chunk.length;
       await emit("docs", docCount, docTotal);
     }
     if (docCount > 0) console.log(`  [${elapsed()}] docs: ${docCount} pages`);
@@ -419,7 +441,7 @@ export class Ingester {
     // table; too large saturates the Workers runtime's concurrency
     // budget and risks hitting unrelated soft limits. 25 is a safe
     // starting point — tune empirically.
-    const CHUNK_SIZE = 50;
+    const CHUNK_SIZE = 100;
     let apiCount = 0;
     for (let i = 0; i < apiEntries.length; i += CHUNK_SIZE) {
       const chunkStart = Date.now();

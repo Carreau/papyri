@@ -19,7 +19,7 @@ sudo apt-get install -y libopenblas-dev liblapack-dev gfortran
 cd "$CLONE_DIR"
 git submodule update --init --depth=1
 
-uv pip install --system -r requirements/build.txt -r requirements/dev.txt
+uv pip install --system spin -r requirements/build.txt -r requirements/dev.txt
 
 spin build
 

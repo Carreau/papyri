@@ -277,11 +277,23 @@ export class Ingester {
     // For re-uploads of an existing (pkg, version) we keep the slow path
     // so removed cross-refs get DELETE-d. Re-uploads are the rarer case
     // and the slow path is the correct one.
+    // Wall-clock timing: ingest is dominated by R2/D1 round-trips on
+    // Workers; surface per-section + per-chunk timings so we can tell
+    // where seconds are going without guessing. Logs only flush at
+    // request end on Workers (see bundle.ts), but the totals are still
+    // accurate when they finally show up.
+    const t0 = Date.now();
+    const elapsed = () => `${((Date.now() - t0) / 1000).toFixed(2)}s`;
+
+    const tBundle = Date.now();
     const existingBundle = await this.graphDb.all(
       "SELECT 1 AS one FROM bundles WHERE module = ? AND version = ? LIMIT 1",
       [root, version],
     );
     const freshIngest = existingBundle.length === 0;
+    console.log(
+      `  [${elapsed()}] bundles lookup: ${Date.now() - tBundle}ms (fresh=${freshIngest})`,
+    );
 
     // Progress emit helper. Wraps the optional onProgress callback so the
     // body of ingestBundle stays free of `if (onProgress)` clutter and
@@ -313,7 +325,7 @@ export class Ingester {
       exCount++;
       await emit("examples", exCount, exTotal);
     }
-    if (exCount > 0) console.log(`  examples: ${exCount} files`);
+    if (exCount > 0) console.log(`  [${elapsed()}] examples: ${exCount} files`);
 
     const asEntries = Object.entries(bundle.assets ?? {});
     const asTotal = asEntries.length;
@@ -330,7 +342,7 @@ export class Ingester {
       asCount++;
       await emit("assets", asCount, asTotal);
     }
-    if (asCount > 0) console.log(`  assets: ${asCount} files`);
+    if (asCount > 0) console.log(`  [${elapsed()}] assets: ${asCount} files`);
 
     await this._put(
       { module: root, version, kind: "meta", path: "aliases.cbor" },
@@ -379,7 +391,7 @@ export class Ingester {
       docCount++;
       await emit("docs", docCount, docTotal);
     }
-    if (docCount > 0) console.log(`  docs: ${docCount} pages`);
+    if (docCount > 0) console.log(`  [${elapsed()}] docs: ${docCount} pages`);
 
     if (Array.isArray(bundle.toc) && bundle.toc.length > 0) {
       await this._put(
@@ -393,7 +405,7 @@ export class Ingester {
 
     const apiEntries = Object.entries(bundle.api ?? {});
     const apiTotal = apiEntries.length;
-    if (apiTotal > 0) console.log(`  module: starting (${apiTotal} pages)`);
+    if (apiTotal > 0) console.log(`  [${elapsed()}] module: starting (${apiTotal} pages)`);
 
     // Process api pages in parallel chunks. Each `_put` makes 2–3
     // independent subrequests (R2 has + R2 put + D1 batch); awaiting
@@ -410,6 +422,7 @@ export class Ingester {
     const CHUNK_SIZE = 50;
     let apiCount = 0;
     for (let i = 0; i < apiEntries.length; i += CHUNK_SIZE) {
+      const chunkStart = Date.now();
       const chunk = apiEntries.slice(i, i + CHUNK_SIZE);
       await Promise.all(
         chunk.map(async ([qa, genDoc]) => {
@@ -437,10 +450,11 @@ export class Ingester {
         }),
       );
       apiCount += chunk.length;
-      console.log(`  module: ${apiCount}/${apiTotal}`);
+      const chunkMs = Date.now() - chunkStart;
+      console.log(`  [${elapsed()}] module: ${apiCount}/${apiTotal} (chunk ${chunkMs}ms)`);
       await emit("module", apiCount, apiTotal);
     }
-    if (apiCount > 0) console.log(`  module: ${apiCount} pages (done)`);
+    if (apiCount > 0) console.log(`  [${elapsed()}] module: ${apiCount} pages (done)`);
 
     const metaForStore: Record<string, unknown> = { module: root, version };
     if (bundle.summary) metaForStore["summary"] = bundle.summary;
@@ -463,6 +477,7 @@ export class Ingester {
       );
     }
 
+    console.log(`  [${elapsed()}] ingestBundle: done`);
     return { pkg: root, version };
   }
 

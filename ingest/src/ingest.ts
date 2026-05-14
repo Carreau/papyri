@@ -442,9 +442,10 @@ export class Ingester {
     console.log(
       `  [${elapsed()}] flushing ${blobPuts.length} blobs, ${nodeStmts.length + linkStmts.length} graph stmts`,
     );
+    const flushLog = (msg: string) => console.log(`  [${elapsed()}] ${msg}`);
     await Promise.all([
-      this._putBlobsConcurrent(blobPuts),
-      this._flushGraphStmts([...nodeStmts, ...linkStmts]),
+      this._putBlobsConcurrent(blobPuts, flushLog),
+      this._flushGraphStmts([...nodeStmts, ...linkStmts], flushLog),
     ]);
     console.log(`  [${elapsed()}] flush done in ${Date.now() - tFlush}ms`);
 
@@ -596,25 +597,35 @@ export class Ingester {
   }
 
   /** Run all D1 graph writes in DB_CHUNK_SIZE-statement slices. */
-  private async _flushGraphStmts(stmts: BatchStmt[]): Promise<void> {
-    for (let i = 0; i < stmts.length; i += DB_CHUNK_SIZE) {
+  private async _flushGraphStmts(stmts: BatchStmt[], log?: (msg: string) => void): Promise<void> {
+    const total = stmts.length;
+    for (let i = 0; i < total; i += DB_CHUNK_SIZE) {
       await this.graphDb.batch(stmts.slice(i, i + DB_CHUNK_SIZE));
+      log?.(`graph: ${Math.min(i + DB_CHUNK_SIZE, total)}/${total} stmts`);
     }
   }
 
   /** Put blobs concurrently up to BLOB_CONCURRENCY in-flight at a time. */
-  private async _putBlobsConcurrent(blobs: { key: Key; bytes: Uint8Array }[]): Promise<void> {
+  private async _putBlobsConcurrent(
+    blobs: { key: Key; bytes: Uint8Array }[],
+    log?: (msg: string) => void,
+  ): Promise<void> {
     if (blobs.length === 0) return;
     const store = this.blobStore;
+    const total = blobs.length;
     let index = 0;
+    let done = 0;
+    const LOG_EVERY = 100;
     const worker = async (): Promise<void> => {
       while (true) {
         const i = index++;
-        if (i >= blobs.length) break;
+        if (i >= total) break;
         await store.put(blobs[i]!.key, blobs[i]!.bytes);
+        const d = ++done;
+        if (d % LOG_EVERY === 0 || d === total) log?.(`blobs: ${d}/${total}`);
       }
     };
-    await Promise.all(Array.from({ length: Math.min(BLOB_CONCURRENCY, blobs.length) }, worker));
+    await Promise.all(Array.from({ length: Math.min(BLOB_CONCURRENCY, total) }, worker));
   }
 
   // -------------------------------------------------------------------------

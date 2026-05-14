@@ -332,3 +332,94 @@ jobs:
             --project-name=${{ secrets.CLOUDFLARE_PAGES_PROJECT }}
             --branch=${{ github.head_ref || github.ref_name }}
 ```
+
+## Alternative: Railway (Node server)
+
+The simplest path to a persistent hosted instance. Unlike the static deploys
+above, this keeps the server running and accepts new bundles via
+`PUT /api/bundle` at any time — no rebuild needed to add content.
+
+Uses the Node adapter with SQLite + filesystem storage (the same backends as
+`pnpm serve`). No D1, R2, or Workers quirks. Recommended when large bundles
+(numpy/scipy scale) need to be uploaded, since there are no per-invocation
+subrequest limits.
+
+`railway.json` at the repo root tells Railway how to build and start the
+viewer. The monorepo matters: `pnpm install` runs from the workspace root so
+the `papyri-ingest: workspace:*` dependency resolves before the viewer build,
+and `better-sqlite3` is compiled against the right Node ABI by Nixpacks.
+
+### One-time Railway setup
+
+1. Create a new Railway project and connect the GitHub repository. Railway
+   will auto-deploy on every push to `main` using `railway.json`.
+
+2. Add a **Persistent Volume** in the Railway dashboard, mounted at `/data`.
+   SQLite and blob files land here and survive redeploys.
+
+3. Set environment variables in the Railway dashboard:
+
+   | Variable               | Value                    |
+   | ---------------------- | ------------------------ |
+   | `PAPYRI_INGEST_DIR`    | `/data/ingest`           |
+   | `PAPYRI_UPLOAD_TOKEN`  | A strong random secret   |
+   | `NODE_ENV`             | `production`             |
+
+   Railway injects `PORT` automatically — do not set it manually.
+
+### Configuring `papyri upload`
+
+```sh
+export PAPYRI_UPLOAD_TOKEN=your-secret-here
+export PAPYRI_UPLOAD_URL=https://your-app.up.railway.app/api/bundle
+
+papyri upload ~/.papyri/data/numpy_2.3.5/
+```
+
+Store both values as CI secrets when running `papyri gen` + `papyri upload`
+from GitHub Actions.
+
+### Optional: generate and upload bundles from GitHub Actions
+
+Save as `.github/workflows/railway-upload.yml` when ready to turn on:
+
+```yaml
+name: Generate and upload bundles to Railway
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Install papyri
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Generate bundles
+        run: papyri gen examples/papyri.toml --no-infer
+
+      - name: Upload bundles
+        env:
+          PAPYRI_UPLOAD_TOKEN: ${{ secrets.PAPYRI_UPLOAD_TOKEN }}
+          PAPYRI_UPLOAD_URL: ${{ secrets.PAPYRI_UPLOAD_URL }}
+        run: |
+          for d in ~/.papyri/data/*/; do
+            papyri upload "$d"
+          done
+```
+
+Add `PAPYRI_UPLOAD_TOKEN` and `PAPYRI_UPLOAD_URL` as repository secrets
+before the first run.

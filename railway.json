@@ -1,0 +1,12 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "NIXPACKS",
+    "buildCommand": "pnpm install --frozen-lockfile && pnpm --filter papyri-viewer build"
+  },
+  "deploy": {
+    "startCommand": "node viewer/dist/server/entry.mjs",
+    "restartPolicyType": "ON_FAILURE",
+    "healthcheckPath": "/api/health.json"
+  }
+}

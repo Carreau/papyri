@@ -773,6 +773,7 @@ class DefListItem(Node):
         | FieldList
         | TocTree
         | Table
+        | Target  # TODO: maybe remove that.
     ]
 
     @property

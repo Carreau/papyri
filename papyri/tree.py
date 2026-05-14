@@ -654,7 +654,12 @@ class DirectiveVisiter(TreeReplacer):
         self.known_refs = frozenset(known_refs)
         self.local_refs = frozenset(local_refs)
         self.qa = qa
-        self.module: str = module if module is not None else qa.split(".")[0]
+        # qa may use either `.` (submodule path) or `:` (top-level module
+        # attribute, e.g. "numpy:promote_types") as the first separator;
+        # both must be split to extract the bundle's root module name.
+        self.module: str = (
+            module if module is not None else qa.split(".")[0].split(":")[0]
+        )
         self.local: list[str] = []
         self.total: list[tuple[Any, str]] = []
         # long -> short

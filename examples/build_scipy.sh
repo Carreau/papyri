@@ -16,10 +16,11 @@ CLONE_DIR="${1:?usage: build_scipy.sh <clone_dir>}"
 sudo apt-get update
 sudo apt-get install -y libopenblas-dev liblapack-dev gfortran
 
-uv pip install --system meson meson-python ninja Cython spin pythran numpy
-
 cd "$CLONE_DIR"
 git submodule update --init --depth=1
+
+uv pip install --system -r requirements/build.txt -r requirements/dev.txt
+
 spin build
 
 SITE_PACKAGES=$(find "$CLONE_DIR/build-install" -type d -name 'site-packages' | head -n 1)

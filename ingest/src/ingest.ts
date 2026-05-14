@@ -266,6 +266,23 @@ export class Ingester {
     const version = bundle.version;
     const aliases = (bundle.aliases ?? {}) as Record<string, string>;
 
+    // Has this (pkg, version) been ingested before? Single up-front query
+    // against the `bundles` table lets us skip the per-object `has()` and
+    // `_getForwardRefs()` round-trips when ingesting a brand-new version
+    // — there can't be any old links to reconcile. For an unknown bundle
+    // these two reads are pure waste; on a remote backend (Workers + D1
+    // + R2) they double the subrequest count and double the wall time
+    // because each ~30ms round-trip serialises into the per-object chain.
+    //
+    // For re-uploads of an existing (pkg, version) we keep the slow path
+    // so removed cross-refs get DELETE-d. Re-uploads are the rarer case
+    // and the slow path is the correct one.
+    const existingBundle = await this.graphDb.all(
+      "SELECT 1 AS one FROM bundles WHERE module = ? AND version = ? LIMIT 1",
+      [root, version],
+    );
+    const freshIngest = existingBundle.length === 0;
+
     // Progress emit helper. Wraps the optional onProgress callback so the
     // body of ingestBundle stays free of `if (onProgress)` clutter and
     // callers that don't pass a callback pay only one function call per
@@ -290,6 +307,8 @@ export class Ingester {
         { module: root, version, kind: "examples", path: name },
         encode(section),
         refs,
+        undefined,
+        freshIngest,
       );
       exCount++;
       await emit("examples", exCount, exTotal);
@@ -301,7 +320,13 @@ export class Ingester {
     let asCount = 0;
     for (const [name, raw] of asEntries) {
       const bytes = toUint8(raw);
-      await this._put({ module: root, version, kind: "assets", path: name }, bytes, []);
+      await this._put(
+        { module: root, version, kind: "assets", path: name },
+        bytes,
+        [],
+        undefined,
+        freshIngest,
+      );
       asCount++;
       await emit("assets", asCount, asTotal);
     }
@@ -311,6 +336,8 @@ export class Ingester {
       { module: root, version, kind: "meta", path: "aliases.cbor" },
       cborEncode(aliases) as Uint8Array,
       [],
+      undefined,
+      freshIngest,
     );
 
     let storedLogoName: string | null = null;
@@ -324,6 +351,8 @@ export class Ingester {
           { module: root, version, kind: "meta", path: destName },
           toUint8(logoBytes),
           [],
+          undefined,
+          freshIngest,
         );
         storedLogoName = destName;
       }
@@ -344,6 +373,8 @@ export class Ingester {
         { module: root, version, kind: "docs", path: name },
         encode(ingestedDoc),
         refs,
+        undefined,
+        freshIngest,
       );
       docCount++;
       await emit("docs", docCount, docTotal);
@@ -355,6 +386,8 @@ export class Ingester {
         { module: root, version, kind: "meta", path: "toc.cbor" },
         encode(bundle.toc),
         [],
+        undefined,
+        freshIngest,
       );
     }
 
@@ -374,7 +407,7 @@ export class Ingester {
     // table; too large saturates the Workers runtime's concurrency
     // budget and risks hitting unrelated soft limits. 25 is a safe
     // starting point — tune empirically.
-    const CHUNK_SIZE = 25;
+    const CHUNK_SIZE = 50;
     let apiCount = 0;
     for (let i = 0; i < apiEntries.length; i += CHUNK_SIZE) {
       const chunk = apiEntries.slice(i, i + CHUNK_SIZE);
@@ -399,6 +432,7 @@ export class Ingester {
             encode(ingestedDoc),
             refs,
             encode(stripVolatileFields(ingestedDoc)),
+            freshIngest,
           );
         }),
       );
@@ -457,9 +491,16 @@ export class Ingester {
     bytes: Uint8Array,
     refs: Key[],
     digestInput?: Uint8Array,
+    freshIngest: boolean = false,
   ): Promise<void> {
+    // `freshIngest`: caller has confirmed there are no prior writes for
+    // this (pkg, version). Skip both round-trips to find oldRefs — there
+    // can't be any. Cuts subrequests-per-_put from 3 to 2 (and removes
+    // a serialised network hop, which matters far more for wall time).
+    // INSERT OR IGNORE in the batch below keeps the second-attempt case
+    // safe if a fresh-flagged ingest is somehow retried.
     let oldRefs = new Set<string>();
-    if (key.kind !== "assets" && (await this.blobStore.has(key))) {
+    if (!freshIngest && key.kind !== "assets" && (await this.blobStore.has(key))) {
       oldRefs = new Set((await this._getForwardRefs(key)).map(keyStr));
     }
 

@@ -123,6 +123,14 @@ export const PUT: APIRoute = async ({ request }) => {
   // Kick the ingest off without awaiting. Workers keeps the worker alive
   // while the response body is being consumed, so this IIFE is allowed to
   // outlive the handler return. Any throw turns into a final `error` event.
+  //
+  // Note: if the client disconnects mid-stream (Ctrl-C on `papyri upload`,
+  // network drop), writer.close() throws and the ingest continues silently
+  // to completion. The data still lands consistently — D1 batches stay
+  // atomic per `_put`, and the bundles row writes last — but a client
+  // cancellation is NOT a server cancellation. If we ever need true
+  // cancellation propagation, wire an AbortController through ingestBundle
+  // and abort it from the writer's close handler.
   (async () => {
     try {
       await send({ event: "start", pkg: rawPkg, version: rawVer });

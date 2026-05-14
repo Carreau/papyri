@@ -25,6 +25,19 @@ compatibility_flags = ["nodejs_compat"]
 [observability]
 enabled = true
 
+# Per-invocation subrequest cap. Each R2 put / R2 has / D1 query /
+# D1 batch counts as one subrequest. `PUT /api/bundle` performs
+# roughly 3 subrequests per IR object (has + put + db.batch); a
+# medium bundle like astropy is ~1100 objects → ~3300 subrequests.
+# The paid-plan default is 10,000 but raising explicitly gives us
+# headroom for scipy- and numpy-sized bundles and documents the
+# requirement at the config layer.
+#
+# Free-account ceiling is 50; paid-account ceiling is 10,000,000.
+# See https://developers.cloudflare.com/workers/platform/limits/
+[limits]
+subrequests = 100000
+
 # `pnpm build:cf` (PAPYRI_ADAPTER=cloudflare astro build) emits the
 # worker entrypoint at `dist/_worker.js/index.js` and pre-rendered
 # HTML / client assets under `dist/`. The @astrojs/cloudflare adapter

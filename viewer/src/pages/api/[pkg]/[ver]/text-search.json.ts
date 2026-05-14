@@ -14,6 +14,7 @@ import type { BlobStore } from "papyri-ingest";
 import { collectNodes, type TypedNode } from "../../../../lib/ir-reader.ts";
 import { getBackends } from "../../../../lib/backends.ts";
 import { walkBundle, type PageRef } from "../../../../lib/bundle-walk.ts";
+import { respond } from "../../../../lib/api-utils.ts";
 
 export const prerender = false;
 
@@ -69,25 +70,22 @@ async function searchBundle(
 export const GET: APIRoute = async ({ params, url }) => {
   const { pkg, ver } = params;
   if (!pkg || !ver) {
-    return new Response(JSON.stringify({ error: "Bundle not found" }), {
-      status: 404,
-      headers: { "Content-Type": "application/json" },
-    });
+    return respond({ error: "Bundle not found" }, 404);
   }
 
   const q = url.searchParams.get("q") ?? "";
   const limit = Math.min(20, Math.max(1, Number(url.searchParams.get("limit") || 20)));
 
   if (q.trim() === "") {
-    return new Response(JSON.stringify({ hits: [], query: q } satisfies TextSearchResponse), {
-      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    return respond({ hits: [], query: q } satisfies TextSearchResponse, 200, {
+      "Cache-Control": "no-store",
     });
   }
 
   const { blobStore } = await getBackends();
   const hits = await searchBundle(blobStore, pkg, ver, q, limit);
 
-  return new Response(JSON.stringify({ hits, query: q } satisfies TextSearchResponse), {
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+  return respond({ hits, query: q } satisfies TextSearchResponse, 200, {
+    "Cache-Control": "no-store",
   });
 };

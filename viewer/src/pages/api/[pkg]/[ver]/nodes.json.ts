@@ -21,6 +21,7 @@ import { getBackends } from "../../../../lib/backends.ts";
 import { typeFromSlug } from "../../../../lib/ir-types.ts";
 import { renderNode } from "../../../../lib/render-node.ts";
 import { walkBundle, type PageRef } from "../../../../lib/bundle-walk.ts";
+import { respond } from "../../../../lib/api-utils.ts";
 
 export const prerender = false;
 
@@ -111,10 +112,7 @@ async function collectBundleNodes(
 export const GET: APIRoute = async ({ params, url }) => {
   const { pkg, ver } = params;
   if (!pkg || !ver) {
-    return new Response(JSON.stringify({ error: "Bundle not found" }), {
-      status: 404,
-      headers: { "Content-Type": "application/json" },
-    });
+    return respond({ error: "Bundle not found" }, 404);
   }
   const nodetypeSlug = url.searchParams.get("nodetype");
   const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") || 100)));
@@ -123,10 +121,7 @@ export const GET: APIRoute = async ({ params, url }) => {
   if (nodetypeSlug) {
     const typeName = typeFromSlug(nodetypeSlug);
     if (!typeName) {
-      return new Response(JSON.stringify({ error: "Unknown node type" }), {
-        status: 404,
-        headers: { "Content-Type": "application/json" },
-      });
+      return respond({ error: "Unknown node type" }, 404);
     }
     types = new Set([typeName]);
   }
@@ -134,10 +129,5 @@ export const GET: APIRoute = async ({ params, url }) => {
   const { blobStore } = await getBackends();
   const result = await collectBundleNodes(blobStore, pkg, ver, types, limit);
 
-  return new Response(JSON.stringify(result), {
-    headers: {
-      "Content-Type": "application/json",
-      "Cache-Control": "no-store",
-    },
-  });
+  return respond(result, 200, { "Cache-Control": "no-store" });
 };

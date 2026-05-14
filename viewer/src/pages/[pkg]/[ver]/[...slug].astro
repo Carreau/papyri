@@ -34,10 +34,15 @@ try {
   return new Response(`Module ${qualname} not found`, { status: 404 });
 }
 
-const backrefs = await getBackrefs(graphDb, { pkg, ver, kind: "module", path: qualname });
+// Three independent async operations: graph backrefs, xref resolution, and
+// sidebar nav. None depends on the others, so run them concurrently.
+const [backrefs, resolveXref, nav] = await Promise.all([
+  getBackrefs(graphDb, { pkg, ver, kind: "module", path: qualname }),
+  buildXrefResolver(graphDb, doc, pkg, ver),
+  loadBundleNav(blobStore, pkg, ver),
+]);
 const view = buildQualnamePageView(doc, backrefs, pkg);
 const hasBackrefs = view.internalBackrefs.length > 0 || view.externalBackrefs.length > 0;
-const resolveXref = await buildXrefResolver(graphDb, doc, pkg, ver);
 
 // Direct children for the on-page Members TOC. Qualnames use `:` to separate
 // the module path from in-module objects, and `.` after `:` for class
@@ -45,7 +50,6 @@ const resolveXref = await buildXrefResolver(graphDb, doc, pkg, ver);
 //   `pkg.sub`               — submodule of `pkg`
 //   `pkg.sub:func`          — function/class/attr inside module `pkg.sub`
 //   `pkg.sub:Cls.method`    — method on class `pkg.sub:Cls`
-const nav = await loadBundleNav(blobStore, pkg, ver);
 const isClassPage = qualname.includes(":");
 interface MemberGroup {
   title: string;

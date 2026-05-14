@@ -1,7 +1,7 @@
 ---
 // Package overview: lists every ingested version, links into each
 // bundle's home, and offers a version-pair picker that links to /diff.
-import { listIngestedPackages, listModules, type IngestedPackage } from "../../lib/ir-reader.ts";
+import { listIngestedPackages, type IngestedPackage } from "../../lib/ir-reader.ts";
 import { loadBundleNav } from "../../lib/nav.ts";
 import { getBackends } from "../../lib/backends.ts";
 import BaseLayout from "../../layouts/BaseLayout.astro";
@@ -70,18 +70,22 @@ const githubIssuesUrl = githubUrl ? `${githubUrl}/issues` : null;
 const githubPrsUrl = githubUrl ? `${githubUrl}/pulls` : null;
 const condaForgeUrl = `https://anaconda.org/conda-forge/${pkg}`;
 
-// Gather counts per version. listModules is cheap; nav would be heavier.
-const rows = await Promise.all(
-  entry.versions.map(async (v) => {
-    const meta = bundleMeta.get(v);
-    return {
-      version: v,
-      qualnameCount: (await listModules(blobStore, pkg, v)).length,
-      size: meta?.size ?? null,
-      ingestedAt: meta?.ingestedAt ?? null,
-    };
-  })
+// Count API items per version from the graph DB (one query, not N blob-store lists).
+const countRows = await graphDb.all<{ version: string; module_count: number }>(
+  "SELECT version, COUNT(*) AS module_count FROM nodes WHERE package=? AND category='module' AND has_blob=1 GROUP BY version",
+  [pkg]
 );
+const moduleCountByVer = new Map(countRows.map((r) => [r.version, r.module_count]));
+
+const rows = entry.versions.map((v) => {
+  const meta = bundleMeta.get(v);
+  return {
+    version: v,
+    qualnameCount: moduleCountByVer.get(v) ?? 0,
+    size: meta?.size ?? null,
+    ingestedAt: meta?.ingestedAt ?? null,
+  };
+});
 
 // Default diff comparison: latest vs second-latest if available.
 const defaultFrom = entry.versions[1] ?? entry.versions[0]!;

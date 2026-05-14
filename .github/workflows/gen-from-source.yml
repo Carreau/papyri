@@ -53,7 +53,7 @@ jobs:
             {
               "lib": "IPython",
               "repo": "https://github.com/ipython/ipython.git",
-              "tags": ["9.3.0","9.5.0","9.10.0","9.11.0","9.12.0","9.13.0", "9.14.0", "main"],
+              "tags": ["9.3.0","9.5.0","9.10.0","9.11.0","9.12.0","9.13.0", "main"],
               "clone_dir": "IPython",
               "config": "examples/IPython.toml",
               "gen_flags": "",

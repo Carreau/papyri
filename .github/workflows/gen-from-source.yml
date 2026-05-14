@@ -1,0 +1,162 @@
+name: Gen from Source (Matrix)
+
+# Run papyri gen against specific tagged releases cloned from upstream repos.
+#
+# A `prepare` job explodes the per-library config (which carries a list of
+# tags) into one matrix entry per (lib, tag) pair.  The `gen` job then runs
+# each entry as an independent parallel runner, so builds for different tags
+# of the same library do not block each other.
+#
+# To add a library or change a pinned tag, edit the JSON in the
+# "Build matrix" step of the `prepare` job below.
+#
+# Per-library fields:
+#   lib          display name used in step / artifact names
+#   repo         upstream git URL to clone
+#   tags         list of git tags; each becomes a separate parallel job
+#   clone_dir    subdirectory under $HOME/dev/ to clone into
+#   config       path to the papyri .toml config inside this repo
+#   gen_flags    extra flags forwarded to papyri gen (space-separated, optional)
+#   install_cmd  custom shell command to install the library after cloning
+#                ($CLONE_DIR is pre-set); default: uv pip install --system "$CLONE_DIR"
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly on Monday at 03:00 UTC — keeps pinned tags from rotting silently.
+    - cron: '0 3 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+
+  # ---------------------------------------------------------------------------
+  # Explode per-library configs (which carry a tags list) into one matrix entry
+  # per (lib, tag) pair so that each combination runs as a parallel job.
+  # ---------------------------------------------------------------------------
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.build-matrix.outputs.matrix }}
+    steps:
+      - name: Build matrix
+        id: build-matrix
+        run: |
+          libs='[
+            {
+              "lib": "IPython",
+              "repo": "https://github.com/ipython/ipython.git",
+              "tags": ["9.3.0"],
+              "clone_dir": "IPython",
+              "config": "examples/IPython.toml",
+              "gen_flags": "",
+              "install_cmd": ""
+            },
+            {
+              "lib": "numpy",
+              "repo": "https://github.com/numpy/numpy.git",
+              "tags": ["v2.2.6"],
+              "clone_dir": "numpy",
+              "config": "examples/numpy.toml",
+              "gen_flags": "--no-exec",
+              "install_cmd": ""
+            },
+            {
+              "lib": "scipy",
+              "repo": "https://github.com/scipy/scipy.git",
+              "tags": ["v1.15.3"],
+              "clone_dir": "scipy",
+              "config": "examples/scipy.toml",
+              "gen_flags": "--no-exec --no-infer",
+              "install_cmd": ""
+            },
+            {
+              "lib": "astropy",
+              "repo": "https://github.com/astropy/astropy.git",
+              "tags": ["v7.0.1"],
+              "clone_dir": "astropy",
+              "config": "examples/astropy.toml",
+              "gen_flags": "",
+              "install_cmd": ""
+            }
+          ]'
+          matrix=$(echo "$libs" | jq -c '{
+            include: [
+              .[] | . as $lib | .tags[] | {
+                lib:         $lib.lib,
+                repo:        $lib.repo,
+                tag:         .,
+                clone_dir:   $lib.clone_dir,
+                config:      $lib.config,
+                gen_flags:   $lib.gen_flags,
+                install_cmd: $lib.install_cmd
+              }
+            ]
+          }')
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------------
+  # One runner per (lib, tag) pair — all run in parallel.
+  # ---------------------------------------------------------------------------
+  gen:
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          python-version: "3.14"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install papyri
+        run: |
+          uv pip install --system -r requirements-dev.txt
+          uv pip install --system -e .
+
+      - name: Clone ${{ matrix.lib }} at ${{ matrix.tag }}
+        env:
+          REPO: ${{ matrix.repo }}
+          TAG: ${{ matrix.tag }}
+          CLONE_SUBDIR: ${{ matrix.clone_dir }}
+        run: |
+          mkdir -p "$HOME/dev"
+          git clone --depth=1 --branch "$TAG" "$REPO" "$HOME/dev/$CLONE_SUBDIR"
+
+      - name: Install ${{ matrix.lib }}
+        env:
+          CLONE_DIR: ${{ runner.temp }}
+          CLONE_SUBDIR: ${{ matrix.clone_dir }}
+          INSTALL_CMD: ${{ matrix.install_cmd }}
+        run: |
+          CLONE_DIR="$HOME/dev/$CLONE_SUBDIR"
+          if [ -n "${INSTALL_CMD}" ]; then
+            eval "${INSTALL_CMD}"
+          else
+            uv pip install --system "$CLONE_DIR"
+          fi
+
+      - name: Gen ${{ matrix.lib }} ${{ matrix.tag }}
+        env:
+          CONFIG: ${{ matrix.config }}
+          GEN_FLAGS: ${{ matrix.gen_flags }}
+        run: |
+          rm -rf ~/.papyri/data/*
+          read -ra flags <<< "$GEN_FLAGS"
+          papyri gen "$CONFIG" "${flags[@]}"
+          papyri pack
+          tree ~/.papyri/data
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: gen-source-${{ matrix.lib }}-${{ matrix.tag }}
+          path: ~/.papyri/data/*.papyri

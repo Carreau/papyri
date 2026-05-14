@@ -17,6 +17,9 @@ CLONE_DIR="${1:?usage: build_numpy.sh <clone_dir>}"
 uv pip install --system meson meson-python ninja Cython spin pythran
 
 cd "$CLONE_DIR"
+# numpy bundles meson as a git submodule; the shallow clone in the workflow
+# skips it, so `spin build` aborts until we populate it.
+git submodule update --init --depth=1
 spin build
 
 SITE_PACKAGES=$(find "$CLONE_DIR/build-install" -type d -name 'site-packages' | head -n 1)

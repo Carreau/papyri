@@ -69,7 +69,7 @@ jobs:
               "clone_dir": "scipy",
               "config": "examples/scipy.toml",
               "gen_flags": "--no-exec --no-infer",
-              "install_cmd": ""
+              "install_cmd": "bash examples/build_scipy.sh \"$CLONE_DIR\""
             },
             {
               "lib": "astropy",

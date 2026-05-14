@@ -170,16 +170,26 @@ def upload(
                             err_msg = f"unparseable server response: {e}"
                             break
                     kind = event.get("event")
+                    elapsed = event.get("elapsed_s")
+                    since = event.get("since_last_ms")
+                    # Server may decorate every event with timing fields
+                    # (elapsed_s seconds since the stream opened, since_last_ms
+                    # since the previous event). Render them when present so
+                    # the client shows live progress in real time despite
+                    # console.log being unbuffered on the worker side.
+                    suffix = ""
+                    if elapsed is not None and since is not None:
+                        suffix = f" [t={elapsed}s Δ={since}ms]"
                     if kind == "start":
                         typer.echo(
                             f"{prefix} server: starting ingest of "
-                            f"{event.get('pkg')} {event.get('version')}",
+                            f"{event.get('pkg')} {event.get('version')}{suffix}",
                             err=True,
                         )
                     elif kind == "progress":
                         typer.echo(
                             f"{prefix} {event.get('phase')}: "
-                            f"{event.get('done')}/{event.get('total')}",
+                            f"{event.get('done')}/{event.get('total')}{suffix}",
                             err=True,
                         )
                     elif kind == "done":

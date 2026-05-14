@@ -131,19 +131,36 @@ export const PUT: APIRoute = async ({ request }) => {
   // cancellation is NOT a server cancellation. If we ever need true
   // cancellation propagation, wire an AbortController through ingestBundle
   // and abort it from the writer's close handler.
+  // Timing decoration: each event is enriched with `elapsed_s` (since the
+  // stream opened) and `since_last_ms` (since the previous event) so the
+  // client can render live wall-time stats. console.log inside the worker
+  // is buffered until request end, so the stream is the only way to
+  // surface per-chunk timings during a long ingest.
+  const startedAt = Date.now();
+  let prevEventAt = startedAt;
+  const sendWithTiming = async (event: Record<string, unknown>) => {
+    const now = Date.now();
+    await send({
+      ...event,
+      elapsed_s: ((now - startedAt) / 1000).toFixed(2),
+      since_last_ms: now - prevEventAt,
+    });
+    prevEventAt = now;
+  };
+
   (async () => {
     try {
-      await send({ event: "start", pkg: rawPkg, version: rawVer });
+      await sendWithTiming({ event: "start", pkg: rawPkg, version: rawVer });
       const result = await ingester.ingestBundle(
         bundle,
         bundleSizeBytes,
         async (phase, done, total) => {
-          await send({ event: "progress", phase, done, total });
+          await sendWithTiming({ event: "progress", phase, done, total });
         }
       );
-      await send({ event: "done", pkg: result.pkg, version: result.version });
+      await sendWithTiming({ event: "done", pkg: result.pkg, version: result.version });
     } catch (err) {
-      await send({ event: "error", error: `ingest failed: ${err}` });
+      await sendWithTiming({ event: "error", error: `ingest failed: ${err}` });
     } finally {
       try {
         await writer.close();

@@ -154,7 +154,10 @@ def upload(
                 # single line and we treat it as a `done` event below.
                 final: dict[str, object] | None = None
                 err_msg: str | None = None
-                for raw_line in resp:
+                while True:
+                    raw_line = resp.readline()
+                    if not raw_line:
+                        break
                     line = raw_line.strip()
                     if not line:
                         continue

@@ -147,6 +147,17 @@ interface PapyriMeta {
 // Ingester
 // ---------------------------------------------------------------------------
 
+/**
+ * Per-section progress callback. Invoked at most once per N writes
+ * (currently per-chunk for `module`, per-item for the smaller sections).
+ * `phase` is one of "examples" | "assets" | "docs" | "module". `done`
+ * and `total` are item counts within the phase. The callback may be
+ * async; ingest awaits it before continuing. Throwing is non-fatal —
+ * ingest swallows errors and proceeds, so a closed stream writer
+ * cannot abort an in-flight ingest.
+ */
+export type ProgressCallback = (phase: string, done: number, total: number) => void | Promise<void>;
+
 export interface IngestOptions {
   /** Mirror Python's --check: skip qualnames that don't pass normalise_ref. */
   check?: boolean;
@@ -247,6 +258,7 @@ export class Ingester {
   async ingestBundle(
     node: unknown,
     bundleSizeBytes?: number,
+    onProgress?: ProgressCallback,
   ): Promise<{ pkg: string; version: string }> {
     assertBundle(node);
     const bundle = node;
@@ -254,30 +266,107 @@ export class Ingester {
     const version = bundle.version;
     const aliases = (bundle.aliases ?? {}) as Record<string, string>;
 
-    let exCount = 0;
-    for (const [name, section] of Object.entries(bundle.examples ?? {})) {
-      const refs = collectForwardRefsFromSection(section);
-      await this._put(
-        { module: root, version, kind: "examples", path: name },
-        encode(section),
-        refs,
-      );
-      exCount++;
-    }
-    if (exCount > 0) console.log(`  examples: ${exCount} files`);
+    // Has this (pkg, version) been ingested before? Single up-front query
+    // against the `bundles` table lets us skip the per-object `has()` and
+    // `_getForwardRefs()` round-trips when ingesting a brand-new version
+    // — there can't be any old links to reconcile. For an unknown bundle
+    // these two reads are pure waste; on a remote backend (Workers + D1
+    // + R2) they double the subrequest count and double the wall time
+    // because each ~30ms round-trip serialises into the per-object chain.
+    //
+    // For re-uploads of an existing (pkg, version) we keep the slow path
+    // so removed cross-refs get DELETE-d. Re-uploads are the rarer case
+    // and the slow path is the correct one.
+    // Wall-clock timing: ingest is dominated by R2/D1 round-trips on
+    // Workers; surface per-section + per-chunk timings so we can tell
+    // where seconds are going without guessing. Logs only flush at
+    // request end on Workers (see bundle.ts), but the totals are still
+    // accurate when they finally show up.
+    const t0 = Date.now();
+    const elapsed = () => `${((Date.now() - t0) / 1000).toFixed(2)}s`;
 
-    let asCount = 0;
-    for (const [name, raw] of Object.entries(bundle.assets ?? {})) {
-      const bytes = toUint8(raw);
-      await this._put({ module: root, version, kind: "assets", path: name }, bytes, []);
-      asCount++;
+    const tBundle = Date.now();
+    const existingBundle = await this.graphDb.all(
+      "SELECT 1 AS one FROM bundles WHERE module = ? AND version = ? LIMIT 1",
+      [root, version],
+    );
+    const freshIngest = existingBundle.length === 0;
+    console.log(
+      `  [${elapsed()}] bundles lookup: ${Date.now() - tBundle}ms (fresh=${freshIngest})`,
+    );
+
+    // Progress emit helper. Wraps the optional onProgress callback so the
+    // body of ingestBundle stays free of `if (onProgress)` clutter and
+    // callers that don't pass a callback pay only one function call per
+    // emit. Errors from the callback are swallowed so a broken stream
+    // writer (e.g. client disconnect) doesn't abort the ingest itself.
+    const emit = async (phase: string, done: number, total: number) => {
+      if (!onProgress) return;
+      try {
+        await onProgress(phase, done, total);
+      } catch {
+        /* progress is best-effort; never fail an ingest because the
+           callback threw. */
+      }
+    };
+
+    // Small-section chunked parallelism. Same pattern as the api loop:
+    // sequential per-item R2 puts were eating tens of seconds for ~30
+    // assets / ~75 docs even though each individual op is fast. The
+    // ordering inside a section doesn't matter (no cross-item deps),
+    // so we chunk and Promise.all just like the module loop.
+    const SMALL_CHUNK_SIZE = 50;
+
+    const exEntries = Object.entries(bundle.examples ?? {});
+    const exTotal = exEntries.length;
+    let exCount = 0;
+    for (let i = 0; i < exEntries.length; i += SMALL_CHUNK_SIZE) {
+      const chunk = exEntries.slice(i, i + SMALL_CHUNK_SIZE);
+      await Promise.all(
+        chunk.map(async ([name, section]) => {
+          const refs = collectForwardRefsFromSection(section);
+          await this._put(
+            { module: root, version, kind: "examples", path: name },
+            encode(section),
+            refs,
+            undefined,
+            freshIngest,
+          );
+        }),
+      );
+      exCount += chunk.length;
+      await emit("examples", exCount, exTotal);
     }
-    if (asCount > 0) console.log(`  assets: ${asCount} files`);
+    if (exCount > 0) console.log(`  [${elapsed()}] examples: ${exCount} files`);
+
+    const asEntries = Object.entries(bundle.assets ?? {});
+    const asTotal = asEntries.length;
+    let asCount = 0;
+    for (let i = 0; i < asEntries.length; i += SMALL_CHUNK_SIZE) {
+      const chunk = asEntries.slice(i, i + SMALL_CHUNK_SIZE);
+      await Promise.all(
+        chunk.map(async ([name, raw]) => {
+          const bytes = toUint8(raw);
+          await this._put(
+            { module: root, version, kind: "assets", path: name },
+            bytes,
+            [],
+            undefined,
+            freshIngest,
+          );
+        }),
+      );
+      asCount += chunk.length;
+      await emit("assets", asCount, asTotal);
+    }
+    if (asCount > 0) console.log(`  [${elapsed()}] assets: ${asCount} files`);
 
     await this._put(
       { module: root, version, kind: "meta", path: "aliases.cbor" },
       cborEncode(aliases) as Uint8Array,
       [],
+      undefined,
+      freshIngest,
     );
 
     let storedLogoName: string | null = null;
@@ -291,62 +380,103 @@ export class Ingester {
           { module: root, version, kind: "meta", path: destName },
           toUint8(logoBytes),
           [],
+          undefined,
+          freshIngest,
         );
         storedLogoName = destName;
       }
     }
 
+    const narrativeEntries = Object.entries(bundle.narrative ?? {});
+    const docTotal = narrativeEntries.length;
     let docCount = 0;
-    for (const [name, genDoc] of Object.entries(bundle.narrative ?? {})) {
-      const g = genDoc as TypedNode;
-      if (g.__type !== "GeneratedDoc") {
-        console.warn(`  docs: skipping ${name} (unexpected type ${g.__type})`);
-        continue;
-      }
-      const ingestedDoc = generatedDocToIngested(g, name);
-      const refs = collectForwardRefs(ingestedDoc);
-      await this._put(
-        { module: root, version, kind: "docs", path: name },
-        encode(ingestedDoc),
-        refs,
+    for (let i = 0; i < narrativeEntries.length; i += SMALL_CHUNK_SIZE) {
+      const chunk = narrativeEntries.slice(i, i + SMALL_CHUNK_SIZE);
+      await Promise.all(
+        chunk.map(async ([name, genDoc]) => {
+          const g = genDoc as TypedNode;
+          if (g.__type !== "GeneratedDoc") {
+            console.warn(`  docs: skipping ${name} (unexpected type ${g.__type})`);
+            return;
+          }
+          const ingestedDoc = generatedDocToIngested(g, name);
+          const refs = collectForwardRefs(ingestedDoc);
+          await this._put(
+            { module: root, version, kind: "docs", path: name },
+            encode(ingestedDoc),
+            refs,
+            undefined,
+            freshIngest,
+          );
+        }),
       );
-      docCount++;
+      docCount += chunk.length;
+      await emit("docs", docCount, docTotal);
     }
-    if (docCount > 0) console.log(`  docs: ${docCount} pages`);
+    if (docCount > 0) console.log(`  [${elapsed()}] docs: ${docCount} pages`);
 
     if (Array.isArray(bundle.toc) && bundle.toc.length > 0) {
       await this._put(
         { module: root, version, kind: "meta", path: "toc.cbor" },
         encode(bundle.toc),
         [],
+        undefined,
+        freshIngest,
       );
     }
 
+    const apiEntries = Object.entries(bundle.api ?? {});
+    const apiTotal = apiEntries.length;
+    if (apiTotal > 0) console.log(`  [${elapsed()}] module: starting (${apiTotal} pages)`);
+
+    // Process api pages in parallel chunks. Each `_put` makes 2–3
+    // independent subrequests (R2 has + R2 put + D1 batch); awaiting
+    // them sequentially serialises all that round-trip latency.
+    // `INSERT OR IGNORE` in the D1 statements makes concurrent puts
+    // safe — every key writes its own node row and only references
+    // other keys' rows via subqueries, so two concurrent _puts that
+    // share a referenced node race-but-converge instead of conflict.
+    //
+    // CHUNK_SIZE is a tradeoff: too small leaves latency on the
+    // table; too large saturates the Workers runtime's concurrency
+    // budget and risks hitting unrelated soft limits. 25 is a safe
+    // starting point — tune empirically.
+    const CHUNK_SIZE = 100;
     let apiCount = 0;
-    for (const [qa, genDoc] of Object.entries(bundle.api ?? {})) {
-      const g = genDoc as TypedNode;
-      if (g.__type !== "GeneratedDoc") {
-        console.warn(`  module: skipping ${qa} (unexpected type ${g.__type})`);
-        continue;
-      }
-      const modRoot = qa.split(/[.:]/, 1)[0];
-      if (modRoot !== root) {
-        console.warn(`  module: skipping ${qa} (root ${modRoot} != bundle root ${root})`);
-        continue;
-      }
-      const ingestedDoc = generatedDocToIngested(g, qa);
-      const refs = collectForwardRefs(ingestedDoc);
-      const keyQa = qa.includes(":") ? qa.split(":")[0]! : qa;
-      const keyMod = keyQa.split(".")[0] ?? root;
-      await this._put(
-        { module: keyMod, version, kind: "module", path: qa },
-        encode(ingestedDoc),
-        refs,
-        encode(stripVolatileFields(ingestedDoc)),
+    for (let i = 0; i < apiEntries.length; i += CHUNK_SIZE) {
+      const chunkStart = Date.now();
+      const chunk = apiEntries.slice(i, i + CHUNK_SIZE);
+      await Promise.all(
+        chunk.map(async ([qa, genDoc]) => {
+          const g = genDoc as TypedNode;
+          if (g.__type !== "GeneratedDoc") {
+            console.warn(`  module: skipping ${qa} (unexpected type ${g.__type})`);
+            return;
+          }
+          const modRoot = qa.split(/[.:]/, 1)[0];
+          if (modRoot !== root) {
+            console.warn(`  module: skipping ${qa} (root ${modRoot} != bundle root ${root})`);
+            return;
+          }
+          const ingestedDoc = generatedDocToIngested(g, qa);
+          const refs = collectForwardRefs(ingestedDoc);
+          const keyQa = qa.includes(":") ? qa.split(":")[0]! : qa;
+          const keyMod = keyQa.split(".")[0] ?? root;
+          await this._put(
+            { module: keyMod, version, kind: "module", path: qa },
+            encode(ingestedDoc),
+            refs,
+            encode(stripVolatileFields(ingestedDoc)),
+            freshIngest,
+          );
+        }),
       );
-      apiCount++;
+      apiCount += chunk.length;
+      const chunkMs = Date.now() - chunkStart;
+      console.log(`  [${elapsed()}] module: ${apiCount}/${apiTotal} (chunk ${chunkMs}ms)`);
+      await emit("module", apiCount, apiTotal);
     }
-    if (apiCount > 0) console.log(`  module: ${apiCount} pages`);
+    if (apiCount > 0) console.log(`  [${elapsed()}] module: ${apiCount} pages (done)`);
 
     const metaForStore: Record<string, unknown> = { module: root, version };
     if (bundle.summary) metaForStore["summary"] = bundle.summary;
@@ -369,6 +499,7 @@ export class Ingester {
       );
     }
 
+    console.log(`  [${elapsed()}] ingestBundle: done`);
     return { pkg: root, version };
   }
 
@@ -397,9 +528,16 @@ export class Ingester {
     bytes: Uint8Array,
     refs: Key[],
     digestInput?: Uint8Array,
+    freshIngest: boolean = false,
   ): Promise<void> {
+    // `freshIngest`: caller has confirmed there are no prior writes for
+    // this (pkg, version). Skip both round-trips to find oldRefs — there
+    // can't be any. Cuts subrequests-per-_put from 3 to 2 (and removes
+    // a serialised network hop, which matters far more for wall time).
+    // INSERT OR IGNORE in the batch below keeps the second-attempt case
+    // safe if a fresh-flagged ingest is somehow retried.
     let oldRefs = new Set<string>();
-    if (key.kind !== "assets" && (await this.blobStore.has(key))) {
+    if (!freshIngest && key.kind !== "assets" && (await this.blobStore.has(key))) {
       oldRefs = new Set((await this._getForwardRefs(key)).map(keyStr));
     }
 

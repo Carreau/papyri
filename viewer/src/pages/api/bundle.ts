@@ -20,11 +20,23 @@
 //
 // (or just `papyri upload <bundle_dir-or-.papyri>` which does both steps.)
 //
-// Responses:
-//   201  { ok: true, pkg, version }
-//   400  { ok: false, error }   — missing body or bad Bundle metadata
-//   422  { ok: false, error }   — gunzip / decode / ingest failed
-//   500  { ok: false, error }   — backend setup failed
+// Response contract:
+//   The success path returns 200 with Content-Type application/x-ndjson:
+//   a streaming sequence of one JSON object per line. The client must read
+//   the body to determine outcome — the final line is either `{"event":
+//   "done", "pkg":..., "version":...}` or `{"event":"error","error":...}`.
+//   On Cloudflare Workers `console.log` is buffered until the request ends,
+//   so this stream is the only way to give the client live progress on
+//   long ingests.
+//
+//   Pre-stream errors that we can resolve before hitting the wire still
+//   come back as buffered JSON with the appropriate status code:
+//     401  { ok: false, error }   — missing/invalid bearer token
+//     400  { ok: false, error }   — missing body or bad Bundle metadata
+//     422  { ok: false, error }   — gunzip / cbor decode failed
+//     500  { ok: false, error }   — backend setup failed
+//   Once the ingest stream opens we return 200 unconditionally; any
+//   downstream failure is reported as an `error` event in the body.
 
 import type { APIRoute } from "astro";
 import { Ingester, decode, type TypedNode } from "papyri-ingest";
@@ -95,16 +107,78 @@ export const PUT: APIRoute = async ({ request }) => {
     );
   }
 
-  let pkg: string;
-  let version: string;
-  try {
-    ({ pkg, version } = await ingester.ingestBundle(bundle, bundleSizeBytes));
-  } catch (err) {
-    return respond({ ok: false, error: `ingest failed: ${err}` }, 422);
-  }
-  // Don't close the Ingester — it wraps the shared singleton backends from
-  // getBackends() (the SQLite handle in particular is reused by every
-  // subsequent read). The Ingester owns no per-request state.
+  // Streaming response: ingest is potentially long-running (D1 / R2 round-
+  // trips dominate). Open an NDJSON stream now and emit progress events as
+  // the ingest walks the bundle; the client reads line-by-line. This
+  // bypasses the Workers per-request console.log buffer, which only flushes
+  // when the request ends and therefore makes `wrangler tail` useless for
+  // live progress.
+  const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+  const writer = writable.getWriter();
+  const encoder = new TextEncoder();
+  const send = async (event: Record<string, unknown>) => {
+    await writer.write(encoder.encode(JSON.stringify(event) + "\n"));
+  };
 
-  return respond({ ok: true, pkg, version }, 201);
+  // Kick the ingest off without awaiting. Workers keeps the worker alive
+  // while the response body is being consumed, so this IIFE is allowed to
+  // outlive the handler return. Any throw turns into a final `error` event.
+  //
+  // Note: if the client disconnects mid-stream (Ctrl-C on `papyri upload`,
+  // network drop), writer.close() throws and the ingest continues silently
+  // to completion. The data still lands consistently — D1 batches stay
+  // atomic per `_put`, and the bundles row writes last — but a client
+  // cancellation is NOT a server cancellation. If we ever need true
+  // cancellation propagation, wire an AbortController through ingestBundle
+  // and abort it from the writer's close handler.
+  // Timing decoration: each event is enriched with `elapsed_s` (since the
+  // stream opened) and `since_last_ms` (since the previous event) so the
+  // client can render live wall-time stats. console.log inside the worker
+  // is buffered until request end, so the stream is the only way to
+  // surface per-chunk timings during a long ingest.
+  const startedAt = Date.now();
+  let prevEventAt = startedAt;
+  const sendWithTiming = async (event: Record<string, unknown>) => {
+    const now = Date.now();
+    await send({
+      ...event,
+      elapsed_s: ((now - startedAt) / 1000).toFixed(2),
+      since_last_ms: now - prevEventAt,
+    });
+    prevEventAt = now;
+  };
+
+  (async () => {
+    try {
+      await sendWithTiming({ event: "start", pkg: rawPkg, version: rawVer });
+      const result = await ingester.ingestBundle(
+        bundle,
+        bundleSizeBytes,
+        async (phase, done, total) => {
+          await sendWithTiming({ event: "progress", phase, done, total });
+        }
+      );
+      await sendWithTiming({ event: "done", pkg: result.pkg, version: result.version });
+    } catch (err) {
+      await sendWithTiming({ event: "error", error: `ingest failed: ${err}` });
+    } finally {
+      try {
+        await writer.close();
+      } catch {
+        /* writer already closed (e.g. client disconnect); nothing to do. */
+      }
+    }
+  })();
+
+  return new Response(readable, {
+    status: 200,
+    headers: {
+      "Content-Type": "application/x-ndjson",
+      "Cache-Control": "no-store",
+      // Disable response buffering on intermediaries that honor it. The
+      // worker emits one line per progress event; without this some
+      // proxies coalesce until the connection closes.
+      "X-Accel-Buffering": "no",
+    },
+  });
 };

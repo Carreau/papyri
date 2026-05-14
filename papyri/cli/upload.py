@@ -4,11 +4,18 @@ from __future__ import annotations
 
 import json
 import urllib.error
+import urllib.parse
 import urllib.request
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Annotated
 
 import typer
+
+try:
+    _PAPYRI_VERSION = version("papyri")
+except PackageNotFoundError:
+    _PAPYRI_VERSION = "0+unknown"
 
 _DEFAULT_URL = "http://localhost:4321/api/bundle"
 
@@ -118,20 +125,98 @@ def upload(
             err=True,
         )
 
-        headers: dict[str, str] = {"Content-Type": "application/gzip"}
+        # User-Agent: Cloudflare's default bot protection on *.workers.dev
+        # rejects urllib's `Python-urllib/3.x` UA with a 1010 before the
+        # request reaches the worker. Send a real identifier.
+        # Origin: Astro's CSRF protection (`security.checkOrigin`, on by
+        # default in Astro 6+) blocks PUTs whose Origin doesn't match the
+        # request host with "Cross-site PUT form submissions are forbidden".
+        # `/api/bundle` is meant for cross-origin CLI use, so we set Origin
+        # to the upload URL's own scheme+host to satisfy the check.
+        parsed = urllib.parse.urlsplit(url)
+        headers: dict[str, str] = {
+            "Content-Type": "application/gzip",
+            "User-Agent": f"papyri-upload/{_PAPYRI_VERSION}",
+            "Origin": f"{parsed.scheme}://{parsed.netloc}",
+        }
         if token:
             headers["Authorization"] = f"Bearer {token}"
         req = urllib.request.Request(url, data=data, method="PUT", headers=headers)
         t0 = time.monotonic()
         try:
             with urllib.request.urlopen(req) as resp:
-                body = json.loads(resp.read())
+                # The server streams NDJSON: one JSON event per line.
+                # Read line-by-line so progress events surface in real
+                # time on the terminal — important when the worker would
+                # otherwise look hung for tens of seconds.
+                # Non-streaming servers (older deploys, or accidentally
+                # buffered ones) still work: the whole body arrives as a
+                # single line and we treat it as a `done` event below.
+                final: dict[str, object] | None = None
+                err_msg: str | None = None
+                for raw_line in resp:
+                    line = raw_line.strip()
+                    if not line:
+                        continue
+                    try:
+                        event = json.loads(line)
+                    except json.JSONDecodeError:
+                        # Likely the legacy buffered shape: a single
+                        # JSON object spanning the whole body. Fall back
+                        # to slurping and parsing once.
+                        try:
+                            event = json.loads(b"".join([line, resp.read()]))
+                        except json.JSONDecodeError as e:
+                            err_msg = f"unparseable server response: {e}"
+                            break
+                    kind = event.get("event")
+                    elapsed = event.get("elapsed_s")
+                    since = event.get("since_last_ms")
+                    # Server may decorate every event with timing fields
+                    # (elapsed_s seconds since the stream opened, since_last_ms
+                    # since the previous event). Render them when present so
+                    # the client shows live progress in real time despite
+                    # console.log being unbuffered on the worker side.
+                    suffix = ""
+                    if elapsed is not None and since is not None:
+                        suffix = f" [t={elapsed}s Δ={since}ms]"
+                    if kind == "start":
+                        typer.echo(
+                            f"{prefix} server: starting ingest of "
+                            f"{event.get('pkg')} {event.get('version')}{suffix}",
+                            err=True,
+                        )
+                    elif kind == "progress":
+                        typer.echo(
+                            f"{prefix} {event.get('phase')}: "
+                            f"{event.get('done')}/{event.get('total')}{suffix}",
+                            err=True,
+                        )
+                    elif kind == "done":
+                        final = event
+                    elif kind == "error":
+                        err_msg = str(event.get("error", "ingest failed"))
+                    elif kind is None and "pkg" in event and "version" in event:
+                        # Legacy non-streaming success shape.
+                        final = event
+                    # Unknown event kinds: ignore forward-compatibly.
             elapsed = time.monotonic() - t0
-            typer.echo(
-                f"{prefix} ok: {body.get('pkg')} {body.get('version')} "
-                f"ingested in {elapsed:.1f}s (HTTP {resp.status})",
-                err=True,
-            )
+            if err_msg is not None:
+                typer.echo(f"{prefix} error: {err_msg}", err=True)
+                ok = False
+            elif final is None:
+                typer.echo(
+                    f"{prefix} error: server stream closed without a "
+                    "done or error event",
+                    err=True,
+                )
+                ok = False
+            else:
+                typer.echo(
+                    f"{prefix} ok: {final.get('pkg')} {final.get('version')} "
+                    f"ingested in {elapsed:.1f}s",
+                    err=True,
+                )
         except urllib.error.HTTPError as exc:
             raw = exc.read()
             try:

@@ -7,8 +7,8 @@ import BundleGridSearch from "../components/BundleGridSearch.tsx";
 
 export const prerender = false;
 
-const { blobStore } = await getBackends();
-const packages = await listIngestedPackages(blobStore);
+const { graphDb } = await getBackends();
+const packages = await listIngestedPackages(graphDb);
 
 const bundlesForFilter = packages.map((p) => ({
   pkg: p.pkg,

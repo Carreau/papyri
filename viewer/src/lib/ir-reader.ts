@@ -11,7 +11,7 @@
 // Decoder + post-walk so the global cbor-x extension registry isn't
 // shared with the SSR ingest encoder running in the same process.
 
-import { decode as decodeIR, type BlobStore } from "papyri-ingest";
+import { decode as decodeIR, type BlobStore, type GraphDb } from "papyri-ingest";
 import { IR_TYPE_NAMES } from "./ir-types.ts";
 import { linkForAsset } from "./links.ts";
 import { qualnameToSlug, slugToQualname } from "./slugs.ts";
@@ -58,8 +58,8 @@ export interface IngestedPackage {
 }
 
 /** Distinct packages with their versions, latest first. */
-export async function listIngestedPackages(blobStore: BlobStore): Promise<IngestedPackage[]> {
-  const bundles = await listIngestedBundles(blobStore);
+export async function listIngestedPackages(graphDb: GraphDb): Promise<IngestedPackage[]> {
+  const bundles = await listBundlesFromDb(graphDb);
   const byPkg = new Map<string, string[]>();
   for (const b of bundles) {
     const arr = byPkg.get(b.pkg) ?? [];
@@ -75,23 +75,12 @@ export async function listIngestedPackages(blobStore: BlobStore): Promise<Ingest
   return out;
 }
 
-/** Distinct (pkg, version) pairs that have any blob in the store. */
-export async function listIngestedBundles(blobStore: BlobStore): Promise<IngestedBundle[]> {
-  const keys = await blobStore.list("");
-  const seen = new Set<string>();
-  const out: IngestedBundle[] = [];
-  for (const k of keys) {
-    const parts = k.split("/");
-    if (parts.length < 3) continue;
-    const pkg = parts[0]!;
-    const version = parts[1]!;
-    const id = `${pkg}/${version}`;
-    if (seen.has(id)) continue;
-    seen.add(id);
-    out.push({ pkg, version });
-  }
-  out.sort((a, b) => `${a.pkg}/${a.version}`.localeCompare(`${b.pkg}/${b.version}`));
-  return out;
+/** Distinct (pkg, version) pairs from the bundles table. */
+export async function listBundlesFromDb(graphDb: GraphDb): Promise<IngestedBundle[]> {
+  const rows = await graphDb.all<{ module: string; version: string }>(
+    "SELECT module, version FROM bundles ORDER BY module, version"
+  );
+  return rows.map((r) => ({ pkg: r.module, version: r.version }));
 }
 
 /** Qualnames under `<pkg>/<ver>/module/`. Sorted. */

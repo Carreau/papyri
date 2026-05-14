@@ -12,7 +12,7 @@ const { pkg } = Astro.params;
 if (!pkg) return new Response("Not found", { status: 404 });
 
 const { blobStore, graphDb } = await getBackends();
-const packages = await listIngestedPackages(blobStore);
+const packages = await listIngestedPackages(graphDb);
 const entry: IngestedPackage | undefined = packages.find((p) => p.pkg === pkg);
 
 if (!entry) {

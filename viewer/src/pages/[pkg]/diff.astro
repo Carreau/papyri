@@ -27,8 +27,8 @@ const url = new URL(Astro.request.url);
 const fromVer = url.searchParams.get("from");
 const toVer = url.searchParams.get("to");
 
-const { blobStore, graphDb } = await getBackends();
-const entry = (await listIngestedPackages(blobStore)).find((p) => p.pkg === pkg);
+const { graphDb } = await getBackends();
+const entry = (await listIngestedPackages(graphDb)).find((p) => p.pkg === pkg);
 if (!entry) return new Response(`Package ${pkg} not found`, { status: 404 });
 
 const valid = (v: string | null) => !!v && entry.versions.includes(v);

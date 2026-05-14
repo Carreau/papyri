@@ -4,11 +4,18 @@ from __future__ import annotations
 
 import json
 import urllib.error
+import urllib.parse
 import urllib.request
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Annotated
 
 import typer
+
+try:
+    _PAPYRI_VERSION = version("papyri")
+except PackageNotFoundError:
+    _PAPYRI_VERSION = "0+unknown"
 
 _DEFAULT_URL = "http://localhost:4321/api/bundle"
 
@@ -118,7 +125,20 @@ def upload(
             err=True,
         )
 
-        headers: dict[str, str] = {"Content-Type": "application/gzip"}
+        # User-Agent: Cloudflare's default bot protection on *.workers.dev
+        # rejects urllib's `Python-urllib/3.x` UA with a 1010 before the
+        # request reaches the worker. Send a real identifier.
+        # Origin: Astro's CSRF protection (`security.checkOrigin`, on by
+        # default in Astro 6+) blocks PUTs whose Origin doesn't match the
+        # request host with "Cross-site PUT form submissions are forbidden".
+        # `/api/bundle` is meant for cross-origin CLI use, so we set Origin
+        # to the upload URL's own scheme+host to satisfy the check.
+        parsed = urllib.parse.urlsplit(url)
+        headers: dict[str, str] = {
+            "Content-Type": "application/gzip",
+            "User-Agent": f"papyri-upload/{_PAPYRI_VERSION}",
+            "Origin": f"{parsed.scheme}://{parsed.netloc}",
+        }
         if token:
             headers["Authorization"] = f"Bearer {token}"
         req = urllib.request.Request(url, data=data, method="PUT", headers=headers)

@@ -19,6 +19,9 @@ name: Gen from Source (Matrix)
 #   gen_flags    extra flags forwarded to papyri gen (space-separated, optional)
 #   install_cmd  custom shell command to install the library after cloning
 #                ($CLONE_DIR is pre-set); default: uv pip install --system "$CLONE_DIR"
+#   pypi_name    PyPI package name; if set and the tag is a plain release
+#                (e.g. v2.4.4, 9.3.0), the wheel is installed from PyPI instead
+#                of building from source, skipping install_cmd entirely
 
 on:
   workflow_dispatch:
@@ -54,7 +57,8 @@ jobs:
               "clone_dir": "IPython",
               "config": "examples/IPython.toml",
               "gen_flags": "",
-              "install_cmd": ""
+              "install_cmd": "",
+              "pypi_name": "ipython"
             },
             {
               "lib": "numpy",
@@ -63,7 +67,8 @@ jobs:
               "clone_dir": "numpy",
               "config": "examples/numpy.toml",
               "gen_flags": "--no-exec",
-              "install_cmd": "bash examples/build_numpy.sh \"$CLONE_DIR\""
+              "install_cmd": "bash examples/build_numpy.sh \"$CLONE_DIR\"",
+              "pypi_name": "numpy"
             },
             {
               "lib": "scipy",
@@ -72,7 +77,8 @@ jobs:
               "clone_dir": "scipy",
               "config": "examples/scipy.toml",
               "gen_flags": "--no-exec --no-infer",
-              "install_cmd": "bash examples/build_scipy.sh \"$CLONE_DIR\""
+              "install_cmd": "bash examples/build_scipy.sh \"$CLONE_DIR\"",
+              "pypi_name": "scipy"
             },
             {
               "lib": "astropy",
@@ -81,7 +87,8 @@ jobs:
               "clone_dir": "astropy",
               "config": "examples/astropy.toml",
               "gen_flags": "",
-              "install_cmd": ""
+              "install_cmd": "",
+              "pypi_name": "astropy"
             }
           ]'
           matrix=$(echo "$libs" | jq -c '{
@@ -93,7 +100,8 @@ jobs:
                 clone_dir:   $lib.clone_dir,
                 config:      $lib.config,
                 gen_flags:   $lib.gen_flags,
-                install_cmd: $lib.install_cmd
+                install_cmd: $lib.install_cmd,
+                pypi_name:   $lib.pypi_name
               }
             ]
           }')
@@ -137,12 +145,18 @@ jobs:
 
       - name: Install ${{ matrix.lib }}
         env:
-          CLONE_DIR: ${{ runner.temp }}
           CLONE_SUBDIR: ${{ matrix.clone_dir }}
           INSTALL_CMD: ${{ matrix.install_cmd }}
+          PYPI_NAME: ${{ matrix.pypi_name }}
+          TAG: ${{ matrix.tag }}
         run: |
           CLONE_DIR="$HOME/dev/$CLONE_SUBDIR"
-          if [ -n "${INSTALL_CMD}" ]; then
+          # Pure release tags (e.g. 9.3.0, v2.4.4) — install pre-built wheel from PyPI.
+          # Dev/rc/branch tags fall through to the source build path.
+          VERSION="${TAG#v}"
+          if [ -n "${PYPI_NAME}" ] && [[ "$TAG" =~ ^v?[0-9]+(\.[0-9]+)*$ ]]; then
+            uv pip install --system "${PYPI_NAME}==${VERSION}"
+          elif [ -n "${INSTALL_CMD}" ]; then
             eval "${INSTALL_CMD}"
           else
             uv pip install --system "$CLONE_DIR"

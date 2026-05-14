@@ -153,15 +153,24 @@ jobs:
           TAG: ${{ matrix.tag }}
         run: |
           CLONE_DIR="$HOME/dev/$CLONE_SUBDIR"
-          # Pure release tags (e.g. 9.3.0, v2.4.4) — install pre-built wheel from PyPI.
-          # Dev/rc/branch tags fall through to the source build path.
+          # Pure release tags (e.g. 9.3.0, v2.4.4) — try a pre-built wheel from
+          # PyPI first.  --only-binary :all: means uv will not fall back to
+          # building from source if no wheel exists for this Python version.
+          # On failure (no wheel) we fall through to INSTALL_CMD, which can do a
+          # proper source build with the required system libraries.
           VERSION="${TAG#v}"
+          installed=false
           if [ -n "${PYPI_NAME}" ] && [[ "$TAG" =~ ^v?[0-9]+(\.[0-9]+)*$ ]]; then
-            uv pip install --system "${PYPI_NAME}==${VERSION}"
-          elif [ -n "${INSTALL_CMD}" ]; then
-            eval "${INSTALL_CMD}"
-          else
-            uv pip install --system "$CLONE_DIR"
+            if uv pip install --system --only-binary :all: "${PYPI_NAME}==${VERSION}"; then
+              installed=true
+            fi
+          fi
+          if [ "$installed" = false ]; then
+            if [ -n "${INSTALL_CMD}" ]; then
+              eval "${INSTALL_CMD}"
+            else
+              uv pip install --system "$CLONE_DIR"
+            fi
           fi
 
       - name: Gen ${{ matrix.lib }} ${{ matrix.tag }}

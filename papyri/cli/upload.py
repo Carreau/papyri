@@ -1,4 +1,4 @@
-"""``papyri upload`` — push a ``.papyri`` artifact (or a DocBundle directory) to a viewer ingest endpoint."""
+"""``papyri upload`` — push a ``.papyri`` artifact, a ``.zip`` containing one, or a DocBundle directory to a viewer ingest endpoint."""
 
 from __future__ import annotations
 
@@ -8,7 +8,10 @@ import urllib.parse
 import urllib.request
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
+
+if TYPE_CHECKING:
+    from papyri.bundle import Bundle
 
 import typer
 
@@ -20,13 +23,40 @@ except PackageNotFoundError:
 _DEFAULT_URL = "http://localhost:4321/api/bundle"
 
 
+def _load_from_zip(path: Path) -> tuple[bytes, Bundle]:
+    """Extract and load the single ``.papyri`` artifact from a zip file.
+
+    Raises ``BundleError`` if the zip contains zero or more than one ``.papyri``
+    member, or if the artifact itself is invalid.
+    """
+    import zipfile
+
+    from papyri.pack import BundleError, load_artifact
+
+    with zipfile.ZipFile(path, "r") as zf:
+        papyri_members = [n for n in zf.namelist() if n.endswith(".papyri")]
+        if len(papyri_members) == 0:
+            raise BundleError(f"{path.name} contains no .papyri file")
+        if len(papyri_members) > 1:
+            names = ", ".join(papyri_members)
+            raise BundleError(
+                f"{path.name} contains {len(papyri_members)} .papyri files "
+                f"({names}); expected exactly one"
+            )
+        data = zf.read(papyri_members[0])
+
+    bundle = load_artifact(data)
+    return data, bundle
+
+
 def upload(
     paths: Annotated[
         list[Path],
         typer.Argument(
             help=(
-                "Paths to upload. Each path is either a ``.papyri`` artifact "
-                "(produced by ``papyri pack``) or a DocBundle directory "
+                "Paths to upload. Each path is a ``.papyri`` artifact "
+                "(produced by ``papyri pack``), a ``.zip`` file containing "
+                "exactly one ``.papyri`` artifact, or a DocBundle directory "
                 "(packed on the fly, output unchanged from ``papyri gen``)."
             ),
         ),
@@ -66,9 +96,16 @@ def upload(
     Send each ``.papyri`` artifact (or pack a DocBundle directory on the
     fly) to the viewer ingest endpoint.
 
-    Bundle directories are passed through ``papyri.pack.make_artifact_from_dir``
-    so the bytes on the wire are identical to what ``papyri pack`` would
-    produce — same validation, same byte-reproducibility guarantees.
+    Accepted input forms:
+
+    - ``.papyri`` file: loaded directly.
+    - ``.zip`` file: must contain exactly one ``.papyri`` member; that
+      member is extracted and uploaded.  The zip is validated before the
+      network request is made.
+    - DocBundle directory: passed through ``papyri.pack.make_artifact_from_dir``
+      so the bytes on the wire are identical to what ``papyri pack`` would
+      produce — same validation, same byte-reproducibility guarantees.
+
     The viewer's ``/api/bundle`` endpoint runs the full ingest pipeline
     server-side; this is the canonical way to ship a bundle into the
     cross-linked graph.
@@ -99,13 +136,17 @@ def upload(
                 data = path.read_bytes()
                 bundle = load_artifact(data)
                 pkg, version = bundle.module, bundle.version
+            elif path.is_file() and path.suffix == ".zip":
+                typer.echo(f"{prefix} inspecting {path.name} …", err=True)
+                data, bundle = _load_from_zip(path)
+                pkg, version = bundle.module, bundle.version
             elif path.is_dir():
                 typer.echo(f"{prefix} packing {path.name} …", err=True)
                 data, bundle = make_artifact_from_dir(path, log=log)
                 pkg, version = bundle.module, bundle.version
             else:
                 typer.echo(
-                    f"{prefix} error: {path} is not a .papyri file or a directory",
+                    f"{prefix} error: {path} is not a .papyri file, a .zip file, or a directory",
                     err=True,
                 )
                 ok = False

@@ -51,13 +51,11 @@ const DB_CHUNK_SIZE = 500;
 
 // Fields that change across rebuilds without reflecting any user-visible
 // content change. We strip them before computing the content digest so the
-// version-diff "changed" bucket isn't dominated by line-number churn from
-// `inspect.getsourcelines()` shifting under unrelated edits.
-//
-// Currently only `IngestedDoc.item_line` qualifies; add others here if
-// the same problem shows up for other IR fields.
+// version-diff "changed" bucket isn't dominated by churn from
+// `inspect.getsourcelines()` shifting under unrelated edits or
+// `inspect.getfile()` returning different absolute paths across environments.
 const VOLATILE_FIELDS_BY_TYPE: Record<string, ReadonlySet<string>> = {
-  IngestedDoc: new Set(["item_line"]),
+  IngestedDoc: new Set(["item_line", "item_file"]),
 };
 
 function stripVolatileFields<T>(node: T): T {

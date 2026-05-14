@@ -1903,6 +1903,7 @@ class Gen:
                     aliases={},
                     version=self.version,
                     config=self.config.directives,
+                    module=self.root,
                     doc_path=_doc_path,
                     asset_store=self.put_raw,
                 )
@@ -1941,7 +1942,13 @@ class Gen:
                     )
                     assert isinstance(r, RefInfo)
                     if r.kind == "module":
-                        sa.name.reference = r
+                        # Intra-bundle refs don't need a version stamp — store
+                        # as LocalRef so the bundle digest is independent of
+                        # its own version number. Mirrors GenVisitor._ref_to_crossref.
+                        if r.module == self.root:
+                            sa.name.reference = LocalRef(r.kind, r.path)
+                        else:
+                            sa.name.reference = r
                     else:
                         imp = GenVisitor._import_solver(sa.name.value)
                         if imp:

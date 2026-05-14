@@ -18,6 +18,13 @@ name = "papyri-viewer"
 compatibility_date = "2026-04-27"
 compatibility_flags = ["nodejs_compat"]
 
+# Observability: needed for `wrangler tail` to receive logs from
+# deployed workers. Without this, `tail` connects but never streams
+# any events. Off by default to keep idle workers free of log
+# infrastructure cost; on here so we can debug the ingest pipeline.
+[observability]
+enabled = true
+
 # `pnpm build:cf` (PAPYRI_ADAPTER=cloudflare astro build) emits the
 # worker entrypoint at `dist/_worker.js/index.js` and pre-rendered
 # HTML / client assets under `dist/`. The @astrojs/cloudflare adapter

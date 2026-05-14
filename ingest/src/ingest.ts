@@ -322,6 +322,8 @@ export class Ingester {
       );
     }
 
+    const apiTotal = Object.keys(bundle.api ?? {}).length;
+    if (apiTotal > 0) console.log(`  module: starting (${apiTotal} pages)`);
     let apiCount = 0;
     for (const [qa, genDoc] of Object.entries(bundle.api ?? {})) {
       const g = genDoc as TypedNode;
@@ -345,8 +347,14 @@ export class Ingester {
         encode(stripVolatileFields(ingestedDoc)),
       );
       apiCount++;
+      // Periodic progress log so the Worker tail shows how far the
+      // ingest got before any per-invocation limit (subrequests, CPU
+      // time, request body size) terminates the request.
+      if (apiCount % 25 === 0) {
+        console.log(`  module: ${apiCount}/${apiTotal}`);
+      }
     }
-    if (apiCount > 0) console.log(`  module: ${apiCount} pages`);
+    if (apiCount > 0) console.log(`  module: ${apiCount} pages (done)`);
 
     const metaForStore: Record<string, unknown> = { module: root, version };
     if (bundle.summary) metaForStore["summary"] = bundle.summary;

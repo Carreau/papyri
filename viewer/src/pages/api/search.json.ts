@@ -5,7 +5,7 @@
 // (fts5 / D1 fts) once we know the query load.
 
 import type { APIRoute } from "astro";
-import { listIngestedBundles, listModules } from "../../lib/ir-reader.ts";
+import { listBundlesFromDb, listModules } from "../../lib/ir-reader.ts";
 import { getBackends } from "../../lib/backends.ts";
 import { linkForRef } from "../../lib/links.ts";
 import { filterQualnames } from "../../lib/search.ts";
@@ -23,8 +23,8 @@ export const GET: APIRoute = async ({ url }) => {
     });
   }
 
-  const { blobStore } = await getBackends();
-  const bundles = await listIngestedBundles(blobStore);
+  const { blobStore, graphDb } = await getBackends();
+  const bundles = await listBundlesFromDb(graphDb);
   const hits: Array<{ pkg: string; version: string; qualname: string; href: string }> = [];
 
   for (const b of bundles) {

@@ -162,12 +162,3 @@ export async function listDigests(
   return out;
 }
 
-/** Distinct (pkg, ver) pairs of bundles that have any blob in the graph. */
-export async function listBundlesViaGraph(
-  graphDb: GraphDb
-): Promise<{ pkg: string; ver: string }[]> {
-  const rows = await graphDb.all<{ package: string; version: string }>(
-    "SELECT DISTINCT package, version FROM nodes WHERE has_blob=1 ORDER BY package, version"
-  );
-  return rows.map((r) => ({ pkg: r.package, ver: r.version }));
-}

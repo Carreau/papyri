@@ -41,6 +41,14 @@ import { SqliteGraphDb, type GraphDb, type BatchStmt } from "./graph-db.js";
 
 const DIGEST_SIZE = 16;
 
+// Max concurrent R2 puts during a bundle flush.  R2 has no batch-put API so
+// we parallelise the individual puts instead of serialising them.
+const BLOB_CONCURRENCY = 100;
+
+// D1 batch calls are capped at ~1 000 statements; stay well under that limit
+// so a single large bundle does not blow the API ceiling.
+const DB_CHUNK_SIZE = 500;
+
 // Fields that change across rebuilds without reflecting any user-visible
 // content change. We strip them before computing the content digest so the
 // version-diff "changed" bucket isn't dominated by line-number churn from
@@ -266,25 +274,29 @@ export class Ingester {
     const version = bundle.version;
     const aliases = (bundle.aliases ?? {}) as Record<string, string>;
 
-    // Has this (pkg, version) been ingested before? Single up-front query
-    // against the `bundles` table lets us skip the per-object `has()` and
-    // `_getForwardRefs()` round-trips when ingesting a brand-new version
-    // — there can't be any old links to reconcile. For an unknown bundle
-    // these two reads are pure waste; on a remote backend (Workers + D1
-    // + R2) they double the subrequest count and double the wall time
-    // because each ~30ms round-trip serialises into the per-object chain.
-    //
-    // For re-uploads of an existing (pkg, version) we keep the slow path
-    // so removed cross-refs get DELETE-d. Re-uploads are the rarer case
-    // and the slow path is the correct one.
     // Wall-clock timing: ingest is dominated by R2/D1 round-trips on
-    // Workers; surface per-section + per-chunk timings so we can tell
-    // where seconds are going without guessing. Logs only flush at
-    // request end on Workers (see bundle.ts), but the totals are still
-    // accurate when they finally show up.
+    // Workers; surface per-phase timings so we can tell where time goes.
     const t0 = Date.now();
     const elapsed = () => `${((Date.now() - t0) / 1000).toFixed(2)}s`;
 
+    // Progress emit helper. Errors are swallowed so a broken stream writer
+    // (e.g. client disconnect) never aborts an in-flight ingest.
+    const emit = async (phase: string, done: number, total: number) => {
+      if (!onProgress) return;
+      try {
+        await onProgress(phase, done, total);
+      } catch {
+        /* progress is best-effort */
+      }
+    };
+
+    // --- Phase 1: pre-fetch existing state ---
+    // Bundles-table lookup tells us whether this is a fresh ingest (no prior
+    // blobs, no links to reconcile).  For a fresh bundle both subsequent
+    // queries would return nothing, so we skip them and use empty
+    // collections — the accumulate loop treats them the same way.
+    // For re-uploads we run two bulk D1 queries to replace the old
+    // N×(R2 HEAD + D1 SELECT) per-doc pattern.
     const tBundle = Date.now();
     const existingBundle = await this.graphDb.all(
       "SELECT 1 AS one FROM bundles WHERE module = ? AND version = ? LIMIT 1",
@@ -295,78 +307,63 @@ export class Ingester {
       `  [${elapsed()}] bundles lookup: ${Date.now() - tBundle}ms (fresh=${freshIngest})`,
     );
 
-    // Progress emit helper. Wraps the optional onProgress callback so the
-    // body of ingestBundle stays free of `if (onProgress)` clutter and
-    // callers that don't pass a callback pay only one function call per
-    // emit. Errors from the callback are swallowed so a broken stream
-    // writer (e.g. client disconnect) doesn't abort the ingest itself.
-    const emit = async (phase: string, done: number, total: number) => {
-      if (!onProgress) return;
-      try {
-        await onProgress(phase, done, total);
-      } catch {
-        /* progress is best-effort; never fail an ingest because the
-           callback threw. */
-      }
+    let existingBlobs: Set<string>;
+    let existingRefs: Map<string, Set<string>>;
+    if (freshIngest) {
+      existingBlobs = new Set();
+      existingRefs = new Map();
+    } else {
+      const tPrefetch = Date.now();
+      [existingBlobs, existingRefs] = await Promise.all([
+        this._fetchExistingBlobKeys(root, version),
+        this._fetchAllForwardRefsForBundle(root, version),
+      ]);
+      console.log(
+        `  [${elapsed()}] pre-fetch: ${existingBlobs.size} blobs in ${Date.now() - tPrefetch}ms`,
+      );
+    }
+
+    // --- Phase 2: accumulate blobs and graph statements (pure CPU, no I/O) ---
+    // stage() queues one blob put and the corresponding graph statements.
+    // All node inserts are collected separately from link inserts so the
+    // flush can send them in the right order (nodes before links).
+    const blobPuts: { key: Key; bytes: Uint8Array }[] = [];
+    const nodeStmts: BatchStmt[] = [];
+    const linkStmts: BatchStmt[] = [];
+
+    const stage = (key: Key, bytes: Uint8Array, refs: Key[], digestInput?: Uint8Array): void => {
+      blobPuts.push({ key, bytes });
+      const s = this._buildBatchStmts(key, bytes, refs, existingBlobs, existingRefs, digestInput);
+      nodeStmts.push(...s.nodeStmts);
+      linkStmts.push(...s.linkStmts);
     };
 
-    // Small-section chunked parallelism. Same pattern as the api loop:
-    // sequential per-item R2 puts were eating tens of seconds for ~30
-    // assets / ~75 docs even though each individual op is fast. The
-    // ordering inside a section doesn't matter (no cross-item deps),
-    // so we chunk and Promise.all just like the module loop.
-    const SMALL_CHUNK_SIZE = 50;
-
     const exEntries = Object.entries(bundle.examples ?? {});
-    const exTotal = exEntries.length;
-    let exCount = 0;
-    for (let i = 0; i < exEntries.length; i += SMALL_CHUNK_SIZE) {
-      const chunk = exEntries.slice(i, i + SMALL_CHUNK_SIZE);
-      await Promise.all(
-        chunk.map(async ([name, section]) => {
-          const refs = collectForwardRefsFromSection(section);
-          await this._put(
-            { module: root, version, kind: "examples", path: name },
-            encode(section),
-            refs,
-            undefined,
-            freshIngest,
-          );
-        }),
+    for (const [name, section] of exEntries) {
+      stage(
+        { module: root, version, kind: "examples", path: name },
+        encode(section),
+        collectForwardRefsFromSection(section),
       );
-      exCount += chunk.length;
-      await emit("examples", exCount, exTotal);
     }
-    if (exCount > 0) console.log(`  [${elapsed()}] examples: ${exCount} files`);
+    if (exEntries.length > 0) {
+      console.log(`  [${elapsed()}] examples: ${exEntries.length} staged`);
+      await emit("examples", exEntries.length, exEntries.length);
+    }
 
     const asEntries = Object.entries(bundle.assets ?? {});
-    const asTotal = asEntries.length;
-    let asCount = 0;
-    for (let i = 0; i < asEntries.length; i += SMALL_CHUNK_SIZE) {
-      const chunk = asEntries.slice(i, i + SMALL_CHUNK_SIZE);
-      await Promise.all(
-        chunk.map(async ([name, raw]) => {
-          const bytes = toUint8(raw);
-          await this._put(
-            { module: root, version, kind: "assets", path: name },
-            bytes,
-            [],
-            undefined,
-            freshIngest,
-          );
-        }),
-      );
-      asCount += chunk.length;
-      await emit("assets", asCount, asTotal);
+    for (const [name, raw] of asEntries) {
+      stage({ module: root, version, kind: "assets", path: name }, toUint8(raw), []);
     }
-    if (asCount > 0) console.log(`  [${elapsed()}] assets: ${asCount} files`);
+    if (asEntries.length > 0) {
+      console.log(`  [${elapsed()}] assets: ${asEntries.length} staged`);
+      await emit("assets", asEntries.length, asEntries.length);
+    }
 
-    await this._put(
+    stage(
       { module: root, version, kind: "meta", path: "aliases.cbor" },
       cborEncode(aliases) as Uint8Array,
       [],
-      undefined,
-      freshIngest,
     );
 
     let storedLogoName: string | null = null;
@@ -376,107 +373,80 @@ export class Ingester {
       if (logoBytes !== undefined) {
         const ext = extname(bundle.logo);
         const destName = ext ? `logo${ext}` : "logo";
-        await this._put(
-          { module: root, version, kind: "meta", path: destName },
-          toUint8(logoBytes),
-          [],
-          undefined,
-          freshIngest,
-        );
+        stage({ module: root, version, kind: "meta", path: destName }, toUint8(logoBytes), []);
         storedLogoName = destName;
       }
     }
 
     const narrativeEntries = Object.entries(bundle.narrative ?? {});
-    const docTotal = narrativeEntries.length;
     let docCount = 0;
-    for (let i = 0; i < narrativeEntries.length; i += SMALL_CHUNK_SIZE) {
-      const chunk = narrativeEntries.slice(i, i + SMALL_CHUNK_SIZE);
-      await Promise.all(
-        chunk.map(async ([name, genDoc]) => {
-          const g = genDoc as TypedNode;
-          if (g.__type !== "GeneratedDoc") {
-            console.warn(`  docs: skipping ${name} (unexpected type ${g.__type})`);
-            return;
-          }
-          const ingestedDoc = generatedDocToIngested(g, name);
-          const refs = collectForwardRefs(ingestedDoc);
-          await this._put(
-            { module: root, version, kind: "docs", path: name },
-            encode(ingestedDoc),
-            refs,
-            undefined,
-            freshIngest,
-          );
-        }),
+    for (const [name, genDoc] of narrativeEntries) {
+      const g = genDoc as TypedNode;
+      if (g.__type !== "GeneratedDoc") {
+        console.warn(`  docs: skipping ${name} (unexpected type ${g.__type})`);
+        continue;
+      }
+      const ingestedDoc = generatedDocToIngested(g, name);
+      stage(
+        { module: root, version, kind: "docs", path: name },
+        encode(ingestedDoc),
+        collectForwardRefs(ingestedDoc),
       );
-      docCount += chunk.length;
-      await emit("docs", docCount, docTotal);
+      docCount++;
     }
-    if (docCount > 0) console.log(`  [${elapsed()}] docs: ${docCount} pages`);
+    if (docCount > 0) {
+      console.log(`  [${elapsed()}] docs: ${docCount} staged`);
+      await emit("docs", docCount, narrativeEntries.length);
+    }
 
     if (Array.isArray(bundle.toc) && bundle.toc.length > 0) {
-      await this._put(
-        { module: root, version, kind: "meta", path: "toc.cbor" },
-        encode(bundle.toc),
-        [],
-        undefined,
-        freshIngest,
-      );
+      stage({ module: root, version, kind: "meta", path: "toc.cbor" }, encode(bundle.toc), []);
     }
 
     const apiEntries = Object.entries(bundle.api ?? {});
     const apiTotal = apiEntries.length;
-    if (apiTotal > 0) console.log(`  [${elapsed()}] module: starting (${apiTotal} pages)`);
-
-    // Process api pages in parallel chunks. Each `_put` makes 2–3
-    // independent subrequests (R2 has + R2 put + D1 batch); awaiting
-    // them sequentially serialises all that round-trip latency.
-    // `INSERT OR IGNORE` in the D1 statements makes concurrent puts
-    // safe — every key writes its own node row and only references
-    // other keys' rows via subqueries, so two concurrent _puts that
-    // share a referenced node race-but-converge instead of conflict.
-    //
-    // CHUNK_SIZE is a tradeoff: too small leaves latency on the
-    // table; too large saturates the Workers runtime's concurrency
-    // budget and risks hitting unrelated soft limits. 25 is a safe
-    // starting point — tune empirically.
-    const CHUNK_SIZE = 100;
+    if (apiTotal > 0) console.log(`  [${elapsed()}] module: staging ${apiTotal} pages`);
     let apiCount = 0;
-    for (let i = 0; i < apiEntries.length; i += CHUNK_SIZE) {
-      const chunkStart = Date.now();
-      const chunk = apiEntries.slice(i, i + CHUNK_SIZE);
-      await Promise.all(
-        chunk.map(async ([qa, genDoc]) => {
-          const g = genDoc as TypedNode;
-          if (g.__type !== "GeneratedDoc") {
-            console.warn(`  module: skipping ${qa} (unexpected type ${g.__type})`);
-            return;
-          }
-          const modRoot = qa.split(/[.:]/, 1)[0];
-          if (modRoot !== root) {
-            console.warn(`  module: skipping ${qa} (root ${modRoot} != bundle root ${root})`);
-            return;
-          }
-          const ingestedDoc = generatedDocToIngested(g, qa);
-          const refs = collectForwardRefs(ingestedDoc);
-          const keyQa = qa.includes(":") ? qa.split(":")[0]! : qa;
-          const keyMod = keyQa.split(".")[0] ?? root;
-          await this._put(
-            { module: keyMod, version, kind: "module", path: qa },
-            encode(ingestedDoc),
-            refs,
-            encode(stripVolatileFields(ingestedDoc)),
-            freshIngest,
-          );
-        }),
+    for (const [qa, genDoc] of apiEntries) {
+      const g = genDoc as TypedNode;
+      if (g.__type !== "GeneratedDoc") {
+        console.warn(`  module: skipping ${qa} (unexpected type ${g.__type})`);
+        continue;
+      }
+      const modRoot = qa.split(/[.:]/, 1)[0];
+      if (modRoot !== root) {
+        console.warn(`  module: skipping ${qa} (root ${modRoot} != bundle root ${root})`);
+        continue;
+      }
+      const ingestedDoc = generatedDocToIngested(g, qa);
+      const keyQa = qa.includes(":") ? qa.split(":")[0]! : qa;
+      const keyMod = keyQa.split(".")[0] ?? root;
+      const encoded = encode(ingestedDoc);
+      stage(
+        { module: keyMod, version, kind: "module", path: qa },
+        encoded,
+        collectForwardRefs(ingestedDoc),
+        encode(stripVolatileFields(ingestedDoc)),
       );
-      apiCount += chunk.length;
-      const chunkMs = Date.now() - chunkStart;
-      console.log(`  [${elapsed()}] module: ${apiCount}/${apiTotal} (chunk ${chunkMs}ms)`);
+      apiCount++;
+    }
+    if (apiCount > 0) {
+      console.log(`  [${elapsed()}] module: ${apiCount} staged`);
       await emit("module", apiCount, apiTotal);
     }
-    if (apiCount > 0) console.log(`  [${elapsed()}] module: ${apiCount} pages (done)`);
+
+    // --- Phase 3: flush — concurrent R2 puts + chunked D1 mega-batch ---
+    // All nodeStmts precede linkStmts so subquery-based insLink always
+    // finds the dest node row already present in the batch.
+    const tFlush = Date.now();
+    console.log(
+      `  [${elapsed()}] flushing ${blobPuts.length} blobs, ${nodeStmts.length + linkStmts.length} graph stmts`,
+    );
+    await Promise.all([
+      this._putBlobsConcurrent(blobPuts),
+      this._flushGraphStmts([...nodeStmts, ...linkStmts]),
+    ]);
+    console.log(`  [${elapsed()}] flush done in ${Date.now() - tFlush}ms`);
 
     const metaForStore: Record<string, unknown> = { module: root, version };
     if (bundle.summary) metaForStore["summary"] = bundle.summary;
@@ -508,7 +478,147 @@ export class Ingester {
   }
 
   // -------------------------------------------------------------------------
-  // Core write — single path used by both `ingest()` and `ingestBundle()`.
+  // Two-phase ingest helpers (used by ingestBundle)
+  // -------------------------------------------------------------------------
+
+  /** One D1 query replaces N R2 HEAD requests for existence checks. */
+  private async _fetchExistingBlobKeys(root: string, version: string): Promise<Set<string>> {
+    const rows = await this.graphDb.all<{ category: string; identifier: string }>(
+      "SELECT category, identifier FROM nodes WHERE package=? AND version=? AND has_blob=1",
+      [root, version],
+    );
+    return new Set(rows.map((r) => `${r.category}/${r.identifier}`));
+  }
+
+  /** One D1 JOIN query replaces N per-doc _getForwardRefs calls. */
+  private async _fetchAllForwardRefsForBundle(
+    root: string,
+    version: string,
+  ): Promise<Map<string, Set<string>>> {
+    const rows = await this.graphDb.all<{
+      src_category: string;
+      src_identifier: string;
+      dest_package: string;
+      dest_version: string;
+      dest_category: string;
+      dest_identifier: string;
+    }>(
+      "SELECT n_src.category AS src_category, n_src.identifier AS src_identifier," +
+        " n_dest.package AS dest_package, n_dest.version AS dest_version," +
+        " n_dest.category AS dest_category, n_dest.identifier AS dest_identifier" +
+        " FROM links" +
+        " JOIN nodes AS n_src ON links.source = n_src.id" +
+        " JOIN nodes AS n_dest ON links.dest = n_dest.id" +
+        " WHERE n_src.package=? AND n_src.version=?",
+      [root, version],
+    );
+    const map = new Map<string, Set<string>>();
+    for (const r of rows) {
+      const srcKey = `${r.src_category}/${r.src_identifier}`;
+      let set = map.get(srcKey);
+      if (!set) {
+        set = new Set();
+        map.set(srcKey, set);
+      }
+      set.add(
+        keyStr({
+          module: r.dest_package,
+          version: r.dest_version,
+          kind: r.dest_category,
+          path: r.dest_identifier,
+        }),
+      );
+    }
+    return map;
+  }
+
+  /**
+   * Pure (no I/O) graph-statement builder for one item.
+   *
+   * Returns stmts split into nodeStmts and linkStmts so the caller can
+   * concatenate all nodeStmts before all linkStmts in the mega-batch —
+   * guaranteeing dest nodes exist when the subquery-based insLink runs.
+   */
+  private _buildBatchStmts(
+    key: Key,
+    bytes: Uint8Array,
+    refs: Key[],
+    existingBlobs: Set<string>,
+    existingRefs: Map<string, Set<string>>,
+    digestInput?: Uint8Array,
+  ): { nodeStmts: BatchStmt[]; linkStmts: BatchStmt[] } {
+    const blobKey = `${key.kind}/${key.path}`;
+    const isExisting = key.kind !== "assets" && existingBlobs.has(blobKey);
+    const oldRefs = isExisting
+      ? (existingRefs.get(blobKey) ?? new Set<string>())
+      : new Set<string>();
+
+    const digest = blake2b(digestInput ?? bytes, { dkLen: DIGEST_SIZE });
+    const newRefSet = new Set(refs.map(keyStr));
+    const addedRefs = refs.filter((r) => !oldRefs.has(keyStr(r)));
+    const removedRefStrs = [...oldRefs].filter((s) => !newRefSet.has(s));
+
+    const insNode =
+      "INSERT OR IGNORE INTO nodes(package, version, category, identifier) VALUES (?, ?, ?, ?)";
+    const updBlob =
+      "UPDATE nodes SET has_blob=1, digest=? WHERE package=? AND version=? AND category=? AND identifier=?";
+    const insLink =
+      "INSERT OR IGNORE INTO links(source, dest) VALUES (" +
+      "(SELECT id FROM nodes WHERE package=? AND version=? AND category=? AND identifier=?), " +
+      "(SELECT id FROM nodes WHERE package=? AND version=? AND category=? AND identifier=?)" +
+      ")";
+    const delLink =
+      "DELETE FROM links WHERE source = " +
+      "(SELECT id FROM nodes WHERE package=? AND version=? AND category=? AND identifier=?) " +
+      "AND dest = " +
+      "(SELECT id FROM nodes WHERE package=? AND version=? AND category=? AND identifier=?)";
+
+    const nodeStmts: BatchStmt[] = [
+      { sql: insNode, params: [key.module, key.version, key.kind, key.path] },
+      { sql: updBlob, params: [digest, key.module, key.version, key.kind, key.path] },
+      ...addedRefs.map((r) => ({ sql: insNode, params: [r.module, r.version, r.kind, r.path] })),
+    ];
+    const linkStmts: BatchStmt[] = [
+      ...addedRefs.map((r) => ({
+        sql: insLink,
+        params: [key.module, key.version, key.kind, key.path, r.module, r.version, r.kind, r.path],
+      })),
+      ...removedRefStrs.map((s) => {
+        const [m, v, k, p] = s.split("/");
+        return {
+          sql: delLink,
+          params: [key.module, key.version, key.kind, key.path, m ?? "", v ?? "", k ?? "", p ?? ""],
+        };
+      }),
+    ];
+
+    return { nodeStmts, linkStmts };
+  }
+
+  /** Run all D1 graph writes in DB_CHUNK_SIZE-statement slices. */
+  private async _flushGraphStmts(stmts: BatchStmt[]): Promise<void> {
+    for (let i = 0; i < stmts.length; i += DB_CHUNK_SIZE) {
+      await this.graphDb.batch(stmts.slice(i, i + DB_CHUNK_SIZE));
+    }
+  }
+
+  /** Put blobs concurrently up to BLOB_CONCURRENCY in-flight at a time. */
+  private async _putBlobsConcurrent(blobs: { key: Key; bytes: Uint8Array }[]): Promise<void> {
+    if (blobs.length === 0) return;
+    const store = this.blobStore;
+    let index = 0;
+    const worker = async (): Promise<void> => {
+      while (true) {
+        const i = index++;
+        if (i >= blobs.length) break;
+        await store.put(blobs[i]!.key, blobs[i]!.bytes);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(BLOB_CONCURRENCY, blobs.length) }, worker));
+  }
+
+  // -------------------------------------------------------------------------
+  // Core write — used by the directory-based ingest() path only.
   //
   // Atomicity contract:
   //   On SQLite (`SqliteGraphDb`) the whole `batch` runs inside one

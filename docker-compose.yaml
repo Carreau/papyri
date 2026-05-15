@@ -1,0 +1,13 @@
+services:
+  viewer:
+    build:
+      context: .
+      dockerfile: viewer/Dockerfile
+    environment:
+      - PAPYRI_UPLOAD_TOKEN=${PAPYRI_UPLOAD_TOKEN:-dev}
+    volumes:
+      - papyri-data:/data
+    restart: unless-stopped
+
+volumes:
+  papyri-data:

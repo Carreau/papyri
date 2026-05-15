@@ -2,8 +2,25 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { FsBlobStore } from "papyri-ingest";
-import { listIngestedBundles, listModules } from "../src/lib/ir-reader.ts";
+import Database from "better-sqlite3";
+import { FsBlobStore, SqliteGraphDb } from "papyri-ingest";
+import { listBundlesFromDb, listModules } from "../src/lib/ir-reader.ts";
+
+function seedBundlesDb(path: string) {
+  const db = new Database(path);
+  db.exec(
+    "CREATE TABLE bundles(module TEXT NOT NULL, version TEXT NOT NULL, " +
+      "bundle_size_bytes INTEGER NOT NULL, ingested_at INTEGER NOT NULL, " +
+      "PRIMARY KEY(module, version))"
+  );
+  const ins = db.prepare(
+    "INSERT INTO bundles(module, version, bundle_size_bytes, ingested_at) VALUES (?,?,?,?)"
+  );
+  ins.run("numpy", "1.26.4", 100, 0);
+  ins.run("numpy", "2.0.0", 200, 0);
+  ins.run("scipy", "1.13.0", 300, 0);
+  db.close();
+}
 
 describe("fs-facing helpers", () => {
   let dir: string;
@@ -14,25 +31,26 @@ describe("fs-facing helpers", () => {
     await rm(dir, { recursive: true, force: true });
   });
 
-  it("listIngestedBundles: [] on empty/missing, discovers <pkg>/<ver>", async () => {
-    // Empty store returns [].
-    expect(await listIngestedBundles(new FsBlobStore(join(dir, "nope")))).toEqual([]);
-    expect(await listIngestedBundles(new FsBlobStore(dir))).toEqual([]);
+  it("listBundlesFromDb: [] on empty bundles table, discovers rows", async () => {
+    const dbPath = join(dir, "empty.db");
+    const emptyDb = new Database(dbPath);
+    emptyDb.exec(
+      "CREATE TABLE bundles(module TEXT NOT NULL, version TEXT NOT NULL, " +
+        "bundle_size_bytes INTEGER NOT NULL, ingested_at INTEGER NOT NULL, " +
+        "PRIMARY KEY(module, version))"
+    );
+    emptyDb.close();
+    const emptyGraphDb = new SqliteGraphDb(
+      new Database(dbPath) as Parameters<typeof SqliteGraphDb>[0]
+    );
+    expect(await listBundlesFromDb(emptyGraphDb)).toEqual([]);
 
-    // Create a minimal blob per bundle so FsBlobStore.list("") picks them up.
-    const dummy = new Uint8Array([0]);
-    for (const [pkg, ver] of [
-      ["numpy", "1.26.4"],
-      ["numpy", "2.0.0"],
-      ["scipy", "1.13.0"],
-    ]) {
-      await mkdir(join(dir, pkg, ver, "module"), { recursive: true });
-      await writeFile(join(dir, pkg, ver, "module", "placeholder"), dummy);
-    }
-    // A stray file at the top level must be ignored (parts.length < 3).
-    await writeFile(join(dir, "stray.txt"), "nope");
-
-    const got = await listIngestedBundles(new FsBlobStore(dir));
+    const seededPath = join(dir, "seeded.db");
+    seedBundlesDb(seededPath);
+    const seededGraphDb = new SqliteGraphDb(
+      new Database(seededPath) as Parameters<typeof SqliteGraphDb>[0]
+    );
+    const got = await listBundlesFromDb(seededGraphDb);
     expect(got.map((b) => `${b.pkg}/${b.version}`)).toEqual([
       "numpy/1.26.4",
       "numpy/2.0.0",

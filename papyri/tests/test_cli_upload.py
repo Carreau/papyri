@@ -80,7 +80,7 @@ def _mock_stream_response(events: list[dict], status: int = 200) -> MagicMock:
 def test_upload_missing_path(tmp_path):
     result = runner.invoke(_app, [str(tmp_path / "nonexistent")])
     assert result.exit_code == 1
-    assert "not a .papyri file or a directory" in result.output
+    assert "not a .papyri file" in result.output
 
 
 def test_upload_dir_without_papyri_json(tmp_path):
@@ -299,3 +299,83 @@ def test_upload_url_error(tmp_path):
 
     assert result.exit_code == 1
     assert "connection refused" in result.output
+
+
+# ---------------------------------------------------------------------------
+# ZIP input
+# ---------------------------------------------------------------------------
+
+
+def _make_zip_with_artifact(zip_path: Path, artifact_bytes: bytes, name: str) -> None:
+    import zipfile
+
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr(name, artifact_bytes)
+
+
+def test_upload_zip_success(tmp_path):
+    bundle_dir = _make_bundle(tmp_path / "mypkg_1.0")
+    artifact_bytes, _ = make_artifact_from_dir(bundle_dir)
+    zip_path = tmp_path / "mypkg-1.0.zip"
+    _make_zip_with_artifact(zip_path, artifact_bytes, "mypkg-1.0.papyri")
+
+    resp = _mock_response({"ok": True, "pkg": "mypkg", "version": "1.0"})
+    with patch("urllib.request.urlopen", return_value=resp) as mock_open:
+        result = runner.invoke(_app, [str(zip_path)])
+
+    assert result.exit_code == 0, result.output
+    assert "mypkg" in result.output
+    req: urllib.request.Request = mock_open.call_args[0][0]
+    assert req.get_method() == "PUT"
+    assert req.get_header("Content-type") == "application/gzip"
+
+
+def test_upload_zip_sends_same_bytes_as_artifact(tmp_path):
+    """Uploading via zip must put the same bytes on the wire as the raw artifact."""
+    bundle_dir = _make_bundle(tmp_path / "mypkg_1.0")
+    artifact_bytes, _ = make_artifact_from_dir(bundle_dir)
+    artifact_path = tmp_path / "mypkg-1.0.papyri"
+    artifact_path.write_bytes(artifact_bytes)
+    zip_path = tmp_path / "mypkg-1.0.zip"
+    _make_zip_with_artifact(zip_path, artifact_bytes, "mypkg-1.0.papyri")
+
+    resp = _mock_response({"ok": True, "pkg": "mypkg", "version": "1.0"})
+    captured: list[bytes] = []
+
+    def fake_urlopen(req: urllib.request.Request):
+        captured.append(req.data)  # type: ignore[arg-type]
+        return resp
+
+    with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        runner.invoke(_app, [str(artifact_path)])
+        runner.invoke(_app, [str(zip_path)])
+
+    assert len(captured) == 2
+    assert captured[0] == captured[1]
+
+
+def test_upload_zip_no_papyri_file(tmp_path):
+    import zipfile
+
+    zip_path = tmp_path / "empty.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("readme.txt", "hello")
+
+    result = runner.invoke(_app, [str(zip_path)])
+    assert result.exit_code == 1
+    assert "no .papyri file" in result.output
+
+
+def test_upload_zip_multiple_papyri_files(tmp_path):
+    import zipfile
+
+    bundle_dir = _make_bundle(tmp_path / "mypkg_1.0")
+    artifact_bytes, _ = make_artifact_from_dir(bundle_dir)
+    zip_path = tmp_path / "multi.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("a.papyri", artifact_bytes)
+        zf.writestr("b.papyri", artifact_bytes)
+
+    result = runner.invoke(_app, [str(zip_path)])
+    assert result.exit_code == 1
+    assert "2 .papyri files" in result.output

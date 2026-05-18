@@ -53,9 +53,16 @@ def _mock_response(body: dict, status: int = 200) -> MagicMock:
     resp = MagicMock()
     resp.status = status
     # The client reads the response line-by-line via readline().
+    # Reset the buffer on each __enter__ so the same mock can be reused
+    # across multiple urlopen calls (e.g. multi-bundle tests).
     buf = io.BytesIO(raw)
     resp.readline = buf.readline
-    resp.__enter__ = lambda s: s
+
+    def _enter(s: MagicMock) -> MagicMock:
+        buf.seek(0)
+        return s
+
+    resp.__enter__ = _enter
     resp.__exit__ = MagicMock(return_value=False)
     return resp
 
@@ -67,7 +74,12 @@ def _mock_stream_response(events: list[dict], status: int = 200) -> MagicMock:
     resp.status = status
     buf = io.BytesIO(raw)
     resp.readline = buf.readline
-    resp.__enter__ = lambda s: s
+
+    def _enter(s: MagicMock) -> MagicMock:
+        buf.seek(0)
+        return s
+
+    resp.__enter__ = _enter
     resp.__exit__ = MagicMock(return_value=False)
     return resp
 

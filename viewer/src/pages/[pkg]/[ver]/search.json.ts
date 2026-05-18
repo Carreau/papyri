@@ -9,20 +9,16 @@
 import type { APIRoute } from "astro";
 import { listModules } from "../../../lib/ir-reader.ts";
 import { getBackends } from "../../../lib/backends.ts";
+import { respond } from "../../../lib/api-utils.ts";
 
 export const prerender = false;
 
 export const GET: APIRoute = async ({ params }) => {
   const { pkg, ver } = params;
   if (!pkg || !ver) {
-    return new Response(JSON.stringify({ error: "Bundle not found" }), {
-      status: 404,
-      headers: { "Content-Type": "application/json" },
-    });
+    return respond({ error: "Bundle not found" }, 404);
   }
   const { blobStore } = await getBackends();
   const qualnames = await listModules(blobStore, pkg, ver);
-  return new Response(JSON.stringify({ qualnames }), {
-    headers: { "Content-Type": "application/json" },
-  });
+  return respond({ qualnames });
 };

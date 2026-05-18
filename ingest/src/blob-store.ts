@@ -9,7 +9,7 @@
  *   FsBlobStore  — Node filesystem rooted at a directory.
  *   R2BlobStore  — Cloudflare R2 bucket binding (Workers runtime).
  *
- * Per-bundle metadata (`meta.cbor`) lives at `<module>/<version>/meta.cbor`
+ * Per-bundle metadata (`meta.msgpack`) lives at `<module>/<version>/meta.msgpack`
  * — outside the (kind,path) addressing scheme, which is why it needs its
  * own helper.
  */
@@ -36,9 +36,9 @@ export interface BlobStore {
    * list. Use coarse prefixes (`<pkg>/<ver>/`) to keep page counts bounded.
    */
   list(prefix: string): Promise<string[]>;
-  /** Per-bundle meta.cbor (outside the {kind,path} address space). */
+  /** Per-bundle meta.msgpack (outside the {kind,path} address space). */
   putMeta(module: string, version: string, bytes: Uint8Array): Promise<void>;
-  /** Read per-bundle meta.cbor. Null if absent. */
+  /** Read per-bundle meta.msgpack. Null if absent. */
   getMeta(module: string, version: string): Promise<Uint8Array | null>;
 }
 
@@ -79,14 +79,14 @@ export class FsBlobStore implements BlobStore {
   }
 
   async putMeta(module: string, version: string, bytes: Uint8Array): Promise<void> {
-    const p = join(this.root, module, version, "meta.cbor");
+    const p = join(this.root, module, version, "meta.msgpack");
     await mkdir(dirname(p), { recursive: true });
     await writeFile(p, bytes);
   }
 
   async getMeta(module: string, version: string): Promise<Uint8Array | null> {
     try {
-      const buf = await readFile(join(this.root, module, version, "meta.cbor"));
+      const buf = await readFile(join(this.root, module, version, "meta.msgpack"));
       return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
@@ -167,11 +167,11 @@ export class R2BlobStore implements BlobStore {
   }
 
   async putMeta(module: string, version: string, bytes: Uint8Array): Promise<void> {
-    await this.bucket.put(`${module}/${version}/meta.cbor`, bytes);
+    await this.bucket.put(`${module}/${version}/meta.msgpack`, bytes);
   }
 
   async getMeta(module: string, version: string): Promise<Uint8Array | null> {
-    const obj = await this.bucket.get(`${module}/${version}/meta.cbor`);
+    const obj = await this.bucket.get(`${module}/${version}/meta.msgpack`);
     if (!obj) return null;
     return new Uint8Array(await obj.arrayBuffer());
   }

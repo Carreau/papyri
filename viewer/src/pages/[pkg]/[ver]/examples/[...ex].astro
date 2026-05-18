@@ -1,5 +1,5 @@
 ---
-import { loadCbor, sectionChildren, type SectionNode } from "../../../../lib/ir-reader.ts";
+import { loadIR, sectionChildren, type SectionNode } from "../../../../lib/ir-reader.ts";
 import { getBackends } from "../../../../lib/backends.ts";
 import { buildXrefResolver } from "../../../../lib/xref.ts";
 import IrNode from "../../../../components/IrNode.astro";
@@ -15,7 +15,7 @@ const { blobStore, graphDb } = await getBackends();
 
 let section: SectionNode;
 try {
-  section = (await loadCbor(blobStore, pkg, ver, "examples", examplePath)) as SectionNode;
+  section = (await loadIR(blobStore, pkg, ver, "examples", examplePath)) as SectionNode;
 } catch {
   return new Response(`Example ${examplePath} not found`, { status: 404 });
 }

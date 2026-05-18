@@ -2,12 +2,11 @@
  * Tests for encoder.ts: decode/encode round-trip and GeneratedDoc→IngestedDoc
  * conversion.
  *
- * We test at the TypedNode / Tag level so tests run without any real gen
+ * We test at the TypedNode level so tests run without any real gen
  * bundle on disk.
  */
 
 import { describe, it, expect } from "vitest";
-import { encode as cborEncode, Tag } from "cbor-x";
 import {
   decode,
   encode,
@@ -58,43 +57,45 @@ describe("toEncodable", () => {
   it("recursively processes arrays", () => {
     const result = toEncodable([makeText("hi")]) as unknown[];
     expect(result).toHaveLength(1);
-    expect(result[0]).toBeInstanceOf(Tag);
-    const tag = result[0] as Tag;
-    expect(tag.tag).toBe(4046);
-    expect(Array.isArray(tag.value)).toBe(true);
+    // toEncodable converts TypedNodes to _PapyriExt markers; they should not
+    // be plain objects anymore.
+    expect(result[0]).not.toMatchObject({ __type: "Text" });
   });
 
-  it("converts a TypedNode to Tag(values, tag)", () => {
+  it("converts a TypedNode to an opaque non-object (ext marker)", () => {
     const node = makeText("hello");
     const result = toEncodable(node);
-    expect(result).toBeInstanceOf(Tag);
-    const tag = result as Tag;
-    expect(tag.tag).toBe(4046);
-    expect(tag.value).toEqual(["hello"]);
+    // After toEncodable, the node is no longer a TypedNode plain object.
+    expect(result).not.toMatchObject({ __type: "Text" });
+    // Encoding and decoding recovers the original node.
+    const bytes = encode(node);
+    const back = decode<TypedNode>(bytes);
+    expect(back.__type).toBe("Text");
+    expect(back.value).toBe("hello");
   });
 
-  it("converts a RefInfo to Tag with 4 fields in order", () => {
+  it("converts a RefInfo to encodable with 4 fields in order", () => {
     const node = makeRefInfo("numpy", "2.0", "module", "numpy.linspace");
-    const tag = toEncodable(node) as Tag;
-    expect(tag.tag).toBe(4000);
-    expect(tag.value).toEqual(["numpy", "2.0", "module", "numpy.linspace"]);
+    const bytes = encode(node);
+    const back = decode<TypedNode>(bytes);
+    expect(back.__type).toBe("RefInfo");
+    expect(back.module).toBe("numpy");
+    expect(back.version).toBe("2.0");
+    expect(back.kind).toBe("module");
+    expect(back.path).toBe("numpy.linspace");
   });
 
   it("passes plain objects through as maps (no tag)", () => {
     const obj = { key: "val" };
     const result = toEncodable(obj);
-    // Not a Tag, just a plain object.
-    expect(result).not.toBeInstanceOf(Tag);
+    // Plain object remains a plain object.
     expect(result).toEqual({ key: "val" });
   });
 
-  it("strips __type and __tag from plain objects (they look like TypedNodes only if both present)", () => {
-    // The _content dict has string keys, no __type.
-    const content = { Parameters: makeSection("Parameters") };
+  it("sorts plain object keys for determinism", () => {
+    const content = { b: "2", a: "1" };
     const result = toEncodable(content) as Record<string, unknown>;
-    expect(result["Parameters"]).toBeInstanceOf(Tag);
-    // __type / __tag not present in the map itself.
-    expect(Object.keys(result)).toEqual(["Parameters"]);
+    expect(Object.keys(result)).toEqual(["a", "b"]);
   });
 });
 
@@ -134,7 +135,7 @@ describe("encode + decode round-trip", () => {
     expect(back.path).toBe("numpy.linspace");
   });
 
-  it("round-trips a plain dict (CBOR map) inside a node", () => {
+  it("round-trips a plain dict (map) inside a node", () => {
     const sec = makeSection();
     const doc: TypedNode = {
       __type: "IngestedDoc",
@@ -161,25 +162,15 @@ describe("encode + decode round-trip", () => {
     expect(content["Summary"]?.__type).toBe("Section");
   });
 
-  it("decode is the inverse of the raw cbor-x encoder when no tags are used", () => {
-    // Encode a plain value with cbor-x directly (no IR tags).
-    const plain = { a: 1, b: "two", c: [true, null] };
-    const bytes = cborEncode(plain);
-    const back = decode(bytes);
-    expect(back).toEqual(plain);
+  it("encode produces deterministic bytes for the same input", () => {
+    const node = makeRefInfo("numpy", "2.0", "module", "numpy.linspace");
+    expect(encode(node)).toEqual(encode(node));
   });
 
-  it("decodes a cbor-x Tag produced outside papyri", () => {
-    // Simulate what happens when cbor-x sees a raw tagged value.
-    const tag = new Tag([["numpy", "2.0", "module", "numpy.linspace"]], 4000);
-    const bytes = cborEncode(tag);
-    const back = decode<TypedNode>(bytes);
-    // The outer Tag(4000, [...]) should be decoded as a RefInfo.
-    // Note: cbor-x encodes Tag(value, tag) — value is the array wrapping the fields.
-    // Our FIELD_ORDER expects the value to be the positional fields array directly.
-    // The raw encoding produces Tag(4000, [["numpy", ...]]) — one extra nesting.
-    // That's fine; this test just checks that unknown structures degrade gracefully.
-    expect(back.__type).toBeDefined();
+  it("dict key order does not affect encoded bytes", () => {
+    const a = encode({ ...makeSection(), options: { b: "2", a: "1" } } as unknown as TypedNode);
+    const b = encode({ ...makeSection(), options: { a: "1", b: "2" } } as unknown as TypedNode);
+    expect(a).toEqual(b);
   });
 });
 

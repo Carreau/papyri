@@ -2,9 +2,9 @@
 // into the cross-link graph store.
 //
 // The client (`papyri upload`) produces a `.papyri` artifact via
-// `papyri pack` and streams it here. The artifact is a gzipped canonical-CBOR
+// `papyri pack` and streams it here. The artifact is a gzipped msgpack
 // `Bundle` Node (tag 4070) that carries the entire DocBundle as typed fields.
-// We gunzip + cbor-decode it, then hand the in-memory Bundle to the ingest
+// We gunzip + msgpack-decode it, then hand the in-memory Bundle to the ingest
 // pipeline directly — no temporary directory, no fs round-trip.
 //
 // Backend selection happens in `lib/backends.ts`: same {blobStore, graphDb}
@@ -33,7 +33,7 @@
 //   come back as buffered JSON with the appropriate status code:
 //     401  { ok: false, error }   — missing/invalid bearer token
 //     400  { ok: false, error }   — missing body or bad Bundle metadata
-//     422  { ok: false, error }   — gunzip / cbor decode failed
+//     422  { ok: false, error }   — gunzip / msgpack decode failed
 //     500  { ok: false, error }   — backend setup failed
 //   Once the ingest stream opens we return 200 unconditionally; any
 //   downstream failure is reported as an `error` event in the body.
@@ -82,8 +82,8 @@ export const PUT: APIRoute = async ({ request }) => {
     const decompressed = new Response(
       new Blob([compressedBuffer]).stream().pipeThrough(new DecompressionStream("gzip"))
     );
-    const cborBytes = new Uint8Array(await decompressed.arrayBuffer());
-    bundle = decode<TypedNode>(cborBytes);
+    const msgpackBytes = new Uint8Array(await decompressed.arrayBuffer());
+    bundle = decode<TypedNode>(msgpackBytes);
   } catch (err) {
     return respond({ ok: false, error: `failed to decode .papyri artifact: ${err}` }, 422);
   }

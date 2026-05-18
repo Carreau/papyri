@@ -27,7 +27,6 @@
 import { readdirSync, readFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, basename, extname, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { encode as cborEncode } from "cbor-x";
 import { blake2b } from "@noble/hashes/blake2b.js";
 import Database from "better-sqlite3";
 import { decode, encode, generatedDocToIngested } from "./encoder.js";
@@ -251,7 +250,7 @@ export class Ingester {
     await this._ingestNarrativeDir(bundlePath, root, version);
     await this._ingestApiDir(bundlePath, root, version, check);
 
-    await this.blobStore.putMeta(root, version, cborEncode(metaForStore) as Uint8Array);
+    await this.blobStore.putMeta(root, version, encode(metaForStore));
 
     console.log(`Done ingesting ${basename(bundlePath)}.`);
   }
@@ -358,11 +357,7 @@ export class Ingester {
       await emit("assets", asEntries.length, asEntries.length);
     }
 
-    stage(
-      { module: root, version, kind: "meta", path: "aliases.cbor" },
-      cborEncode(aliases) as Uint8Array,
-      [],
-    );
+    stage({ module: root, version, kind: "meta", path: "aliases.msgpack" }, encode(aliases), []);
 
     let storedLogoName: string | null = null;
     if (bundle.logo) {
@@ -398,7 +393,7 @@ export class Ingester {
     }
 
     if (Array.isArray(bundle.toc) && bundle.toc.length > 0) {
-      stage({ module: root, version, kind: "meta", path: "toc.cbor" }, encode(bundle.toc), []);
+      stage({ module: root, version, kind: "meta", path: "toc.msgpack" }, encode(bundle.toc), []);
     }
 
     const apiEntries = Object.entries(bundle.api ?? {});
@@ -456,7 +451,7 @@ export class Ingester {
     for (const [k, v] of Object.entries((bundle.extra ?? {}) as Record<string, unknown>)) {
       if (!(k in metaForStore)) metaForStore[k] = v;
     }
-    await this.blobStore.putMeta(root, version, cborEncode(metaForStore) as Uint8Array);
+    await this.blobStore.putMeta(root, version, encode(metaForStore));
 
     if (bundleSizeBytes !== undefined) {
       const now = Math.floor(Date.now() / 1000);
@@ -778,8 +773,8 @@ export class Ingester {
     }
 
     await this._put(
-      { module: root, version, kind: "meta", path: "aliases.cbor" },
-      cborEncode(aliases) as Uint8Array,
+      { module: root, version, kind: "meta", path: "aliases.msgpack" },
+      encode(aliases),
       [],
     );
   }
@@ -835,10 +830,10 @@ export class Ingester {
       if (count > 0) console.log(`  docs: ${count} pages`);
     }
 
-    const tocPath = join(bundlePath, "toc.cbor");
+    const tocPath = join(bundlePath, "toc.msgpack");
     if (existsSync(tocPath)) {
       const tocRaw = new Uint8Array(readFileSync(tocPath));
-      await this._put({ module: root, version, kind: "meta", path: "toc.cbor" }, tocRaw, []);
+      await this._put({ module: root, version, kind: "meta", path: "toc.msgpack" }, tocRaw, []);
     }
   }
 
@@ -852,14 +847,14 @@ export class Ingester {
     if (!existsSync(moduleDir)) return;
 
     const files = readdirSync(moduleDir, { withFileTypes: true }).filter(
-      (e) => e.isFile() && (e.name.endsWith(".cbor") || !e.name.includes(".")),
+      (e) => e.isFile() && (e.name.endsWith(".msgpack") || !e.name.includes(".")),
     );
 
     const docs: { qa: string; ingestedDoc: TypedNode }[] = [];
     let skipped = 0;
 
     for (const f of files) {
-      const qa = f.name.endsWith(".cbor") ? f.name.slice(0, -5) : f.name;
+      const qa = f.name.endsWith(".msgpack") ? f.name.slice(0, -8) : f.name;
       if (check && !isValidQa(qa)) {
         skipped++;
         continue;

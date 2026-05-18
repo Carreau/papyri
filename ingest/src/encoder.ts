@@ -1,17 +1,19 @@
 /**
- * CBOR codec for the papyri IR.
+ * Msgpack codec for the papyri IR.
  *
  * Decoding mirrors viewer/src/lib/ir-reader.ts but adds:
  *  - local_refs field for IngestedDoc (tag 4010) and GeneratedDoc (tag 4011)
- *  - encode() to re-serialise a decoded IR tree back to CBOR bytes
+ *  - encode() to re-serialise a decoded IR tree back to msgpack bytes
  *  - generatedDocToIngested() to convert tag-4011 → tag-4010
  *
- * Field ordering must exactly match Python's get_type_hints(cls) on each Node
- * subclass (declaration order in the class body), because Node.cbor() uses
- * that ordering for the positional CBOR array.
+ * Encoding scheme: each papyri Node becomes msgpack ext type 1 whose data is
+ * `[tag_hi, tag_lo, ...inner_msgpack_bytes]` (2-byte big-endian tag followed
+ * by the msgpack-encoded positional-fields array). Field ordering must exactly
+ * match Python's get_type_hints(cls) on each Node subclass (declaration order
+ * in the class body), because that is the ordering the Python encoder uses.
  */
 
-import { Decoder, Encoder, Tag } from "cbor-x";
+import { encode as mpEncode, decode as mpDecode, ExtensionCodec } from "@msgpack/msgpack";
 
 // ---------------------------------------------------------------------------
 // TypedNode shapes (same as viewer, re-exported for consumers)
@@ -32,7 +34,7 @@ export interface UnknownNode {
 export type IRNode = TypedNode | UnknownNode;
 
 // ---------------------------------------------------------------------------
-// FIELD_ORDER — positional field lists per CBOR tag.
+// FIELD_ORDER — positional field lists per papyri tag.
 //
 // Must exactly match Python's typing.get_type_hints(cls) order.
 // Source of truth: papyri/crosslink.py (IngestedDoc), papyri/gen.py
@@ -156,12 +158,16 @@ export const FIELD_ORDER: Readonly<Record<number, { name: string; fields: readon
   },
 } as const;
 
-const TUPLE_TAG = 4444;
+// ---------------------------------------------------------------------------
+// Ext type and codec
+// ---------------------------------------------------------------------------
+
+// Single msgpack ext type code used for all papyri Node tags.
+// Ext data layout: [tag_hi, tag_lo, ...inner_msgpack_bytes]
+// where tag_hi/tag_lo encode the original papyri tag as big-endian uint16.
+const PAPYRI_EXT_TYPE = 1;
 
 function buildTyped(tag: number, value: unknown): IRNode {
-  if (tag === TUPLE_TAG) {
-    return { __type: "tuple", __tag: tag, value } as TypedNode;
-  }
   const spec = FIELD_ORDER[tag];
   if (!spec) {
     return { __type: "unknown", __tag: tag, value };
@@ -176,58 +182,45 @@ function buildTyped(tag: number, value: unknown): IRNode {
   return node;
 }
 
-// ---------------------------------------------------------------------------
-// Decode
-//
-// We do NOT use addExtension() — its `Class: Object` would fire for every
-// plain object during encoding too, corrupting CBOR maps.  Instead we decode
-// without any extensions (raw Tag objects come through as cbor-x Tag
-// instances) and then walk the result with processRaw() to convert Tags to
-// TypedNodes.
-// ---------------------------------------------------------------------------
+// Internal marker class used during the encode pre-processing pass so the
+// extension codec can identify papyri nodes without ambiguity.
+class _PapyriExt {
+  constructor(
+    public readonly tag: number,
+    public readonly fieldsBytes: Uint8Array,
+  ) {}
+}
 
-/** Recursively convert raw cbor-x Tag instances to TypedNode objects. */
-function processRaw(val: unknown): unknown {
-  if (!val || typeof val !== "object") return val;
-  // CBOR byte strings decode to Uint8Array (Buffer is a subclass). They must
-  // pass through unchanged — Object.entries() on a Buffer would expand it
-  // into a `{0: byte, 1: byte, ...}` plain object, corrupting binary fields
-  // like Bundle.assets values.
-  if (val instanceof Uint8Array) return val;
-  if (Array.isArray(val)) return val.map(processRaw);
-  if (val instanceof Tag) {
-    const tag = val.tag as number;
-    if (tag === TUPLE_TAG) {
-      // Treat Python tuples as plain arrays on the JS side.
-      return Array.isArray(val.value) ? val.value.map(processRaw) : processRaw(val.value);
+const _codec = new ExtensionCodec();
+_codec.register({
+  type: PAPYRI_EXT_TYPE,
+  // Decode: reconstruct a TypedNode from the raw ext bytes.
+  decode(data: Uint8Array): unknown {
+    const tag = ((data[0]! << 8) | data[1]!) >>> 0;
+    const fields = mpDecode(data.slice(2), { extensionCodec: _codec });
+    return buildTyped(tag, fields as unknown[]);
+  },
+  // Encode: only called for _PapyriExt marker objects produced by toEncodable().
+  encode(input: unknown): Uint8Array | null {
+    if (input instanceof _PapyriExt) {
+      const result = new Uint8Array(2 + input.fieldsBytes.length);
+      result[0] = (input.tag >> 8) & 0xff;
+      result[1] = input.tag & 0xff;
+      result.set(input.fieldsBytes, 2);
+      return result;
     }
-    const processed = processRaw(val.value);
-    return buildTyped(tag, processed);
-  }
-  // Plain object (CBOR map — e.g. _content or meta dict).
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(val as Record<string, unknown>)) {
-    out[k] = processRaw(v);
-  }
-  return out;
-}
-
-const _decoder = new Decoder({ mapsAsObjects: true });
-
-/** Decode a CBOR buffer into a decoded IR tree of TypedNode objects. */
-export function decode<T = unknown>(buf: Buffer | Uint8Array): T {
-  const raw = _decoder.decode(buf);
-  return processRaw(raw) as T;
-}
+    return null;
+  },
+});
 
 // ---------------------------------------------------------------------------
 // Encode
 // ---------------------------------------------------------------------------
 
 /**
- * Walk a decoded IR tree and convert every TypedNode back to a Tag(tag, [...])
- * that cbor-x can serialise. Plain objects (CBOR maps like _content) are
- * recursively processed but remain as plain objects.
+ * Walk a decoded IR tree and convert every TypedNode to a _PapyriExt marker
+ * that the codec will serialise as ext type 1. Plain objects (maps like
+ * _content) are sorted for deterministic output and remain as plain objects.
  */
 export function toEncodable(val: unknown): unknown {
   if (val === null || val === undefined) return null;
@@ -239,34 +232,42 @@ export function toEncodable(val: unknown): unknown {
 
   if (typeof node.__type === "string" && typeof node.__tag === "number") {
     const tag = node.__tag;
-    if (tag === TUPLE_TAG) {
-      // Decoded tuples become plain arrays; re-encode as CBOR arrays (lists).
-      return Array.isArray(node.value) ? node.value.map(toEncodable) : [];
-    }
     const spec = FIELD_ORDER[tag];
     if (spec) {
       const values = spec.fields.map((f) => toEncodable(node[f] ?? null));
-      return new Tag(values, tag);
+      const fieldsBytes = mpEncode(values, { extensionCodec: _codec, sortKeys: true });
+      return new _PapyriExt(tag, fieldsBytes);
     }
-    // Unknown node — preserve the raw value best-effort.
-    return toEncodable(node.value);
+    // Unknown node — preserve tag so the round-trip is lossless. Wrap value
+    // in an array so buildTyped(tag, fields) hands the value back unchanged.
+    const rawVal = toEncodable(node.value);
+    const inner = Array.isArray(rawVal) ? rawVal : [rawVal];
+    const fieldsBytes = mpEncode(inner, { extensionCodec: _codec, sortKeys: true });
+    return new _PapyriExt(tag, fieldsBytes);
   }
 
-  // Plain object (CBOR map): recursively process values, strip __ meta keys.
+  // Plain object (map): sort keys for determinism, strip __type/__tag metadata.
   const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(node)) {
+  for (const k of Object.keys(node).sort()) {
     if (k !== "__type" && k !== "__tag") {
-      out[k] = toEncodable(v);
+      out[k] = toEncodable(node[k]);
     }
   }
   return out;
 }
 
-const _encoder = new Encoder();
-
-/** Encode a decoded IR tree (or any CBOR-compatible value) to bytes. */
+/** Encode a decoded IR tree (or any msgpack-compatible value) to bytes. */
 export function encode(val: unknown): Uint8Array {
-  return _encoder.encode(toEncodable(val));
+  return mpEncode(toEncodable(val), { extensionCodec: _codec, sortKeys: true });
+}
+
+// ---------------------------------------------------------------------------
+// Decode
+// ---------------------------------------------------------------------------
+
+/** Decode a msgpack buffer into a decoded IR tree of TypedNode objects. */
+export function decode<T = unknown>(buf: Buffer | Uint8Array): T {
+  return mpDecode(buf, { extensionCodec: _codec }) as T;
 }
 
 // ---------------------------------------------------------------------------

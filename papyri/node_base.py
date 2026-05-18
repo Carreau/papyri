@@ -4,8 +4,6 @@ import json
 import typing
 from typing import Any
 
-import cbor2
-
 from .node_serializer import serialize as _serialize
 from .serde import deserialize, get_type_hints
 
@@ -32,11 +30,6 @@ class Node(Base):
             setattr(self, k, v)
         if hasattr(self, "_post_deserialise"):
             self._post_deserialise()
-
-    def cbor(self, encoder):
-        tag = TAG_MAP[type(self)]
-        attrs = get_type_hints(type(self))  # type: ignore[arg-type]
-        encoder.encode(cbor2.CBORTag(tag, [getattr(self, k) for k in attrs]))
 
     def __eq__(self, other):
         if not (type(self) == type(other)):
@@ -89,11 +82,6 @@ class UnserializableNode(Node):
     """
 
     _dont_serialise = True
-
-    def cbor(self, encoder):
-        raise NotImplementedError(
-            f"{type(self).__name__} must be rewritten before serialization"
-        )
 
     def to_json(self) -> bytes:
         raise NotImplementedError(

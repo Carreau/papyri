@@ -4,7 +4,7 @@ import sqlite3
 from hashlib import blake2b
 from pathlib import Path as _Path
 
-import cbor2
+import msgpack
 
 # 16-byte BLAKE2b is enough collision space for our use (page-content
 # fingerprint, not a security primitive) and noticeably faster than SHA-256.
@@ -48,19 +48,17 @@ _PRAGMAS = [
 
 
 class Path:
-    """path wrapper with .read_json / .write_json backed by CBOR"""
+    """path wrapper with .read_json / .write_json backed by msgpack"""
 
     def __init__(self, path):
         assert isinstance(path, _Path), path
         self.path = path
 
     def read_json(self):
-        with open(self.path, "rb") as f:
-            return cbor2.load(f)
+        return msgpack.unpackb(self.path.read_bytes(), raw=False)
 
     def write_json(self, data):
-        with open(self.path, "wb") as f:
-            return cbor2.dump(data, f, canonical=True)
+        self.path.write_bytes(msgpack.packb(data, use_bin_type=True))
 
     def __truediv__(self, other):
         return type(self)(self.path / other)

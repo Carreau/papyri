@@ -1,10 +1,10 @@
 """Build a deterministic ``.papyri`` artifact from a DocBundle directory.
 
-The artifact is a single ``Bundle`` Node, encoded with canonical CBOR (RFC
-8949 §4.2 deterministic encoding) and gzipped with a zero-mtime header.
-Running ``make_artifact_from_dir`` twice on the same directory must produce
-byte-identical output; that property is what makes the artifact suitable as
-a publication contract (content addressing, signing, mirroring).
+The artifact is a single ``Bundle`` Node, encoded with msgpack (sorted map
+keys for determinism) and gzipped with a zero-mtime header.  Running
+``make_artifact_from_dir`` twice on the same directory must produce
+byte-identical output; that property makes the artifact suitable as a
+publication contract (content addressing, signing, mirroring).
 """
 
 from __future__ import annotations
@@ -213,9 +213,9 @@ def read_bundle_dir(path: Path, log: Callable[[str], None] | None = None) -> Bun
 
 
 def make_artifact(bundle: Bundle, log: Callable[[str], None] | None = None) -> bytes:
-    """Encode a ``Bundle`` to canonical-CBOR + gzip bytes (deterministic)."""
+    """Encode a ``Bundle`` to msgpack + gzip bytes (deterministic)."""
     if log:
-        log("  encoding CBOR …")
+        log("  encoding msgpack …")
     cbor_bytes = encoder.encode(bundle)
     if log:
         log(f"  compressing (gzip, {len(cbor_bytes) / (1024 * 1024):.1f} MiB raw) …")

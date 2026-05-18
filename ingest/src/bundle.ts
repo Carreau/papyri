@@ -2,8 +2,8 @@
  * Explode a decoded `Bundle` Node into the per-file directory layout the
  * existing `Ingester` consumes.
  *
- * `papyri pack` writes a `.papyri` artifact = gzip(canonical-CBOR(Bundle)).
- * The viewer's upload endpoint gunzips + cbor-decodes the request body to a
+ * `papyri pack` writes a `.papyri` artifact = gzip(msgpack(Bundle)).
+ * The viewer's upload endpoint gunzips + msgpack-decodes the request body to a
  * Bundle TypedNode, then calls into here to materialise the bundle as the
  * `~/.papyri/data/<pkg>_<ver>/`-shaped directory tree the Ingester already
  * understands. That keeps the ingest pipeline format-agnostic: pack/upload
@@ -58,11 +58,11 @@ export function assertBundle(node: unknown): asserts node is BundleNode {
  * Layout produced — matches what `papyri gen` writes to disk:
  *   papyri.json           {module, version, summary?, github_slug?, tag?,
  *                           logo?, aliases?, ...extra}
- *   module/<qa>.cbor      encoded GeneratedDoc
- *   docs/<key>            encoded GeneratedDoc (no .cbor suffix, matches gen)
+ *   module/<qa>.msgpack   encoded GeneratedDoc
+ *   docs/<key>            encoded GeneratedDoc (no extension, matches gen)
  *   examples/<key>        encoded Section
  *   assets/<filename>     raw asset bytes
- *   toc.cbor              encoded list[TocTree]   (only when non-empty)
+ *   toc.msgpack           encoded list[TocTree]   (only when non-empty)
  *
  * Empty optional sections are skipped — the Ingester's existsSync checks
  * tolerate that.
@@ -89,13 +89,13 @@ export async function explodeBundleToDir(node: unknown, destDir: string): Promis
   }
   await writeFile(join(destDir, "papyri.json"), JSON.stringify(meta, null, 2));
 
-  // API — module/<qualname>.cbor
+  // API — module/<qualname>.msgpack
   const api = asRecord<TypedNode>(bundle.api);
   if (Object.keys(api).length > 0) {
     const moduleDir = join(destDir, "module");
     await mkdir(moduleDir, { recursive: true });
     for (const [qa, doc] of Object.entries(api)) {
-      await writeFile(join(moduleDir, `${qa}.cbor`), encode(doc));
+      await writeFile(join(moduleDir, `${qa}.msgpack`), encode(doc));
     }
   }
 
@@ -129,8 +129,8 @@ export async function explodeBundleToDir(node: unknown, destDir: string): Promis
     }
   }
 
-  // TOC — toc.cbor  (only when non-empty; matches gen.write_narrative)
+  // TOC — toc.msgpack  (only when non-empty; matches gen.write_narrative)
   if (Array.isArray(bundle.toc) && bundle.toc.length > 0) {
-    await writeFile(join(destDir, "toc.cbor"), encode(bundle.toc));
+    await writeFile(join(destDir, "toc.msgpack"), encode(bundle.toc));
   }
 }

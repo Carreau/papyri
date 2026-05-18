@@ -1,7 +1,7 @@
 import { extname } from "node:path";
-import { Decoder } from "cbor-x";
+import { decode as msgpackDecode } from "@msgpack/msgpack";
 import type { BlobStore } from "papyri-ingest";
-import { listFiles, listModules, loadCbor, type TypedNode } from "./ir-reader.ts";
+import { listFiles, listModules, loadIR, type TypedNode } from "./ir-reader.ts";
 import { linkForDoc, linkForExample, linkForLocalRef, linkForRef } from "./links.ts";
 
 // ---------------------------------------------------------------------------
@@ -57,12 +57,15 @@ export interface BundleNav {
 // isolate / Node process gets a clean map.
 const _navCache = new Map<string, Promise<BundleNav>>();
 
-async function readMetaCbor(blobStore: BlobStore, pkg: string, ver: string): Promise<BundleMeta> {
+async function readMetaMsgpack(
+  blobStore: BlobStore,
+  pkg: string,
+  ver: string
+): Promise<BundleMeta> {
   try {
     const raw = await blobStore.getMeta(pkg, ver);
     if (!raw) return {};
-    const dec = new Decoder({ mapsAsObjects: true });
-    const decoded = dec.decode(Buffer.from(raw));
+    const decoded = msgpackDecode(raw);
     if (decoded && typeof decoded === "object") {
       return decoded as BundleMeta;
     }
@@ -164,7 +167,7 @@ interface ReadTocResult {
 
 async function readToc(blobStore: BlobStore, pkg: string, ver: string): Promise<ReadTocResult> {
   try {
-    const raw = await loadCbor(blobStore, pkg, ver, "meta", "toc.cbor");
+    const raw = await loadIR(blobStore, pkg, ver, "meta", "toc.msgpack");
     if (Array.isArray(raw)) {
       return { toc: raw.map((n) => walkToc(n as TocTreeNode, pkg, ver)), rootHref: null };
     }
@@ -174,7 +177,7 @@ async function readToc(blobStore: BlobStore, pkg: string, ver: string): Promise<
       return { toc: t.children.length > 0 ? t.children : [t], rootHref };
     }
   } catch {
-    // No toc.cbor → empty nav.
+    // No toc.msgpack → empty nav.
   }
   return { toc: [], rootHref: null };
 }
@@ -220,7 +223,7 @@ export async function listExamples(
 
 async function buildNav(blobStore: BlobStore, pkg: string, version: string): Promise<BundleNav> {
   const [meta, tocResult, docPaths, examplePaths, qualnames] = await Promise.all([
-    readMetaCbor(blobStore, pkg, version),
+    readMetaMsgpack(blobStore, pkg, version),
     readToc(blobStore, pkg, version),
     listDocs(blobStore, pkg, version),
     listExamples(blobStore, pkg, version),

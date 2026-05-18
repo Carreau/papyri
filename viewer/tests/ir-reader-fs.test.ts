@@ -58,14 +58,14 @@ describe("fs-facing helpers", () => {
     ]);
   });
 
-  it("listModules: missing module/ -> [], files listed, .cbor stripped", async () => {
+  it("listModules: missing module/ -> [], files listed, .msgpack stripped", async () => {
     const store = new FsBlobStore(dir);
     expect(await listModules(store, "pkg", "1.0")).toEqual([]);
 
     const modDir = join(dir, "pkg", "1.0", "module");
     await mkdir(modDir, { recursive: true });
     await writeFile(join(modDir, "numpy.fft$fft"), "x");
-    await writeFile(join(modDir, "numpy.linalg$svd.cbor"), "x");
+    await writeFile(join(modDir, "numpy.linalg$svd.msgpack"), "x");
     // Subdirectories are ignored (rel.includes("/")).
     await mkdir(join(modDir, "subdir"));
     await writeFile(join(modDir, "subdir", "ignored"), "x");

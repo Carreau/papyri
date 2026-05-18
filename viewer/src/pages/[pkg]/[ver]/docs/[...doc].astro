@@ -1,5 +1,5 @@
 ---
-import { loadCbor, sectionChildren, type IngestedDoc } from "../../../../lib/ir-reader.ts";
+import { loadIR, sectionChildren, type IngestedDoc } from "../../../../lib/ir-reader.ts";
 import { buildDocPageView } from "../../../../lib/doc-page.ts";
 import { getBackends } from "../../../../lib/backends.ts";
 import { buildXrefResolver } from "../../../../lib/xref.ts";
@@ -19,7 +19,7 @@ const { blobStore, graphDb } = await getBackends();
 
 let doc: IngestedDoc;
 try {
-  doc = (await loadCbor(blobStore, pkg, ver, "docs", docPath)) as IngestedDoc;
+  doc = (await loadIR(blobStore, pkg, ver, "docs", docPath)) as IngestedDoc;
 } catch {
   return new Response(`Doc ${docPath} not found`, { status: 404 });
 }

@@ -10,7 +10,7 @@
 // this helper is the right place to hang that optimisation once it lands.
 
 import type { BlobStore } from "papyri-ingest";
-import { listModules, loadModule, loadCbor } from "./ir-reader.ts";
+import { listModules, loadModule, loadIR } from "./ir-reader.ts";
 import { listDocs, listExamples } from "./nav.ts";
 import { linkForDoc, linkForExample, linkForQualname } from "./links.ts";
 
@@ -51,7 +51,7 @@ export async function walkBundle(
   for (const docPath of docPaths) {
     let section;
     try {
-      section = await loadCbor(blobStore, pkg, ver, "docs", docPath);
+      section = await loadIR(blobStore, pkg, ver, "docs", docPath);
     } catch {
       continue;
     }
@@ -62,7 +62,7 @@ export async function walkBundle(
   for (const exPath of exPaths) {
     let section;
     try {
-      section = await loadCbor(blobStore, pkg, ver, "examples", exPath);
+      section = await loadIR(blobStore, pkg, ver, "examples", exPath);
     } catch {
       continue;
     }

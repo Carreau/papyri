@@ -57,18 +57,17 @@ Unless your use case is widely adopted it is likely not worse the complexity
 
 from __future__ import annotations
 
+import struct
 import sys
 from dataclasses import dataclass, field
 from typing import Any, TypeAlias
 
-import cbor2
+import msgpack
 
 from . import signature
-from .node_base import REV_TAG_MAP, Node, UnserializableNode, register
+from .node_base import REV_TAG_MAP, TAG_MAP, Node, UnserializableNode, register
 from .serde import get_type_hints
 from .utils import dedent_but_first
-
-register(tuple)(4444)
 
 
 @register(4003)
@@ -882,47 +881,70 @@ FlowContent: TypeAlias = (
 ListContent: TypeAlias = ListItem
 
 
+_EXT_TYPE = 1  # msgpack ext type code used for all papyri Node tags
+
+
+def _to_msgpack(obj: Any) -> Any:
+    """Recursively convert an IR tree to msgpack-native values.
+
+    Nodes become ExtType(1, pack_uint16(tag) + inner_msgpack_bytes).
+    Dicts are key-sorted for deterministic output.
+    Tuples are flattened to lists (the IR never depends on tuple identity).
+    Unregistered Node subclasses (UnserializableNode descendants) raise.
+    """
+    if isinstance(obj, Node):
+        tag = TAG_MAP.get(type(obj))
+        if tag is None:
+            raise NotImplementedError(
+                f"{type(obj).__name__} is not registered for serialization"
+            )
+        attrs = get_type_hints(type(obj))  # type: ignore[arg-type]
+        fields = [_to_msgpack(getattr(obj, k)) for k in attrs]
+        inner = msgpack.packb(fields, use_bin_type=True)
+        return msgpack.ExtType(_EXT_TYPE, struct.pack(">H", tag) + inner)
+    if isinstance(obj, dict):
+        return {k: _to_msgpack(v) for k, v in sorted(obj.items())}
+    if isinstance(obj, (list, tuple)):
+        return [_to_msgpack(v) for v in obj]
+    return obj
+
+
 class Encoder:
     def __init__(self, rev_map):
         self._rev_map = rev_map
 
-    def encode(self, obj):
-        # canonical=True sorts map keys per RFC 8949 §4.2, so the same logical
-        # input always produces byte-identical CBOR. Node fields are encoded as
-        # CBOR arrays (see node_base.Node.cbor), so attribute order is fixed by
-        # the class definition. The only dict whose iteration order is
-        # semantic (GeneratedDoc._content) has its order carried separately
-        # via _ordered_sections, so sorting its keys here loses no information.
-        return cbor2.dumps(
-            obj,
-            default=lambda encoder, obj: obj.cbor(encoder),
-            canonical=True,
-        )
+    def encode(self, obj) -> bytes:
+        # Dicts are key-sorted inside _to_msgpack so the same logical input
+        # always produces byte-identical output (same guarantee as the old
+        # canonical=True CBOR encoding). Node fields are positional arrays;
+        # their order is fixed by the class type-hint declaration order.
+        result: bytes = msgpack.packb(_to_msgpack(obj), use_bin_type=True)
+        return result
 
-    def _type_from_tag(self, tag):
-        return self._rev_map[tag.tag]
+    def decode(self, data: bytes) -> Any:
+        rev_map = self._rev_map
 
-    def _tag_hook(self, *args, **_kwargs):
-        # cbor2 has shifted calling conventions for tag_hook across major
-        # versions: 5.x calls (decoder, tag[, shareable_index]); 6.x calls
-        # (tag, immutable, shareable_index) without the decoder. We don't
-        # use any of the extras, so just pick the CBORTag out of whichever
-        # positional slot it landed in.
-        from cbor2 import CBORTag
+        def _ext_hook(code: int, raw: bytes) -> Any:
+            if code != _EXT_TYPE:
+                return msgpack.ExtType(code, raw)
+            tag = struct.unpack(">H", raw[:2])[0]
+            fields = msgpack.unpackb(
+                raw[2:], ext_hook=_ext_hook, raw=False, use_list=True
+            )
+            type_ = rev_map.get(tag)
+            if type_ is None or not isinstance(fields, list):
+                raise ValueError(f"Unknown IR tag {tag}")
+            tt = get_type_hints(type_)
+            kwds = {k: v for k, v in zip(tt, fields, strict=False)}
+            return type_(**kwds)
 
-        tag = next(a for a in args if isinstance(a, CBORTag))
-        type_ = self._type_from_tag(tag)
-        tt = get_type_hints(type_)
-        kwds = {k: t for k, t in zip(tt, tag.value, strict=False)}
-        return type_(**kwds)
+        return msgpack.unpackb(data, ext_hook=_ext_hook, raw=False, use_list=True)
 
-    def decode(self, bytes):
-        return cbor2.loads(bytes, tag_hook=self._tag_hook)
-
-    def _available_tags(self):
-        k = self._rev_map.keys()
-        mi, ma = min(k), max(k)
-        return set(range(mi, ma + 2)) - set(k)
+    def _available_tags(self) -> set[int]:
+        """Return unused tag numbers in the registered range (for debugging)."""
+        ks = [k for k in self._rev_map if isinstance(k, int)]
+        mi, ma = min(ks), max(ks)
+        return set(range(mi, ma + 2)) - set(ks)
 
 
 encoder = Encoder(REV_TAG_MAP)

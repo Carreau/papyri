@@ -7,7 +7,7 @@ import json
 import os
 from pathlib import Path
 
-import cbor2
+import msgpack
 import pytest
 
 from papyri.bundle import IR_SCHEMA_VERSION, PACK_FORMAT_VERSION, Bundle
@@ -159,33 +159,50 @@ def test_load_artifact_decodes_to_bundle():
     assert isinstance(decoded, Bundle)
 
 
-def test_artifact_is_gzipped_cbor_with_bundle_tag():
+def test_artifact_is_gzipped_msgpack_with_bundle_tag():
     """
-    Peek the artifact: gunzip, then read the first CBOR major type. It
-    should be a tag with the Bundle's registered value.
+    Peek the artifact: gunzip, then decode the outer msgpack ext type.
+    It should carry the Bundle's registered tag.
     """
     bundle = _make_bundle_node()
     data = make_artifact(bundle)
-    cbor_bytes = gzip.decompress(data)
-    obj = cbor2.loads(cbor_bytes)
-    assert isinstance(obj, cbor2.CBORTag)
-    assert obj.tag == TAG_MAP[Bundle]
+    msgpack_bytes = gzip.decompress(data)
+    ext_seen: list[msgpack.ExtType] = []
+
+    def _ext_hook(code: int, raw: bytes) -> msgpack.ExtType:
+        e = msgpack.ExtType(code, raw)
+        ext_seen.append(e)
+        return e
+
+    obj = msgpack.unpackb(msgpack_bytes, ext_hook=_ext_hook, raw=False)
+    assert isinstance(obj, msgpack.ExtType), "outer value should be an ext type"
+    import struct
+
+    tag = struct.unpack(">H", obj.data[:2])[0]
+    assert tag == TAG_MAP[Bundle]
 
 
 def test_pack_version_peek_is_cheap():
     """
     The pack/IR version is in the first two positional fields of the
-    Bundle CBOR-tagged array. A consumer that wants to gate compatibility
-    can peek without instantiating the full Bundle.
+    Bundle msgpack ext. A consumer that wants to gate compatibility can
+    peek without instantiating the full Bundle.
     """
+
     bundle = _make_bundle_node()
     data = make_artifact(bundle)
-    cbor_bytes = gzip.decompress(data)
-    raw = cbor2.loads(cbor_bytes)
-    assert isinstance(raw, cbor2.CBORTag)
-    array = raw.value
-    assert array[0] == PACK_FORMAT_VERSION
-    assert array[1] == IR_SCHEMA_VERSION
+    msgpack_bytes = gzip.decompress(data)
+
+    def _ext_hook(code: int, raw: bytes) -> msgpack.ExtType:
+        return msgpack.ExtType(code, raw)
+
+    outer = msgpack.unpackb(msgpack_bytes, ext_hook=_ext_hook, raw=False)
+    assert isinstance(outer, msgpack.ExtType)
+    # inner bytes = inner msgpack-encoded fields array
+    fields = msgpack.unpackb(outer.data[2:], ext_hook=_ext_hook, raw=False)
+    assert isinstance(fields, list)
+    assert fields[0] == PACK_FORMAT_VERSION
+    assert fields[1] == IR_SCHEMA_VERSION
 
 
 # ---------------------------------------------------------------------------

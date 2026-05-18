@@ -1,13 +1,13 @@
 """
-CBOR roundtrip tests for IR nodes.
+Msgpack roundtrip tests for IR nodes.
 
-Gen writes IR as CBOR; ingest reads it back; the viewer reads the ingest
-store (also CBOR) with its own decoder. If ``encoder.encode`` / ``decode``
+Gen writes IR as msgpack; ingest reads it back; the viewer reads the ingest
+store (also msgpack) with its own decoder. If ``encoder.encode`` / ``decode``
 lose information, every downstream step is wrong.
 
 These tests pin the bridge between the gen and render steps on the Python
 side. The viewer has its own tests for the JavaScript decoder
-(``viewer/tests/ir-reader-cbor.test.ts``); this file guarantees that the
+(``viewer/tests/ir-reader-msgpack.test.ts``); this file guarantees that the
 Python encoder produces what that decoder expects.
 """
 
@@ -189,9 +189,8 @@ def test_encoder_decode_list_of_nodes():
 
 def test_encoder_is_byte_deterministic():
     # Encoding the same logical IR twice must produce identical bytes:
-    # this is the property that makes CBOR files comparable across runs
-    # (same source -> same hash). It relies on canonical=True in
-    # Encoder.encode (RFC 8949 §4.2 sorts map keys).
+    # this is the property that makes msgpack files comparable across runs
+    # (same source -> same hash). It relies on dict key sorting in _to_msgpack.
     sec = Section(
         children=[Paragraph([Text("body")])],
         title="My Section",
@@ -203,7 +202,7 @@ def test_encoder_is_byte_deterministic():
 
 def test_encoder_dict_key_order_does_not_affect_bytes():
     # A dict-typed Node field encoded with two different insertion orders
-    # for the same key/value pairs must yield identical CBOR bytes.
+    # for the same key/value pairs must yield identical msgpack bytes.
     # We use a Directive's `options` field, which is `dict[str, str]`.
     from papyri.nodes import Directive
 

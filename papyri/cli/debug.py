@@ -96,13 +96,13 @@ def debug(
     prints the bundle context (package, version, kind) derived from the path.
 
     Tries to decode using the papyri IR tag registry first; falls back to
-    plain cbor2 if the file does not contain tagged IR objects.
+    plain msgpack if the file does not contain tagged IR objects.
 
     A ``.papyri`` artifact (output of ``papyri pack``) is also accepted:
     the artifact is gunzipped + decoded to a ``Bundle`` Node and pretty-
     printed in place of the file-tree-walk path.
     """
-    import cbor2
+    import msgpack as _msgpack
     from rich.console import Console
     from rich.pretty import pprint as rich_pprint
 
@@ -156,7 +156,7 @@ def debug(
             rich_pprint(obj)
         except Exception:
             try:
-                obj = cbor2.loads(raw)
+                obj = _msgpack.unpackb(raw, raw=False)
                 rich_pprint(obj)
             except Exception as e:
                 typer.echo(f"Failed to decode {resolved}: {e}", err=True)

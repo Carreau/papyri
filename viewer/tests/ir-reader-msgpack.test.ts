@@ -2,49 +2,62 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach } from "vitest";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Encoder, Tag } from "cbor-x";
 import { FsBlobStore } from "papyri-ingest";
+import { encode } from "../../ingest/src/encoder.ts";
+import type { TypedNode } from "../../ingest/src/encoder.ts";
 
-const tg = (tag: number, fields: unknown[]) => new Tag(fields, tag);
-const enc = new Encoder({ useRecords: false });
+// Build IngestedDoc fixtures using the papyri encoder so the test verifies
+// the full encode→store→loadModule decode round-trip.
 
-// IngestedDoc (4010) fields, in declared order (see ir-reader FIELD_ORDER).
-const mkDoc = (qa: string, o: Record<string, unknown> = {}) =>
-  tg(4010, [
-    {},
-    [],
-    o.item_file ?? null,
-    o.item_line ?? null,
-    o.item_type ?? null,
-    [],
-    null,
-    [],
-    o.signature ?? null,
-    [],
-    qa,
-    o.arbitrary ?? [],
-  ]);
+const mkDoc = (qa: string, o: Record<string, unknown> = {}): TypedNode => ({
+  __type: "IngestedDoc",
+  __tag: 4010,
+  _content: {},
+  _ordered_sections: [],
+  item_file: (o.item_file as string | null) ?? null,
+  item_line: (o.item_line as number | null) ?? null,
+  item_type: (o.item_type as string | null) ?? null,
+  aliases: [],
+  example_section_data: null,
+  see_also: [],
+  signature: (o.signature as TypedNode | null) ?? null,
+  references: null,
+  qa,
+  arbitrary: (o.arbitrary as unknown[]) ?? [],
+  local_refs: [],
+});
 
-const bytesFull = enc.encode(
+const bytesFull = encode(
   mkDoc("pkg.mod:foo", {
     item_file: "foo.py",
     item_line: 42,
     item_type: "function",
-    signature: tg(4029, ["function", [], tg(4031, []), "foo"]),
-  })
+    signature: {
+      __type: "SignatureNode",
+      __tag: 4029,
+      kind: "function",
+      parameters: [],
+      return_annotation: { __type: "Empty", __tag: 4031 },
+      target_name: "foo",
+    },
+  }),
 );
-const bytesBar = enc.encode(mkDoc("pkg:bar"));
-const bytesUnknown = enc.encode(mkDoc("pkg:qux", { arbitrary: [tg(9999, ["mystery"])] }));
+const bytesBar = encode(mkDoc("pkg:bar"));
+const bytesUnknown = encode(
+  mkDoc("pkg:qux", {
+    arbitrary: [{ __type: "unknown", __tag: 9999, value: ["mystery"] }],
+  }),
+);
 
 let loadModule: typeof import("../src/lib/ir-reader.ts").loadModule;
 beforeAll(async () => {
   ({ loadModule } = await import("../src/lib/ir-reader.ts"));
 });
 
-describe("loadModule (CBOR roundtrip)", () => {
+describe("loadModule (msgpack roundtrip)", () => {
   let dir: string;
   beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), "papyri-viewer-cbor-"));
+    dir = await mkdtemp(join(tmpdir(), "papyri-viewer-msgpack-"));
   });
   afterEach(async () => {
     await rm(dir, { recursive: true, force: true });
@@ -60,7 +73,7 @@ describe("loadModule (CBOR roundtrip)", () => {
   };
 
   it("decodes an IngestedDoc (tag 4010) with nested tagged children", async () => {
-    const store = await writeBlob("pkg.mod:foo", bytesFull);
+    const store = await writeBlob("pkg.mod:foo.msgpack", bytesFull);
     const out = await loadModule(store, "pkg", "1.0", "pkg.mod:foo");
     expect(out.__type).toBe("IngestedDoc");
     expect(out.__tag).toBe(4010);
@@ -77,13 +90,13 @@ describe("loadModule (CBOR roundtrip)", () => {
     expect(s.return_annotation.__type).toBe("Empty");
   });
 
-  it("falls back to .cbor when the bare filename is absent", async () => {
-    const store = await writeBlob("pkg:bar.cbor", bytesBar);
+  it("falls back to bare filename when .msgpack is absent", async () => {
+    const store = await writeBlob("pkg:bar", bytesBar);
     expect((await loadModule(store, "pkg", "1.0", "pkg:bar")).qa).toBe("pkg:bar");
   });
 
   it("wraps unregistered inner tags as UnknownNode", async () => {
-    const store = await writeBlob("pkg:qux", bytesUnknown);
+    const store = await writeBlob("pkg:qux.msgpack", bytesUnknown);
     const out = await loadModule(store, "pkg", "1.0", "pkg:qux");
     const arb = out.arbitrary as unknown[];
     expect(arb).toHaveLength(1);

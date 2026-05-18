@@ -227,9 +227,9 @@ export class GraphStore {
     tx();
   }
 
-  /** Write a per-bundle meta.cbor (not tracked in the nodes table). */
+  /** Write a per-bundle meta.msgpack (not tracked in the nodes table). */
   putMeta(module: string, version: string, data: Uint8Array): void {
-    const metaPath = join(this.root, module, version, "meta.cbor");
+    const metaPath = join(this.root, module, version, "meta.msgpack");
     mkdirSync(dirname(metaPath), { recursive: true });
     writeFileSync(metaPath, data);
   }

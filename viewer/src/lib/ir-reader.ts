@@ -6,10 +6,10 @@
 // helpers used by every page; backend selection happens in
 // `viewer/src/lib/backends.ts`.
 //
-// The on-disk encoding is CBOR with papyri's tag-numbered IR. We delegate
-// decoding to `papyri-ingest`'s `decode()`, which uses a private cbor-x
-// Decoder + post-walk so the global cbor-x extension registry isn't
-// shared with the SSR ingest encoder running in the same process.
+// The on-disk encoding is msgpack with papyri's tag-numbered IR. We delegate
+// decoding to `papyri-ingest`'s `decode()`, which uses a private msgpack
+// ExtensionCodec so the global codec instance isn't shared with the SSR
+// ingest encoder running in the same process.
 
 import { decode as decodeIR, type BlobStore, type GraphDb } from "papyri-ingest";
 import { IR_TYPE_NAMES } from "./ir-types.ts";
@@ -95,7 +95,7 @@ export async function listModules(
   for (const k of keys) {
     const rel = k.slice(prefix.length);
     if (!rel || rel.includes("/")) continue;
-    out.push(rel.endsWith(".cbor") ? rel.slice(0, -5) : rel);
+    out.push(rel.endsWith(".msgpack") ? rel.slice(0, -8) : rel);
   }
   out.sort();
   return out;
@@ -192,8 +192,8 @@ export interface IngestedDoc {
   arbitrary: SectionNode[];
 }
 
-/** Decode raw CBOR bytes (re-export of papyri-ingest's decoder). */
-export function decodeCborBytes<T = unknown>(bytes: Uint8Array | Buffer): T {
+/** Decode raw msgpack bytes (re-export of papyri-ingest's decoder). */
+export function decodeIRBytes<T = unknown>(bytes: Uint8Array | Buffer): T {
   return decodeIR<T>(bytes);
 }
 
@@ -208,16 +208,16 @@ export async function loadModule(
   version: string,
   qualname: string
 ): Promise<IngestedDoc> {
-  // Ingester writes `module/<qualname>` (no .cbor) on the gen→ingest path,
-  // but older bundles or alternate writers may have used `.cbor`. Try both.
-  let bytes = await blobStore.get({ module: pkg, version, kind: "module", path: qualname });
+  // Ingester writes `module/<qualname>.msgpack`; try bare qualname as fallback
+  // for manually written or legacy stores.
+  let bytes = await blobStore.get({
+    module: pkg,
+    version,
+    kind: "module",
+    path: `${qualname}.msgpack`,
+  });
   if (!bytes) {
-    bytes = await blobStore.get({
-      module: pkg,
-      version,
-      kind: "module",
-      path: `${qualname}.cbor`,
-    });
+    bytes = await blobStore.get({ module: pkg, version, kind: "module", path: qualname });
   }
   if (!bytes) throw new Error(`module not found: ${pkg}/${version}/${qualname}`);
   const obj = decodeIR<IRNode>(bytes);
@@ -227,8 +227,8 @@ export async function loadModule(
   throw new Error(`unexpected decode result for ${qualname}: ${typeof obj}`);
 }
 
-/** Generic loader: read `<pkg>/<ver>/<kind>/<path>` and CBOR-decode it. */
-export async function loadCbor<T = unknown>(
+/** Generic loader: read `<pkg>/<ver>/<kind>/<path>` and msgpack-decode it. */
+export async function loadIR<T = unknown>(
   blobStore: BlobStore,
   pkg: string,
   version: string,

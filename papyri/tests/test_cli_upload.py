@@ -5,12 +5,13 @@ from __future__ import annotations
 import gzip
 import io
 import json
+import struct
 import urllib.error
 import urllib.request
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import cbor2
+import msgpack
 import typer
 from typer.testing import CliRunner
 
@@ -180,9 +181,14 @@ def test_upload_sends_a_papyri_artifact(tmp_path):
     assert captured, "urlopen was never called"
     data = captured[0]
     assert data[:2] == b"\x1f\x8b", "expected gzip magic"
-    decoded = cbor2.loads(gzip.decompress(data))
-    assert isinstance(decoded, cbor2.CBORTag)
-    assert decoded.tag == TAG_MAP[Bundle]
+
+    def _ext_hook(code: int, raw: bytes) -> msgpack.ExtType:
+        return msgpack.ExtType(code, raw)
+
+    outer = msgpack.unpackb(gzip.decompress(data), ext_hook=_ext_hook, raw=False)
+    assert isinstance(outer, msgpack.ExtType), "expected outer msgpack ext type"
+    tag = struct.unpack(">H", outer.data[:2])[0]
+    assert tag == TAG_MAP[Bundle]
 
 
 def test_upload_dir_and_artifact_send_identical_bytes(tmp_path):

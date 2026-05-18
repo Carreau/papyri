@@ -59,7 +59,7 @@ function buildApiTreeItems(qualnames: string[], active: string | undefined): Api
 
 const apiTreeItems = buildApiTreeItems(nav.qualnames, activeQualname);
 
-// The toc comes from meta/toc.cbor. When it's empty we still show the flat
+// The toc comes from meta/toc.msgpack. When it's empty we still show the flat
 // `docs` list below so the section isn't an awkward empty stub.
 const hasToc = nav.toc.length > 0;
 

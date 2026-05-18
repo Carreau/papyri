@@ -53,8 +53,8 @@ class _OrderedDictProxy:
     mapping: dict[str, Any]
 
     def __init__(self, ordering: list[str], mapping: dict[str, Any]):
-        # cbor2 6.x may hand us a tuple (immutable mode) where we expect a
-        # list; normalise so mutating ops still work.
+        # msgpack decodes arrays as lists, but guard against tuples from other
+        # callers so mutating ops still work.
         if isinstance(ordering, tuple):
             ordering = list(ordering)
         self.ordering = ordering

@@ -1,0 +1,26 @@
+.git
+.github
+
+# Local node_modules — always rebuilt inside Docker.
+node_modules
+*/node_modules
+
+# Build outputs — rebuilt inside Docker.
+viewer/dist
+ingest/dist
+viewer/.wrangler
+
+# Python artefacts.
+papyri/__pycache__
+**/__pycache__
+**/*.pyc
+.pytest_cache
+**/*.egg-info
+.venv
+
+# Dev-only files.
+.dev.vars
+*.db
+draft/
+docs/
+assets/

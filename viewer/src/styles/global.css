@@ -1202,3 +1202,44 @@ section.backrefs ul.qualnames {
   font-weight: 600;
   margin-bottom: 4px;
 }
+
+/* --------------------------------------------------------------------------
+ * Prev / next navigation for narrative doc pages
+ * -------------------------------------------------------------------------- */
+.doc-page-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.9rem;
+}
+.doc-page-nav--top {
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.doc-page-nav--bottom {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+.doc-page-nav-prev,
+.doc-page-nav-next {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  color: var(--accent);
+  text-decoration: none;
+  max-width: 45%;
+}
+.doc-page-nav-prev:hover,
+.doc-page-nav-next:hover {
+  text-decoration: underline;
+}
+.doc-page-nav-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.doc-page-nav-arrow {
+  flex-shrink: 0;
+}

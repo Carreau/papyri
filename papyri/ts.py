@@ -19,6 +19,8 @@ from .nodes import (
     Emphasis,
     FieldList,
     FieldListItem,
+    Footnote,
+    FootnoteReference,
     InlineCode,
     InlineRole,
     ListItem,
@@ -854,9 +856,15 @@ class TSVisitor:
         return [directive]
 
     def visit_footnote_reference(self, node):
-        # TODO
-        # assert False, self.as_text(node)
-        return []
+        # Inline footnote reference, RST forms ``[1]_``, ``[#]_``,
+        # ``[#name]_``, ``[*]_``.
+        text = self.as_text(node).strip()
+        if text.startswith("[") and text.endswith("]_"):
+            label = text[1:-2]
+        else:
+            # Defensive fallback for grammar shapes we haven't seen.
+            label = text.strip("[]_")
+        return [FootnoteReference(label=label)]
 
     def visit_emphasis(self, node):
         # TODO
@@ -885,10 +893,41 @@ class TSVisitor:
         return [Strong([Text(self.as_text(node)[2:-2])])]
 
     def visit_footnote(self, node):
-        # TODO
-        # that is actually used for references
-        # assert False, self.as_text(node)
-        return [Unimplemented("footnote", self.as_text(node))]
+        # RST block footnote: ``.. [LABEL] body text`` where LABEL is one of
+        # a number (``1``), ``#`` (auto-numbered), ``#name`` (auto-numbered
+        # named), or ``*`` (auto-symbol).
+        #
+        # The tree-sitter grammar exposes the label and body as named child
+        # nodes (``label`` and ``body``); fall back to text parsing if the
+        # shape is unexpected.
+        by_type = {c.type: c for c in node.children}
+        label_node = by_type.get("label")
+        body_node = by_type.get("body")
+        if label_node is not None:
+            label_text = self.as_text(label_node).strip()
+            if label_text.startswith("[") and label_text.endswith("]"):
+                label = label_text[1:-1]
+            else:
+                label = label_text.strip("[]")
+            if body_node is not None:
+                children = self.visit(body_node)
+                paragraphs = [c for c in children if isinstance(c, Paragraph)]
+                if not paragraphs:
+                    paragraphs = [Paragraph([])]
+                return [Footnote(label=label, children=paragraphs)]
+            return [Footnote(label=label, children=[Paragraph([])])]
+        # Fallback: best-effort string parse of the raw text.
+        text = self.as_text(node).strip()
+        if text.startswith(".. ["):
+            rest = text[3:]
+            try:
+                close = rest.index("]")
+                label = rest[1:close]
+                body = " ".join(rest[close + 1 :].split()).strip()
+                return [Footnote(label=label, children=[Paragraph([Text(body)])])]
+            except ValueError:
+                pass
+        return [Unimplemented("footnote", text)]
 
     def visit_escape_sequence(self, node):
         # RST escape: backslash followed by the escaped character.

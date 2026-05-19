@@ -29,6 +29,7 @@ from .nodes import (
     Code,
     CrossRef,
     Directive,
+    FootnoteReference,
     InlineCode,
     InlineMath,
     InlineRole,
@@ -327,6 +328,7 @@ class TreeVisitor:
                 ThematicBreak,
                 SubstitutionDef,
                 CitationReference,
+                FootnoteReference,
             ),
         ):
             return {}
@@ -393,6 +395,7 @@ class TreeReplacer:
                 "Unimplemented",
                 "CrossRef",
                 "CitationReference",
+                "FootnoteReference",
             ]:
                 return [node]
             else:

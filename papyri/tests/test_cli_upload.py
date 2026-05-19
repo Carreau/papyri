@@ -44,12 +44,12 @@ def _make_bundle(root: Path, pkg: str = "mypkg", version: str = "1.0") -> Path:
 def _mock_response(body: dict, status: int = 200) -> MagicMock:
     """Mock an HTTPResponse for ``papyri upload``'s NDJSON streaming path.
 
-    Single-event responses become a one-line stream: the legacy
-    ``{"ok": True, "pkg": ..., "version": ...}`` shape and the new
-    ``{"event": "done", "pkg": ..., "version": ...}`` shape both work
-    via the client's forward-compatible parser.
+    The supplied ``body`` is emitted as a single ``done`` event on the
+    NDJSON stream — enough to drive the upload's success summary in
+    tests that don't care about per-phase progress.
     """
-    raw = json.dumps(body).encode() + b"\n"
+    event = {"event": "done", **body}
+    raw = json.dumps(event).encode() + b"\n"
     resp = MagicMock()
     resp.status = status
     # The client reads the response line-by-line via readline().

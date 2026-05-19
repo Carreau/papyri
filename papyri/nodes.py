@@ -59,7 +59,7 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass, field
-from typing import Any, TypeAlias
+from typing import Any, ClassVar, TypeAlias
 
 import cbor2
 
@@ -361,8 +361,16 @@ class Admonition(Node):
     )
 
 
-@register(4060)
 class Comment(Node):
+    """RST comment node.
+
+    Kept in the Python IR and JSON serialization so post-processing tools
+    can see them. Stripped during CBOR pack (see ``Node.cbor``) so they
+    never appear in published bundles — hence no ``@register`` tag.
+    """
+
+    _drop_in_cbor: ClassVar[bool] = True
+
     type = "comment"
     value: str
 

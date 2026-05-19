@@ -125,7 +125,6 @@ export const FIELD_ORDER: Readonly<Record<number, { name: string; fields: readon
   4057: { name: "InlineMath", fields: ["value"] },
   4058: { name: "Math", fields: ["value"] },
   4059: { name: "Blockquote", fields: ["children"] },
-  4060: { name: "Comment", fields: ["value"] },
   4061: { name: "Target", fields: ["label"] },
   4062: { name: "Image", fields: ["url", "alt"] },
   4063: { name: "CitationReference", fields: ["label"] },

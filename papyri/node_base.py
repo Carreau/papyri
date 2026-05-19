@@ -36,7 +36,16 @@ class Node(Base):
     def cbor(self, encoder):
         tag = TAG_MAP[type(self)]
         attrs = get_type_hints(type(self))  # type: ignore[arg-type]
-        encoder.encode(cbor2.CBORTag(tag, [getattr(self, k) for k in attrs]))
+        values = []
+        for k in attrs:
+            v = getattr(self, k)
+            # Comment nodes are kept in the Python IR / JSON so downstream
+            # tools can post-process them, but they have no semantic content
+            # and must not appear in the packed CBOR bundle.
+            if isinstance(v, list):
+                v = [x for x in v if not getattr(type(x), "_drop_in_cbor", False)]
+            values.append(v)
+        encoder.encode(cbor2.CBORTag(tag, values))
 
     def __eq__(self, other):
         if not (type(self) == type(other)):

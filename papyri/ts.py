@@ -872,9 +872,10 @@ class TSVisitor:
         ]
 
     def visit_comment(self, node):
-        # TODO
+        # Comments survive into the JSON IR so downstream tooling can
+        # post-process them. They are stripped during CBOR pack — see
+        # ``Node.cbor`` — and never appear in published bundles.
         return [Comment(self.as_text(node))]
-        # raise VisitCommentNotImplementedError()
 
     def visit_strong(self, node):
         return [Strong([Text(self.as_text(node)[2:-2])])]

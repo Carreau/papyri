@@ -49,25 +49,37 @@ def _mock_response(body: dict, status: int = 200) -> MagicMock:
     ``{"event": "done", "pkg": ..., "version": ...}`` shape both work
     via the client's forward-compatible parser.
     """
-    line = json.dumps(body).encode() + b"\n"
+    raw = json.dumps(body).encode() + b"\n"
     resp = MagicMock()
-    resp.read.return_value = line
     resp.status = status
-    # The client iterates the response file-like to read NDJSON lines.
-    resp.__iter__ = lambda s: iter([line])
-    resp.__enter__ = lambda s: s
+    # The client reads the response line-by-line via readline().
+    # Reset the buffer on each __enter__ so the same mock can be reused
+    # across multiple urlopen calls (e.g. multi-bundle tests).
+    buf = io.BytesIO(raw)
+    resp.readline = buf.readline
+
+    def _enter(s: MagicMock) -> MagicMock:
+        buf.seek(0)
+        return s
+
+    resp.__enter__ = _enter
     resp.__exit__ = MagicMock(return_value=False)
     return resp
 
 
 def _mock_stream_response(events: list[dict], status: int = 200) -> MagicMock:
     """Mock an NDJSON-streaming HTTPResponse: one event per yielded line."""
-    lines = [json.dumps(e).encode() + b"\n" for e in events]
+    raw = b"".join(json.dumps(e).encode() + b"\n" for e in events)
     resp = MagicMock()
-    resp.read.return_value = b"".join(lines)
     resp.status = status
-    resp.__iter__ = lambda s: iter(lines)
-    resp.__enter__ = lambda s: s
+    buf = io.BytesIO(raw)
+    resp.readline = buf.readline
+
+    def _enter(s: MagicMock) -> MagicMock:
+        buf.seek(0)
+        return s
+
+    resp.__enter__ = _enter
     resp.__exit__ = MagicMock(return_value=False)
     return resp
 

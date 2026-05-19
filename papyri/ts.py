@@ -978,25 +978,50 @@ def _find_error_nodes(node) -> list:
     return results
 
 
+def _byte_offset_to_line(text: bytes, byte_offset: int) -> int:
+    """Convert a byte offset into a 1-based line number in `text`."""
+    return text.count(b"\n", 0, max(0, byte_offset)) + 1
+
+
+def _visitor_failure_byte(exc: BaseException) -> int | None:
+    """Innermost byte offset from a visitor frame's `node` local, if any."""
+    tb = exc.__traceback__
+    byte: int | None = None
+    while tb is not None:
+        node = tb.tb_frame.f_locals.get("node")
+        start_byte = getattr(node, "start_byte", None)
+        if isinstance(start_byte, int):
+            byte = start_byte
+        tb = tb.tb_next
+    return byte
+
+
 def parse(text: bytes, qa=None) -> list[Section]:
     """
     Parse text using Tree sitter RST, and return a list of serialised section I guess ?
     """
 
     tree = parser.parse(text)
-    #    for err in _find_error_nodes(tree.root_node):
-    #        log.error(
-    #            "Tree-sitter ERROR node at %s..%s in (%s): %r",
-    #            err.start_point,
-    #            err.end_point,
-    #            qa,
-    #            text[err.start_byte : err.end_byte].decode(errors="replace"),
-    #        )
     root = Node(tree.root_node)
-    res = TSVisitor(text, qa).visit_document(root)
+    try:
+        res = TSVisitor(text, qa).visit_document(root)
+    except errors.SpaceAfterBlockDirectiveError:
+        # Deliberate semantic error raised by the visitor; callers (and tests)
+        # rely on the specific type, so don't wrap it.
+        raise
+    except Exception as e:
+        byte = _visitor_failure_byte(e)
+        if byte is None:
+            errs = _find_error_nodes(tree.root_node)
+            if errs:
+                byte = errs[0].start_byte
+        line = _byte_offset_to_line(text, byte) if byte is not None else 1
+        raise TreeSitterParseError(str(e), line=line) from e
     ns = nest_sections(res)
     return ns
 
 
 class TreeSitterParseError(Exception):
-    pass
+    def __init__(self, message: str = "", *, line: int = 1):
+        super().__init__(message)
+        self.line = line

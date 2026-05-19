@@ -22,6 +22,42 @@ def dotdotcount(path):
 
 
 def _tree(current_path, unnest, counter, depth=0) -> dict:
+    """Recursively build a nested toctree dict rooted at ``current_path``.
+
+    Walks the flat toctree adjacency map ``unnest`` (``node -> list of child
+    references as written in the source``) and returns a nested
+    ``{child_path: {grandchild_path: {...}}}`` dict describing the tree
+    reachable from ``current_path``.
+
+    Path model:
+        Nodes are addressed with ``:``-separated keys (e.g.
+        ``pkg:sub:page``); the last segment is the page name and the prefix
+        is its "directory". Child references in ``unnest`` are written in
+        source form using ``/`` and may be relative (``../sibling``,
+        ``sub/page``). For each child reference this function:
+
+        - drops empty entries,
+        - skips absolute (``/...``) and external (``https://``) refs,
+        - rewrites a trailing ``/`` to ``/index`` (Sphinx directory-index
+          convention),
+        - resolves ``..`` segments against ``current_path``'s directory
+          via :func:`dotdotcount`,
+        - strips a trailing ``.rst``,
+        - then recurses.
+
+    Side effects / bookkeeping:
+        - ``counter`` maps every known node to a visit count. It is
+          incremented for ``current_path`` on entry, so callers can detect
+          nodes referenced 0 times (orphans) or >1 times (multi-parent).
+          A reference whose resolved path is not in ``counter`` is treated
+          as dangling and skipped with a printed warning.
+        - Asserts that the resolved child path is neither ``current_path``
+          itself nor already present among siblings — i.e. the input must
+          describe a tree, not a DAG with duplicate edges.
+
+    ``depth`` is informational only (used by the commented-out debug
+    prints); it does not affect the result.
+    """
     if current_path not in counter:
         print("Warning, ", current_path, "not in Counter")
         counter[current_path] = 0
@@ -50,9 +86,27 @@ def _tree(current_path, unnest, counter, depth=0) -> dict:
 
         if p.endswith(".rst"):
             p = p[:-4]
-        assert p != current_path
+        assert p != current_path, (
+            f"toctree self-reference: {current_path!r} lists {cp!r} "
+            f"which resolves back to itself"
+        )
         # print(' '*depth*4,cp, '->', p)
-        assert p not in children
+        if p in children:
+            # Sphinx allows the same page to appear in multiple `.. toctree::`
+            # directives on a single parent — typically one visible toctree
+            # plus a separate `:hidden:` toctree used only to define
+            # prev/next ordering. We only model tree shape here, so the
+            # second occurrence is redundant: keep the first and skip.
+            log.warning(
+                "toc: %r is listed more than once under %r "
+                "(reference %r); keeping the first occurrence and "
+                "ignoring the duplicate. This is usually a hidden "
+                "toctree used for prev/next ordering in Sphinx.",
+                p,
+                current_path,
+                cp,
+            )
+            continue
         if p not in counter:
             print("skip Path", p, "in", current_path, repr(cp))
             continue

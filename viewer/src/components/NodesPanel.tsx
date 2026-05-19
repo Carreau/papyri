@@ -35,7 +35,19 @@ interface Props {
   nodetype?: string;
 }
 
-const SORTED_TYPES = [...IR_TYPE_NAMES].sort();
+const EXCLUDED = new Set([
+  "AdmonitionTitle",
+  "DefListItem",
+  "DocParam",
+  "FieldListItem",
+  "ListItem",
+  "LocalRef",
+  "RefInfo",
+  "SeeAlsoItem",
+  "TocTree",
+  "ThematicBreak",
+]);
+const SORTED_TYPES = [...IR_TYPE_NAMES].filter((t) => !EXCLUDED.has(t)).sort();
 
 export default function NodesPanel({ pkg, ver, nodetype }: Props) {
   const [data, setData] = useState<ApiResponse | null>(null);

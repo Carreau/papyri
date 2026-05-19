@@ -44,17 +44,9 @@ export function keyStr(k: Key): string {
 // path applies the same files via `wrangler d1 migrations apply`
 // (`viewer/wrangler.toml` points `migrations_dir = "../ingest/migrations"`).
 //
-// Two consumers, two ways the schema can reach the GraphStore constructor:
-//
-//   1. The `papyri-ingest` CLI runs from `dist/cli.js` → `dist/graphstore.js`.
-//      `import.meta.url` points at the actual file on disk, so the lazy
-//      disk loader below resolves `../migrations/*.sql` correctly.
-//
-//   2. The viewer's SSR bundle is produced by Vite, which inlines
-//      `graphstore.ts` into `dist/server/chunks/<hash>.mjs`. There the
-//      `import.meta.url` is a chunk path with no sibling `migrations/`
-//      dir. To handle that, callers can pass `schemaSql` explicitly
-//      (e.g. via Vite's `?raw` import) and skip the disk loader.
+// The `papyri-ingest` CLI runs from `dist/cli.js` → `dist/graphstore.js`.
+// `import.meta.url` points at the actual file on disk, so the lazy disk
+// loader below resolves `../migrations/*.sql` correctly.
 // ---------------------------------------------------------------------------
 
 function migrationsDir(): string {
@@ -102,22 +94,11 @@ const PRAGMAS = [
 // GraphStore
 // ---------------------------------------------------------------------------
 
-export interface GraphStoreOptions {
-  /**
-   * Schema SQL applied when the SQLite file is first created. Combined
-   * `migrations/*.sql` content; statements are split on `;` and exec'd
-   * in order. Pass this when the caller's runtime can't reach the
-   * on-disk migrations dir — e.g. a Vite-bundled SSR worker. The CLI
-   * can omit it; the disk loader handles `dist/cli.js` correctly.
-   */
-  schemaSql?: string;
-}
-
 export class GraphStore {
   private db: DatabaseType.Database;
   private root: string;
 
-  constructor(ingestDir: string, options: GraphStoreOptions = {}) {
+  constructor(ingestDir: string) {
     this.root = ingestDir;
     const dbPath = join(ingestDir, "papyri.db");
     const isNew = !existsSync(dbPath);
@@ -127,7 +108,7 @@ export class GraphStore {
     for (const p of PRAGMAS) this.db.exec(p);
 
     if (isNew) {
-      const sql = options.schemaSql ?? loadSchemaFromDisk();
+      const sql = loadSchemaFromDisk();
       for (const stmt of splitStatements(sql)) this.db.exec(stmt);
     }
   }

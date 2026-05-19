@@ -190,9 +190,6 @@ def upload(
                 # Read line-by-line so progress events surface in real
                 # time on the terminal — important when the worker would
                 # otherwise look hung for tens of seconds.
-                # Non-streaming servers (older deploys, or accidentally
-                # buffered ones) still work: the whole body arrives as a
-                # single line and we treat it as a `done` event below.
                 final: dict[str, object] | None = None
                 err_msg: str | None = None
                 while True:
@@ -204,15 +201,9 @@ def upload(
                         continue
                     try:
                         event = json.loads(line)
-                    except json.JSONDecodeError:
-                        # Likely the legacy buffered shape: a single
-                        # JSON object spanning the whole body. Fall back
-                        # to slurping and parsing once.
-                        try:
-                            event = json.loads(b"".join([line, resp.read()]))
-                        except json.JSONDecodeError as e:
-                            err_msg = f"unparseable server response: {e}"
-                            break
+                    except json.JSONDecodeError as e:
+                        err_msg = f"unparseable server response: {e}"
+                        break
                     kind = event.get("event")
                     elapsed = event.get("elapsed_s")
                     since = event.get("since_last_ms")
@@ -240,9 +231,6 @@ def upload(
                         final = event
                     elif kind == "error":
                         err_msg = str(event.get("error", "ingest failed"))
-                    elif kind is None and "pkg" in event and "version" in event:
-                        # Legacy non-streaming success shape.
-                        final = event
                     # Unknown event kinds: ignore forward-compatibly.
             elapsed = time.monotonic() - t0
             if err_msg is not None:

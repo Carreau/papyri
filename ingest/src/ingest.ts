@@ -8,8 +8,7 @@
  *
  * Two backends are supported:
  *   • Node fs + better-sqlite3 — default. The CLI and the Node-adapter
- *     viewer use this path; the constructor builds them from `ingestDir` /
- *     `schemaSql` for backwards compat.
+ *     viewer use this path; the constructor builds them from `ingestDir`.
  *   • Cloudflare R2 + D1 — explicit. The Workers-adapter viewer passes
  *     pre-built backends via the `backends` option so the same Ingester
  *     code runs unchanged.
@@ -117,17 +116,14 @@ function splitStatements(sql: string): string[] {
  * db). Applies migrations on first init. Used by `Ingester` when the
  * caller provides `ingestDir` instead of explicit backends.
  */
-function openNodeBackends(
-  ingestDir: string,
-  schemaSql?: string,
-): { blobStore: BlobStore; graphDb: GraphDb } {
+function openNodeBackends(ingestDir: string): { blobStore: BlobStore; graphDb: GraphDb } {
   mkdirSync(ingestDir, { recursive: true });
   const dbPath = join(ingestDir, "papyri.db");
   const isNew = !existsSync(dbPath);
   const db = new Database(dbPath);
   for (const p of PRAGMAS) db.prepare(p).run();
   if (isNew) {
-    const sql = schemaSql ?? loadSchemaFromDisk();
+    const sql = loadSchemaFromDisk();
     for (const stmt of splitStatements(sql)) db.prepare(stmt).run();
   }
   return {
@@ -173,13 +169,6 @@ export interface IngestOptions {
    */
   ingestDir?: string;
   /**
-   * Schema SQL applied to a freshly created papyri.db. Forwarded from the
-   * Vite-bundled SSR endpoint (which embeds the migrations file via
-   * `?raw`); the CLI can leave it unset and rely on the on-disk migrations
-   * dir. Ignored when `backends` is set.
-   */
-  schemaSql?: string;
-  /**
    * Pre-built async backends. Pass these in environments where the default
    * Node fs + SQLite backends are not available — e.g. the viewer's
    * Cloudflare Workers build, which supplies `R2BlobStore` + `D1GraphDb`
@@ -210,7 +199,7 @@ export class Ingester {
       this.graphDb = opts.backends.graphDb;
     } else {
       const dir = opts.ingestDir ?? defaultIngestDir();
-      const b = openNodeBackends(dir, opts.schemaSql);
+      const b = openNodeBackends(dir);
       this.blobStore = b.blobStore;
       this.graphDb = b.graphDb;
     }

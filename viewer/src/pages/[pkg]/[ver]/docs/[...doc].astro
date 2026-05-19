@@ -3,6 +3,8 @@ import { loadCbor, sectionChildren, type IngestedDoc } from "../../../../lib/ir-
 import { buildDocPageView } from "../../../../lib/doc-page.ts";
 import { getBackends } from "../../../../lib/backends.ts";
 import { buildXrefResolver } from "../../../../lib/xref.ts";
+import { loadBundleNav, flattenToc } from "../../../../lib/nav.ts";
+import { linkForDoc } from "../../../../lib/links.ts";
 import IrNode from "../../../../components/IrNode.astro";
 import BundleLayout from "../../../../layouts/BundleLayout.astro";
 
@@ -25,6 +27,27 @@ try {
 }
 const view = buildDocPageView(doc, docPath);
 const resolveXref = await buildXrefResolver(graphDb, doc, pkg, ver);
+
+// Build ordered page list for prev/next navigation.
+// loadBundleNav is memoised — this call is effectively free.
+const nav = await loadBundleNav(blobStore, pkg, ver);
+interface PageLink {
+  title: string;
+  href: string;
+}
+let orderedPages: PageLink[];
+if (nav.toc.length > 0) {
+  orderedPages = flattenToc(nav.toc)
+    .filter((item) => item.href !== null)
+    .map((item) => ({ title: item.title, href: item.href! }));
+} else {
+  orderedPages = nav.docs.map((e) => ({ title: e.name, href: e.href }));
+}
+const currentHref = linkForDoc(pkg, ver, docPath);
+const currentIdx = orderedPages.findIndex((p) => p.href === currentHref);
+const prevPage: PageLink | null = currentIdx > 0 ? orderedPages[currentIdx - 1] : null;
+const nextPage: PageLink | null =
+  currentIdx !== -1 && currentIdx < orderedPages.length - 1 ? orderedPages[currentIdx + 1] : null;
 
 function sectionHeading(title: string, level: number): string {
   const tag = `h${Math.min(Math.max(level + 1, 2), 6)}`;
@@ -52,6 +75,33 @@ function sectionHeading(title: string, level: number): string {
   </header>
 
   {
+    (prevPage || nextPage) && (
+      <nav class="doc-page-nav doc-page-nav--top" aria-label="Page navigation">
+        {prevPage ? (
+          <a class="doc-page-nav-prev" href={prevPage.href}>
+            <span class="doc-page-nav-arrow" aria-hidden="true">
+              ←
+            </span>
+            <span class="doc-page-nav-label">{prevPage.title}</span>
+          </a>
+        ) : (
+          <span />
+        )}
+        {nextPage ? (
+          <a class="doc-page-nav-next" href={nextPage.href}>
+            <span class="doc-page-nav-label">{nextPage.title}</span>
+            <span class="doc-page-nav-arrow" aria-hidden="true">
+              →
+            </span>
+          </a>
+        ) : (
+          <span />
+        )}
+      </nav>
+    )
+  }
+
+  {
     view.sections.length === 0 ? (
       <p class="lede">This doc is empty.</p>
     ) : (
@@ -67,6 +117,33 @@ function sectionHeading(title: string, level: number): string {
           </section>
         );
       })
+    )
+  }
+
+  {
+    (prevPage || nextPage) && (
+      <nav class="doc-page-nav doc-page-nav--bottom" aria-label="Page navigation">
+        {prevPage ? (
+          <a class="doc-page-nav-prev" href={prevPage.href}>
+            <span class="doc-page-nav-arrow" aria-hidden="true">
+              ←
+            </span>
+            <span class="doc-page-nav-label">{prevPage.title}</span>
+          </a>
+        ) : (
+          <span />
+        )}
+        {nextPage ? (
+          <a class="doc-page-nav-next" href={nextPage.href}>
+            <span class="doc-page-nav-label">{nextPage.title}</span>
+            <span class="doc-page-nav-arrow" aria-hidden="true">
+              →
+            </span>
+          </a>
+        ) : (
+          <span />
+        )}
+      </nav>
     )
   }
 

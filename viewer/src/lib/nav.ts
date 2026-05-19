@@ -244,6 +244,23 @@ async function buildNav(blobStore: BlobStore, pkg: string, version: string): Pro
   };
 }
 
+/**
+ * Depth-first flatten of a TocItem tree. Items without an href are included
+ * as structural nodes (they carry a title but no link); callers that need
+ * only linked pages should filter on `item.href !== null`.
+ */
+export function flattenToc(toc: TocItem[]): TocItem[] {
+  const result: TocItem[] = [];
+  function walk(items: TocItem[]): void {
+    for (const item of items) {
+      result.push(item);
+      if (item.children.length > 0) walk(item.children);
+    }
+  }
+  walk(toc);
+  return result;
+}
+
 export async function loadBundleNav(
   blobStore: BlobStore,
   pkg: string,

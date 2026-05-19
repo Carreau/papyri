@@ -1004,6 +1004,10 @@ def parse(text: bytes, qa=None) -> list[Section]:
     root = Node(tree.root_node)
     try:
         res = TSVisitor(text, qa).visit_document(root)
+    except errors.SpaceAfterBlockDirectiveError:
+        # Deliberate semantic error raised by the visitor; callers (and tests)
+        # rely on the specific type, so don't wrap it.
+        raise
     except Exception as e:
         byte = _visitor_failure_byte(e)
         if byte is None:

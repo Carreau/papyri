@@ -13,6 +13,7 @@ from .nodes import (
     Citation,
     CitationReference,
     Code,
+    Comment,
     DefList,
     DefListItem,
     Emphasis,
@@ -871,8 +872,10 @@ class TSVisitor:
         ]
 
     def visit_comment(self, node):
-        # RST comments are dropped from the IR; they never reach serialization.
-        return []
+        # Comments survive into the JSON IR so downstream tooling can
+        # post-process them. They are stripped during CBOR pack — see
+        # ``Node.cbor`` — and never appear in published bundles.
+        return [Comment(self.as_text(node))]
 
     def visit_strong(self, node):
         return [Strong([Text(self.as_text(node)[2:-2])])]

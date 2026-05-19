@@ -1088,19 +1088,18 @@ class Gen:
             return result
 
         nodes = _build_toc(raw_tree)
-        # Prepend the root (typically "index") as the first sibling so the
-        # narrative entry point is visible in the rendered toc rather than
-        # only reachable by clicking the "Docs" header.
+        # Make the root (typically "index") the actual root of the toctree,
+        # with the remaining nodes as its children.
         if root is not None and root in self.docs:
-            nodes.insert(
-                0,
+            self._toc_nodes = [
                 TocTree(
-                    children=[],
+                    children=nodes,
                     title=title_map.get(root, root),
                     ref=LocalRef("docs", root),
-                ),
-            )
-        self._toc_nodes = nodes
+                )
+            ]
+        else:
+            self._toc_nodes = nodes
 
     def write_narrative(self, where: Path) -> None:
         if self._toc_nodes:

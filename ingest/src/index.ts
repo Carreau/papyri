@@ -28,3 +28,6 @@ export type { IRNode, TypedNode, UnknownNode } from "./encoder.js";
 export { assertBundle, explodeBundleToDir } from "./bundle.js";
 
 export { collectForwardRefs, collectForwardRefsFromSection } from "./visitor.js";
+
+export { FsRawStore, R2RawStore } from "./raw-store.js";
+export type { RawStore } from "./raw-store.js";

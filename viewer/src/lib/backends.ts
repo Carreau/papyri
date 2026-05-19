@@ -21,8 +21,11 @@
 import {
   R2BlobStore,
   D1GraphDb,
+  R2RawStore,
+  FsRawStore,
   type BlobStore,
   type GraphDb,
+  type RawStore,
   type R2BucketLike,
   type D1DatabaseLike,
 } from "papyri-ingest";
@@ -36,9 +39,14 @@ interface WorkersEnv {
   PAPYRI_UPLOAD_TOKEN?: string;
 }
 
+// Raw archive uses a _raw/ prefix within the same BLOBS R2 bucket.
+// The prefix is never a valid processed-blob key (those start with a letter
+// or digit) so the two namespaces are disjoint without a separate binding.
+
 export interface Backends {
   blobStore: BlobStore;
   graphDb: GraphDb;
+  rawStore: RawStore;
 }
 
 async function loadCfEnv(): Promise<WorkersEnv | null> {
@@ -135,6 +143,7 @@ async function nodeBackends(): Promise<Backends> {
   return {
     blobStore: new ingest.FsBlobStore(ingestDir),
     graphDb: new ingest.SqliteGraphDb(db),
+    rawStore: new FsRawStore(ingestDir),
   };
 }
 
@@ -150,7 +159,11 @@ export async function getBackends(): Promise<Backends> {
   if (cf?.GRAPH_DB && cf?.BLOBS) {
     const graphDb = new D1GraphDb(cf.GRAPH_DB);
     await ensureD1Schema(graphDb);
-    return { blobStore: new R2BlobStore(cf.BLOBS), graphDb };
+    return {
+      blobStore: new R2BlobStore(cf.BLOBS),
+      graphDb,
+      rawStore: new R2RawStore(cf.BLOBS),
+    };
   }
   if (!_nodeCached) _nodeCached = nodeBackends();
   return _nodeCached;

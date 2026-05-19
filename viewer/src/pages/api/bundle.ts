@@ -63,8 +63,9 @@ export const PUT: APIRoute = async ({ request }) => {
   }
 
   let ingester: Ingester;
+  let backends: Awaited<ReturnType<typeof getBackends>>;
   try {
-    const backends = await getBackends();
+    backends = await getBackends();
     ingester = new Ingester({ backends });
   } catch (err) {
     return respond({ ok: false, error: `failed to open ingest backend: ${err}` }, 500);
@@ -73,12 +74,17 @@ export const PUT: APIRoute = async ({ request }) => {
   // Decode the artifact: gunzip → CBOR → Bundle Node. DecompressionStream
   // is in Web Streams (Workers + Node 18+), so this is a single code path.
   // Read the compressed bytes into a buffer first so we can record the
-  // on-wire size before decompressing.
+  // on-wire size before decompressing. The raw compressed bytes are kept for
+  // archiving to rawStore before ingest runs.
   let bundle: TypedNode;
   let bundleSizeBytes = 0;
+  let compressedBytes: Uint8Array;
   try {
     const compressedBuffer = await request.arrayBuffer();
     bundleSizeBytes = compressedBuffer.byteLength;
+    compressedBytes = new Uint8Array(compressedBuffer);
+    // Use the original ArrayBuffer (not the Uint8Array view) so TypeScript
+    // accepts it as a BlobPart — Blob rejects Uint8Array<ArrayBufferLike>.
     const decompressed = new Response(
       new Blob([compressedBuffer]).stream().pipeThrough(new DecompressionStream("gzip"))
     );
@@ -151,6 +157,18 @@ export const PUT: APIRoute = async ({ request }) => {
   (async () => {
     try {
       await sendWithTiming({ event: "start", pkg: rawPkg, version: rawVer });
+      // Archive the raw compressed bundle before ingest. Failure is non-fatal:
+      // the ingest proceeds and the warning is surfaced in the stream. The raw
+      // archive exists solely for future reingest; missing it doesn't corrupt
+      // the processed store.
+      try {
+        await backends.rawStore.put(rawPkg, rawVer, compressedBytes);
+      } catch (archiveErr) {
+        await sendWithTiming({
+          event: "warning",
+          message: `raw archive write failed: ${archiveErr}`,
+        });
+      }
       const result = await ingester.ingestBundle(
         bundle,
         bundleSizeBytes,

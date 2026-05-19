@@ -13,7 +13,6 @@ from .nodes import (
     Citation,
     CitationReference,
     Code,
-    Comment,
     DefList,
     DefListItem,
     Emphasis,
@@ -872,9 +871,8 @@ class TSVisitor:
         ]
 
     def visit_comment(self, node):
-        # TODO
-        return [Comment(self.as_text(node))]
-        # raise VisitCommentNotImplementedError()
+        # RST comments are dropped from the IR; they never reach serialization.
+        return []
 
     def visit_strong(self, node):
         return [Strong([Text(self.as_text(node)[2:-2])])]

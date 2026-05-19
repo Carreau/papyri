@@ -49,7 +49,6 @@ export const IR_TYPE_NAMES: readonly string[] = [
   "InlineMath",
   "Math",
   "Blockquote",
-  "Comment",
   "Target",
   "Image",
   "CitationReference",

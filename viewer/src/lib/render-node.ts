@@ -259,9 +259,6 @@ export async function renderNode(node: IRNode, opts: RenderOptions = {}): Promis
       return `<div id="cite-${label}" class="citation"><span class="citation-label">[${label}]</span>${inner}</div>`;
     }
 
-    case "Comment":
-      return "";
-
     case "SubstitutionRef":
     case "SubstitutionDef":
       return `<span class="substitution">${escapeHtml(String(n.value ?? ""))}</span>`;

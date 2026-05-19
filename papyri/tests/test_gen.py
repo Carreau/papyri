@@ -224,9 +224,9 @@ def test_normalize_see_also_rst_comment_description():
 
     Some scipy docstrings use bare `..` in See Also sections, e.g.
     scipy.ndimage._measurements:minimum_position.  numpydoc passes ['..'] as
-    the raw_description, which tree-sitter parses as a Comment node.  The
-    SeeAlsoItem.descriptions field only accepts Paragraph nodes, so Comment
-    nodes must be dropped rather than forwarded.
+    the raw_description, which tree-sitter parses as an RST comment.  RST
+    comments are dropped from the IR, so the resulting descriptions list
+    must be empty.
     """
     # Mirrors what numpydoc produces for:
     #   :func:`minimum_position`, :func:`extrema`

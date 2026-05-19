@@ -15,7 +15,6 @@ from typing import Any, ClassVar
 from . import ts
 from .node_base import Node, register
 from .nodes import (
-    Comment,
     CrossRef,
     DocParam,
     Paragraph,
@@ -36,6 +35,8 @@ def paragraph(lines: list[str], qa) -> Any:
     Remove at some point.
     """
     [section] = ts.parse("\n".join(lines).encode(), qa)
+    if not section.children:
+        return None
     assert len(section.children) == 1
     p2 = section.children[0]
     return p2
@@ -259,8 +260,8 @@ def _normalize_see_also(see_also: Section, qa: str):
                     assert isinstance(raw_description, list)
                     type_ = type_or_description
                     parsed = paragraph(raw_description, qa)
-                    # RST `..` with no content parses as a Comment; drop it
-                    desc = [] if isinstance(parsed, Comment) else [parsed]
+                    # RST `..` with no content yields no node; drop it.
+                    desc = [] if parsed is None else [parsed]
                 else:
                     type_ = type_or_description
                     desc = []

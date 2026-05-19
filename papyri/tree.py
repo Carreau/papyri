@@ -374,7 +374,6 @@ class TreeReplacer:
                 new_nodes = self._call_method(method, node)
             elif name in [
                 "Code",
-                "Comment",
                 "Example",
                 "Figure",
                 "GenCode",

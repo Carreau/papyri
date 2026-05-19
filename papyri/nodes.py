@@ -361,12 +361,6 @@ class Admonition(Node):
     )
 
 
-@register(4060)
-class Comment(Node):
-    type = "comment"
-    value: str
-
-
 @register(4058)
 class Math(Node):
     type = "math"
@@ -546,7 +540,6 @@ class Section(Node):
         | Admonition
         | Blockquote
         | Code
-        | Comment
         | BulletList
         | Math
         | Directive
@@ -872,7 +865,6 @@ FlowContent: TypeAlias = (
     | DefList
     | DefListItem
     | FieldList
-    | Comment
     | Citation
     | Image
     | Figure

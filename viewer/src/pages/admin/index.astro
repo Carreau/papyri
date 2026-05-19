@@ -3,11 +3,19 @@
 import { getBackends } from "../../lib/backends.ts";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import ReingestPanel from "../../components/ReingestPanel.tsx";
+import ClearGraphstoreButton from "../../components/ClearGraphstoreButton.tsx";
 
 export const prerender = false;
 
-const { rawStore } = await getBackends();
+const { rawStore, graphDb } = await getBackends();
 const rawEntries = await rawStore.list();
+
+const tableNames = ["nodes", "links", "bundles"] as const;
+const tableStats: Array<{ name: string; rows: number }> = [];
+for (const name of tableNames) {
+  const row = await graphDb.get<{ n: number }>(`SELECT COUNT(*) AS n FROM ${name}`);
+  tableStats.push({ name, rows: row?.n ?? 0 });
+}
 ---
 
 <BaseLayout title="Admin — Papyri">
@@ -28,6 +36,41 @@ const rawEntries = await rawStore.list();
           </p>
         )
       }
+    </section>
+
+    <section class="admin-section">
+      <h2>Graph database</h2>
+      <table class="admin-stats-table">
+        <thead>
+          <tr>
+            <th>Table</th>
+            <th>Rows</th>
+          </tr>
+        </thead>
+        <tbody>
+          {
+            tableStats.map((t) => (
+              <tr>
+                <td>
+                  <code>{t.name}</code>
+                </td>
+                <td>{t.rows.toLocaleString()}</td>
+              </tr>
+            ))
+          }
+          <tr class="admin-stats-total">
+            <td>
+              <strong>{tableStats.length} table{tableStats.length !== 1 ? "s" : ""}</strong>
+            </td>
+            <td>
+              <strong>
+                {tableStats.reduce((sum, t) => sum + t.rows, 0).toLocaleString()} total
+              </strong>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <ClearGraphstoreButton client:load rawCount={rawEntries.length} />
     </section>
 
     <ReingestPanel client:load entries={rawEntries} />
@@ -51,6 +94,86 @@ const rawEntries = await rawStore.list();
 
   .admin-archive-count {
     margin: 0;
+  }
+
+  .admin-stats-table {
+    border-collapse: collapse;
+    margin: 0.5rem 0 1rem;
+    min-width: 280px;
+    font-size: 0.9rem;
+  }
+
+  .admin-stats-table th,
+  .admin-stats-table td {
+    text-align: left;
+    padding: 0.3rem 0.75rem;
+    border-bottom: 1px solid var(--color-border, #e5e7eb);
+  }
+
+  .admin-stats-table th {
+    color: var(--color-muted, #666);
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .admin-stats-table td:nth-child(2) {
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+
+  .admin-stats-table tr.admin-stats-total td {
+    border-bottom: none;
+    border-top: 2px solid var(--color-border, #d1d5db);
+  }
+
+  :global(.clear-graphstore) {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+  }
+
+  :global(.clear-graphstore-btn) {
+    align-self: flex-start;
+    padding: 0.4rem 1rem;
+    background: var(--color-error, #dc2626);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+
+  :global(.clear-graphstore-btn:disabled) {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  :global(.clear-graphstore-desc) {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--color-muted, #666);
+  }
+
+  :global(.clear-graphstore-result) {
+    padding: 0.5rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+  }
+
+  :global(.clear-graphstore-result--ok) {
+    background: var(--color-success-bg, #f0fdf4);
+    border: 1px solid var(--color-success-border, #86efac);
+    color: var(--color-success, #16a34a);
+  }
+
+  :global(.clear-graphstore-result--error) {
+    background: var(--color-error-bg, #fef2f2);
+    border: 1px solid var(--color-error-border, #fca5a5);
+    color: var(--color-error, #dc2626);
   }
 
   /* ---- ReingestPanel styles (scoped via :global since component is React) ---- */

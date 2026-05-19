@@ -33,6 +33,12 @@ export interface GraphDb {
   all<R = GraphRow>(sql: string, params?: unknown[]): Promise<R[]>;
   /** Atomic batch (D1) / single sync transaction (SQLite). */
   batch(stmts: BatchStmt[]): Promise<void>;
+  /**
+   * Empty every row from `nodes`, `links`, and `bundles` without dropping
+   * the schema. Used by the admin "clear graphstore" action to prepare the
+   * processed store for a fresh re-ingest from the raw archive.
+   */
+  clear(): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -61,6 +67,16 @@ export class SqliteGraphDb implements GraphDb {
       for (const s of items) this.db.prepare(s.sql).run(...((s.params ?? []) as never[]));
     });
     tx(stmts);
+  }
+
+  async clear(): Promise<void> {
+    await this.batch([
+      // links has ON DELETE CASCADE on nodes, but be explicit so the order
+      // is stable regardless of FK enforcement state.
+      { sql: "DELETE FROM links" },
+      { sql: "DELETE FROM nodes" },
+      { sql: "DELETE FROM bundles" },
+    ]);
   }
 
   async close(): Promise<void> {
@@ -118,6 +134,14 @@ export class D1GraphDb implements GraphDb {
     if (stmts.length === 0) return;
     const prepared = stmts.map((s) => this.db.prepare(s.sql).bind(...(s.params ?? [])));
     await this.db.batch(prepared);
+  }
+
+  async clear(): Promise<void> {
+    await this.batch([
+      { sql: "DELETE FROM links" },
+      { sql: "DELETE FROM nodes" },
+      { sql: "DELETE FROM bundles" },
+    ]);
   }
 
   async close(): Promise<void> {

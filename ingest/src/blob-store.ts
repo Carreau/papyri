@@ -13,7 +13,7 @@
  * — outside the (kind,path) addressing scheme, which is why it needs its
  * own helper.
  */
-import { mkdir, writeFile, readFile, stat, readdir } from "node:fs/promises";
+import { mkdir, writeFile, readFile, stat, readdir, rm } from "node:fs/promises";
 import { join, dirname, sep } from "node:path";
 import type { Key } from "./graphstore.js";
 
@@ -40,6 +40,13 @@ export interface BlobStore {
   putMeta(module: string, version: string, bytes: Uint8Array): Promise<void>;
   /** Read per-bundle meta.cbor. Null if absent. */
   getMeta(module: string, version: string): Promise<Uint8Array | null>;
+  /**
+   * Delete every processed blob (and per-bundle meta.cbor) without touching
+   * the raw archive (`_raw/` prefix) that lives in the same backend.
+   * Returns the number of objects deleted. Idempotent — clearing an
+   * already-empty store is a no-op.
+   */
+  clear(): Promise<number>;
 }
 
 // ---------------------------------------------------------------------------
@@ -92,6 +99,29 @@ export class FsBlobStore implements BlobStore {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
       throw err;
     }
+  }
+
+  async clear(): Promise<number> {
+    // Walk top-level entries at the root; remove every module directory
+    // (anything that isn't the raw archive or the SQLite DB). The blob
+    // namespace is `<module>/<version>/...`, so module dirs are exactly
+    // the top-level entries we need to delete. _raw/ and papyri.db* live
+    // at the same root and must be preserved.
+    let ents;
+    try {
+      ents = await readdir(this.root, { withFileTypes: true });
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return 0;
+      throw err;
+    }
+    let count = 0;
+    for (const e of ents) {
+      if (e.name === "_raw") continue;
+      if (e.name === "papyri.db" || e.name.startsWith("papyri.db-")) continue;
+      await rm(join(this.root, e.name), { recursive: true, force: true });
+      count++;
+    }
+    return count;
   }
 
   async list(prefix: string): Promise<string[]> {
@@ -147,6 +177,7 @@ export interface R2BucketLike {
   get(key: string): Promise<R2ObjectLike | null>;
   head(key: string): Promise<unknown | null>;
   list(opts?: { prefix?: string; cursor?: string; limit?: number }): Promise<R2ListResult>;
+  delete(keys: string | string[]): Promise<unknown>;
 }
 
 export class R2BlobStore implements BlobStore {
@@ -188,5 +219,22 @@ export class R2BlobStore implements BlobStore {
     } while (cursor);
     out.sort();
     return out;
+  }
+
+  async clear(): Promise<number> {
+    // List every object in the bucket and delete in batches, skipping
+    // anything under `_raw/` (the raw archive shares this bucket).
+    let count = 0;
+    let cursor: string | undefined;
+    do {
+      const r: R2ListResult = await this.bucket.list({ cursor });
+      const keys = r.objects.map((o) => o.key).filter((k) => !k.startsWith("_raw/"));
+      if (keys.length > 0) {
+        await this.bucket.delete(keys);
+        count += keys.length;
+      }
+      cursor = r.truncated ? r.cursor : undefined;
+    } while (cursor);
+    return count;
   }
 }

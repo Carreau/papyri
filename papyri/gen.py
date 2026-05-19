@@ -985,6 +985,9 @@ class Gen:
             assert parts[-1].endswith("rst")
             try:
                 data = ts.parse(p.read_bytes(), p)
+            except ts.TreeSitterParseError as e:
+                self.log.warning("Could not parse %s:%d, skipping: %s", p, e.line, e)
+                continue
             except Exception as e:
                 self.log.warning("Could not parse %s, skipping: %s", p, e)
                 continue

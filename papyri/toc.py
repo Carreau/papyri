@@ -91,11 +91,22 @@ def _tree(current_path, unnest, counter, depth=0) -> dict:
             f"which resolves back to itself"
         )
         # print(' '*depth*4,cp, '->', p)
-        assert p not in children, (
-            f"duplicate toctree child {p!r} under {current_path!r} "
-            f"(reference {cp!r} resolves to a sibling already listed); "
-            f"each page may appear at most once in a given toctree"
-        )
+        if p in children:
+            # Sphinx allows the same page to appear in multiple `.. toctree::`
+            # directives on a single parent — typically one visible toctree
+            # plus a separate `:hidden:` toctree used only to define
+            # prev/next ordering. We only model tree shape here, so the
+            # second occurrence is redundant: keep the first and skip.
+            log.warning(
+                "toc: %r is listed more than once under %r "
+                "(reference %r); keeping the first occurrence and "
+                "ignoring the duplicate. This is usually a hidden "
+                "toctree used for prev/next ordering in Sphinx.",
+                p,
+                current_path,
+                cp,
+            )
+            continue
         if p not in counter:
             print("skip Path", p, "in", current_path, repr(cp))
             continue

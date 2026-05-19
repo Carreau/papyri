@@ -1,0 +1,263 @@
+---
+// Admin panel: re-ingest raw archived bundles with live progress.
+import { getBackends } from "../../lib/backends.ts";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import ReingestPanel from "../../components/ReingestPanel.tsx";
+
+export const prerender = false;
+
+const { rawStore } = await getBackends();
+const rawEntries = await rawStore.list();
+---
+
+<BaseLayout title="Admin — Papyri">
+  <div class="admin-page">
+    <h1>Admin</h1>
+
+    <section class="admin-section">
+      <h2>Raw archive</h2>
+      {
+        rawEntries.length === 0 ? (
+          <p class="admin-empty">
+            No bundles in the raw archive yet. Upload a bundle with <code>papyri upload</code>{" "}
+            first.
+          </p>
+        ) : (
+          <p class="admin-archive-count">
+            {rawEntries.length} bundle{rawEntries.length !== 1 ? "s" : ""} archived.
+          </p>
+        )
+      }
+    </section>
+
+    <ReingestPanel client:load entries={rawEntries} />
+  </div>
+</BaseLayout>
+
+<style>
+  .admin-page {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 1.5rem 1rem 3rem;
+  }
+
+  .admin-section {
+    margin-bottom: 1.5rem;
+  }
+
+  .admin-empty {
+    color: var(--color-muted, #888);
+  }
+
+  .admin-archive-count {
+    margin: 0;
+  }
+
+  /* ---- ReingestPanel styles (scoped via :global since component is React) ---- */
+  :global(.reingest-panel) {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  :global(.reingest-controls h2) {
+    margin: 0 0 0.4rem;
+  }
+
+  :global(.reingest-desc) {
+    margin: 0 0 1rem;
+    color: var(--color-muted, #666);
+    font-size: 0.9rem;
+  }
+
+  :global(.reingest-filters) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.75rem;
+  }
+
+  :global(.reingest-filters label) {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+
+  :global(.reingest-filters select) {
+    padding: 0.35rem 0.5rem;
+    border: 1px solid var(--color-border, #ccc);
+    border-radius: 4px;
+    background: var(--color-bg, #fff);
+    color: inherit;
+    font-size: 0.9rem;
+  }
+
+  :global(.reingest-btn) {
+    padding: 0.4rem 1rem;
+    background: var(--color-accent, #2563eb);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+    align-self: flex-end;
+  }
+
+  :global(.reingest-btn:disabled) {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  :global(.reingest-progress h3) {
+    margin: 0 0 0.75rem;
+  }
+
+  :global(.reingest-bundle-list) {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  :global(.reingest-bundle) {
+    border: 1px solid var(--color-border, #ddd);
+    border-radius: 6px;
+    padding: 0.6rem 0.8rem;
+    background: var(--color-surface, #fafafa);
+  }
+
+  :global(.reingest-bundle--done) {
+    border-color: var(--color-success-border, #86efac);
+    background: var(--color-success-bg, #f0fdf4);
+  }
+
+  :global(.reingest-bundle--warning) {
+    border-color: var(--color-warn-border, #fcd34d);
+    background: var(--color-warn-bg, #fffbeb);
+  }
+
+  :global(.reingest-bundle--active) {
+    border-color: var(--color-accent, #2563eb);
+  }
+
+  :global(.reingest-bundle-header) {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 0.9rem;
+  }
+
+  :global(.reingest-bundle-name) {
+    font-weight: 600;
+  }
+
+  :global(.reingest-bundle-ver) {
+    font-weight: 400;
+    color: var(--color-muted, #666);
+    font-size: 0.85em;
+  }
+
+  :global(.reingest-bundle-status) {
+    font-size: 0.8rem;
+    color: var(--color-muted, #666);
+  }
+
+  :global(.reingest-bundle--done .reingest-bundle-status) {
+    color: var(--color-success, #16a34a);
+    font-weight: 600;
+  }
+
+  :global(.reingest-bundle--warning .reingest-bundle-status) {
+    color: var(--color-warn, #b45309);
+    font-weight: 600;
+  }
+
+  :global(.reingest-bar-wrap) {
+    margin-top: 0.4rem;
+    height: 6px;
+    background: var(--color-border, #e5e7eb);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  :global(.reingest-bar-fill) {
+    height: 100%;
+    background: var(--color-accent, #2563eb);
+    border-radius: 3px;
+    transition: width 0.2s ease;
+  }
+
+  :global(.reingest-bundle--done .reingest-bar-fill) {
+    background: var(--color-success, #16a34a);
+  }
+
+  :global(.reingest-bundle-msg) {
+    margin-top: 0.3rem;
+    font-size: 0.8rem;
+    color: var(--color-warn, #b45309);
+    font-family: monospace;
+  }
+
+  :global(.reingest-summary) {
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+    font-weight: 600;
+  }
+
+  :global(.reingest-summary--ok) {
+    background: var(--color-success-bg, #f0fdf4);
+    border: 1px solid var(--color-success-border, #86efac);
+    color: var(--color-success, #16a34a);
+  }
+
+  :global(.reingest-summary--error) {
+    background: var(--color-error-bg, #fef2f2);
+    border: 1px solid var(--color-error-border, #fca5a5);
+    color: var(--color-error, #dc2626);
+  }
+
+  :global(.reingest-log-details) {
+    border: 1px solid var(--color-border, #ddd);
+    border-radius: 6px;
+    padding: 0 0.8rem;
+  }
+
+  :global(.reingest-log-details > summary) {
+    padding: 0.6rem 0;
+    cursor: pointer;
+    font-size: 0.85rem;
+    color: var(--color-muted, #666);
+    user-select: none;
+  }
+
+  :global(.reingest-log) {
+    max-height: 300px;
+    overflow-y: auto;
+    padding: 0.5rem 0 0.75rem;
+    font-family: monospace;
+    font-size: 0.78rem;
+  }
+
+  :global(.reingest-log-line) {
+    padding: 1px 0;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  :global(.reingest-log--warning) {
+    color: var(--color-warn, #b45309);
+  }
+
+  :global(.reingest-log--error) {
+    color: var(--color-error, #dc2626);
+  }
+
+  :global(.reingest-log--done) {
+    font-weight: 600;
+  }
+</style>

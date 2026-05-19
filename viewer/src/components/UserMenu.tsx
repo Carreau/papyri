@@ -18,20 +18,36 @@ export default function UserMenu() {
   };
 
   return (
-    <button
-      onClick={handleLogout}
-      disabled={loading}
-      style={{
-        padding: "6px 12px",
-        backgroundColor: "transparent",
-        border: "1px solid #ddd",
-        borderRadius: "4px",
-        cursor: loading ? "not-allowed" : "pointer",
-        fontSize: "14px",
-        color: loading ? "#999" : "inherit",
-      }}
-    >
-      {loading ? "Logging out…" : "Logout"}
-    </button>
+    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+      <a
+        href="/admin"
+        style={{
+          padding: "6px 12px",
+          backgroundColor: "transparent",
+          border: "1px solid #ddd",
+          borderRadius: "4px",
+          fontSize: "14px",
+          textDecoration: "none",
+          color: "inherit",
+        }}
+      >
+        Admin
+      </a>
+      <button
+        onClick={handleLogout}
+        disabled={loading}
+        style={{
+          padding: "6px 12px",
+          backgroundColor: "transparent",
+          border: "1px solid #ddd",
+          borderRadius: "4px",
+          cursor: loading ? "not-allowed" : "pointer",
+          fontSize: "14px",
+          color: loading ? "#999" : "inherit",
+        }}
+      >
+        {loading ? "Logging out…" : "Logout"}
+      </button>
+    </div>
   );
 }

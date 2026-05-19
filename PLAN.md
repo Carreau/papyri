@@ -45,6 +45,31 @@ The boundary between the two halves:
   SQLite for the cross-link graph and a filesystem store for blobs; the
   hosted service will use different backends (e.g. Cloudflare D1 + R2).
 
+## Storage invariant: the graphstore is a derived cache
+
+The DocBundle (the `.papyri.gz` artifact produced by `papyri gen` and
+archived verbatim in the `_raw/` zone — see "Raw bundle archive" below) is
+the **only** authoritative IR. Everything the viewer's graphstore + blob
+store contains is a derived projection of those raw bundles, rebuildable at
+any time via `POST /api/reingest`.
+
+Consequence: **what ingest writes into the graphstore is not required to be
+the IR.** Ingest may freely denormalize, precompute, rewrite, resolve refs
+into concrete keys, drop fields the renderer doesn't consume, or split a
+single IR node across several tables. The only contracts are:
+
+1. The raw archive (`_raw/<pkg>/<ver>.papyri.gz`) remains byte-identical to
+   the upload.
+2. The renderer's input shape (what page templates read) stays stable, or
+   migrates in lockstep with the renderer.
+
+This unlocks several items already listed below — precomputed
+`nodes_by_type` tables, resolved-ref storage, image indices, search
+indices — which can land without preserving any IR-shape invariant in the
+store. It also means the "graphstore write-side audit" should not try to
+preserve round-trip-to-IR fidelity; the round-trip is via re-ingest from
+the raw archive, not via reading the graphstore back.
+
 ## Python version
 
 - Minimum: **Python 3.14**. `requires-python = ">=3.14"`.
@@ -187,6 +212,10 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   ingest resolves them against the shim exactly like any other package. No
   special-casing in the ingest resolver.
 - **Core invariant: gen owns all ref classification; ingest only links.**
+  This invariant applies to the IR in the raw archive, not to the
+  graphstore's internal representation (see "Storage invariant" above) —
+  ingest may store refs in whatever resolved/denormalized form is
+  convenient.
   - `LocalRef` means *this bundle*, always. Gen converts every relative ref,
     alias, and local name to a `LocalRef` before writing the IR.
   - Every cross-bundle reference is a `RefInfo` with a fully qualified
@@ -197,7 +226,9 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
 - Rename `crosslink.py` to something that reflects its current read-only role
   (`ingested_doc.py`?), or fold `IngestedDoc` into `nodes.py`.
 - Audit `papyri/graphstore.py`: the write-side methods are no longer called
-  by the Python side. Decide whether to slim it to a read-only interface.
+  by the Python side (TypeScript ingest is the sole writer). Slim it to a
+  read-only interface — the viewer's store is a derived cache (see "Storage
+  invariant" above), so the Python side has no reason to write into it.
 - Decide the future of `papyri find` / `describe` / `diff` / `debug`: they
   work against the store written by the TypeScript pipeline, but the viewer
   is the user-facing replacement.
@@ -312,7 +343,10 @@ directives.)
 - **Precompute bundle indices at ingest time.** PLAN's M9.2 already notes the
   `~25s /images/` scan; once `walkBundle` exists, move the work into the
   ingest pipeline as a `nodes_by_type` table so endpoints query rather than
-  scan. Both the local SQLite and D1 backends benefit equally.
+  scan. Both the local SQLite and D1 backends benefit equally. Per the
+  "Storage invariant" section, these tables are free to hold whatever shape
+  the endpoint wants — they need not mirror IR node structure, since
+  re-ingest can rebuild them from the raw archive.
 - **Shared API response utility.** `viewer/src/lib/bundle.ts:111` defines a
   `respond()` helper, but `bundles.json.ts`, `health.json.ts`,
   `search.json.ts`, and `nodes.json.ts` each hand-roll

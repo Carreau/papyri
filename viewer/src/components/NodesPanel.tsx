@@ -29,8 +29,9 @@ interface ApiResponse {
 }
 
 interface Props {
-  pkg: string;
-  ver: string;
+  /** Bundle-scoped browsing when both set; cross-bundle when both omitted. */
+  pkg?: string;
+  ver?: string;
   /** Lowercase IR type slug (e.g. "paragraph"). Absent means all types. */
   nodetype?: string;
 }
@@ -53,8 +54,11 @@ export default function NodesPanel({ pkg, ver, nodetype }: Props) {
   const [data, setData] = useState<ApiResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const apiPath = pkg && ver ? `/api/${pkg}/${ver}/nodes.json` : `/api/nodes.json`;
+  const basePath = pkg && ver ? `/${pkg}/${ver}/nodes` : `/nodes`;
+
   useEffect(() => {
-    const u = new URL(`/api/${pkg}/${ver}/nodes.json`, window.location.origin);
+    const u = new URL(apiPath, window.location.origin);
     if (nodetype) u.searchParams.set("nodetype", nodetype);
 
     fetch(u.toString())
@@ -64,7 +68,7 @@ export default function NodesPanel({ pkg, ver, nodetype }: Props) {
       })
       .then(setData)
       .catch((e: unknown) => setError(String(e)));
-  }, [pkg, ver, nodetype]);
+  }, [apiPath, nodetype]);
 
   if (error) {
     return <p className="nodes-error">Failed to load nodes: {error}</p>;
@@ -77,7 +81,7 @@ export default function NodesPanel({ pkg, ver, nodetype }: Props) {
     <div>
       <nav className="node-type-nav" aria-label="Filter by node type">
         <a
-          href={`/${pkg}/${ver}/nodes/`}
+          href={`${basePath}/`}
           className={"node-type-nav-item" + (!nodetype ? " active" : "")}
           aria-current={!nodetype ? "page" : undefined}
         >
@@ -89,7 +93,7 @@ export default function NodesPanel({ pkg, ver, nodetype }: Props) {
           return (
             <a
               key={slug}
-              href={`/${pkg}/${ver}/nodes/${slug}/`}
+              href={`${basePath}/${slug}/`}
               className={
                 "node-type-nav-item" +
                 (nodetype === slug ? " active" : "") +

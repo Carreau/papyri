@@ -19,7 +19,9 @@ const bundlesForFilter = packages.map((p) => ({
 <BaseLayout title="Papyri viewer">
   <h1>Papyri viewer</h1>
   <p class="lede">
-    {packages.length} package{packages.length !== 1 ? "s" : ""} ingested.
+    {packages.length} package{packages.length !== 1 ? "s" : ""} ingested. Browse <a href="/nodes/"
+      >all nodes</a
+    > or <a href="/text-search/">search text</a> across every bundle.
   </p>
 
   {

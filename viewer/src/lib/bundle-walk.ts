@@ -9,8 +9,8 @@
 // nodes_by_type table at ingest time so endpoints query instead of scan;
 // this helper is the right place to hang that optimisation once it lands.
 
-import type { BlobStore } from "papyri-ingest";
-import { listModules, loadModule, loadCbor } from "./ir-reader.ts";
+import type { BlobStore, GraphDb } from "papyri-ingest";
+import { listBundlesFromDb, listModules, loadModule, loadCbor } from "./ir-reader.ts";
 import { listDocs, listExamples } from "./nav.ts";
 import { linkForDoc, linkForExample, linkForQualname } from "./links.ts";
 
@@ -67,5 +67,28 @@ export async function walkBundle(
       continue;
     }
     if (!visitor(section, { label: exPath, href: linkForExample(pkg, ver, exPath) })) return;
+  }
+}
+
+/**
+ * Walk every ingested bundle and call `visitor` for each document.  Page
+ * labels are prefixed with `pkg ver` so cross-bundle results stay
+ * unambiguous.  Stops as soon as `visitor` returns `false`.
+ */
+export async function walkAllBundles(
+  blobStore: BlobStore,
+  graphDb: GraphDb,
+  visitor: BundleVisitor
+): Promise<void> {
+  const bundles = await listBundlesFromDb(graphDb);
+  let stopped = false;
+  for (const b of bundles) {
+    if (stopped) return;
+    await walkBundle(blobStore, b.pkg, b.version, (doc, page) => {
+      const labelled: PageRef = { label: `${b.pkg} ${b.version} — ${page.label}`, href: page.href };
+      const cont = visitor(doc, labelled);
+      if (!cont) stopped = true;
+      return cont;
+    });
   }
 }

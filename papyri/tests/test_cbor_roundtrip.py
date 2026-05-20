@@ -145,13 +145,13 @@ def test_roundtrip_section_preserves_target():
     # navigation.
     sec = Section(
         children=[Paragraph([Text("body")])],
-        title="My Section",
+        title=(Text("My Section"),),
         level=1,
         target="my-anchor",
     )
     out = _roundtrip(sec)
     assert isinstance(out, Section)
-    assert out.title == "My Section"
+    assert out.title == (Text("My Section"),)
     assert out.target == "my-anchor"
     assert out.level == 1
 
@@ -177,14 +177,14 @@ def test_encoder_decode_list_of_nodes():
     # Narrative docs are stored as a list of Section nodes; encode/decode a
     # list too, to cover the top-level container case.
     items = [
-        Section([Paragraph([Text("a")])], "Sec A", 1, None),
-        Section([Paragraph([Text("b")])], "Sec B", 1, None),
+        Section([Paragraph([Text("a")])], (Text("Sec A"),), 1, None),
+        Section([Paragraph([Text("b")])], (Text("Sec B"),), 1, None),
     ]
     out = _roundtrip(items)
     assert isinstance(out, list)
     assert len(out) == 2
     assert all(isinstance(s, Section) for s in out)
-    assert [s.title for s in out] == ["Sec A", "Sec B"]
+    assert [s.title for s in out] == [(Text("Sec A"),), (Text("Sec B"),)]
 
 
 def test_encoder_is_byte_deterministic():
@@ -194,7 +194,7 @@ def test_encoder_is_byte_deterministic():
     # Encoder.encode (RFC 8949 §4.2 sorts map keys).
     sec = Section(
         children=[Paragraph([Text("body")])],
-        title="My Section",
+        title=(Text("My Section"),),
         level=1,
         target="anchor",
     )

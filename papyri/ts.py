@@ -599,8 +599,14 @@ class TSVisitor:
             level = len(self._section_levels)
             self._section_levels[pre_a + post_a] = level
 
-        title = self.as_text(tc)
-        return [Section([], title, level=level)]
+        # Visit the title node's inline children so that ``code``, :role:`x`,
+        # `link`_ etc. survive in the IR instead of being flattened to text.
+        # Section.title is the same inline vocabulary used inside a Paragraph.
+        title_inline = compress_word(self.visit(tc.with_whitespace()))
+        # Strip a trailing whitespace Text node, matching visit_paragraph.
+        if title_inline and title_inline[-1] == Text(" "):
+            title_inline.pop()
+        return [Section([], tuple(title_inline), level=level)]
 
     def visit_block_quote(self, node):
         return [Blockquote(self.visit(node))]
@@ -998,7 +1004,7 @@ def nest_sections(items: list[Any]) -> list[Section]:
         return []
     acc = []
     if not isinstance(items[0], Section):
-        acc.append(Section([], None))
+        acc.append(Section([], ()))
     for item in items:
         if isinstance(item, Section):
             acc.append(item)

@@ -601,8 +601,11 @@ class Section(Node):
         | Table,
         ...,
     ]
-    # might need to be more complicated like verbatim.
-    title: str | None
+    # Inline content (Text, InlineCode, InlineRole, Link, ...).  Empty tuple
+    # means the section has no title (anonymous wrapper section emitted by
+    # numpydoc-style parsers); a single Text node is the equivalent of the old
+    # plain-string title.
+    title: tuple[PhrasingContent, ...] = field(default_factory=tuple)
     level: int = 0
     target: str | None = None
 
@@ -634,6 +637,22 @@ class Section(Node):
 
     def __len__(self):
         return len(self.children)
+
+
+def section_title_text(title: tuple[Any, ...]) -> str:
+    """Plain-text projection of a Section.title for places that need a string
+    (tab title, slug source, comparison against canonical numpydoc section
+    names). Walks the inline tree and concatenates text content."""
+    out: list[str] = []
+    for n in title:
+        v = getattr(n, "value", None)
+        if isinstance(v, str):
+            out.append(v)
+        else:
+            kids = getattr(n, "children", None)
+            if kids:
+                out.append(section_title_text(tuple(kids)))
+    return "".join(out)
 
 
 @register(4026)

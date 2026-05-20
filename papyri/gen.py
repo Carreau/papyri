@@ -74,6 +74,7 @@ from .nodes import (
     Text,
     TocTree,
     parse_rst_section,
+    section_title_text,
 )
 from .numpydoc_compat import NumpyDocString
 from .signature import Signature as ObjectSignature
@@ -166,7 +167,7 @@ class _MatplotlibFontFilter(logging.Filter):
 
 def processed_example_data(example_section_data: Section) -> Section:
     """this should be no-op on already ingested"""
-    new_example_section_data = Section([], None)
+    new_example_section_data = Section([], ())
     # Historical note: this used to strip nodes of an old `take2.Text` class
     # distinct from MText (now Text). That class no longer exists, so the
     # filter has become a passthrough.
@@ -578,7 +579,16 @@ class APIObjectInfo:
     def special(self, title):
         if self.kind == "module":
             return None
-        res = [s for s in self.parsed if s.title == title]
+
+        # Section.title is now a tuple of inline nodes; the Numpydoc{Example,
+        # SeeAlso,Signature} nodes still carry a plain ClassVar string. Compare
+        # via the inline-projection helper for Sections and direct equality
+        # otherwise.
+        def _t(s):
+            t = s.title
+            return section_title_text(t) if isinstance(t, tuple) else t
+
+        res = [s for s in self.parsed if _t(s) == title]
         if not res:
             return None
         assert len(res) == 1
@@ -600,7 +610,7 @@ class PapyriDocTestRunner(doctest.DocTestRunner):
         self.obj = obj
         self.qa = qa
         self.config = config
-        self._example_section_data = Section([], None)
+        self._example_section_data = Section([], ())
         super().__init__(*args, **kwargs)
         import matplotlib
         import matplotlib.pyplot as plt
@@ -689,7 +699,7 @@ class PapyriDocTestRunner(doctest.DocTestRunner):
 
     def get_example_section_data(self) -> Section:
         example_section_data = self._example_section_data
-        self._example_section_data = Section([], None)
+        self._example_section_data = Section([], ())
         return example_section_data
 
     def _compact(self, example_section_data: Section) -> Section:
@@ -887,7 +897,7 @@ class Gen:
             config=config,
             optionflags=optionflags,
         )
-        example_section_data = Section([], None)
+        example_section_data = Section([], ())
 
         def debugprint(*args):
             """
@@ -1004,7 +1014,9 @@ class Gen:
                 self.log.warning("Could not parse %s, skipping: %s", p, e)
                 continue
             key = ":".join(parts)[:-4]
-            first_title = next((s.title for s in data if s.title), None)
+            first_title = next(
+                (section_title_text(s.title) for s in data if s.title), None
+            )
             if first_title:
                 doc_titles[key] = first_title
             internal_labels, doc_external = self._extract_rst_targets(data)
@@ -1064,7 +1076,7 @@ class Gen:
                     blob.item_line = None
                     blob.item_type = None
                     blob.aliases = ()
-                    blob.example_section_data = Section([], None)
+                    blob.example_section_data = Section([], ())
                     blob.see_also = ()
                     blob.signature = None
                     blob.validate()
@@ -1077,7 +1089,9 @@ class Gen:
                 # entry, so the rendered toc loses everything reachable only
                 # from that root, including the doc itself).
                 trees[key] = dv._tocs
-                titles = [s.title for s in blob.arbitrary if s.title]
+                titles = [
+                    section_title_text(s.title) for s in blob.arbitrary if s.title
+                ]
                 title = f"<No Title {key}>" if not titles else titles[0]
                 title_map[key] = title
                 if "generated" not in key and title_map[key] is None:
@@ -1353,13 +1367,13 @@ class Gen:
                     log=self.log,
                 )
             except Exception as e:
-                example_section_data = Section([], None)
+                example_section_data = Section([], ())
                 self.log.error("Error getting example data in %s", repr(qa))
                 from .errors import ExampleError1
 
                 raise ExampleError1(f"Error getting example data in {qa!r}") from e
         else:
-            example_section_data = Section([], None)
+            example_section_data = Section([], ())
             figs = []
 
         refs_I = []
@@ -1407,18 +1421,18 @@ class Gen:
                     pass
                 elif not data:
                     # is empty
-                    blob.content[section] = Section([], None)
+                    blob.content[section] = Section([], ())
                 else:
                     tsc = ts.parse("\n".join(data).encode(), qa)
                     assert len(tsc) in (0, 1), (tsc, data)
-                    tssc = tsc[0] if tsc else Section([], None)
+                    tssc = tsc[0] if tsc else Section([], ())
                     assert isinstance(tssc, Section)
                     blob.content[section] = tssc
             except Exception:
                 self.log.exception(f"Skipping section {section!r} in {qa!r} (Error)")
                 raise
         assert isinstance(blob.content["Summary"], Section)
-        assert isinstance(blob.content.get("Summary", Section([], None)), Section), (
+        assert isinstance(blob.content.get("Summary", Section([], ())), Section), (
             blob.content["Summary"]
         )
 
@@ -1450,9 +1464,9 @@ class Gen:
                         assert not isinstance(l, Section)
                 new_content.append(DocParam(param, type_, desc=items).validate())
             if new_content:
-                blob.content[s] = Section([Parameters(new_content)], None)
+                blob.content[s] = Section([Parameters(new_content)], ())
             else:
-                blob.content[s] = Section([], None)
+                blob.content[s] = Section([], ())
 
         blob.see_also = _normalize_see_also(blob.content.get("See Also", Section()), qa)
         del blob.content["See Also"]

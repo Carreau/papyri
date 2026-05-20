@@ -9,7 +9,7 @@
 //   3. Resolve and bucket backrefs from the graph store into same-package
 //      vs cross-package rows.
 
-import type { IngestedDoc, SectionNode } from "./ir-reader.ts";
+import { sectionTitleText, type IngestedDoc, type SectionNode } from "./ir-reader.ts";
 import { linkForRef } from "./links.ts";
 import type { RefTuple } from "./graph.ts";
 
@@ -69,7 +69,11 @@ function unwrapExampleSection(doc: IngestedDoc): ExampleSection | null {
   if (!es) return null;
   const kids = Array.isArray(es.children) ? es.children : [];
   if (kids.length === 0) return null;
-  return { title: es.title ?? "Examples", children: kids };
+  // `es.title` is now a tuple of inline nodes; an empty tuple is the
+  // common "no heading" case. Fall back to the static label so the
+  // <h2> on the Examples block stays meaningful.
+  const titleText = sectionTitleText(es);
+  return { title: titleText || "Examples", children: kids };
 }
 
 function bucketBackrefs(

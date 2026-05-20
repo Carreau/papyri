@@ -14,7 +14,7 @@
 //      the runtime scroll-spy can collapse h3+ entries outside the
 //      active section).
 
-import type { IngestedDoc, SectionNode } from "./ir-reader.ts";
+import { sectionTitleText, type IngestedDoc, type SectionNode } from "./ir-reader.ts";
 
 export interface TocEntry {
   section: SectionNode;
@@ -63,8 +63,9 @@ function assignSectionIds(sections: readonly SectionNode[]): Map<SectionNode, st
   const ids = new Map<SectionNode, string>();
   const used = new Set<string>();
   for (const s of sections) {
-    if (!s.title) continue;
-    const base = s.target ?? slugifyTitle(s.title);
+    const text = sectionTitleText(s);
+    if (!text) continue;
+    const base = s.target ?? slugifyTitle(text);
     let id = base;
     let n = 2;
     while (used.has(id)) id = `${base}-${n++}`;
@@ -80,12 +81,16 @@ export function buildDocPageView(doc: IngestedDoc, docPath: string): DocPageView
 
   // Reuse the first section's title as the page <h1>; falling back to
   // doc.qa avoids leaking raw IR keys like "config:details" into the UI.
-  const displayTitle = sections[0]?.title || doc.qa || docPath;
+  // The <h1> is plain text — inline structure (code, role) renders only in
+  // the in-flow <h2>; using the projection here keeps the tab title and
+  // navigation labels clean.
+  const firstTitle = sections[0] ? sectionTitleText(sections[0]) : "";
+  const displayTitle = firstTitle || doc.qa || docPath;
   const pageTitle = doc.qa || docPath;
-  const firstTitleIsH1 = sections.length > 0 && sections[0].title === displayTitle;
+  const firstTitleIsH1 = sections.length > 0 && firstTitle === displayTitle && !!firstTitle;
 
   // TOC entries: any titled section, minus the first when it became the h1.
-  const titled = sections.filter((s, i) => s.title && !(i === 0 && firstTitleIsH1));
+  const titled = sections.filter((s, i) => sectionTitleText(s) && !(i === 0 && firstTitleIsH1));
 
   let currentH2Id: string | undefined;
   const tocEntries: TocEntry[] = titled.map((s) => {

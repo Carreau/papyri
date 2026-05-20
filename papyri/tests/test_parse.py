@@ -113,6 +113,30 @@ def test_parse_warning_directive():
     assert len(items[0].children) == 0
 
 
+def test_parse_section_title_inline_content():
+    """Section titles preserve inline nodes (code, roles, refs) instead of
+    being flattened to a single string. Renderers can then style them."""
+    data = dedent(
+        """
+        Title with ``code`` and :func:`foo`
+        ===================================
+
+        Body.
+        """
+    ).encode()
+    [section] = parse(data, "test_parse_section_title_inline_content")
+    title = section.title
+    assert isinstance(title, tuple)
+    types = [type(n).__name__ for n in title]
+    assert "InlineCode" in types
+    assert "InlineRole" in types
+    code = next(n for n in title if isinstance(n, InlineCode))
+    assert code.value == "code"
+    role = next(n for n in title if isinstance(n, InlineRole))
+    assert role.role == "func"
+    assert role.value == "foo"
+
+
 def test_parse_space():
     [section] = parse(
         b"Element-wise maximum of two arrays, propagating any NaNs.",

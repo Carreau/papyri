@@ -2,6 +2,7 @@
 import {
   loadModule,
   sectionChildren,
+  sectionTitleNodes,
   slugToQualname,
   resolveVersion,
   type IngestedDoc,
@@ -216,7 +217,13 @@ const crumbs = qualnameAncestors(qualname).map((qa) => ({
         <h2>Additional content</h2>
         {view.arbitrary.map((s) => (
           <div>
-            {s.title ? <h3>{s.title}</h3> : null}
+            {sectionTitleNodes(s).length > 0 ? (
+              <h3>
+                {sectionTitleNodes(s).map((n) => (
+                  <IrNode node={n} resolveXref={resolveXref} />
+                ))}
+              </h3>
+            ) : null}
             {sectionChildren(s).map((c) => (
               <IrNode node={c} resolveXref={resolveXref} />
             ))}

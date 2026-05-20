@@ -346,7 +346,14 @@ class TSVisitor:
 
         by_type = {c.type: c for c in node.children}
         name = by_type.get("name")
+        uri = by_type.get("uri")
         if name is None:
+            # Embedded-URI autolink form: `<https://example.com/>`_
+            # No display name — use the URI itself as the name, matching
+            # docutils' behavior of rendering the bare URI.
+            if uri is not None:
+                uri_text = self.as_text(uri).replace("\n", " ")
+                return [InlineRole(f"{uri_text} <{uri_text}>", None, None)]
             full_text = self.as_text(node)
             log.warning(
                 "Hyperlink reference %r missing 'name' child in (%s); "
@@ -358,7 +365,6 @@ class TSVisitor:
             return [Text(full_text)]
 
         name_text = self.as_text(name).replace("\n", " ")
-        uri = by_type.get("uri")
         if uri is None:
             return [InlineRole(name_text, None, None)]
 

@@ -71,7 +71,7 @@ from .utils import dedent_but_first
 register(tuple)(4444)
 
 
-@register(4003)
+@debug(4003)
 class InlineRole(Node):
     value: str
     domain: str | None
@@ -728,7 +728,7 @@ class TocTree(Node):
     current: bool = False
 
 
-@register(4034)
+@debug(4034)
 class Options(Node):
     values: tuple[str, ...]
 

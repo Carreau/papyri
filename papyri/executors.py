@@ -12,7 +12,7 @@ from typing import Any
 
 
 @contextmanager
-def capture_displayhook(acc: list[Any]) -> Generator[None]:
+def capture_displayhook(acc: list[Any]) -> Generator[None, None, None]:  # noqa: UP043
     def dh(value: Any) -> None:
         acc.append(value)
 

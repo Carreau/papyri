@@ -385,6 +385,107 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   - `viewer/src/styles/ir-nodes.css` — `.unresolved-ref` styles
   - `viewer/src/pages/[pkg]/[ver]/validate.astro` — optional report page
 
+- **Bundle staging area** (captured 2026-05-20).
+  Support uploading a bundle into a *staging* zone that is isolated from the
+  main cross-linked graph — no backrefs computed, easy to drop atomically.
+
+  *Use cases:*
+  - Review a PR's documentation before merging: upload the PR build to staging,
+    browse it, discard it when the PR is merged or closed.
+  - Release-candidate review: publish a `1.2.0rc1` bundle to staging so
+    maintainers can check rendered output before cutting the final release.
+  - The staged bundle should never appear in cross-package "Referenced by"
+    lists or pollute the global search index.
+
+  *Design notes:*
+  - Staging is a namespace, not a separate pipeline. The ingest engine runs
+    the same parsing logic but writes into a `_staging/<pkg>/<ver>/` zone
+    (raw archive) and a separate `staging_*` set of graphstore tables (or a
+    `staging` flag column on the existing tables).
+  - No backrefs are computed for staged bundles. Ingest may resolve *outgoing*
+    refs from the staged bundle against the main graph (so maintainers see
+    which of their own cross-refs are still live), but the main graph's
+    backref tables are not updated.
+  - Drop semantics: deleting a staged bundle is a single table/row drop with
+    no cascading side-effects on other bundles.
+  - Upload endpoint: `POST /api/bundle?staging=1` (or a separate
+    `POST /api/bundle/staging`). The viewer should make the staging zone
+    visually distinct (e.g. a persistent "STAGING" banner, excluded from the
+    default bundle list on the home page).
+  - Promotion path (later, not required for v1): an explicit
+    `POST /api/bundle/staging/<pkg>/<ver>/promote` that moves the raw
+    archive to the main zone and re-ingests it into the full graph.
+  - Staging bundles are not subject to the "only latest backrefs" dedup rule
+    since they have no backrefs; that simplifies staging-aware backref logic.
+  - Auth: staging upload should require the same credentials as normal upload;
+    viewing staged bundles may optionally require login (prevents leaking
+    pre-release content to unauthenticated visitors).
+
+  *Open questions:*
+  - TTL / automatic eviction: should staged bundles auto-expire after N days,
+    or require an explicit delete? Lean toward explicit delete for v1.
+  - Whether `GET /[pkg]/[ver]/` for a staged bundle shows a warning banner
+    (probably yes, reuse the version-status-banner infrastructure from above).
+
+  *Files to create/modify (when implemented):*
+  - `ingest/src/ingest.ts` — `staging` flag; skip backref writes when set
+  - `viewer/src/pages/api/bundle/[...path].ts` — pass flag to ingest
+  - `viewer/src/lib/graphstore.ts` — `listStagingBundles`, `dropStagingBundle`
+  - `viewer/src/pages/[pkg]/[ver]/index.astro` — staging banner
+  - `viewer/src/pages/staging.astro` — list of all staged bundles (admin view)
+
+- **Incoming broken-link report page** (captured 2026-05-20).
+  A per-bundle report page at `/[pkg]/[ver]/backref-validate` (or similar)
+  that lists every *incoming* cross-reference from other bundles that no
+  longer resolves — i.e. another package links to an identifier or page that
+  this bundle no longer exports.
+
+  *Why this matters:*
+  - When a maintainer renames or removes a public API symbol, all other bundles
+    that referenced the old name now have dangling links. Today this is silent.
+  - The report lets maintainers audit the real-world breakage before releasing,
+    and lets downstream maintainers discover that the API they depend on has
+    moved.
+
+  *Data model:*
+  - At ingest time the graph already stores `(source_pkg, source_ver,
+    source_path, dest_pkg, dest_ver, dest_kind, dest_identifier)` in the
+    `links` table (or per-bundle refs table if that design lands).
+  - A broken incoming link is one where `dest_identifier` no longer exists in
+    the current `nodes` table for `(dest_pkg, dest_ver)`.
+  - The query is straightforward: `SELECT * FROM links WHERE dest_pkg = ? AND
+    dest_ver = ? AND NOT EXISTS (SELECT 1 FROM nodes WHERE pkg = dest_pkg AND
+    ver = dest_ver AND identifier = dest_identifier)`.
+  - Results are grouped by `(source_pkg, source_ver)` and by kind
+    (module-level ref vs. parameter ref vs. narrative-doc ref).
+
+  *Design notes:*
+  - This is a read-only, render-time query — no IR changes needed.
+  - The page is linked from the bundle's index page (e.g. a small
+    "N unresolved incoming refs" badge) so maintainers can find it without
+    knowing the URL.
+  - Distinct from the *outgoing* unresolved-ref report (`/validate`) which
+    shows links this bundle makes to others that don't resolve. Both pages
+    are useful; they answer different questions (am I breaking others? vs. am
+    I referring to something that no longer exists?).
+  - For staging bundles, run the same query against the staging graph —
+    useful for verifying that a PR's doc changes don't introduce new broken
+    incoming links before merging.
+  - Pagination or truncation at ~500 rows for large packages (e.g. numpy) to
+    avoid unbounded page loads.
+
+  *Open questions:*
+  - Whether to surface the report in the main navigation or only via the badge
+    link — start with badge-only to keep noise down.
+  - Whether ingest should eagerly precompute the broken-backref count and
+    store it as a `bundle_stats` row so the badge renders without an
+    additional query per page load.
+
+  *Files to create/modify (when implemented):*
+  - `viewer/src/lib/graph.ts` — `getBrokenBackrefs(pkg, ver)` query
+  - `viewer/src/pages/[pkg]/[ver]/backref-validate.astro` — report page
+  - `viewer/src/pages/[pkg]/[ver]/index.astro` — broken-backref count badge
+
 ## Codebase cleanup follow-ups (audited 2026-05-01)
 
 Items below come from a full-tree review (Python / TS ingest / viewer). Each

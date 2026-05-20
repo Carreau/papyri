@@ -64,9 +64,18 @@ def admonition_helper(name, argument, options, content):
     assert not options
     if content:
         inner = parse(content.encode(), qa="")
-        assert len(inner) == 1, (inner, name, argument, options, content)
-
-        assert isinstance(inner[0], Section)
+        if len(inner) != 1 or not isinstance(inner[0], Section):
+            log.warning(
+                "admonition %r: expected 1 Section, got %r; rendering as plain text",
+                name,
+                inner,
+            )
+            return [
+                Admonition(
+                    kind=name,
+                    children=[AdmonitionTitle([Text(f"{name} {argument}")])],
+                )
+            ]
 
         return [
             Admonition(

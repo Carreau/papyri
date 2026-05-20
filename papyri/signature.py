@@ -48,7 +48,7 @@ class SigParam(Node):
 @register(4029)
 class SignatureNode(Node):
     kind: str  # maybe enum, is it a function, async generator, generator, etc.
-    parameters: list[SigParam]  # of pairs, we don't use dict because of ordering
+    parameters: tuple[SigParam, ...]  # of pairs, we don't use dict because of ordering
     return_annotation: Empty | str
     target_name: str
     type = "signature"

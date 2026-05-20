@@ -110,7 +110,7 @@ def test_parse_warning_directive():
         items[0].value
         == "Title The warning directive does not admit a title.\nJust testing now."
     )
-    assert items[0].children == []
+    assert len(items[0].children) == 0
 
 
 def test_parse_space():
@@ -627,8 +627,8 @@ def test_resolve_colon_notation_path_via_dot_notation():
 @pytest.mark.parametrize(
     "kind", ["note", "warning", "deprecated", "versionadded", "versionchanged"]
 )
-def test_admonition_helper_children_is_list(kind):
-    """Admonition children must be a list, not a dataclasses.Field sentinel.
+def test_admonition_helper_children_is_sequence(kind):
+    """Admonition children must be a sequence, not a dataclasses.Field sentinel.
 
     Regression: admonition_helper passed children as the first positional arg
     but Admonition has `kind` as the first annotation, so children was never
@@ -644,7 +644,7 @@ def test_admonition_helper_children_is_list(kind):
     assert not isinstance(admonition.children, dataclasses.Field), (
         f"Admonition.children is a Field sentinel: {admonition.children!r}"
     )
-    assert isinstance(admonition.children, list)
+    assert isinstance(admonition.children, (list, tuple))
 
 
 # ---------------------------------------------------------------------------

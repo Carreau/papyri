@@ -29,7 +29,7 @@ def test_generated_doc_new():
     one so that `_ordered_sections` received None instead of [].
     """
     doc = GeneratedDoc.new()
-    assert isinstance(doc._ordered_sections, list), doc._ordered_sections
+    assert isinstance(doc._ordered_sections, (list, tuple)), doc._ordered_sections
     assert isinstance(doc._content, dict), doc._content
 
 
@@ -240,7 +240,7 @@ def test_normalize_see_also_rst_comment_description():
     items = _normalize_see_also(see_also, qa="test:func")  # type: ignore[arg-type]
     assert len(items) == 3  # one SeeAlsoItem per name
     for item in items:
-        assert item.descriptions == [], (
+        assert len(item.descriptions) == 0, (
             f"Expected empty descriptions for '..', got {item.descriptions!r}"
         )
 

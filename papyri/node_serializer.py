@@ -37,10 +37,10 @@ def serialize(instance, annotation):
             return instance
 
         origin = getattr(annotation, "__origin__", None)
-        if origin is list:
-            assert isinstance(instance, origin), f"{instance} {origin}"
+        if origin in (list, tuple):
+            assert isinstance(instance, (list, tuple)), f"{instance} {origin}"
             inner_annotation = annotation.__args__
-            # assert len(inner_annotation) == 1, inner_annotation
+            # tuple[T, ...] has __args__ == (T, Ellipsis); use index 0 in both cases.
             return [serialize(x, inner_annotation[0]) for x in instance]
         if origin is dict:
             assert isinstance(instance, origin)

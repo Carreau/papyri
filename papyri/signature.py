@@ -4,7 +4,10 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-import annotationlib
+try:
+    import annotationlib
+except ImportError:
+    annotationlib = None
 
 from .errors import TextSignatureParsingFailed
 from .node_base import Node, register
@@ -93,9 +96,31 @@ class Signature:
 
         """
         self.target_item = target_item
-        self._sig = inspect.signature(
-            target_item, annotation_format=annotationlib.Format.STRING
-        )
+        if annotationlib is not None:
+            self._sig = inspect.signature(
+                target_item,
+                annotation_format=annotationlib.Format.STRING,  # type: ignore[call-arg]
+            )
+        else:
+            # Python 3.13 fallback: inspect.signature returns evaluated
+            # annotations. Format them to strings to match 3.14 behavior.
+            raw = inspect.signature(target_item)
+            params = [
+                p.replace(
+                    annotation=inspect.formatannotation(p.annotation)
+                    if p.annotation is not inspect.Parameter.empty
+                    else p.annotation,
+                )
+                for p in raw.parameters.values()
+            ]
+            return_annotation = (
+                inspect.formatannotation(raw.return_annotation)
+                if raw.return_annotation is not inspect.Signature.empty
+                else raw.return_annotation
+            )
+            self._sig = raw.replace(
+                parameters=params, return_annotation=return_annotation
+            )
 
     def to_node(self) -> SignatureNode:
         kind = ""

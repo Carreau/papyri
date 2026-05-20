@@ -669,14 +669,14 @@ class PapyriDocTestRunner(doctest.DocTestRunner):
 
     def report_unexpected_exception(
         self,
-        out: Callable[..., None],
+        out: Callable[[str], object],
         test: doctest.DocTest,
         example: doctest.Example,
         exc_info: tuple[type[BaseException], BaseException, TracebackType | None],
     ) -> None:
-        out(f"Unexpected exception after running example in `{self.qa}`", exc_info)
-        tok_entries = self._get_tok_entries(example)
         formatted = "".join(traceback.format_exception(*exc_info))
+        out(f"Unexpected exception after running example in `{self.qa}`\n{formatted}")
+        tok_entries = self._get_tok_entries(example)
         self._example_section_data.append(
             GenCode(tok_entries, formatted, ExecutionStatus.unexpected_exception)
         )

@@ -9,7 +9,9 @@ exec_failure = 'raise'
 exclude= ["papyri.utils:FullQual","papyri.utils:Canonical" ]
 [global.directives]
 mydirective='papyri.examples:_mydirective_handler'
- 
+# To silently drop a directive, map it to papyri.directives:drop:
+# testsetup = 'papyri.directives:drop'
+
 
 [meta]
 github_slug = 'jupyter/papyri'

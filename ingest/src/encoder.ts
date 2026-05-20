@@ -129,6 +129,8 @@ export const FIELD_ORDER: Readonly<Record<number, { name: string; fields: readon
   4062: { name: "Image", fields: ["url", "alt"] },
   4063: { name: "CitationReference", fields: ["label"] },
   4064: { name: "Citation", fields: ["label", "children"] },
+  4066: { name: "FootnoteReference", fields: ["label"] },
+  4067: { name: "Footnote", fields: ["label", "children"] },
   // Bundle (tag 4070): top-level publishable artifact written by `papyri pack`.
   // Source of truth: papyri/bundle.py.  Field order MUST match the Python
   // class declaration; pack_format_version + ir_schema_version come first

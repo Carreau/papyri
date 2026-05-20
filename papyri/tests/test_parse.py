@@ -406,6 +406,97 @@ def test_parse_citation_block():
     assert citations[0].children[0].children[0].value == "Book title, Author, Year."  # type: ignore[union-attr]
 
 
+def test_parse_footnote_reference():
+    """
+    Inline footnote references like ``[1]_`` should parse as a
+    FootnoteReference node carrying the label.
+    """
+    from papyri.nodes import FootnoteReference
+
+    [section] = parse(b"See [1]_ for more details.", "test_parse_footnote_reference")
+    [paragraph_node] = section.children
+    assert isinstance(paragraph_node, Paragraph)
+    fnotes = [c for c in paragraph_node.children if isinstance(c, FootnoteReference)]
+    assert len(fnotes) == 1, (
+        f"expected one FootnoteReference among {paragraph_node.children!r}"
+    )
+    assert fnotes[0].label == "1"
+
+
+def test_parse_footnote_reference_named():
+    """Named (``[#name]_``) and auto (``[#]_``, ``[*]_``) footnote refs."""
+    from papyri.nodes import FootnoteReference
+
+    [section] = parse(
+        b"See [#name]_ and [#]_ and [*]_.",
+        "test_parse_footnote_reference_named",
+    )
+    [paragraph_node] = section.children
+    assert isinstance(paragraph_node, Paragraph)
+    fnotes = [c for c in paragraph_node.children if isinstance(c, FootnoteReference)]
+    assert [c.label for c in fnotes] == ["#name", "#", "*"]
+
+
+def test_footnote_reference_roundtrip():
+    """
+    FootnoteReference should survive a CBOR encode/decode roundtrip via the
+    shared IR encoder, confirming CBOR tag 4066 is wired in.
+    """
+    from papyri.nodes import FootnoteReference, encoder
+
+    original = FootnoteReference(label="1")
+    decoded = encoder.decode(encoder.encode(original))
+    assert isinstance(decoded, FootnoteReference)
+    assert decoded.label == "1"
+
+
+def test_parse_footnote_block():
+    """
+    Block-level ``.. [label] body`` footnote definitions should parse as
+    Footnote nodes carrying a label and a body Paragraph.
+    """
+    from papyri.nodes import Footnote
+
+    sections = parse(
+        b".. [1] First footnote body.\n",
+        "test_parse_footnote_block",
+    )
+    footnotes = []
+    stack: list = list(sections)
+    while stack:
+        node = stack.pop()
+        if isinstance(node, Footnote):
+            footnotes.append(node)
+        elif hasattr(node, "children"):
+            stack.extend(node.children or [])
+
+    assert len(footnotes) == 1, f"expected one Footnote, got {footnotes!r}"
+    assert footnotes[0].label == "1"
+    assert isinstance(footnotes[0].children[0], Paragraph)
+    text_content = "".join(
+        c.value
+        for c in footnotes[0].children[0].children
+        if hasattr(c, "value") and isinstance(c.value, str)
+    )
+    assert "First" in text_content
+    assert "footnote" in text_content
+    assert "body" in text_content
+
+
+def test_footnote_roundtrip():
+    """
+    Footnote block node should survive a CBOR encode/decode roundtrip
+    via the shared IR encoder, confirming tag 4067 is wired in.
+    """
+    from papyri.nodes import Footnote, Paragraph, Text, encoder
+
+    original = Footnote(label="1", children=[Paragraph([Text("Body.")])])
+    decoded = encoder.decode(encoder.encode(original))
+    assert isinstance(decoded, Footnote)
+    assert decoded.label == "1"
+    assert decoded.children[0].children[0].value == "Body."  # type: ignore[union-attr]
+
+
 def test_citation_roundtrip():
     """
     Citation block node should survive a CBOR encode/decode roundtrip

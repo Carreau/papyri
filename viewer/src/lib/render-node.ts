@@ -259,6 +259,17 @@ export async function renderNode(node: IRNode, opts: RenderOptions = {}): Promis
       return `<div id="cite-${label}" class="citation"><span class="citation-label">[${label}]</span>${inner}</div>`;
     }
 
+    case "FootnoteReference": {
+      const label = escapeHtml(String(n.label ?? ""));
+      return `<a class="footnote-reference" href="#footnote-${label}"><sup>[${label}]</sup></a>`;
+    }
+
+    case "Footnote": {
+      const label = escapeHtml(String(n.label ?? ""));
+      const inner = await renderChildren(asArray(n.children), opts);
+      return `<div id="footnote-${label}" class="footnote"><span class="footnote-label">[${label}]</span>${inner}</div>`;
+    }
+
     case "SubstitutionRef":
     case "SubstitutionDef":
       return `<span class="substitution">${escapeHtml(String(n.value ?? ""))}</span>`;

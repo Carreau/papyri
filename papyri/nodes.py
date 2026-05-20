@@ -213,6 +213,38 @@ class Citation(Node):
     children: tuple[Paragraph, ...]
 
 
+@register(4066)
+class FootnoteReference(Node):
+    """
+    Inline reference to a footnote, from RST source like ``[1]_``, ``[#]_``,
+    ``[#name]_`` or ``[*]_``.
+
+    ``label`` carries the raw footnote label (``"1"``, ``"#"``, ``"#name"``,
+    ``"*"``). The renderer displays it as ``[label]`` and anchors it to
+    ``#footnote-<label>``.
+    """
+
+    type = "footnoteReference"
+    label: str
+
+
+@register(4067)
+class Footnote(Node):
+    """
+    Block-level footnote definition, from RST source like
+    ``.. [1] body text`` or ``.. [#name] body text``.
+
+    ``label`` matches the identifier used in ``FootnoteReference`` nodes
+    (``"1"``, ``"#"``, ``"#name"``, ``"*"``). ``children`` holds the body
+    paragraphs.  The renderer emits this with ``id="footnote-<label>"`` so
+    ``FootnoteReference`` anchors scroll to it.
+    """
+
+    type = "footnote"
+    label: str
+    children: list[Paragraph]
+
+
 @debug(4018)
 class Unimplemented(Node):
     placeholder: str
@@ -572,6 +604,7 @@ class Section(Node):
         | Unimplemented
         | UnimplementedInline
         | Citation
+        | Footnote
         | Table,
         ...,
     ]
@@ -866,6 +899,7 @@ StaticPhrasingContent: TypeAlias = (
     | InlineRole
     | CrossRef
     | CitationReference
+    | FootnoteReference
     | SubstitutionRef
     | Unimplemented
 )
@@ -889,6 +923,7 @@ FlowContent: TypeAlias = (
     | FieldList
     | Comment
     | Citation
+    | Footnote
     | Image
     | Figure
     | Table

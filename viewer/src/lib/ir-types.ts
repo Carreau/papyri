@@ -64,6 +64,8 @@ export const IR_TYPE_NAMES: readonly string[] = [
   "Image",
   "CitationReference",
   "Citation",
+  "FootnoteReference",
+  "Footnote",
 ] as const;
 
 /** Lower-cased slug for a type name, e.g. "Paragraph" → "paragraph". */

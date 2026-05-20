@@ -105,6 +105,61 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
 - Do we want to re-publish to PyPI under a new version, or keep it as
   "install from git" only for the foreseeable future? **Still open.**
 
+- **Per-bundle crossref tables instead of one global `links` table?**
+  Today the graphstore keeps every crossref in a single `links(source,
+  dest)` table over a global `nodes` table (see
+  `ingest/migrations/0000_init.sql`). `getBackrefs`
+  (`viewer/src/lib/graph.ts`) computes incoming edges with a join across
+  `links` + two copies of `nodes`, filtered by `(package, identifier)`.
+
+  Alternative shape to consider:
+    1. A per-bundle table of *outgoing* refs — the refs that bundle
+       actually emits — keyed by source qualname → target
+       `(pkg, kind, identifier)`. Naturally partitioned by bundle, so
+       re-ingesting a bundle is a single table drop+rebuild instead of
+       deleting rows by `source` from a global table.
+    2. A small coarse-grained bundle-to-bundle index (`from_bundle,
+       to_bundle`, maybe with a count) that says which bundles refer to
+       which.
+    3. Backrefs computed lazily at view time: use the coarse index to
+       find candidate bundles that mention the target package, then
+       union the relevant per-bundle outgoing tables, filtering for the
+       target identifier.
+
+  Things to think about before committing to it:
+  - **Cost model.** The global `links` table makes backref lookup one
+    indexed query; the per-bundle shape makes it `O(N_bundles_pointing_at_pkg)`
+    queries (or a `UNION ALL` over them). For a hot package like numpy
+    where almost everything points at it, that fan-out could be larger
+    than the current single join. But the per-bundle tables would each
+    be small, so the *total* row count scanned might still be lower.
+  - **Cache friendliness.** Per-bundle tables are append-only during a
+    single ingest; the global `links` table is write-amplified across
+    every concurrent upload. The per-bundle shape probably wins on the
+    hosted service (D1) where write contention matters.
+  - **Re-ingest semantics.** Today removing a bundle means deleting from
+    `nodes` (and `links` cascades). Per-bundle tables make
+    `POST /api/reingest` and bundle eviction trivially atomic per bundle
+    — drop the table.
+  - **Wildcard-version stubs.** `getBackrefs` already matches
+    `version IN ('?','*')` for cross-package refs whose target version
+    is unresolved at ingest. The per-bundle scheme needs to preserve
+    that behavior — either by storing the wildcard at the per-bundle
+    level, or by resolving it lazily when the backref is materialized.
+  - **Schema-per-bundle vs. partition column.** "Per-bundle table" can
+    mean a literal `refs_<pkg>_<ver>` table (clean partitioning, ugly
+    DDL churn) or one `refs` table partitioned by `(from_pkg,
+    from_ver)` with a covering index. D1 doesn't love DDL churn; one
+    table with a partition column is probably the realistic shape.
+  - **Interaction with the "graphstore is a derived cache" invariant.**
+    This is purely a denormalization choice — no IR contract changes,
+    no raw-archive impact — so it's exactly the kind of change the
+    invariant says we're free to make. The question is just whether it
+    pays off.
+
+  Not a decision yet; capture and revisit when backref latency or
+  ingest write contention becomes a measured problem.
+
 ## Follow-ups (not yet scheduled)
 
 - **Missing block directives for numpy / scipy / IPython builds.**

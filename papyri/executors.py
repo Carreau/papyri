@@ -49,7 +49,7 @@ class BlockExecutor:
     def fig_man(self) -> list[Any]:
         from matplotlib import _pylab_helpers
 
-        return _pylab_helpers.Gcf.get_all_fig_managers()
+        return list(_pylab_helpers.Gcf.get_all_fig_managers())
 
     def get_figs(self) -> list[bytes]:
         figs = []

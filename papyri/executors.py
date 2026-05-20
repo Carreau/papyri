@@ -6,13 +6,14 @@ and capture the resulting figures / stdout / stderr.
 import ast
 import io
 import sys
+from collections.abc import Generator
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from typing import Any
 
 
 @contextmanager
-def capture_displayhook(acc):
-    def dh(value):
+def capture_displayhook(acc: list[Any]) -> Generator[None, None, None]:  # noqa: UP043
+    def dh(value: Any) -> None:
         acc.append(value)
 
     old_dh = sys.displayhook
@@ -29,28 +30,28 @@ class BlockExecutor:
     can take sequences of code, keep state and will return the figures generated.
     """
 
-    def __init__(self, ns):
+    def __init__(self, ns: dict[str, Any]) -> None:
         import matplotlib
 
         matplotlib.use("agg")
         self.ns = ns
         pass
 
-    def __enter__(self):
+    def __enter__(self) -> None:
         assert (len(self.fig_man())) == 0, f"init fail in {len(self.fig_man())}"
 
-    def __exit__(self, *args, **kwargs):
+    def __exit__(self, *args: Any, **kwargs: Any) -> None:
         import matplotlib.pyplot as plt
 
         plt.close("all")
         assert (len(self.fig_man())) == 0, f"init fail in {len(self.fig_man())}"
 
-    def fig_man(self):
+    def fig_man(self) -> list[Any]:
         from matplotlib import _pylab_helpers
 
-        return _pylab_helpers.Gcf.get_all_fig_managers()
+        return list(_pylab_helpers.Gcf.get_all_fig_managers())
 
-    def get_figs(self):
+    def get_figs(self) -> list[bytes]:
         figs = []
         for fig_man in self.fig_man():
             buf = io.BytesIO()
@@ -59,7 +60,7 @@ class BlockExecutor:
             figs.append(buf.read())
         return figs
 
-    def _exec(self, text, ns, name):
+    def _exec(self, text: str, ns: dict[str, Any], name: str) -> Any:
         """
         A variant of exec that can run multi line,
         and capture sys_displayhook
@@ -80,7 +81,7 @@ class BlockExecutor:
         else:
             return None
 
-    def exec(self, text, *, name="<papyri>"):
+    def exec(self, text: str, *, name: str = "<papyri>") -> tuple[Any, Any, str, str]:
         from matplotlib import _pylab_helpers, cbook
         from matplotlib.backend_bases import FigureManagerBase
 

@@ -218,7 +218,7 @@ class Signature:
         else:
             return None
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """
         Output self as JSON (Python dict), using the same format as Griffe
         """
@@ -230,7 +230,7 @@ class Signature:
 
         json_data["returns"] = self.return_annotation
 
-        return json_data  # type: ignore[no-any-return]
+        return json_data
 
     def to_json(self) -> bytes:
         """

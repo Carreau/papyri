@@ -21,6 +21,7 @@ import logging
 import warnings
 from hashlib import sha256
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import jedi
 from pygments import lex
@@ -28,6 +29,9 @@ from pygments.formatters import HtmlFormatter
 from pygments.lexers import PythonLexer
 
 from .utils import pos_to_nl
+
+if TYPE_CHECKING:
+    from .config_loader import Config
 
 log = logging.getLogger("papyri")
 
@@ -37,24 +41,24 @@ _PYGMENTS_FMT = HtmlFormatter()
 _JEDI_CACHE = Path("~/.cache/papyri/jedi/").expanduser()
 
 
-def _hashf(text):
+def _hashf(text: str) -> str:
     ##  for cache expiring every day.
     ## for every hours, change to 0:13.
 
     return sha256(text.encode()).hexdigest() + datetime.datetime.now().isoformat()[0:10]
 
 
-def _jedi_get_cache(text):
+def _jedi_get_cache(text: str) -> list[tuple[str, str | None]] | None:
     _JEDI_CACHE.mkdir(exist_ok=True, parents=True)
 
     _cache = _JEDI_CACHE / _hashf(text)
     if _cache.exists():
-        return tuple(tuple(x) for x in json.loads(_cache.read_text()))
+        return [tuple(x) for x in json.loads(_cache.read_text())]
 
     return None
 
 
-def _jedi_set_cache(text, value):
+def _jedi_set_cache(text: str, value: list[tuple[str, str | None]]) -> None:
     _JEDI_CACHE.mkdir(exist_ok=True, parents=True)
 
     _cache = _JEDI_CACHE / _hashf(text)
@@ -62,7 +66,12 @@ def _jedi_set_cache(text, value):
 
 
 def parse_script(
-    script: str, ns: dict, prev, config, *, where=None
+    script: str,
+    ns: dict[str, Any],
+    prev: str,
+    config: Config,
+    *,
+    where: str | None = None,
 ) -> list[tuple[str, str | None]] | None:
     """
     Parse a script into tokens and use Jedi to infer the fully qualified names
@@ -102,7 +111,7 @@ def parse_script(
     full_text = prev + "\n" + script
     k = _jedi_get_cache(full_text)
     if k is not None:
-        return k  # type: ignore[no-any-return]
+        return k
     jeds.append(jedi.Script(full_text))
     P = PythonLexer()
 
@@ -147,7 +156,7 @@ def parse_script(
     return acc
 
 
-def get_classes(code):
+def get_classes(code: str) -> list[str]:
     """
     Extract Pygments token classes names for given code block
     """
@@ -156,7 +165,9 @@ def get_classes(code):
     return classes
 
 
-def _add_classes(entries):
+def _add_classes(
+    entries: list[tuple[str, str | None]],
+) -> list[tuple[str, str | None, str]]:
     assert set(len(x) for x in entries) == {2}
     text = "".join([x for x, y in entries])
     classes = get_classes(text)

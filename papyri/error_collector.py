@@ -14,6 +14,7 @@ expected error never actually fired (so the allow-list stays trimmed).
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 from .errors import UnseenError
@@ -28,7 +29,7 @@ class ErrorCollector:
     _unexpected_errors: dict[str, Any]
     _expected_errors: dict[str, Any]
 
-    def __init__(self, config: Config, log):
+    def __init__(self, config: Config, log: logging.Logger) -> None:
         self.config: Config = config
         self.log = log
 
@@ -39,7 +40,7 @@ class ErrorCollector:
         self._unexpected_errors = {}
         self._expected_errors = {}
 
-    def __call__(self, qa):
+    def __call__(self, qa: str) -> ErrorCollector:
         self._qa = qa
         return self
 

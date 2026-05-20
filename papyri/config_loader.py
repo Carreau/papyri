@@ -48,7 +48,7 @@ class Config:
     execute_doctests: bool = True
     directives: dict[str, str] = dataclasses.field(default_factory=lambda: {})
 
-    def replace(self, **kwargs):
+    def replace(self, **kwargs: Any) -> Config:
         return dataclasses.replace(self, **kwargs)
 
 

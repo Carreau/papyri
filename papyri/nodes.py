@@ -68,7 +68,7 @@ from .node_base import REV_TAG_MAP, Node, UnserializableNode, debug, register
 from .serde import get_type_hints
 from .utils import dedent_but_first
 
-register(tuple)(4444)
+register(4444)(tuple)
 
 
 @debug(4003)
@@ -714,7 +714,7 @@ class GenCode(UnserializableNode):
         return f"<{self.__class__.__name__}: {self.entries=} {self.out=} {self.ce_status=}>"
 
 
-def compress_word(stream) -> list[Any]:
+def compress_word(stream: list[Any]) -> list[Any]:
     acc = []
     wds = ""
     assert isinstance(stream, list), stream

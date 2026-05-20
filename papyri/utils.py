@@ -3,21 +3,21 @@ from __future__ import annotations
 import importlib
 from textwrap import dedent
 from types import ModuleType
-from typing import NewType
+from typing import Any, NewType
 
 
 class FullQual(str):
-    def __init__(self, qa):
+    def __init__(self, qa: str) -> None:
         self._qa = qa
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self._qa
 
 
 Canonical = NewType("Canonical", str)
 
 
-def full_qual(obj) -> FullQual | None:
+def full_qual(obj: Any) -> FullQual | None:
     """
     Compute the fully qualified name of an object.
 
@@ -90,7 +90,7 @@ def full_qual(obj) -> FullQual | None:
     return None
 
 
-def dedent_but_first(text):
+def dedent_but_first(text: str) -> str:
     """
     simple version of `inspect.cleandoc` that does not trim empty lines
     """
@@ -114,13 +114,13 @@ def pos_to_nl(script: str, pos: int) -> tuple[int, int]:
     raise RuntimeError
 
 
-def obj_from_qualname(name):
+def obj_from_qualname(name: str) -> Any:
     mod_name, sep, objs = name.partition(":")
     module = importlib.import_module(mod_name)
     if not sep:
         return module
     else:
-        obj = module
+        obj: Any = module
         parts = objs.split(".")
         for p in parts:
             obj = getattr(obj, p)

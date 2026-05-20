@@ -8,6 +8,7 @@ import json
 import urllib.error
 import urllib.request
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import cbor2
@@ -41,7 +42,7 @@ def _make_bundle(root: Path, pkg: str = "mypkg", version: str = "1.0") -> Path:
     return root
 
 
-def _mock_response(body: dict, status: int = 200) -> MagicMock:
+def _mock_response(body: dict[str, Any], status: int = 200) -> MagicMock:
     """Mock an HTTPResponse for ``papyri upload``'s NDJSON streaming path.
 
     The supplied ``body`` is emitted as a single ``done`` event on the
@@ -67,7 +68,7 @@ def _mock_response(body: dict, status: int = 200) -> MagicMock:
     return resp
 
 
-def _mock_stream_response(events: list[dict], status: int = 200) -> MagicMock:
+def _mock_stream_response(events: list[dict[str, Any]], status: int = 200) -> MagicMock:
     """Mock an NDJSON-streaming HTTPResponse: one event per yielded line."""
     raw = b"".join(json.dumps(e).encode() + b"\n" for e in events)
     resp = MagicMock()
@@ -181,7 +182,7 @@ def test_upload_sends_a_papyri_artifact(tmp_path):
     resp = _mock_response({"ok": True, "pkg": "mypkg", "version": "1.0"})
     captured: list[bytes] = []
 
-    def fake_urlopen(req: urllib.request.Request):
+    def fake_urlopen(req: urllib.request.Request) -> Any:
         assert isinstance(req.data, bytes)
         captured.append(req.data)
         return resp
@@ -211,7 +212,7 @@ def test_upload_dir_and_artifact_send_identical_bytes(tmp_path):
     resp = _mock_response({"ok": True, "pkg": "mypkg", "version": "1.0"})
     captured: list[bytes] = []
 
-    def fake_urlopen(req: urllib.request.Request):
+    def fake_urlopen(req: urllib.request.Request) -> Any:
         assert isinstance(req.data, bytes)
         captured.append(req.data)
         return resp
@@ -354,7 +355,7 @@ def test_upload_zip_sends_same_bytes_as_artifact(tmp_path):
     resp = _mock_response({"ok": True, "pkg": "mypkg", "version": "1.0"})
     captured: list[bytes] = []
 
-    def fake_urlopen(req: urllib.request.Request):
+    def fake_urlopen(req: urllib.request.Request) -> Any:
         captured.append(req.data)  # type: ignore[arg-type]
         return resp
 

@@ -1,15 +1,16 @@
 import logging
+from typing import Any
 
 log = logging.getLogger("papyri")
 
 
-def flatten(dct):
+def flatten(dct: dict[str, Any]) -> dict[str, list[Any]]:
     return {k: [s for sub in toc for s in sub] for k, toc in dct.items()}
 
 
-def dotdotcount(path):
+def dotdotcount(path: list[str]) -> tuple[int, list[str]]:
     n = 0
-    acc = []
+    acc: list[str] = []
     leading = True
     for it in path:
         if it == "..":
@@ -21,7 +22,12 @@ def dotdotcount(path):
     return n, acc
 
 
-def _tree(current_path, unnest, counter, depth=0) -> dict:
+def _tree(
+    current_path: str,
+    unnest: dict[str, list[str]],
+    counter: dict[str, int],
+    depth: int = 0,
+) -> dict[str, Any]:
     """Recursively build a nested toctree dict rooted at ``current_path``.
 
     Walks the flat toctree adjacency map ``unnest`` (``node -> list of child
@@ -115,7 +121,7 @@ def _tree(current_path, unnest, counter, depth=0) -> dict:
     return children
 
 
-def make_tree(data):
+def make_tree(data: dict[str, Any]) -> tuple[str | None, dict[str, Any]]:
     data = {k: v for k, v in data.items()}
     data = flatten(data)
     data = {k: [i[1] for i in v] for k, v in data.items()}

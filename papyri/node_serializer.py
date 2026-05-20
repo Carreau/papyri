@@ -11,13 +11,13 @@ Used by ``Node.to_dict`` / ``Node.to_json``.
 """
 
 import types
-from typing import Union
+from typing import Any, Union
 from typing import get_type_hints as gth
 
 base_types = {int, str, bool, type(None)}
 
 
-def _is_union(annotation) -> bool:
+def _is_union(annotation: Any) -> bool:
     """Return True for both typing.Union[...] and X | Y (types.UnionType)."""
     return (
         isinstance(annotation, types.UnionType)
@@ -25,11 +25,11 @@ def _is_union(annotation) -> bool:
     )
 
 
-def _union_args(annotation) -> tuple:
+def _union_args(annotation: Any) -> tuple[Any, ...]:
     return annotation.__args__  # type: ignore[no-any-return]
 
 
-def serialize(instance, annotation):
+def serialize(instance: Any, annotation: Any) -> Any:
     try:
         if annotation in base_types:
             # print("BASE", instance)

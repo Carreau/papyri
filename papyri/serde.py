@@ -66,13 +66,13 @@ either 2 Authors or 2 Reviewers.
 
 import types
 from functools import lru_cache
-from typing import ClassVar, Union, get_origin
+from typing import Any, ClassVar, Union, get_origin
 from typing import get_type_hints as gth
 
 base_types = {int, str, bool, type(None)}
 
 
-def _is_union(annotation) -> bool:
+def _is_union(annotation: Any) -> bool:
     """Return True for both typing.Union[...] and X | Y (types.UnionType)."""
     return (
         isinstance(annotation, types.UnionType)
@@ -80,16 +80,16 @@ def _is_union(annotation) -> bool:
     )
 
 
-def _union_args(annotation) -> tuple:
+def _union_args(annotation: Any) -> tuple[Any, ...]:
     return annotation.__args__  # type: ignore[no-any-return]
 
 
 @lru_cache(150)
-def get_type_hints(type_):
+def get_type_hints(type_: Any) -> dict[str, Any]:
     return {k: v for k, v in gth(type_).items() if get_origin(v) is not ClassVar}
 
 
-def serialize(instance, annotation):
+def serialize(instance: Any, annotation: Any) -> Any:
     exception_already_desribed = False
     try:
         if (annotation in base_types) and (isinstance(instance, annotation)):
@@ -164,7 +164,7 @@ _sentinel = object()
 
 
 # type_ and annotation are _likely_ duplicate here as an annotation is likely a type, or  a List, Union, ....)
-def deserialize(type_, annotation, data):
+def deserialize(type_: Any, annotation: Any, data: Any) -> Any:
     try:
         # assert type_ is annotation
         # assert annotation != {}

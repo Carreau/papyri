@@ -910,7 +910,10 @@ class Gen:
                         doctest_runner.get_example_section_data()
                     )
                 else:
-                    example_section_data.append(Text(block.source))
+                    tok_entries = doctest_runner._get_tok_entries(block)
+                    example_section_data.append(
+                        GenCode(tok_entries, "", ExecutionStatus.none)
+                    )
             elif block:
                 example_section_data.append(Text(block))
 

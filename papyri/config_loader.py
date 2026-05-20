@@ -46,6 +46,8 @@ class Config:
     early_error: bool = True
     fail_unseen_error: bool = False
     execute_doctests: bool = True
+    # Names of doctest.OPTIONFLAGS_BY_NAME flags to enable (e.g. ["ELLIPSIS", "NORMALIZE_WHITESPACE"]).
+    doctest_optionflags: Sequence[str] = ("ELLIPSIS",)
     directives: dict[str, str] = dataclasses.field(default_factory=lambda: {})
 
     def replace(self, **kwargs: Any) -> Config:

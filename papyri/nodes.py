@@ -64,7 +64,7 @@ from typing import Any, ClassVar, TypeAlias
 import cbor2
 
 from . import signature
-from .node_base import REV_TAG_MAP, Node, UnserializableNode, register
+from .node_base import REV_TAG_MAP, Node, UnserializableNode, debug, register
 from .serde import get_type_hints
 from .utils import dedent_but_first
 
@@ -163,7 +163,7 @@ class Leaf(Node):
     value: str
 
 
-@register(4027)
+@debug(4027)
 class SubstitutionDef(Node):
     value: str
     children: list[Directive | UnprocessedDirective]
@@ -175,7 +175,7 @@ class SubstitutionDef(Node):
         pass
 
 
-@register(4041)
+@debug(4041)
 class SubstitutionRef(Leaf):
     """
     This will be in the for |XXX|, and need to be replaced.
@@ -214,7 +214,7 @@ class Citation(Node):
     children: list[Paragraph]
 
 
-@register(4018)
+@debug(4018)
 class Unimplemented(Node):
     placeholder: str
     value: str
@@ -223,7 +223,7 @@ class Unimplemented(Node):
         return f"<Unimplemented {self.placeholder!r} {self.value!r}>"
 
 
-@register(4065)
+@debug(4065)
 class Table(Node):
     """Verbatim table content (grid or simple RST table).
 
@@ -318,7 +318,7 @@ class ListItem(Node):
     children: list[FlowContent | PhrasingContent | DefList | UnprocessedDirective]
 
 
-@register(4052)
+@debug(4052)
 class Directive(Node):
     type = "directive"
     name: str
@@ -435,7 +435,7 @@ class Root(Node):
     ]
 
 
-@register(4017)
+@debug(4017)
 class UnimplementedInline(Node):
     children: list[Text]
 

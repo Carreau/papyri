@@ -3,6 +3,18 @@
 // Kept in a separate file with no Node.js imports so it can be bundled for
 // the browser (used by NodesPanel) as well as server-side modules.
 
+// Node types registered with @debug in nodes.py: their schema is in flux and
+// they are not yet considered stable IR output. Must stay in sync with
+// DEBUG_TYPES in node_base.py.
+export const DEBUG_TYPE_NAMES: ReadonlySet<string> = new Set([
+  "Directive",
+  "SubstitutionDef",
+  "SubstitutionRef",
+  "Table",
+  "Unimplemented",
+  "UnimplementedInline",
+]);
+
 export const IR_TYPE_NAMES: readonly string[] = [
   "RefInfo",
   "Root",

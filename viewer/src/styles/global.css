@@ -1035,6 +1035,27 @@ section.backrefs ul.qualnames {
   color: #fff;
   border-color: var(--accent);
 }
+.node-type-nav-item.debug {
+  color: var(--warn-border);
+  border-color: var(--warn-border);
+  border-style: dashed;
+}
+.node-type-nav-item.debug:hover {
+  background: var(--warn-bg);
+}
+.node-type-nav-item.debug.active {
+  background: var(--warn-border);
+  color: #fff;
+  border-color: var(--warn-border);
+  border-style: solid;
+}
+.node-entry.debug {
+  border-color: var(--warn-border);
+  border-style: dashed;
+}
+.node-entry.debug dt {
+  background: var(--warn-bg);
+}
 
 .nodes-loading,
 .nodes-error {

@@ -7,8 +7,9 @@ import { useEffect, useRef, useState } from "react";
 import type { TextSearchResponse, TextHit } from "../pages/api/[pkg]/[ver]/text-search.json.ts";
 
 interface Props {
-  pkg: string;
-  ver: string;
+  /** Bundle-scoped search when both set; cross-bundle when both omitted. */
+  pkg?: string;
+  ver?: string;
 }
 
 const DEBOUNCE_MS = 300;
@@ -19,6 +20,10 @@ export default function TextSearchPanel({ pkg, ver }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const apiPath = pkg && ver ? `/api/${pkg}/${ver}/text-search.json` : `/api/text-search.json`;
+  const placeholder =
+    pkg && ver ? `Search text in ${pkg} ${ver}…` : "Search text across all bundles…";
 
   useEffect(() => {
     if (timerRef.current !== null) clearTimeout(timerRef.current);
@@ -32,7 +37,7 @@ export default function TextSearchPanel({ pkg, ver }: Props) {
 
     setLoading(true);
     timerRef.current = setTimeout(() => {
-      const u = new URL(`/api/${pkg}/${ver}/text-search.json`, window.location.origin);
+      const u = new URL(apiPath, window.location.origin);
       u.searchParams.set("q", query);
       fetch(u.toString())
         .then((r) => {
@@ -50,7 +55,7 @@ export default function TextSearchPanel({ pkg, ver }: Props) {
     return () => {
       if (timerRef.current !== null) clearTimeout(timerRef.current);
     };
-  }, [pkg, ver, query]);
+  }, [apiPath, query]);
 
   const hits: TextHit[] = result?.hits ?? [];
 
@@ -58,7 +63,7 @@ export default function TextSearchPanel({ pkg, ver }: Props) {
     <div className="text-search">
       <input
         type="search"
-        placeholder={`Search text in ${pkg} ${ver}…`}
+        placeholder={placeholder}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         aria-label="Search documentation text"

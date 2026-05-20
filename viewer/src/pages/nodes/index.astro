@@ -1,0 +1,13 @@
+---
+export const prerender = false;
+
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import NodesPanel from "../../components/NodesPanel.tsx";
+---
+
+<BaseLayout title="All nodes — Papyri viewer">
+  <p class="crumb"><a href="/">&larr; All bundles</a></p>
+  <h1>All nodes (across bundles)</h1>
+
+  <NodesPanel client:load />
+</BaseLayout>

@@ -1,0 +1,13 @@
+---
+export const prerender = false;
+
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import TextSearchPanel from "../../components/TextSearchPanel.tsx";
+---
+
+<BaseLayout title="Text search — Papyri viewer">
+  <p class="crumb"><a href="/">&larr; All bundles</a></p>
+  <h1>Text search (across bundles)</h1>
+
+  <TextSearchPanel client:load />
+</BaseLayout>

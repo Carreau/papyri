@@ -1,0 +1,20 @@
+---
+export const prerender = false;
+
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import NodesPanel from "../../../components/NodesPanel.tsx";
+import { typeFromSlug } from "../../../lib/ir-types.ts";
+
+const { nodetype } = Astro.params;
+if (!nodetype) return new Response(null, { status: 404 });
+
+const typeName = typeFromSlug(nodetype);
+if (!typeName) return new Response(null, { status: 404 });
+---
+
+<BaseLayout title={`${typeName} — All bundles — Papyri viewer`}>
+  <p class="crumb"><a href="/nodes/">&larr; All nodes</a></p>
+  <h1>{typeName} (across bundles)</h1>
+
+  <NodesPanel client:load nodetype={nodetype} />
+</BaseLayout>

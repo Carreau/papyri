@@ -592,6 +592,23 @@ _SPHINX_ONLY_DIRECTIVES: frozenset[str] = frozenset(
         "autoexception",
         "ipython",
         "ipython3",
+        # doctest infrastructure — drop silently
+        "testsetup",
+        "testcleanup",
+        "testcode",
+        "testoutput",
+        # render/build directives with no IR equivalent
+        "highlight",
+        "plot",
+        "literalinclude",
+        # Sphinx py-domain (handwritten API ref pages)
+        "function",
+        "class",
+        "method",
+        "attribute",
+        "data",
+        "exception",
+        "module",
     }
 )
 

@@ -20,6 +20,7 @@ import shutil
 import site
 import sys
 import tempfile
+import traceback
 import warnings
 from collections import defaultdict, deque
 from functools import lru_cache
@@ -668,8 +669,9 @@ class PapyriDocTestRunner(doctest.DocTestRunner):
     def report_unexpected_exception(self, out, test, example, exc_info):
         out(f"Unexpected exception after running example in `{self.qa}`", exc_info)
         tok_entries = self._get_tok_entries(example)
+        formatted = "".join(traceback.format_exception(*exc_info))
         self._example_section_data.append(
-            GenCode(tok_entries, exc_info, ExecutionStatus.unexpected_exception)
+            GenCode(tok_entries, formatted, ExecutionStatus.unexpected_exception)
         )
 
     def report_failure(self, out, test, example, got):

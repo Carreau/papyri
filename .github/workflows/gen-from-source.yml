@@ -51,6 +51,16 @@ jobs:
           # shellcheck disable=SC2016
           libs='[
             {
+              "lib": "papyri",
+              "repo": "https://github.com/Carreau/papyri.git",
+              "tags": ["main"],
+              "clone_dir": "papyri",
+              "config": "examples/papyri.toml",
+              "gen_flags": "",
+              "install_cmd": "",
+              "pypi_name": "papyri"
+            },
+            {
               "lib": "IPython",
               "repo": "https://github.com/ipython/ipython.git",
               "tags": ["9.3.0","9.5.0","9.10.0","9.11.0","9.12.0","9.13.0", "main"],

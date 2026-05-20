@@ -223,7 +223,7 @@ class Unimplemented(Node):
         return f"<Unimplemented {self.placeholder!r} {self.value!r}>"
 
 
-@debug(4065)
+@register(4065)
 class Table(Node):
     """Verbatim table content (grid or simple RST table).
 

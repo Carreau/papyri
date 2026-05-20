@@ -10,7 +10,6 @@ export const DEBUG_TYPE_NAMES: ReadonlySet<string> = new Set([
   "Directive",
   "SubstitutionDef",
   "SubstitutionRef",
-  "Table",
   "Unimplemented",
   "UnimplementedInline",
 ]);

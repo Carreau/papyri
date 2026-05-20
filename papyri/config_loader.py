@@ -47,6 +47,9 @@ class Config:
     fail_unseen_error: bool = False
     execute_doctests: bool = True
     directives: dict[str, str] = dataclasses.field(default_factory=lambda: {})
+    # Directive names to silently drop; shorthand for mapping each name to
+    # 'papyri.directives:drop' in [global.directives].
+    skip_directives: Sequence[str] = ()
 
     def replace(self, **kwargs):
         return dataclasses.replace(self, **kwargs)

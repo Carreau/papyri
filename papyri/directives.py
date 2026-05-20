@@ -21,6 +21,22 @@ from .ts import parse
 log = logging.getLogger("papyri")
 
 
+def drop(argument, options, content):
+    """Directive handler that silently discards the directive and returns nothing.
+
+    Register this for any directive whose content should not appear in the IR::
+
+        [global.directives]
+        testsetup = 'papyri.directives:drop'
+        plot      = 'papyri.directives:drop'
+
+    Or via the ``skip_directives`` shorthand in ``[global]``::
+
+        skip_directives = ["testsetup", "plot"]
+    """
+    return []
+
+
 def block_math_handler(argument, options, content):
     """
     Handler for the block math directive handler.

@@ -15,6 +15,7 @@ from typing import Any, cast
 from .directives import (
     block_math_handler,
     deprecated_handler,
+    drop,
     make_image_handler,
     note_handler,
     seealso_handler,
@@ -592,23 +593,6 @@ _SPHINX_ONLY_DIRECTIVES: frozenset[str] = frozenset(
         "autoexception",
         "ipython",
         "ipython3",
-        # doctest infrastructure — drop silently
-        "testsetup",
-        "testcleanup",
-        "testcode",
-        "testoutput",
-        # render/build directives with no IR equivalent
-        "highlight",
-        "plot",
-        "literalinclude",
-        # Sphinx py-domain (handwritten API ref pages)
-        "function",
-        "class",
-        "method",
-        "attribute",
-        "data",
-        "exception",
-        "module",
     }
 )
 
@@ -627,6 +611,7 @@ class DirectiveVisiter(TreeReplacer):
         aliases,
         version,
         config=None,
+        skip_directives=(),
         module: str | None = None,
         doc_path: Path | None = None,
         asset_store: Callable[[str, bytes], None] | None = None,
@@ -664,6 +649,9 @@ class DirectiveVisiter(TreeReplacer):
             "deprecated": deprecated_handler,
             "code-block": self._code_handler,
         }
+
+        for k in skip_directives:
+            self._handlers[k] = drop
 
         for k, v in (config or {}).items():
             self._handlers[k] = obj_from_qualname(v)

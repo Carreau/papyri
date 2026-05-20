@@ -416,13 +416,6 @@ class ThematicBreak(Node):
     type = "thematicBreak"
 
 
-@register(4020)
-class Heading(Node):
-    type = "heading"
-    depth: int
-    children: tuple[PhrasingContent, ...]
-
-
 @register(4001)
 class Root(Node):
     type = "root"
@@ -876,7 +869,6 @@ FlowContent: TypeAlias = (
     Code
     | Paragraph
     | UnprocessedDirective
-    | Heading
     | ThematicBreak
     | Blockquote
     | BulletList

@@ -23,11 +23,12 @@ import tempfile
 import traceback
 import warnings
 from collections import defaultdict, deque
+from collections.abc import Callable
 from functools import lru_cache
 from hashlib import sha256
 from itertools import count
 from pathlib import Path
-from types import FunctionType, ModuleType
+from types import FunctionType, ModuleType, TracebackType
 from typing import (
     Any,
 )
@@ -666,7 +667,13 @@ class PapyriDocTestRunner(doctest.DocTestRunner):
             )
         self.figs.extend(figs)
 
-    def report_unexpected_exception(self, out, test, example, exc_info):
+    def report_unexpected_exception(
+        self,
+        out: Callable[..., None],
+        test: doctest.DocTest,
+        example: doctest.Example,
+        exc_info: tuple[type[BaseException], BaseException, TracebackType | None],
+    ) -> None:
         out(f"Unexpected exception after running example in `{self.qa}`", exc_info)
         tok_entries = self._get_tok_entries(example)
         formatted = "".join(traceback.format_exception(*exc_info))

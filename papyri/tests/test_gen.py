@@ -291,6 +291,54 @@ def test_kaiser_bessel_derived_example_has_figure_and_code():
     )
 
 
+def _fn_with_syntax_error_example():
+    """A function whose example triggers an unexpected exception.
+
+    Examples
+    --------
+    >>> [this is syntax error]
+    """
+
+
+def test_get_example_data_unexpected_exception_is_str():
+    """report_unexpected_exception must store a str in GenCode.out.
+
+    Regression: previously the raw `(type, value, traceback)` tuple from
+    doctest was stored as `Code.out`, which is typed as `str`. The
+    post-processing type check then rejected the whole example with
+    "Wrong type at field ... expecting str got tuple", and the example
+    was silently skipped.
+    """
+    from papyri.gen import Gen
+    from papyri.nodes import GenCode
+
+    qa = "papyri.tests.test_gen:_fn_with_syntax_error_example"
+    config = Config(execute_doctests=True, infer=False, wait_for_plt_show=False)
+    gen = Gen(dummy_progress=True, config=config)
+    gen.root = "papyri"
+    gen.version = "test"
+
+    ndoc = NumpyDocString(_fn_with_syntax_error_example.__doc__)
+    examples = ndoc["Examples"]
+    assert examples
+
+    section, _figs = gen.get_example_data(
+        examples,
+        obj=_fn_with_syntax_error_example,
+        qa=qa,
+        config=config,
+        log=gen.log,
+    )
+
+    code_blocks = [c for c in section.children if isinstance(c, GenCode)]
+    assert code_blocks, "Expected at least one GenCode block"
+    assert any(
+        isinstance(c.out, str) and "SyntaxError" in c.out for c in code_blocks
+    ), (
+        f"Expected a formatted SyntaxError str in GenCode.out; got {[(type(c.out), c.out) for c in code_blocks]!r}"
+    )
+
+
 def test_normalize_see_also_real_description():
     """Real descriptions (non-comment) should be preserved."""
     from papyri.nodes import Paragraph

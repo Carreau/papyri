@@ -21,7 +21,7 @@ import site
 import sys
 import tempfile
 import warnings
-from collections import defaultdict
+from collections import defaultdict, deque
 from functools import lru_cache
 from hashlib import sha256
 from itertools import count
@@ -159,7 +159,7 @@ def processed_example_data(example_section_data: Section) -> Section:
     return new_example_section_data
 
 
-@lru_cache
+@lru_cache(maxsize=4096)
 def normalise_ref(ref):
     """
     Consistently normalize references.
@@ -343,7 +343,9 @@ class DFSCollector:
         assert "." not in self.root
         self.obj: dict[str, Any] = dict()
         self.aliases: dict[str, list[str]] = defaultdict(lambda: [])
-        self._open_list = [(root, [root.__name__])]
+        self._open_list: deque[tuple[Any, list[str]]] = deque(
+            [(root, [root.__name__])]
+        )
         for o in others:
             self._open_list.append((o, o.__name__.split(".")))
         self.log = logging.getLogger("papyri")
@@ -354,7 +356,7 @@ class DFSCollector:
         """
         seen: set[int] = set()
         while self._open_list:
-            current, stack = self._open_list.pop(0)
+            current, stack = self._open_list.popleft()
 
             # numpy objects have no bool values.
             if id(current) not in seen:

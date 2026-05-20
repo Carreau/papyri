@@ -99,7 +99,7 @@ def _build_resolver_cache(
     return _m2, frozenset(_m2.keys())
 
 
-@lru_cache
+@lru_cache(10000)
 def root_start(root, refs):
     """
     Compute a subset of references that start with given root.
@@ -437,18 +437,9 @@ class TreeReplacer:
 Handler = Callable[[str], list[Node]]
 
 DIRECTIVE_MAP: dict[str, dict[str, list[Handler]]] = {}
-BLOCK_DIRECTIVE_MAP: dict[str, dict[str, list[Handler]]] = {}
 
 
 def directive_handler(domain, role):
-    def _inner(func):
-        DIRECTIVE_MAP.setdefault(domain, {}).setdefault(role, []).append(func)
-        return func
-
-    return _inner
-
-
-def block_directive_handler(domain, role):
     def _inner(func):
         DIRECTIVE_MAP.setdefault(domain, {}).setdefault(role, []).append(func)
         return func

@@ -703,7 +703,7 @@ class TSVisitor:
     def visit_attribution(self, node):
         # TODO:
         log.warning("attribution not implemented")
-        return [Unimplemented("inline_target", self.as_text(node))]
+        return [Unimplemented("attribution", self.as_text(node))]
 
     def visit_inline_target(self, node):
         # TODO:

@@ -7,13 +7,9 @@ docs_path = "~/dev/papyri/docs"
 execute_doctests = true
 exec_failure = 'raise'
 exclude= ["papyri.utils:FullQual","papyri.utils:Canonical" ]
-# Directives to drop silently (shorthand for mapping each to papyri.directives:drop).
-# Useful for Sphinx-specific directives that have no IR equivalent.
-# skip_directives = ["testsetup", "testcleanup", "plot"]
-
 [global.directives]
 mydirective='papyri.examples:_mydirective_handler'
-# Any directive can also be dropped explicitly:
+# To silently drop a directive, map it to papyri.directives:drop:
 # testsetup = 'papyri.directives:drop'
 
 

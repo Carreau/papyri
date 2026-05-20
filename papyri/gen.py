@@ -1038,7 +1038,6 @@ class Gen:
                         aliases={},
                         version=self._meta["version"],
                         config=self.config.directives,
-                        skip_directives=self.config.skip_directives,
                         module=self._meta.get("module"),
                         doc_path=p.parent,
                         asset_store=self.put_raw,
@@ -1536,7 +1535,6 @@ class Gen:
                     aliases={},
                     version=self.version,
                     config=self.config.directives,
-                    skip_directives=self.config.skip_directives,
                     module=self.root,
                 )
                 dv.collect_substitutions(s)
@@ -1907,7 +1905,6 @@ class Gen:
                     aliases={},
                     version=self.version,
                     config=self.config.directives,
-                    skip_directives=self.config.skip_directives,
                     module=self.root,
                     doc_path=_doc_path,
                     asset_store=self.put_raw,

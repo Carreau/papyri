@@ -15,7 +15,6 @@ from typing import Any, cast
 from .directives import (
     block_math_handler,
     deprecated_handler,
-    drop,
     make_image_handler,
     note_handler,
     seealso_handler,
@@ -611,7 +610,6 @@ class DirectiveVisiter(TreeReplacer):
         aliases,
         version,
         config=None,
-        skip_directives=(),
         module: str | None = None,
         doc_path: Path | None = None,
         asset_store: Callable[[str, bytes], None] | None = None,
@@ -649,9 +647,6 @@ class DirectiveVisiter(TreeReplacer):
             "deprecated": deprecated_handler,
             "code-block": self._code_handler,
         }
-
-        for k in skip_directives:
-            self._handlers[k] = drop
 
         for k, v in (config or {}).items():
             self._handlers[k] = obj_from_qualname(v)

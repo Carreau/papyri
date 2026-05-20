@@ -1047,17 +1047,16 @@ class Gen:
                         doc_titles=doc_titles,
                     )
                     dv.collect_substitutions(*data)
-                    blob.arbitrary = [dv.visit(s) for s in data]
+                    blob.arbitrary = tuple(dv.visit(s) for s in data)
                     blob.item_file = None
                     blob.item_line = None
                     blob.item_type = None
-                    blob.aliases = []
+                    blob.aliases = ()
                     blob.example_section_data = Section([], None)
-                    blob.see_also = []
+                    blob.see_also = ()
                     blob.signature = None
                     blob.validate()
                 except Exception as e:
-                    raise
                     self.log.warning("Could not process %s, skipping: %s", p, e)
                     continue
                 # Only register the toctree references after the doc validates
@@ -1381,7 +1380,7 @@ class Gen:
             blob.references = ref
         del blob.content["References"]
 
-        blob.aliases = aliases
+        blob.aliases = tuple(aliases)
         assert set(blob.content.keys()) == set(blob.ordered_sections), (
             set(blob.content.keys()),
             set(blob.ordered_sections),
@@ -1890,7 +1889,7 @@ class Gen:
             for lr1 in _local_refs:
                 assert isinstance(lr1, str)
             lr: frozenset[str] = frozenset(_local_refs)
-            doc_blob.local_refs = sorted(lr)
+            doc_blob.local_refs = tuple(sorted(lr))
             try:
                 _src_file = find_file(target_item)
                 _doc_path = (
@@ -1918,7 +1917,7 @@ class Gen:
                         if s in doc_blob.content
                     ],
                 )
-                doc_blob.arbitrary = [dv.visit(s) for s in arbitrary]
+                doc_blob.arbitrary = tuple(dv.visit(s) for s in arbitrary)
                 doc_blob.example_section_data = dv.visit(doc_blob.example_section_data)
                 doc_blob._content = {
                     k: dv.visit(v) for (k, v) in doc_blob._content.items()
@@ -1928,7 +1927,7 @@ class Gen:
                     if section in doc_blob.content:
                         doc_blob.content[section] = dv.visit(doc_blob.content[section])
 
-                doc_blob.see_also = list(
+                doc_blob.see_also = tuple(
                     sorted(set(doc_blob.see_also), key=lambda sa: sa.name.value)
                 )
 

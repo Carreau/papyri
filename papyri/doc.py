@@ -172,12 +172,12 @@ class GeneratedDoc(Node):
     item_file: str | None
     item_line: int | None
     item_type: str | None
-    aliases: list[str]
-    see_also: list[SeeAlsoItem]  # see also data
+    aliases: tuple[str, ...]
+    see_also: tuple[SeeAlsoItem, ...]  # see also data
     signature: SignatureNode | None
-    references: list[str] | None
-    arbitrary: list[Section]
-    local_refs: list[str]
+    references: tuple[str, ...] | None
+    arbitrary: tuple[Section, ...]
+    local_refs: tuple[str, ...]
 
     def __repr__(self):
         return "<GeneratedDoc ...>"
@@ -205,7 +205,7 @@ class GeneratedDoc(Node):
 
     @classmethod
     def new(cls):
-        return cls({}, None, [], None, None, None, [], [], None, None, [], [])
+        return cls({}, None, [], None, None, None, (), (), None, None, (), ())
 
 
 def _numpy_data_to_section(data: list[tuple[str, str, list[str]]], title: str, qa):
@@ -278,7 +278,7 @@ def _normalize_see_also(see_also: Section, qa: str):
             raise ValueError(
                 f"Error {qa}: {see_also=} | {name_and_types=}  | {raw_description=}"
             ) from e
-    return new_see_also
+    return tuple(new_see_also)
 
 
 def _flatten_text(node: Any, out: list[str]) -> None:

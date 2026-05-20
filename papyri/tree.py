@@ -413,9 +413,9 @@ class TreeReplacer:
                     assert isinstance(replacement, list)
 
                     new_children.extend(replacement)
-                if children != new_children:
+                if tuple(children) != tuple(new_children) and hasattr(self, "_cr"):
                     self._cr += 1
-                node_with_children.children = new_children
+                node_with_children.children = tuple(new_children)
                 new_nodes = [node]
             assert isinstance(new_nodes, list)
             return new_nodes

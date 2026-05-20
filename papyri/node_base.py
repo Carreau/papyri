@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import types
 import typing
 from typing import Any
 
@@ -20,16 +21,36 @@ class Base:
         return cls()
 
 
+def _coerce_field(ann, val):
+    """Coerce val to the mutable→immutable type the annotation requires.
+
+    Node fields annotated as tuple[T, ...] must be tuples at runtime so that
+    cbor2 ≥ 6 (which decodes CBOR arrays inside tagged values as tuples) and
+    code that passes plain Python lists both produce the same stored type.
+
+    Also handles Optional[tuple[T, ...]] (i.e. ``tuple[T, ...] | None``).
+    """
+    origin = getattr(ann, "__origin__", None)
+    if origin is tuple and isinstance(val, list):
+        return tuple(val)
+    # Handle X | Y unions (types.UnionType, Python 3.10+) and typing.Union
+    if isinstance(ann, types.UnionType) or origin is typing.Union:
+        for arg in ann.__args__:
+            if getattr(arg, "__origin__", None) is tuple and isinstance(val, list):
+                return tuple(val)
+    return val
+
+
 class Node(Base):
     def __init__(self, *args, **kwargs):
         tt = get_type_hints(type(self))  # type: ignore[arg-type]
         if type(self).__name__ == "Directive":
             tt = {k: v for k, v in tt.items() if k != "type"}
         for attr, val in zip(tt, args, strict=False):
-            setattr(self, attr, val)
+            setattr(self, attr, _coerce_field(tt[attr], val))
         for k, v in kwargs.items():
             assert k in tt, f"{k} not in {tt}"
-            setattr(self, k, v)
+            setattr(self, k, _coerce_field(tt[k], v))
         if hasattr(self, "_post_deserialise"):
             self._post_deserialise()
 
@@ -42,7 +63,7 @@ class Node(Base):
             # Comment nodes are kept in the Python IR / JSON so downstream
             # tools can post-process them, but they have no semantic content
             # and must not appear in the packed CBOR bundle.
-            if isinstance(v, list):
+            if isinstance(v, (list, tuple)):
                 v = [x for x in v if not getattr(type(x), "_drop_in_cbor", False)]
             values.append(v)
         encoder.encode(cbor2.CBORTag(tag, values))
@@ -171,6 +192,10 @@ def validate(obj: Any) -> None:
 
 
 def not_type_check(item, annotation):
+    if isinstance(annotation, types.UnionType):
+        if any(not_type_check(item, arg) is None for arg in annotation.__args__):
+            return None
+        return f"expecting one of {annotation!r}, got {item!r}"
     if not hasattr(annotation, "__origin__"):
         if isinstance(item, annotation):
             return None
@@ -194,8 +219,7 @@ def not_type_check(item, annotation):
         # technically incorrect
         if not isinstance(item, (list, tuple)):
             return f"got  {type(item)}, Yexpecting list"
-        # todo, this does not support Tuple[x,x] < len of tuple, and treat is as a list.
-        assert len(annotation.__args__) == 1
+        # tuple[T, ...] has __args__ == (T, Ellipsis); treat it like list[T].
         inner_type = annotation.__args__[0]
 
         b = [not_type_check(i, inner_type) for i in item]

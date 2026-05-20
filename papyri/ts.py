@@ -222,7 +222,7 @@ class TSVisitor:
                 if current is None:
                     current = n
                 elif type(current) is type(n):
-                    current.children.extend(n.children)  # type: ignore[arg-type]
+                    current.children = (*current.children, *n.children)
                 else:
                     acc.append(current)
                     current = None
@@ -345,11 +345,15 @@ class TSVisitor:
         by_type = {c.type: c for c in node.children}
         name = by_type.get("name")
         if name is None:
-            raise ValueError(
-                f"Hyperlink reference {self.as_text(node)!r} missing 'name' "
-                f"child in ({self._qa}); child types: "
-                f"{[c.type for c in node.children]!r}"
+            full_text = self.as_text(node)
+            log.warning(
+                "Hyperlink reference %r missing 'name' child in (%s); "
+                "child types: %r; rendering as plain text.",
+                full_text,
+                self._qa,
+                [c.type for c in node.children],
             )
+            return [Text(full_text)]
 
         name_text = self.as_text(name).replace("\n", " ")
         uri = by_type.get("uri")
@@ -963,7 +967,7 @@ def nest_sections(items) -> list[Section]:
         if isinstance(item, Section):
             acc.append(item)
         else:
-            acc[-1].children.append(item)
+            acc[-1].children = (*acc[-1].children, item)
     return acc
 
 

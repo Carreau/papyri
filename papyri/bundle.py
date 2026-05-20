@@ -37,4 +37,4 @@ class Bundle(Node):
     narrative: dict[str, GeneratedDoc]
     examples: dict[str, Section]
     assets: dict[str, bytes]
-    toc: list[TocTree]
+    toc: tuple[TocTree, ...]

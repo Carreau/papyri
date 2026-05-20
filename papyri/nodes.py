@@ -166,13 +166,12 @@ class Leaf(Node):
 @debug(4027)
 class SubstitutionDef(Node):
     value: str
-    children: list[Directive | UnprocessedDirective]
+    children: tuple[Directive | UnprocessedDirective, ...]
 
     def __init__(self, value, children):
         self.value = value
-        assert isinstance(children, list)
-        self.children = children
-        pass
+        assert isinstance(children, (list, tuple))
+        self.children = tuple(children)
 
 
 @debug(4041)
@@ -211,7 +210,7 @@ class Citation(Node):
 
     type = "citation"
     label: str
-    children: list[Paragraph]
+    children: tuple[Paragraph, ...]
 
 
 @debug(4018)
@@ -258,19 +257,19 @@ class Text(Node):
 @register(4047)
 class Emphasis(Node):
     type = "emphasis"
-    children: list[PhrasingContent]
+    children: tuple[PhrasingContent, ...]
 
 
 @register(4048)
 class Strong(Node):
     type = "strong"
-    children: list[PhrasingContent]
+    children: tuple[PhrasingContent, ...]
 
 
 @register(4049)
 class Link(Node):
     type = "link"
-    children: list[StaticPhrasingContent]
+    children: tuple[StaticPhrasingContent, ...]
     url: str
     title: str
 
@@ -299,7 +298,7 @@ class InlineCode(Node):
 @register(4045)
 class Paragraph(Node):
     type = "paragraph"
-    children: list[PhrasingContent | UnimplementedInline]
+    children: tuple[PhrasingContent | UnimplementedInline, ...]
 
 
 @register(4053)
@@ -308,14 +307,14 @@ class BulletList(Node):
     ordered: bool
     start: int
     spread: bool
-    children: list[ListContent]
+    children: tuple[ListContent, ...]
 
 
 @register(4054)
 class ListItem(Node):
     type = "listItem"
     spread: bool
-    children: list[FlowContent | PhrasingContent | DefList | UnprocessedDirective]
+    children: tuple[FlowContent | PhrasingContent | DefList | UnprocessedDirective, ...]
 
 
 @debug(4052)
@@ -325,7 +324,9 @@ class Directive(Node):
     args: str | None
     options: dict[str, str]
     value: str | None
-    children: list[FlowContent | PhrasingContent | None] = field(default_factory=list)
+    children: tuple[FlowContent | PhrasingContent | None, ...] = field(
+        default_factory=tuple
+    )
 
     @classmethod
     def from_unprocessed(cls, up):
@@ -342,22 +343,22 @@ class UnprocessedDirective(UnserializableNode):
     args: str | None
     options: dict[str, str]
     value: str | None
-    children: list[FlowContent | PhrasingContent | None]
+    children: tuple[FlowContent | PhrasingContent | None, ...]
     raw: str
 
 
 @register(4055)
 class AdmonitionTitle(Node):
     type = "admonitionTitle"
-    children: list[PhrasingContent | None] = field(default_factory=list)
+    children: tuple[PhrasingContent | None, ...] = field(default_factory=tuple)
 
 
 @register(4056)
 class Admonition(Node):
     type = "admonition"
     kind: str = "note"
-    children: list[FlowContent | AdmonitionTitle | Unimplemented | DefList] = field(
-        default_factory=list
+    children: tuple[FlowContent | AdmonitionTitle | Unimplemented | DefList, ...] = (
+        field(default_factory=tuple)
     )
 
 
@@ -390,7 +391,7 @@ class InlineMath(Node):
 @register(4059)
 class Blockquote(Node):
     type = "blockquote"
-    children: list[FlowContent] = field(default_factory=list)
+    children: tuple[FlowContent, ...] = field(default_factory=tuple)
 
 
 @register(4061)
@@ -419,25 +420,26 @@ class ThematicBreak(Node):
 class Heading(Node):
     type = "heading"
     depth: int
-    children: list[PhrasingContent]
+    children: tuple[PhrasingContent, ...]
 
 
 @register(4001)
 class Root(Node):
     type = "root"
-    children: list[
+    children: tuple[
         FlowContent
         | Parameters
         | Unimplemented
         | SubstitutionDef
         | signature.SignatureNode
-        | Image
+        | Image,
+        ...,
     ]
 
 
 @debug(4017)
 class UnimplementedInline(Node):
-    children: list[Text]
+    children: tuple[Text, ...]
 
     def __repr__(self):
         return f"<UnimplementedInline {self.children}>"
@@ -529,13 +531,13 @@ class RefInfo(Node):
 
 @register(4012)
 class NumpydocExample(Node):
-    value: list[str]
+    value: tuple[str, ...]
     title = "Examples"
 
 
 @register(4013)
 class NumpydocSeeAlso(Node):
-    value: list[SeeAlsoItem]
+    value: tuple[SeeAlsoItem, ...]
     title = "See Also"
 
 
@@ -547,7 +549,7 @@ class NumpydocSignature(Node):
 
 @register(4015)
 class Section(Node):
-    children: list[
+    children: tuple[
         DefList
         | FieldList
         | Figure
@@ -570,7 +572,8 @@ class Section(Node):
         | Unimplemented
         | UnimplementedInline
         | Citation
-        | Table
+        | Table,
+        ...,
     ]
     # might need to be more complicated like verbatim.
     title: str | None
@@ -584,16 +587,18 @@ class Section(Node):
         return self.children[k]
 
     def __setitem__(self, k, v):
-        self.children[k] = v
+        lst = list(self.children)
+        lst[k] = v
+        self.children = tuple(lst)
 
     def __iter__(self):
         return iter(self.children)
 
     def append(self, item):
-        self.children.append(item)
+        self.children = (*self.children, item)
 
     def extend(self, items):
-        self.children.extend(items)
+        self.children = (*self.children, *items)
 
     def empty(self):
         return len(self.children) == 0
@@ -607,7 +612,7 @@ class Section(Node):
 
 @register(4026)
 class Parameters(Node):
-    children: list[DocParam]
+    children: tuple[DocParam, ...]
 
     def validate(self):
         assert len(self.children) > 0
@@ -618,7 +623,7 @@ class Parameters(Node):
 class DocParam(Node):
     name: str
     annotation: str
-    desc: list[
+    desc: tuple[
         Figure
         | DefListItem
         | DefList
@@ -631,7 +636,8 @@ class DocParam(Node):
         | Paragraph
         | Code
         | SubstitutionDef
-        | Table
+        | Table,
+        ...,
     ]
 
     @property
@@ -664,7 +670,7 @@ class GenCode(UnserializableNode):
     an in-memory intermediate; serialization is asserted-unreachable.
     """
 
-    entries: list[GenToken]
+    entries: tuple[GenToken, ...]
     out: str
     ce_status: str
 
@@ -715,7 +721,7 @@ inline_nodes = tuple(
 
 @register(4021)
 class TocTree(Node):
-    children: list[TocTree]
+    children: tuple[TocTree, ...]
     title: str
     ref: LocalRef
     open: bool = False
@@ -724,18 +730,18 @@ class TocTree(Node):
 
 @register(4034)
 class Options(Node):
-    values: list[str]
+    values: tuple[str, ...]
 
 
 @register(4035)
 class FieldList(Node):
-    children: list[FieldListItem]
+    children: tuple[FieldListItem, ...]
 
 
 @register(4036)
 class FieldListItem(Node):
-    name: list[Text | Code]
-    body: list[Directive | Text | Paragraph | Code]
+    name: tuple[Text | Code, ...]
+    body: tuple[Directive | Text | Paragraph | Code, ...]
 
     def validate(self):
         for p in self.body:
@@ -751,13 +757,13 @@ class FieldListItem(Node):
     @children.setter
     def children(self, value):
         x, *y = value
-        self.name = [x]
-        self.body = y
+        self.name = (x,)
+        self.body = tuple(y)
 
 
 @register(4033)
 class DefList(Node):
-    children: list[DefListItem]
+    children: tuple[DefListItem, ...]
 
 
 @register(4037)
@@ -766,7 +772,7 @@ class DefListItem(Node):
         Paragraph | Text | Link | UnimplementedInline
     )  # TODO: this is technically incorrect and should
     # be a single term, (word, directive or link is my guess).
-    dd: list[
+    dd: tuple[
         Paragraph
         | Code
         | BulletList
@@ -781,7 +787,8 @@ class DefListItem(Node):
         | FieldList
         | TocTree
         | Table
-        | Target  # TODO: maybe remove that.
+        | Target,  # TODO: maybe remove that.
+        ...,
     ]
 
     @property
@@ -798,7 +805,7 @@ class DefListItem(Node):
 class SeeAlsoItem(Node):
     name: CrossRef
 
-    descriptions: list[Paragraph]
+    descriptions: tuple[Paragraph, ...]
     # there are a few case when the lhs is `:func:something`... in scipy.
     type: str | None
 
@@ -913,15 +920,24 @@ class Encoder:
     def _tag_hook(self, *args, **_kwargs):
         # cbor2 has shifted calling conventions for tag_hook across major
         # versions: 5.x calls (decoder, tag[, shareable_index]); 6.x calls
-        # (tag, immutable, shareable_index) without the decoder. We don't
-        # use any of the extras, so just pick the CBORTag out of whichever
-        # positional slot it landed in.
+        # (tag, immutable) without the decoder. We don't use any of the
+        # extras, so just pick the CBORTag out of whichever positional slot
+        # it landed in.
+        #
+        # cbor2 ≥ 6 decodes containers inside tagged values as immutable:
+        # CBOR arrays → tuples (correct: node list fields are now tuple[T, ...])
+        # CBOR maps   → frozendict (not a dict subclass) → convert to dict.
         from cbor2 import CBORTag
 
         tag = next(a for a in args if isinstance(a, CBORTag))
         type_ = self._type_from_tag(tag)
         tt = get_type_hints(type_)
-        kwds = {k: t for k, t in zip(tt, tag.value, strict=False)}
+        kwds = {}
+        for (k, ann), v in zip(tt.items(), tag.value, strict=False):
+            if getattr(ann, "__origin__", None) is dict and not isinstance(v, dict):
+                # cbor2 ≥ 6 gives frozendict for CBOR maps; dict() accepts any mapping.
+                v = dict(v)
+            kwds[k] = v
         return type_(**kwds)
 
     def decode(self, bytes):

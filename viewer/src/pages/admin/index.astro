@@ -4,6 +4,7 @@ import { getBackends } from "../../lib/backends.ts";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import ReingestPanel from "../../components/ReingestPanel.tsx";
 import ClearGraphstoreButton from "../../components/ClearGraphstoreButton.tsx";
+import DropRawBundlesButton from "../../components/DropRawBundlesButton.tsx";
 
 export const prerender = false;
 
@@ -36,6 +37,7 @@ for (const name of tableNames) {
           </p>
         )
       }
+      <DropRawBundlesButton client:load rawCount={rawEntries.length} />
     </section>
 
     <section class="admin-section">

@@ -259,6 +259,34 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
 - **RST substitution invariant.** The IR must never contain `SubstitutionDef`
   or `SubstitutionRef` nodes. Non-`replace::` substitution types (image,
   unicode) are warned and dropped; support can be added per demand.
+- **Separate domains/processes for upload, admin, and user surfaces.**
+  In a hosted deployment the upload endpoint (`POST /api/bundle`), any admin
+  panel, and any per-user management UI should run as isolated processes (or
+  Workers routes) on separate subdomains. Keeping them isolated limits blast
+  radius: a vulnerability in the upload path cannot reach admin state, and
+  per-user surfaces cannot touch other users' bundles. Design URL structure
+  and routing with this separation in mind so the hosted service is not baked
+  into a monolithic app. Track this when the M9 / hosting design firms up.
+
+- **Track raw upload timestamps independently of bundle metadata.**
+  The `_raw/<pkg>/<ver>.papyri.gz` archive should record when a bundle was
+  *received* (server wall-clock time), kept separate from any timestamps
+  embedded in the bundle itself (which are controlled by the uploader and
+  cannot be trusted for audit purposes). Store as a lightweight metadata
+  sidecar (e.g. `_raw/<pkg>/<ver>.meta.json`) or a dedicated index table.
+  Enables audit logs, "most-recently-uploaded" sorting, and TTL / eviction
+  policies without trusting generator-side clocks.
+
+- **`papyri pack` strict mode and bundle linting.**
+  Add a `--strict` flag to `papyri pack` that promotes warnings to errors,
+  useful in CI to block publishing a bundle with known issues. Add a `--lint`
+  flag (or a `papyri lint` subcommand) that checks IR consistency without
+  fully packing: unresolved local refs, assets referenced but absent from the
+  asset store, `SubstitutionRef`/`SubstitutionDef` nodes that should have been
+  resolved, empty module-docstrings holding a sentinel placeholder rather than
+  a parse failure marker. A `--strict --lint` step in maintainer CI gives fast
+  feedback before upload.
+
 - Static export hardening for `viewer/dist/` deployment.
 - Dark-adapted Shiki theme + dark-mode-aware KaTeX glyphs.
 - Cross-package ingest correctness: TODOs around version resolution for

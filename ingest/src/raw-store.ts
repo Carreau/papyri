@@ -18,7 +18,7 @@
  *   FsRawStore — Node filesystem, files at <ingest-dir>/_raw/<pkg>/<ver>.papyri.gz
  *   R2RawStore — Cloudflare R2, objects at _raw/<pkg>/<ver>.papyri.gz in BLOBS bucket
  */
-import { mkdir, writeFile, readFile, readdir } from "node:fs/promises";
+import { mkdir, writeFile, readFile, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { R2BucketLike } from "./blob-store.js";
 
@@ -29,6 +29,11 @@ export interface RawStore {
   get(pkg: string, ver: string): Promise<Uint8Array | null>;
   /** List all archived (pkg, ver) pairs, sorted by pkg then ver. */
   list(): Promise<Array<{ pkg: string; ver: string }>>;
+  /**
+   * Drop every archived bundle. Returns the number of (pkg, ver) entries
+   * removed. Idempotent — clearing an already-empty archive returns 0.
+   */
+  clear(): Promise<number>;
 }
 
 function rawKey(pkg: string, ver: string): string {
@@ -89,6 +94,12 @@ export class FsRawStore implements RawStore {
     results.sort((a, b) => a.pkg.localeCompare(b.pkg) || a.ver.localeCompare(b.ver));
     return results;
   }
+
+  async clear(): Promise<number> {
+    const entries = await this.list();
+    await rm(join(this.root, "_raw"), { recursive: true, force: true });
+    return entries.length;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -121,5 +132,20 @@ export class R2RawStore implements RawStore {
     } while (cursor);
     out.sort((a, b) => a.pkg.localeCompare(b.pkg) || a.ver.localeCompare(b.ver));
     return out;
+  }
+
+  async clear(): Promise<number> {
+    let count = 0;
+    let cursor: string | undefined;
+    do {
+      const r = await this.bucket.list({ prefix: "_raw/", cursor });
+      const keys = r.objects.map((o) => o.key);
+      if (keys.length > 0) {
+        await this.bucket.delete(keys);
+        count += keys.length;
+      }
+      cursor = r.truncated ? r.cursor : undefined;
+    } while (cursor);
+    return count;
   }
 }

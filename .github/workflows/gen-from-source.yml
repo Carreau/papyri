@@ -77,7 +77,8 @@ jobs:
               "config": "examples/scipy.toml",
               "gen_flags": "--no-infer",
               "install_cmd": "bash examples/build_scipy.sh \"$CLONE_DIR\"",
-              "pypi_name": "scipy"
+              "pypi_name": "scipy",
+              "extra_deps": "matplotlib"
             },
             {
               "lib": "astropy",
@@ -100,7 +101,8 @@ jobs:
                 config:      $lib.config,
                 gen_flags:   $lib.gen_flags,
                 install_cmd: $lib.install_cmd,
-                pypi_name:   $lib.pypi_name
+                pypi_name:   $lib.pypi_name,
+                extra_deps:  ($lib.extra_deps // "")
               }
             ]
           }')
@@ -150,6 +152,7 @@ jobs:
           INSTALL_CMD: ${{ matrix.install_cmd }}
           PYPI_NAME: ${{ matrix.pypi_name }}
           TAG: ${{ matrix.tag }}
+          EXTRA_DEPS: ${{ matrix.extra_deps }}
         run: |
           CLONE_DIR="$HOME/dev/$CLONE_SUBDIR"
           # Pure release tags (e.g. 9.3.0, v2.4.4) — try a pre-built wheel from
@@ -170,6 +173,10 @@ jobs:
             else
               uv pip install --system "$CLONE_DIR"
             fi
+          fi
+          if [ -n "${EXTRA_DEPS}" ]; then
+            # shellcheck disable=SC2086
+            uv pip install --system ${EXTRA_DEPS}
           fi
 
       - name: Gen ${{ matrix.lib }} ${{ matrix.tag }}

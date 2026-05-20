@@ -245,6 +245,51 @@ def test_normalize_see_also_rst_comment_description():
         )
 
 
+def test_kaiser_bessel_derived_example_has_figure_and_code():
+    """kaiser_bessel_derived examples must produce at least one figure and one code block.
+
+    The docstring contains a matplotlib plot, so Figure nodes appear in
+    example_section_data only when matplotlib is importable and execute_doctests
+    is True.  We call prepare_doc_for_one_object directly to bypass the
+    WrongTypeAtField validation that would otherwise skip writing gen.data.
+    """
+    pytest.importorskip("scipy")
+    pytest.importorskip("matplotlib")
+
+    from scipy.signal.windows import kaiser_bessel_derived
+
+    from papyri.gen import Gen, dedent_but_first
+    from papyri.nodes import Figure, GenCode
+    from papyri.numpydoc_compat import NumpyDocString
+
+    qa = "scipy.signal.windows._windows:kaiser_bessel_derived"
+    config = Config(execute_doctests=True, infer=False)
+    gen = Gen(dummy_progress=True, config=config)
+    gen.root = "scipy"
+    gen.version = "test"
+
+    item_docstring, _arbitrary, api_object = gen.extract_docstring(
+        qa=qa, target_item=kaiser_bessel_derived
+    )
+    ndoc = NumpyDocString(dedent_but_first(item_docstring))
+    doc, _figs = gen.prepare_doc_for_one_object(
+        kaiser_bessel_derived,
+        ndoc,
+        qa=qa,
+        config=config,
+        aliases=[],
+        api_object=api_object,
+    )
+
+    children = doc.example_section_data.children
+    assert any(isinstance(c, Figure) for c in children), (
+        "Expected at least one Figure in kaiser_bessel_derived examples"
+    )
+    assert any(isinstance(c, GenCode) for c in children), (
+        "Expected at least one code block in kaiser_bessel_derived examples"
+    )
+
+
 def test_normalize_see_also_real_description():
     """Real descriptions (non-comment) should be preserved."""
     from papyri.nodes import Paragraph

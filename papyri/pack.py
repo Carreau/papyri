@@ -28,6 +28,10 @@ def _count_files(d: Path) -> int:
     return sum(1 for e in d.iterdir() if e.is_file()) if d.is_dir() else 0
 
 
+def _plural(n: int) -> str:
+    return "s" if n != 1 else ""
+
+
 class BundleError(ValueError):
     """A bundle directory is malformed.
 
@@ -135,14 +139,14 @@ def read_bundle_dir(path: Path, log: Callable[[str], None] | None = None) -> Bun
     module_dir = path / "module"
     if log:
         n = _count_files(module_dir)
-        log(f"  decoding module/   ({n} item{'s' if n != 1 else ''}) …")
+        log(f"  decoding module/   ({n} item{_plural(n)}) …")
     api = _decode_dir(module_dir, GeneratedDoc, strip_suffix=".json")
 
     docs_dir = path / "docs"
     if log:
         n = _count_files(docs_dir)
         log(
-            f"  decoding docs/     ({n} item{'s' if n != 1 else ''}) …"
+            f"  decoding docs/     ({n} item{_plural(n)}) …"
             if n
             else "  docs/     (none)"
         )
@@ -152,7 +156,7 @@ def read_bundle_dir(path: Path, log: Callable[[str], None] | None = None) -> Bun
     if log:
         n = _count_files(examples_dir)
         log(
-            f"  decoding examples/ ({n} item{'s' if n != 1 else ''}) …"
+            f"  decoding examples/ ({n} item{_plural(n)}) …"
             if n
             else "  examples/ (none)"
         )
@@ -163,7 +167,7 @@ def read_bundle_dir(path: Path, log: Callable[[str], None] | None = None) -> Bun
     if assets_dir.is_dir():
         if log:
             n = _count_files(assets_dir)
-            log(f"  reading  assets/   ({n} item{'s' if n != 1 else ''}) …")
+            log(f"  reading  assets/   ({n} item{_plural(n)}) …")
         for entry in sorted(assets_dir.iterdir()):
             if entry.is_file():
                 assets[entry.name] = entry.read_bytes()

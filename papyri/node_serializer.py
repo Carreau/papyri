@@ -10,23 +10,12 @@ its regular fields. The tag is either the class's ``type`` class-attribute
 Used by ``Node.to_dict`` / ``Node.to_json``.
 """
 
-import types
-from typing import Any, Union
+from typing import Any
 from typing import get_type_hints as gth
 
+from .serde import _is_union, _union_args
+
 base_types = {int, str, bool, type(None)}
-
-
-def _is_union(annotation: Any) -> bool:
-    """Return True for both typing.Union[...] and X | Y (types.UnionType)."""
-    return (
-        isinstance(annotation, types.UnionType)
-        or getattr(annotation, "__origin__", None) is Union
-    )
-
-
-def _union_args(annotation: Any) -> tuple[Any, ...]:
-    return annotation.__args__  # type: ignore[no-any-return]
 
 
 def serialize(instance: Any, annotation: Any) -> Any:

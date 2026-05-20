@@ -21,7 +21,7 @@ import site
 import sys
 import tempfile
 import warnings
-from collections import defaultdict
+from collections import defaultdict, deque
 from functools import lru_cache
 from hashlib import sha256
 from itertools import count
@@ -148,6 +148,20 @@ def _get_implied_imports(obj):
     return {}
 
 
+class _MatplotlibFontFilter(logging.Filter):
+    """Silence noisy matplotlib font-fallback warnings during gen."""
+
+    _DROP = (
+        "Generic family",
+        "found for the serif fontfamily",
+        "not found. Falling back to",
+        "Substituting symbol",
+    )
+
+    def filter(self, record):
+        return 0 if any(s in record.msg for s in self._DROP) else 1
+
+
 def processed_example_data(example_section_data: Section) -> Section:
     """this should be no-op on already ingested"""
     new_example_section_data = Section([], None)
@@ -159,7 +173,7 @@ def processed_example_data(example_section_data: Section) -> Section:
     return new_example_section_data
 
 
-@lru_cache
+@lru_cache(maxsize=4096)
 def normalise_ref(ref):
     """
     Consistently normalize references.
@@ -343,7 +357,7 @@ class DFSCollector:
         assert "." not in self.root
         self.obj: dict[str, Any] = dict()
         self.aliases: dict[str, list[str]] = defaultdict(lambda: [])
-        self._open_list = [(root, [root.__name__])]
+        self._open_list: deque[tuple[Any, list[str]]] = deque([(root, [root.__name__])])
         for o in others:
             self._open_list.append((o, o.__name__.split(".")))
         self.log = logging.getLogger("papyri")
@@ -354,7 +368,7 @@ class DFSCollector:
         """
         seen: set[int] = set()
         while self._open_list:
-            current, stack = self._open_list.pop(0)
+            current, stack = self._open_list.popleft()
 
             # numpy objects have no bool values.
             if id(current) not in seen:
@@ -733,34 +747,8 @@ class Gen:
             TimeElapsedColumn(),
         )
 
-        # TODO:
-        # At some point it would be better to have that be matplotlib
-        # specific and not hardcoded.
-        class MF(logging.Filter):
-            """
-            This is a matplotlib filter to temporarily silence a bunch of warning
-            messages that are emitted if font are not found
-
-            """
-
-            def filter(self, record):
-                if "Generic family" in record.msg:
-                    return 0
-                if "found for the serif fontfamily" in record.msg:
-                    return 0
-                if "not found. Falling back to" in record.msg:
-                    return 0
-                if "Substituting symbol" in record.msg:
-                    return 0
-                return 1
-
-        mlog = logging.getLogger("matplotlib.font_manager")
-        mlog.addFilter(MF("serif"))
-
-        mplog = logging.getLogger("matplotlib.mathtext")
-        mplog.addFilter(MF("serif"))
-
-        # end TODO
+        for logger_name in ("matplotlib.font_manager", "matplotlib.mathtext"):
+            logging.getLogger(logger_name).addFilter(_MatplotlibFontFilter("serif"))
 
         FORMAT = "%(message)s"
         self.log = logging.getLogger("papyri")
@@ -1177,7 +1165,7 @@ class Gen:
         """
         self.bdata[path] = data
 
-    def _transform_1(self, blob: GeneratedDoc, ndoc: Any) -> GeneratedDoc:
+    def _populate_content(self, blob: GeneratedDoc, ndoc: Any) -> GeneratedDoc:
         """
         Populates GeneratedDoc content field from numpydoc parsed docstring.
 
@@ -1188,7 +1176,7 @@ class Gen:
             assert isinstance(v, (str, list, dict)), type(v)
         return blob
 
-    def _transform_2(
+    def _resolve_item_file(
         self, blob: GeneratedDoc, target_item: Any, qa: str
     ) -> GeneratedDoc:
         """
@@ -1238,7 +1226,7 @@ class Gen:
 
         return blob
 
-    def _transform_3(self, blob, target_item):
+    def _resolve_item_line(self, blob, target_item):
         """
         Try to find source line number for target object and populate item_line
         field for GeneratedDoc.
@@ -1309,9 +1297,9 @@ class Gen:
         assert isinstance(aliases, list)
         blob: GeneratedDoc = GeneratedDoc.new()
 
-        blob = self._transform_1(blob, ndoc)
-        blob = self._transform_2(blob, target_item, qa)
-        blob = self._transform_3(blob, target_item)
+        blob = self._populate_content(blob, ndoc)
+        blob = self._resolve_item_file(blob, target_item, qa)
+        blob = self._resolve_item_line(blob, target_item)
         assert set(blob.content.keys()) == set(blob.ordered_sections), (
             set(blob.content.keys()) - set(blob.ordered_sections),
             set(blob.ordered_sections) - set(blob.content.keys()),

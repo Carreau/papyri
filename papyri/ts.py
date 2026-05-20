@@ -367,6 +367,10 @@ class TSVisitor:
         uri_text = self.as_text(uri).replace("\n", " ")
         return [InlineRole(f"{name_text} <{uri_text}>", None, None)]
 
+    def _text_fallback(self, node, fmt, *args):
+        log.warning(fmt + " in (%s); rendering as plain text.", *args, self._qa)
+        return [Text(self.as_text(node))]
+
     def visit_interpreted_text(self, node):
         inventory = None
         domain = None
@@ -375,21 +379,14 @@ class TSVisitor:
         if len(node.children) == 2:
             role, text = node.children
             if role.type != "role" or text.type != "interpreted_text":
-                log.warning(
-                    "interpreted_text has unexpected child types %r in (%s); "
-                    "rendering as plain text.",
+                return self._text_fallback(
+                    node,
+                    "interpreted_text has unexpected child types %r",
                     [c.type for c in node.children],
-                    self._qa,
                 )
-                return [Text(self.as_text(node))]
             role_value = self.as_text(role)
             if not (role_value.startswith(":") and role_value.endswith(":")):
-                log.warning(
-                    "Malformed role markup %r in (%s); rendering as plain text.",
-                    role_value,
-                    self._qa,
-                )
-                return [Text(self.as_text(node))]
+                return self._text_fallback(node, "Malformed role markup %r", role_value)
             role_value = role_value[1:-1]
             # Sphinx intersphinx: `:external+<inv>:<domain>:<role>:` forces a
             # cross-project lookup in the named inventory. Strip that prefix
@@ -406,31 +403,25 @@ class TSVisitor:
         elif len(node.children) == 1:
             [text] = node.children
             if text.type != "interpreted_text":
-                log.warning(
-                    "interpreted_text single child has unexpected type %r in (%s); "
-                    "rendering as plain text.",
+                return self._text_fallback(
+                    node,
+                    "interpreted_text single child has unexpected type %r",
                     text.type,
-                    self._qa,
                 )
-                return [Text(self.as_text(node))]
         else:
-            log.warning(
-                "interpreted_text has %d children (expected 1 or 2) in (%s); "
-                "rendering as plain text.",
+            return self._text_fallback(
+                node,
+                "interpreted_text has %d children (expected 1 or 2)",
                 len(node.children),
-                self._qa,
             )
-            return [Text(self.as_text(node))]
 
         text_value = self.as_text(text)
         if not text_value.startswith("`"):
-            log.warning(
-                "interpreted_text value does not start with '`': %r in (%s); "
-                "rendering as plain text.",
+            return self._text_fallback(
+                node,
+                "interpreted_text value does not start with '`': %r",
                 text_value,
-                self._qa,
             )
-            return [Text(self.as_text(node))]
 
         # Heuristic: tree-sitter RST sometimes folds a trailing alphanumeric
         # suffix (e.g. the 's' in '`None`s') into the interpreted_text node
@@ -703,7 +694,7 @@ class TSVisitor:
     def visit_attribution(self, node):
         # TODO:
         log.warning("attribution not implemented")
-        return [Unimplemented("inline_target", self.as_text(node))]
+        return [Unimplemented("attribution", self.as_text(node))]
 
     def visit_inline_target(self, node):
         # TODO:

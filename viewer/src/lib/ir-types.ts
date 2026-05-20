@@ -8,6 +8,8 @@
 // DEBUG_TYPES in node_base.py.
 export const DEBUG_TYPE_NAMES: ReadonlySet<string> = new Set([
   "Directive",
+  "InlineRole",
+  "Options",
   "SubstitutionDef",
   "SubstitutionRef",
   "Unimplemented",

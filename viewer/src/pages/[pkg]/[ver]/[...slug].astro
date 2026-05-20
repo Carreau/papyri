@@ -44,6 +44,15 @@ const [backrefs, resolveXref, nav] = await Promise.all([
 const view = buildQualnamePageView(doc, backrefs, pkg);
 const hasBackrefs = view.internalBackrefs.length > 0 || view.externalBackrefs.length > 0;
 
+const githubSlug =
+  typeof nav.meta.github_slug === "string" && nav.meta.github_slug ? nav.meta.github_slug : null;
+// Prefer the explicit git tag over the version string (e.g. "v1.2.3" vs "1.2.3").
+const sourceRef = typeof nav.meta.tag === "string" && nav.meta.tag ? nav.meta.tag : ver;
+const sourceUrl =
+  githubSlug && doc.item_file
+    ? `https://github.com/${githubSlug}/blob/${sourceRef}/${doc.item_file}${doc.item_line != null ? `#L${doc.item_line}` : ""}`
+    : null;
+
 // Direct children for the on-page Members TOC. Qualnames use `:` to separate
 // the module path from in-module objects, and `.` after `:` for class
 // members. Examples:
@@ -131,8 +140,18 @@ const crumbs = qualnameAncestors(qualname).map((qa) => ({
     {
       doc.item_file ? (
         <p class="source">
-          source: <code>{doc.item_file}</code>
-          {doc.item_line != null ? <Fragment>:{doc.item_line}</Fragment> : null}
+          source:{" "}
+          {sourceUrl ? (
+            <a href={sourceUrl} target="_blank" rel="noopener noreferrer">
+              <code>{doc.item_file}</code>
+              {doc.item_line != null ? <Fragment>:{doc.item_line}</Fragment> : null}
+            </a>
+          ) : (
+            <Fragment>
+              <code>{doc.item_file}</code>
+              {doc.item_line != null ? <Fragment>:{doc.item_line}</Fragment> : null}
+            </Fragment>
+          )}
         </p>
       ) : null
     }

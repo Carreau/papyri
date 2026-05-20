@@ -31,10 +31,21 @@ def drop(argument, options, content):
         testsetup = 'papyri.directives:drop'
         plot      = 'papyri.directives:drop'
 
-    Or via the ``skip_directives`` shorthand in ``[global]``::
-
-        skip_directives = ["testsetup", "plot"]
     """
+    return []
+
+
+def warn(argument, options, content):
+    """Directive handler that silently discards the directive and returns nothing.
+
+    Register this for any directive whose content should not appear in the IR::
+
+        [global.directives]
+        testsetup = 'papyri.directives:warn'
+
+    """
+    # TODO: in directive handler pass the name of the current directive ?
+    log.warning(".. directive ignored (name missing) ")
     return []
 
 

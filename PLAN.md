@@ -208,6 +208,63 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
 - Dark-adapted Shiki theme + dark-mode-aware KaTeX glyphs.
 - Cross-package ingest correctness: TODOs around version resolution for
   `Figure`/`RefInfo` across packages (see `crosslink.py`).
+- **Viewer: crossrefs should default to latest-version-only.**
+  The "Referenced by" section on a qualname page currently lists one row per
+  source `(pkg, ver)` that links here. When several versions of the same
+  package have been uploaded, the same logical reference shows up N times
+  (e.g. numpy 1.26 and numpy 2.0 both linking to a scipy symbol). Users
+  almost always want a single row per source package, pointing at its
+  latest version.
+
+  *Where this lives in the code:*
+  - `viewer/src/lib/graph.ts:109` `getBackrefs` — SQL that fetches every
+    incoming `(pkg, ver, kind, path)`. Cheapest place to filter, but the DB
+    doesn't know what "latest" is.
+  - `viewer/src/lib/qualname-page.ts:75` `bucketBackrefs` — view-model layer
+    that already dedupes; the natural place for a render-time filter.
+  - `viewer/src/lib/ir-reader.ts:35,61` already have `compareVersionsDesc`
+    and `listIngestedPackages` (which knows the latest version per package);
+    reuse those rather than reimplementing PEP 440 sort logic.
+
+  *Design — open questions to settle before implementing:*
+  1. **What is "latest"?** Use `listIngestedPackages(...).latest` (latest
+     ingested, including pre-releases) for now. A future refinement could
+     exclude `.dev` / `rc` / `alpha` / `beta` per PEP 440, matching the
+     version-status-banner classifier in the next item.
+  2. **Filter scope.** Group backrefs by source `pkg`, keep only the row
+     whose `ver` equals that package's latest. Cross-package and same-package
+     buckets get the same treatment.
+  3. **What if the link only exists in an older source version?** (e.g.
+     numpy 1.26 references a symbol that numpy 2.0 has dropped.) Two
+     options: (a) drop the ref entirely — clean but hides real signal;
+     (b) keep the latest *version that actually links here* per package —
+     preserves signal at the cost of a slightly fuzzier "latest" rule.
+     Recommendation: (b), since the alternative silently loses information.
+  4. **Toggle.** Add a "show all versions" affordance (querystring
+     `?all-versions=1` or a small toggle) so the raw list is still
+     reachable for debugging and for the validate page.
+  5. **Where to filter.** Render-time in `bucketBackrefs` is simplest and
+     keeps the graphstore generic. A precomputed `latest_backrefs` table is
+     a later optimization once the rule is stable (see "Storage invariant"
+     — derived tables are free to denormalize).
+
+  *Tests to add (`viewer/src/lib/qualname-page.test.ts` or equivalent):*
+  - Same package, two versions both linking → one row, latest version's URL.
+  - Same package, only the older version links → that row is kept (rule b).
+  - Multiple source packages, each with multiple versions → one row per
+    source pkg, each pointing at its latest linking version.
+  - Pre-release vs. stable: `2.0.0rc1` vs. `1.26.4` — document the chosen
+    behaviour and pin it with a test (will need updating when the PEP 440
+    refinement in (1) lands).
+  - Wildcard-version stubs (`?` / `*`) that `getBackrefs` already emits for
+    unresolved cross-package refs: decide whether they count as "latest" or
+    are always shown / always hidden, and lock it in a test.
+  - `?all-versions=1` (or whatever toggle): returns the unfiltered list,
+    matching today's behaviour.
+
+  *Out of scope for the first PR:* PEP 440 pre-release exclusion (item 1),
+  precomputed table (item 5). Land the render-time filter + tests first.
+
 - **Viewer: Version status banners and link validation warnings** (designed 2026-05-04).
   Help users understand documentation state with banners and link warnings.
   

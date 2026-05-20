@@ -2,10 +2,8 @@
 import logging
 import sqlite3
 from hashlib import blake2b
-from pathlib import Path as _Path
-from typing import Any
-
-import cbor2
+from pathlib import Path
+from typing import Any, NamedTuple
 
 # 16-byte BLAKE2b is enough collision space for our use (page-content
 # fingerprint, not a security primitive) and noticeably faster than SHA-256.
@@ -13,9 +11,9 @@ _DIGEST_SIZE = 16
 
 log = logging.getLogger("papyri")
 
-# we try to expanduser as early as possible to prevent
-# jupyter_pytest monkeypatch  of setenv_HOME
-GLOBAL_PATH = _Path("~/.papyri/ingest/papyri.db").expanduser()
+# Expanduser is evaluated at module-import time so tests can monkeypatch HOME
+# afterwards without invalidating this path.
+GLOBAL_PATH = Path("~/.papyri/ingest/papyri.db").expanduser()
 
 _SCHEMA = """
 CREATE TABLE nodes(
@@ -48,76 +46,17 @@ _PRAGMAS = [
 ]
 
 
-class Path:
-    """path wrapper with .read_json / .write_json backed by CBOR"""
+class Key(NamedTuple):
+    module: str
+    version: str
+    kind: str
+    path: str
 
-    def __init__(self, path):
-        assert isinstance(path, _Path), path
-        self.path = path
-
-    def read_json(self):
-        with open(self.path, "rb") as f:
-            return cbor2.load(f)
-
-    def write_json(self, data):
-        with open(self.path, "wb") as f:
-            return cbor2.dump(data, f, canonical=True)
-
-    def __truediv__(self, other):
-        return type(self)(self.path / other)
-
-    def write_bytes(self, *args, **kwargs):
-        self.path.write_bytes(*args, **kwargs)
-
-    @property
-    def parent(self):
-        return self.path.parent
-
-    def exists(self, *args, **kwargs):
-        return self.path.exists(*args, **kwargs)
-
-    def mkdir(self, *args, **kwargs):
-        self.path.mkdir(*args, **kwargs)
-
-    def __getattr__(self, name):
-        return getattr(self.path, name)
-
-    def __str__(self):
-        return f"<{type(self)} {self.path}>"
-
-
-# a Key name tuple with a custom __init__
-class Key:
-    def __init__(self, module, version, kind, path):
+    def __new__(  # type: ignore[misc]
+        cls, module: str, version: str, kind: str, path: str
+    ) -> "Key":
         assert ":" not in module
-        self.module = module
-        self.version = version
-        self.kind = kind
-        self.path = path
-
-    def __contains__(self, other):
-        return other in self._t()
-
-    def _t(self):
-        return (self.module, self.version, self.kind, self.path)
-
-    def __getitem__(self, n):
-        return self._t()[n]
-
-    def __iter__(self):
-        return iter(self._t())
-
-    def __gt__(self, other):
-        return self._t() > other._t()
-
-    def __eq__(self, other):
-        return self._t() == other._t()
-
-    def __hash__(self):
-        return hash(self._t())
-
-    def __repr__(self):
-        return f"<Key {self._t()}>"
+        return tuple.__new__(cls, (module, version, kind, path))
 
 
 class GraphStore:
@@ -161,7 +100,7 @@ class GraphStore:
 
     """
 
-    def __init__(self, root: _Path, link_finder: Any = None) -> None:
+    def __init__(self, root: Path, link_finder: Any = None) -> None:
         from .config import ensure_dirs
 
         ensure_dirs()
@@ -184,8 +123,8 @@ class GraphStore:
                     if stmt:
                         self.conn.execute(stmt)
 
-        assert isinstance(root, _Path)
-        self._root = Path(root)
+        assert isinstance(root, Path)
+        self._root = root
         self._link_finder = link_finder
 
     def _key_to_path(self, key: Key) -> Path:
@@ -204,11 +143,11 @@ class GraphStore:
         assert None not in key, key
         for k in key[:-1]:
             path = path / k
-        return path / key[-1]  # type: ignore[no-any-return]
+        return path / key[-1]
 
     def remove(self, key: Key) -> None:
         path = self._key_to_path(key)
-        path.path.unlink()
+        path.unlink()
         with self.conn:
             row = self.conn.execute(
                 "SELECT id FROM nodes WHERE package=? AND version=? AND category=? AND identifier=?",
@@ -221,7 +160,7 @@ class GraphStore:
 
     def _get(self, key: Key) -> bytes:
         assert isinstance(key, Key)
-        return self._key_to_path(key).read_bytes()  # type: ignore[no-any-return]
+        return self._key_to_path(key).read_bytes()
 
     def _get_backrefs(self, key: Key) -> set[Key]:
         rows = self.conn.execute(
@@ -307,16 +246,16 @@ class GraphStore:
     def _meta_path(self, module: str, version: str) -> Path:
         assert isinstance(module, str)
         assert isinstance(version, str)
-        return self._root / module / version / "meta.cbor"  # type: ignore[no-any-return]
+        return self._root / module / version / "meta.cbor"
 
     def put_meta(self, module: str, version: str, data: bytes) -> None:
         assert isinstance(data, bytes)
         mp = self._meta_path(module, version)
-        mp.path.parent.mkdir(parents=True, exist_ok=True)
+        mp.parent.mkdir(parents=True, exist_ok=True)
         mp.write_bytes(data)
 
     def get_meta(self, key: Key) -> bytes:
-        return self._meta_path(key.module, key.version).read_bytes()  # type: ignore[no-any-return]
+        return self._meta_path(key.module, key.version).read_bytes()
 
     def put(self, key: Key, bytes_: bytes, refs: list[Key]) -> None:
         """
@@ -335,7 +274,7 @@ class GraphStore:
         for r in refs:
             assert isinstance(r, Key), r
         path = self._key_to_path(key)
-        path.path.parent.mkdir(parents=True, exist_ok=True)
+        path.parent.mkdir(parents=True, exist_ok=True)
 
         if "assets" not in key and path.exists():
             old_refs = self.get_forwardrefs(key)

@@ -32,9 +32,6 @@ from typing import (
 )
 
 import tomli_w
-from IPython.core.oinspect import find_file
-from IPython.utils.path import compress_user
-from matplotlib import _pylab_helpers
 from packaging.version import parse
 from rich.logging import RichHandler
 from rich.progress import BarColumn, TextColumn
@@ -146,6 +143,20 @@ def _get_implied_imports(obj):
             return {cname: getattr(mod, cname)}
 
     return {}
+
+
+class _MatplotlibFontFilter(logging.Filter):
+    """Silence noisy matplotlib font-fallback warnings during gen."""
+
+    _DROP = (
+        "Generic family",
+        "found for the serif fontfamily",
+        "not found. Falling back to",
+        "Substituting symbol",
+    )
+
+    def filter(self, record):
+        return 0 if any(s in record.msg for s in self._DROP) else 1
 
 
 def processed_example_data(example_section_data: Section) -> Section:
@@ -343,9 +354,7 @@ class DFSCollector:
         assert "." not in self.root
         self.obj: dict[str, Any] = dict()
         self.aliases: dict[str, list[str]] = defaultdict(lambda: [])
-        self._open_list: deque[tuple[Any, list[str]]] = deque(
-            [(root, [root.__name__])]
-        )
+        self._open_list: deque[tuple[Any, list[str]]] = deque([(root, [root.__name__])])
         for o in others:
             self._open_list.append((o, o.__name__.split(".")))
         self.log = logging.getLogger("papyri")
@@ -631,6 +640,8 @@ class PapyriDocTestRunner(doctest.DocTestRunner):
             GenCode(tok_entries, got, ExecutionStatus.success)
         )
 
+        from matplotlib import _pylab_helpers
+
         wait_for_show = self.config.wait_for_plt_show
         fig_managers = _pylab_helpers.Gcf.get_all_fig_managers()
         figs = []
@@ -735,34 +746,8 @@ class Gen:
             TimeElapsedColumn(),
         )
 
-        # TODO:
-        # At some point it would be better to have that be matplotlib
-        # specific and not hardcoded.
-        class MF(logging.Filter):
-            """
-            This is a matplotlib filter to temporarily silence a bunch of warning
-            messages that are emitted if font are not found
-
-            """
-
-            def filter(self, record):
-                if "Generic family" in record.msg:
-                    return 0
-                if "found for the serif fontfamily" in record.msg:
-                    return 0
-                if "not found. Falling back to" in record.msg:
-                    return 0
-                if "Substituting symbol" in record.msg:
-                    return 0
-                return 1
-
-        mlog = logging.getLogger("matplotlib.font_manager")
-        mlog.addFilter(MF("serif"))
-
-        mplog = logging.getLogger("matplotlib.mathtext")
-        mplog.addFilter(MF("serif"))
-
-        # end TODO
+        for logger_name in ("matplotlib.font_manager", "matplotlib.mathtext"):
+            logging.getLogger(logger_name).addFilter(_MatplotlibFontFilter("serif"))
 
         FORMAT = "%(message)s"
         self.log = logging.getLogger("papyri")
@@ -934,6 +919,8 @@ class Gen:
         example_section_data = doctest_runner._compact(example_section_data)
 
         # TODO fix this if plt.close not called and still a lingering figure.
+        from matplotlib import _pylab_helpers
+
         fig_managers = _pylab_helpers.Gcf.get_all_fig_managers()
         if len(fig_managers) != 0:
             plt.close("all")
@@ -1039,6 +1026,8 @@ class Gen:
             parsed_files.append((p, key, data))
 
         # Second pass: visit each document with the full target map available.
+        from IPython.utils.path import compress_user
+
         with self.progress() as p2:
             task = p2.add_task("Parsing narrative", total=len(parsed_files))
 
@@ -1179,7 +1168,7 @@ class Gen:
         """
         self.bdata[path] = data
 
-    def _transform_1(self, blob: GeneratedDoc, ndoc: Any) -> GeneratedDoc:
+    def _populate_content(self, blob: GeneratedDoc, ndoc: Any) -> GeneratedDoc:
         """
         Populates GeneratedDoc content field from numpydoc parsed docstring.
 
@@ -1190,7 +1179,7 @@ class Gen:
             assert isinstance(v, (str, list, dict)), type(v)
         return blob
 
-    def _transform_2(
+    def _resolve_item_file(
         self, blob: GeneratedDoc, target_item: Any, qa: str
     ) -> GeneratedDoc:
         """
@@ -1198,6 +1187,8 @@ class Gen:
         for GeneratedDoc.
         """
         # will not work for dev install. Maybe an option to set the root location ?
+        from IPython.core.oinspect import find_file
+
         item_file: str | None = find_file(target_item)
         if item_file is not None and item_file.endswith("<string>"):
             # dynamically generated object (like dataclass __eq__ method
@@ -1240,7 +1231,7 @@ class Gen:
 
         return blob
 
-    def _transform_3(self, blob, target_item):
+    def _resolve_item_line(self, blob, target_item):
         """
         Try to find source line number for target object and populate item_line
         field for GeneratedDoc.
@@ -1311,9 +1302,9 @@ class Gen:
         assert isinstance(aliases, list)
         blob: GeneratedDoc = GeneratedDoc.new()
 
-        blob = self._transform_1(blob, ndoc)
-        blob = self._transform_2(blob, target_item, qa)
-        blob = self._transform_3(blob, target_item)
+        blob = self._populate_content(blob, ndoc)
+        blob = self._resolve_item_file(blob, target_item, qa)
+        blob = self._resolve_item_line(blob, target_item)
         assert set(blob.content.keys()) == set(blob.ordered_sections), (
             set(blob.content.keys()) - set(blob.ordered_sections),
             set(blob.ordered_sections) - set(blob.content.keys()),
@@ -1484,6 +1475,8 @@ class Gen:
         #        assert (
         #            len(examples) > 0
         #        ), "we haven't found any examples, it is likely that the path is incorrect."
+
+        from IPython.utils.path import compress_user
 
         with self.progress() as p2:
             failed = []
@@ -1910,6 +1903,8 @@ class Gen:
             lr: frozenset[str] = frozenset(_local_refs)
             doc_blob.local_refs = tuple(sorted(lr))
             try:
+                from IPython.core.oinspect import find_file
+
                 _src_file = find_file(target_item)
                 _doc_path = (
                     Path(_src_file).parent

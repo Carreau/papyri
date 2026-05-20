@@ -130,7 +130,7 @@ def test_get_all(store):
 def test_put_meta(store):
     store.put_meta("pkg", "1.0", b"meta data")
     meta_path = store._meta_path("pkg", "1.0")
-    assert meta_path.path.exists()
+    assert meta_path.exists()
     assert meta_path.read_bytes() == b"meta data"
 
 

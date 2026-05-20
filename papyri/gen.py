@@ -32,6 +32,9 @@ from typing import (
 )
 
 import tomli_w
+from IPython.core.oinspect import find_file
+from IPython.utils.path import compress_user
+from matplotlib import _pylab_helpers
 from packaging.version import parse
 from rich.logging import RichHandler
 from rich.progress import BarColumn, TextColumn
@@ -640,8 +643,6 @@ class PapyriDocTestRunner(doctest.DocTestRunner):
             GenCode(tok_entries, got, ExecutionStatus.success)
         )
 
-        from matplotlib import _pylab_helpers
-
         wait_for_show = self.config.wait_for_plt_show
         fig_managers = _pylab_helpers.Gcf.get_all_fig_managers()
         figs = []
@@ -919,8 +920,6 @@ class Gen:
         example_section_data = doctest_runner._compact(example_section_data)
 
         # TODO fix this if plt.close not called and still a lingering figure.
-        from matplotlib import _pylab_helpers
-
         fig_managers = _pylab_helpers.Gcf.get_all_fig_managers()
         if len(fig_managers) != 0:
             plt.close("all")
@@ -1026,8 +1025,6 @@ class Gen:
             parsed_files.append((p, key, data))
 
         # Second pass: visit each document with the full target map available.
-        from IPython.utils.path import compress_user
-
         with self.progress() as p2:
             task = p2.add_task("Parsing narrative", total=len(parsed_files))
 
@@ -1187,8 +1184,6 @@ class Gen:
         for GeneratedDoc.
         """
         # will not work for dev install. Maybe an option to set the root location ?
-        from IPython.core.oinspect import find_file
-
         item_file: str | None = find_file(target_item)
         if item_file is not None and item_file.endswith("<string>"):
             # dynamically generated object (like dataclass __eq__ method
@@ -1475,8 +1470,6 @@ class Gen:
         #        assert (
         #            len(examples) > 0
         #        ), "we haven't found any examples, it is likely that the path is incorrect."
-
-        from IPython.utils.path import compress_user
 
         with self.progress() as p2:
             failed = []
@@ -1903,8 +1896,6 @@ class Gen:
             lr: frozenset[str] = frozenset(_local_refs)
             doc_blob.local_refs = tuple(sorted(lr))
             try:
-                from IPython.core.oinspect import find_file
-
                 _src_file = find_file(target_item)
                 _doc_path = (
                     Path(_src_file).parent

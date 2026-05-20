@@ -875,13 +875,20 @@ class Gen:
         except (TypeError, OSError):
             lineno = None
 
+        optionflags = 0
+        for flag_name in config.doctest_optionflags:
+            if flag_name not in doctest.OPTIONFLAGS_BY_NAME:
+                raise ValueError(
+                    f"Unknown doctest optionflags entry {flag_name!r}. "
+                    f"Valid names: {sorted(doctest.OPTIONFLAGS_BY_NAME)}"
+                )
+            optionflags |= doctest.OPTIONFLAGS_BY_NAME[flag_name]
         doctest_runner = PapyriDocTestRunner(
             gen=self,
             obj=obj,
             qa=qa,
             config=config,
-            # TODO: Make optionflags configurable
-            optionflags=doctest.ELLIPSIS,
+            optionflags=optionflags,
         )
         example_section_data = Section([], None)
 

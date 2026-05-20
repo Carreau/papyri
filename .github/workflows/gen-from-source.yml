@@ -66,7 +66,6 @@ jobs:
               "tags": ["v2.4.4", "v2.4.3", "v2.5.0.dev0"],
               "clone_dir": "numpy",
               "config": "examples/numpy.toml",
-              "gen_flags": "--no-exec",
               "install_cmd": "bash examples/build_numpy.sh \"$CLONE_DIR\"",
               "pypi_name": "numpy"
             },
@@ -76,7 +75,7 @@ jobs:
               "tags": ["v1.17.1"],
               "clone_dir": "scipy",
               "config": "examples/scipy.toml",
-              "gen_flags": "--no-exec --no-infer",
+              "gen_flags": "--no-infer",
               "install_cmd": "bash examples/build_scipy.sh \"$CLONE_DIR\"",
               "pypi_name": "scipy"
             },

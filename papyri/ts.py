@@ -350,12 +350,12 @@ class TSVisitor:
             full_text = self.as_text(node)
             log.warning(
                 "Hyperlink reference %r missing 'name' child in (%s); "
-                "child types: %r; rendering as plain text.",
+                "child types: %r; emitting Unimplemented.",
                 full_text,
                 self._qa,
                 [c.type for c in node.children],
             )
-            return [Text(full_text)]
+            return [Unimplemented("reference", full_text)]
 
         name_text = self.as_text(name).replace("\n", " ")
         uri = by_type.get("uri")

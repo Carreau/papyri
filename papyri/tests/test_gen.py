@@ -245,6 +245,52 @@ def test_normalize_see_also_rst_comment_description():
         )
 
 
+def test_kaiser_bessel_derived_example_has_figure_and_code():
+    """kaiser_bessel_derived examples must produce at least one figure and one code block.
+
+    The docstring contains a matplotlib plot executed via doctest.  We call
+    get_example_data directly (bypassing APIObjectInfo construction, which raises
+    WrongTypeAtField for this function and would abort the normal gen pipeline).
+    wait_for_plt_show=False ensures figures are captured even if the example
+    omits an explicit plt.show() call.
+    """
+    pytest.importorskip("scipy")
+    pytest.importorskip("matplotlib")
+
+    from scipy.signal.windows import kaiser_bessel_derived
+
+    from papyri.gen import Gen
+    from papyri.nodes import Figure, GenCode
+    from papyri.numpydoc_compat import NumpyDocString
+    from papyri.utils import dedent_but_first
+
+    qa = "scipy.signal.windows._windows:kaiser_bessel_derived"
+    config = Config(execute_doctests=True, infer=False, wait_for_plt_show=False)
+    gen = Gen(dummy_progress=True, config=config)
+    gen.root = "scipy"
+    gen.version = "test"
+
+    ndoc = NumpyDocString(dedent_but_first(kaiser_bessel_derived.__doc__))
+    examples = ndoc["Examples"]
+    assert examples, "kaiser_bessel_derived has no Examples section"
+
+    section, _figs = gen.get_example_data(
+        examples,
+        obj=kaiser_bessel_derived,
+        qa=qa,
+        config=config,
+        log=gen.log,
+    )
+
+    children = section.children
+    assert any(isinstance(c, Figure) for c in children), (
+        "Expected at least one Figure in kaiser_bessel_derived examples"
+    )
+    assert any(isinstance(c, GenCode) for c in children), (
+        "Expected at least one code block in kaiser_bessel_derived examples"
+    )
+
+
 def test_normalize_see_also_real_description():
     """Real descriptions (non-comment) should be preserved."""
     from papyri.nodes import Paragraph

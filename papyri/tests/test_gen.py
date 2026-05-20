@@ -248,40 +248,41 @@ def test_normalize_see_also_rst_comment_description():
 def test_kaiser_bessel_derived_example_has_figure_and_code():
     """kaiser_bessel_derived examples must produce at least one figure and one code block.
 
-    The docstring contains a matplotlib plot, so Figure nodes appear in
-    example_section_data only when matplotlib is importable and execute_doctests
-    is True.  We call prepare_doc_for_one_object directly to bypass the
-    WrongTypeAtField validation that would otherwise skip writing gen.data.
+    The docstring contains a matplotlib plot executed via doctest.  We call
+    get_example_data directly (bypassing APIObjectInfo construction, which raises
+    WrongTypeAtField for this function and would abort the normal gen pipeline).
+    wait_for_plt_show=False ensures figures are captured even if the example
+    omits an explicit plt.show() call.
     """
     pytest.importorskip("scipy")
     pytest.importorskip("matplotlib")
 
     from scipy.signal.windows import kaiser_bessel_derived
 
-    from papyri.gen import Gen, dedent_but_first
+    from papyri.gen import Gen
     from papyri.nodes import Figure, GenCode
     from papyri.numpydoc_compat import NumpyDocString
+    from papyri.utils import dedent_but_first
 
     qa = "scipy.signal.windows._windows:kaiser_bessel_derived"
-    config = Config(execute_doctests=True, infer=False)
+    config = Config(execute_doctests=True, infer=False, wait_for_plt_show=False)
     gen = Gen(dummy_progress=True, config=config)
     gen.root = "scipy"
     gen.version = "test"
 
-    item_docstring, _arbitrary, api_object = gen.extract_docstring(
-        qa=qa, target_item=kaiser_bessel_derived
-    )
-    ndoc = NumpyDocString(dedent_but_first(item_docstring))
-    doc, _figs = gen.prepare_doc_for_one_object(
-        kaiser_bessel_derived,
-        ndoc,
+    ndoc = NumpyDocString(dedent_but_first(kaiser_bessel_derived.__doc__))
+    examples = ndoc["Examples"]
+    assert examples, "kaiser_bessel_derived has no Examples section"
+
+    section, _figs = gen.get_example_data(
+        examples,
+        obj=kaiser_bessel_derived,
         qa=qa,
         config=config,
-        aliases=[],
-        api_object=api_object,
+        log=gen.log,
     )
 
-    children = doc.example_section_data.children
+    children = section.children
     assert any(isinstance(c, Figure) for c in children), (
         "Expected at least one Figure in kaiser_bessel_derived examples"
     )

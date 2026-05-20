@@ -31,7 +31,6 @@ export const IR_TYPE_NAMES: readonly string[] = [
   "UnimplementedInline",
   "Unimplemented",
   "ThematicBreak",
-  "Heading",
   "TocTree",
   "LocalRef",
   "Figure",

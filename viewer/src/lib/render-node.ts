@@ -137,12 +137,6 @@ export async function renderNode(node: IRNode, opts: RenderOptions = {}): Promis
     case "ThematicBreak":
       return `<hr />`;
 
-    case "Heading": {
-      const inner = await renderChildren(asArray(n.children), opts);
-      const depth = Math.min(Math.max(Number(n.depth ?? 2), 1), 6);
-      return `<h${depth}>${inner}</h${depth}>`;
-    }
-
     case "Math":
       return `<div class="math">${renderMath(String(n.value ?? ""), true)}</div>`;
 

@@ -52,12 +52,6 @@ class Key(NamedTuple):
     kind: str
     path: str
 
-    def __new__(  # type: ignore[misc]
-        cls, module: str, version: str, kind: str, path: str
-    ) -> "Key":
-        assert ":" not in module
-        return tuple.__new__(cls, (module, version, kind, path))
-
 
 class GraphStore:
     """

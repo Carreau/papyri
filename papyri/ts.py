@@ -1047,7 +1047,7 @@ def parse(text: bytes, qa: str | None = None) -> list[Section]:
     tree = parser.parse(text)
     root = Node(tree.root_node)
     try:
-        res = TSVisitor(text, qa).visit_document(root)  # type: ignore[arg-type]
+        res = TSVisitor(text, qa if qa is not None else "").visit_document(root)
     except errors.SpaceAfterBlockDirectiveError:
         # Deliberate semantic error raised by the visitor; callers (and tests)
         # rely on the specific type, so don't wrap it.

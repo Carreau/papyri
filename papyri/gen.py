@@ -605,8 +605,7 @@ class PapyriDocTestRunner(doctest.DocTestRunner):
         )
         if entries is None:
             entries = [("jedi failed", "jedi failed")]
-        entries = _add_classes(entries)  # type: ignore[assignment]
-        tok_entries = [GenToken(*x) for x in entries]
+        tok_entries = [GenToken(*x) for x in _add_classes(entries)]
         return tok_entries
 
     def _next_figure_name(self):

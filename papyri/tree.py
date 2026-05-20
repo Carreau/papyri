@@ -889,7 +889,7 @@ class DirectiveVisiter(TreeReplacer):
             self.known_refs,
             loc,
             text,
-            rev_aliases=self.rev_aliases,  # type: ignore[arg-type]
+            rev_aliases=cast(dict[Canonical, FullQual], self.rev_aliases),
         )
 
     def _ref_to_crossref(self, text: str, r: RefInfo, exists: str) -> CrossRef:

@@ -626,7 +626,7 @@ def test_seealso_directive_empty_content_produces_admonition():
 # ---------------------------------------------------------------------------
 
 
-def _make_visitor_with_targets(doc_targets: dict) -> DirectiveVisiter:
+def _make_visitor_with_targets(doc_targets: dict[str, str]) -> DirectiveVisiter:
     return DirectiveVisiter(
         qa="docs:overview",
         known_refs=frozenset(),
@@ -745,7 +745,7 @@ def test_target_node_passes_through_generic_visit():
 # ---------------------------------------------------------------------------
 
 
-def _make_visitor_with_external(external_targets: dict) -> DirectiveVisiter:
+def _make_visitor_with_external(external_targets: dict[str, str]) -> DirectiveVisiter:
     return DirectiveVisiter(
         qa="docs:overview",
         known_refs=frozenset(),

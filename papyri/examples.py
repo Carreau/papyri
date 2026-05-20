@@ -269,11 +269,11 @@ async def example1(
     only: None,
     /,
     var: float | bool,
-    args=1,
+    args: int = 1,
     *,
-    kwarg,
-    also=None,
-    **kwargs,
+    kwarg: Any,
+    also: Any = None,
+    **kwargs: Any,
 ) -> str | None:
     """
     first example.
@@ -432,7 +432,7 @@ def example_backtick_suffix():
 foo = object()
 
 
-def annotation_with_hex_addresses(x: foo = lambda x: x):  # type: ignore [valid-type]
+def annotation_with_hex_addresses(x: foo = lambda x: x) -> None:  # type: ignore [valid-type]
     """
     This function is a function for which the signature will have and hexadecimal addresse.
 
@@ -818,7 +818,7 @@ class Patti:
         return "Patti is a toy class for papyri examples."
 
 
-def _mydirective_handler(args: str, options: dict[str, str], value: str):
+def _mydirective_handler(args: str, options: dict[str, str], value: str) -> list[Any]:
     import json
     from textwrap import indent
 

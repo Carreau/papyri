@@ -5,6 +5,7 @@ Various directive handlers.
 import logging
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from .nodes import (
     Admonition,
@@ -125,7 +126,7 @@ def make_image_handler(
     module: str,
     version: str,
     doc_root: Path | None = None,
-) -> Callable:
+) -> Callable[[str, dict[str, str], str], list[Any]]:
     """Return an ``.. image::`` directive handler bound to the given asset context.
 
     The returned callable has the standard ``(argument, options, content)``
@@ -162,7 +163,7 @@ def make_image_handler(
     """
 
     def image_handler(
-        argument: str, options: dict, content: str
+        argument: str, options: dict[str, str], content: str
     ) -> list[Figure | Image]:
         uri = (argument or "").strip()
         alt = (options or {}).get("alt", "") if isinstance(options, dict) else ""

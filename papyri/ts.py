@@ -198,19 +198,19 @@ class TSVisitor:
         self._section_levels = {}
         self._targets = []
 
-    def as_text(self, node) -> str:
+    def as_text(self, node: Node) -> str:
         """
         Utility function to extract the original text for a given node.
         """
         return self._bytes[node.start_byte : node.end_byte].decode()
 
-    def visit_document(self, node):
+    def visit_document(self, node: Node) -> list[Any]:
         new_node = node.without_whitespace()
         items = self.visit(new_node)
         res = [x for x in items if not isinstance(x, Whitespace)]
         return res
 
-    def _compressor(self, nodes) -> list[Any]:
+    def _compressor(self, nodes: list[Any]) -> list[Any]:
         """
         This is currently a workaround of a tree-sitter limitations.
         List cannot have blank lines between them, so we end up with
@@ -532,7 +532,7 @@ class TSVisitor:
         t = InlineCode(text.replace("\n", " "))
         return [t]
 
-    def visit_literal_block(self, node) -> list[Code]:
+    def visit_literal_block(self, node: Node) -> list[Code]:
         datas = self.as_text(node)
         first_offset = node.start_point[1]
         datas = " " * first_offset + datas
@@ -630,18 +630,18 @@ class TSVisitor:
         log.warning("Skipping line_block node: %s", self.as_text(node))
         return []
 
-    def visit_substitution_reference(self, node):
+    def visit_substitution_reference(self, node: Node) -> list[Any]:
         # TODO
         return [SubstitutionRef(self.as_text(node))]
 
-    def visit_doctest_block(self, node) -> list[Code]:
+    def visit_doctest_block(self, node: Node) -> list[Code]:
         # TODO
         return self.visit_literal_block(node)
 
-    def visit_field(self, node):
+    def visit_field(self, node: Node) -> list[Any]:
         return []
 
-    def visit_field_list(self, node) -> list[FieldList | Options]:
+    def visit_field_list(self, node: Node) -> list[FieldList | Options]:
         acc: list[str] = []
 
         lens = {len(f.children) for f in node.children}
@@ -939,7 +939,7 @@ class TSVisitor:
             return []
         return [Text(text[1:]) if len(text) > 1 else Text(text)]
 
-    def _table_text(self, node) -> str:
+    def _table_text(self, node: Node) -> str:
         # as_text() starts at start_byte, which is after the leading
         # indentation of the first line.  Re-add that whitespace so
         # dedent() can compute the correct common prefix across all lines.
@@ -996,7 +996,7 @@ class TSVisitor:
         return [DefList(acc)]
 
 
-def nest_sections(items) -> list[Section]:
+def nest_sections(items: list[Any]) -> list[Section]:
     if not items:
         return []
     acc = []
@@ -1010,7 +1010,7 @@ def nest_sections(items) -> list[Section]:
     return acc
 
 
-def _find_error_nodes(node) -> list:
+def _find_error_nodes(node: Any) -> list[Any]:
     """Return all ERROR nodes in the tree via depth-first walk."""
     results = []
     if node.is_error:
@@ -1039,7 +1039,7 @@ def _visitor_failure_byte(exc: BaseException) -> int | None:
     return byte
 
 
-def parse(text: bytes, qa=None) -> list[Section]:
+def parse(text: bytes, qa: str | None = None) -> list[Section]:
     """
     Parse text using Tree sitter RST, and return a list of serialised section I guess ?
     """
@@ -1047,7 +1047,7 @@ def parse(text: bytes, qa=None) -> list[Section]:
     tree = parser.parse(text)
     root = Node(tree.root_node)
     try:
-        res = TSVisitor(text, qa).visit_document(root)
+        res = TSVisitor(text, qa).visit_document(root)  # type: ignore[arg-type]
     except errors.SpaceAfterBlockDirectiveError:
         # Deliberate semantic error raised by the visitor; callers (and tests)
         # rely on the specific type, so don't wrap it.

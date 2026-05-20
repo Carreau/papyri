@@ -1,6 +1,7 @@
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 from papyri.tree import GenVisitor
 from papyri.ts import parse
@@ -14,14 +15,14 @@ def _expected_path(sample_path: Path) -> Path:
     return CORP / sample_path.name.replace(".sample.", ".expected.")
 
 
-def _serialize(data) -> bytes:
+def _serialize(data: list[Any]) -> bytes:
     processed = [s.to_dict() for s in data]
     return json.dumps(processed).encode()
 
 
-def _process(sample: Path):
+def _process(sample: Path) -> list[Any]:
     bytes_ = sample.read_bytes()
-    data = parse(bytes_, sample)
+    data = parse(bytes_, str(sample))
     dv = GenVisitor(
         str(sample),
         frozenset(),

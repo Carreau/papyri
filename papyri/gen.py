@@ -148,7 +148,7 @@ def _get_implied_imports(obj):
     return {}
 
 
-def processed_example_data(example_section_data) -> Section:
+def processed_example_data(example_section_data: Section) -> Section:
     """this should be no-op on already ingested"""
     new_example_section_data = Section([], None)
     # Historical note: this used to strip nodes of an old `take2.Text` class
@@ -199,14 +199,14 @@ def gen_main(
     infer: bool | None,
     exec_: bool | None,
     target_file: str,
-    debug,
+    debug: bool,
     *,
     dummy_progress: bool,
     dry_run: bool,
     api: bool,
     examples: bool,
-    fail,
-    narrative,
+    fail: bool,
+    narrative: bool,
     fail_early: bool,
     fail_unseen_error: bool,
     limit_to: list[str],
@@ -605,7 +605,7 @@ class PapyriDocTestRunner(doctest.DocTestRunner):
         )
         if entries is None:
             entries = [("jedi failed", "jedi failed")]
-        entries = _add_classes(entries)
+        entries = _add_classes(entries)  # type: ignore[assignment]
         tok_entries = [GenToken(*x) for x in entries]
         return tok_entries
 
@@ -670,7 +670,7 @@ class PapyriDocTestRunner(doctest.DocTestRunner):
         self._example_section_data = Section([], None)
         return example_section_data
 
-    def _compact(self, example_section_data) -> Section:
+    def _compact(self, example_section_data: Section) -> Section:
         """
         Compact consecutive execution items that do have the same execution status.
 
@@ -782,7 +782,13 @@ class Gen:
         self._toc_nodes: list[TocTree] = []
 
     def get_example_data(
-        self, example_section, *, obj: Any, qa: str, config: Config, log: logging.Logger
+        self,
+        example_section: Any,
+        *,
+        obj: Any,
+        qa: str,
+        config: Config,
+        log: logging.Logger,
     ) -> tuple[Section, list[Any]]:
         """Extract example section data from a NumpyDocString
 
@@ -987,7 +993,7 @@ class Gen:
             parts = p.relative_to(path).parts
             assert parts[-1].endswith("rst")
             try:
-                data = ts.parse(p.read_bytes(), p)
+                data = ts.parse(p.read_bytes(), str(p))
             except ts.TreeSitterParseError as e:
                 self.log.warning("Could not parse %s:%d, skipping: %s", p, e.line, e)
                 continue
@@ -1080,7 +1086,7 @@ class Gen:
 
         root, raw_tree = make_tree(trees)
 
-        def _build_toc(tree: dict) -> list[TocTree]:
+        def _build_toc(tree: dict[str, Any]) -> list[TocTree]:
             result = []
             for k, children in tree.items():
                 result.append(
@@ -1124,7 +1130,7 @@ class Gen:
         for k, v in self.examples.items():
             (where / "examples" / k).write_bytes(v)
 
-    def write_api(self, where: Path):
+    def write_api(self, where: Path) -> None:
         """
         Write the API section of the DocBundle.
         """
@@ -1132,10 +1138,10 @@ class Gen:
         for k, v in self.data.items():
             (where / "module" / (k + ".json")).write_bytes(v.to_json())
 
-    def partial_write(self, where):
+    def partial_write(self, where: Path) -> None:
         self.write_api(where)
 
-    def write(self, where: Path):
+    def write(self, where: Path) -> None:
         """
         Write a DocBundle folder.
         """
@@ -1153,19 +1159,19 @@ class Gen:
         for k, v in self.bdata.items():
             (assets / k).write_bytes(v)
 
-    def put(self, path: str, obj):
+    def put(self, path: str, obj: Any) -> None:
         """
         put some json data at the given path
         """
         self.data[path] = obj
 
-    def put_raw(self, path: str, data: bytes):
+    def put_raw(self, path: str, data: bytes) -> None:
         """
         put some binary data at the given path.
         """
         self.bdata[path] = data
 
-    def _transform_1(self, blob: GeneratedDoc, ndoc) -> GeneratedDoc:
+    def _transform_1(self, blob: GeneratedDoc, ndoc: Any) -> GeneratedDoc:
         """
         Populates GeneratedDoc content field from numpydoc parsed docstring.
 
@@ -1176,7 +1182,9 @@ class Gen:
             assert isinstance(v, (str, list, dict)), type(v)
         return blob
 
-    def _transform_2(self, blob: GeneratedDoc, target_item, qa: str) -> GeneratedDoc:
+    def _transform_2(
+        self, blob: GeneratedDoc, target_item: Any, qa: str
+    ) -> GeneratedDoc:
         """
         Try to find relative path WRT site package and populate item_file field
         for GeneratedDoc.
@@ -1255,13 +1263,13 @@ class Gen:
     def prepare_doc_for_one_object(
         self,
         target_item: Any,
-        ndoc,
+        ndoc: Any,
         *,
         qa: str,
         config: Config,
         aliases: list[str],
         api_object: APIObjectInfo,
-    ) -> tuple[GeneratedDoc, list]:
+    ) -> tuple[GeneratedDoc, list[Any]]:
         """
         Get documentation information for one python object
 
@@ -1452,7 +1460,7 @@ class Gen:
         )
         return blob, figs
 
-    def collect_examples(self, folder: Path, config):
+    def collect_examples(self, folder: Path, config: Config) -> list[Any]:
         acc = []
         examples = list(folder.glob("**/*.py"))
 
@@ -2019,7 +2027,7 @@ def is_private(path):
     return any(p.startswith("_") and not p.startswith("__") for p in path.split("."))
 
 
-def find_canonical(qa: str, aliases: list[str]):
+def find_canonical(qa: str, aliases: list[str]) -> str | None:
     """
     Given the fully qualified name and a lit of aliases, try to find the canonical one.
 

@@ -29,7 +29,7 @@ from .nodes import (
 from .signature import SignatureNode
 
 
-def paragraph(lines: list[str], qa) -> Any:
+def paragraph(lines: list[str], qa: str) -> Any:
     """
     Leftover rst parsing,
 
@@ -63,18 +63,18 @@ class _OrderedDictProxy:
         assert isinstance(mapping, dict), mapping
         assert set(self.mapping.keys()) == set(self.ordering)
 
-    def __getitem__(self, key: str):
+    def __getitem__(self, key: str) -> Any:
         return self.mapping[key]
 
-    def __contains__(self, key: str):
+    def __contains__(self, key: object) -> bool:
         return key in self.mapping
 
-    def __setitem__(self, key: str, value: Any):
+    def __setitem__(self, key: str, value: Any) -> None:
         if key not in self.ordering:
             self.ordering.append(key)
         self.mapping[key] = value
 
-    def __delitem__(self, key: str):
+    def __delitem__(self, key: str) -> None:
         self.ordering.remove(key)
         del self.mapping[key]
 
@@ -84,7 +84,7 @@ class _OrderedDictProxy:
     def keys(self) -> tuple[str, ...]:
         return tuple(self.ordering)
 
-    def get(self, key: str, default=None, /):
+    def get(self, key: str, default: Any = None, /) -> Any:
         return self.mapping.get(key, default)
 
     def items(self):
@@ -208,7 +208,9 @@ class GeneratedDoc(Node):
         return cls({}, None, [], None, None, None, (), (), None, None, (), ())
 
 
-def _numpy_data_to_section(data: list[tuple[str, str, list[str]]], title: str, qa):
+def _numpy_data_to_section(
+    data: list[tuple[str, str, list[str]]], title: str, qa: str
+) -> Section:
     assert isinstance(data, list), repr(data)
     acc = []
     for param, type_, desc in data:
@@ -225,7 +227,7 @@ def _numpy_data_to_section(data: list[tuple[str, str, list[str]]], title: str, q
         return Section([], title)
 
 
-def _normalize_see_also(see_also: Section, qa: str):
+def _normalize_see_also(see_also: Section, qa: str) -> tuple[SeeAlsoItem, ...]:
     """
     numpydoc is complex, the See Also fields can be quite complicated,
     so here we sort of try to normalise them.
@@ -238,7 +240,7 @@ def _normalize_see_also(see_also: Section, qa: str):
     Though if description is empty, them the type is actually the description.
     """
     if not see_also:
-        return []
+        return ()
     assert see_also is not None
     new_see_also = []
     name_and_types: list[tuple[str, str]]

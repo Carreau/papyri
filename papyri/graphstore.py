@@ -3,6 +3,7 @@ import logging
 import sqlite3
 from hashlib import blake2b
 from pathlib import Path as _Path
+from typing import Any
 
 import cbor2
 
@@ -160,7 +161,7 @@ class GraphStore:
 
     """
 
-    def __init__(self, root: _Path, link_finder=None):
+    def __init__(self, root: _Path, link_finder: Any = None) -> None:
         from .config import ensure_dirs
 
         ensure_dirs()
@@ -254,7 +255,7 @@ class GraphStore:
         ).fetchall()
         return {Key(r[0], r[1], r[2], r[3]) for r in rows}
 
-    def get_all(self, key: Key):
+    def get_all(self, key: Key) -> tuple[bytes, set[Key], set[Key]]:
         a = self._get(key)
         b = self._get_backrefs(key)
         c = self.get_forwardrefs(key)
@@ -268,7 +269,7 @@ class GraphStore:
 
     def _maybe_insert_node(
         self,
-        key,
+        key: Key,
         *,
         has_blob: bool = False,
         digest: bytes | None = None,
@@ -303,10 +304,10 @@ class GraphStore:
             )
         return node_id
 
-    def _meta_path(self, module: str, version: str):
+    def _meta_path(self, module: str, version: str) -> Path:
         assert isinstance(module, str)
         assert isinstance(version, str)
-        return self._root / module / version / "meta.cbor"
+        return self._root / module / version / "meta.cbor"  # type: ignore[no-any-return]
 
     def put_meta(self, module: str, version: str, data: bytes) -> None:
         assert isinstance(data, bytes)
@@ -317,7 +318,7 @@ class GraphStore:
     def get_meta(self, key: Key) -> bytes:
         return self._meta_path(key.module, key.version).read_bytes()  # type: ignore[no-any-return]
 
-    def put(self, key: Key, bytes_: bytes, refs) -> None:
+    def put(self, key: Key, bytes_: bytes, refs: list[Key]) -> None:
         """
         Store object ``bytes_``, as path ``key`` with the corresponding
         links to other objects.
@@ -373,7 +374,9 @@ class GraphStore:
             )
             c.executemany("DELETE FROM links WHERE source=? AND dest=?", del_params)
 
-    def glob(self, pattern) -> list[Key]:
+    def glob(
+        self, pattern: tuple[str | None, str | None, str | None, str | None]
+    ) -> list[Key]:
         package, version, category, identifier = pattern
         clauses = []
         params = []

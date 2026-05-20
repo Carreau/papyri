@@ -2,7 +2,8 @@
 vestigial things from velin.
 """
 
-from typing import ClassVar
+from collections.abc import Iterator
+from typing import Any, ClassVar
 
 import numpydoc.docscrape as nds
 
@@ -27,11 +28,11 @@ class NumpyDocString(nds.NumpyDocString):
         "Yields": ("signals",),
     }
 
-    def __init__(self, *args, **kwargs):
-        self.ordered_sections = []
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        self.ordered_sections: list[str] = []
         super().__init__(*args, **kwargs)
 
-    def __setitem__(self, key, value):
+    def __setitem__(self, key: str, value: Any) -> None:
         if key in ["Extended Summary", "Summary"]:
             value = [d.rstrip() for d in value]
 
@@ -41,24 +42,24 @@ class NumpyDocString(nds.NumpyDocString):
         )
         self.ordered_sections.append(key)
 
-    def _guess_header(self, header):
+    def _guess_header(self, header: str) -> str:
         if header in self.sections:
             return header
         # handle missing trailing `s`, and trailing `:`
         for s in self.sections:
             if s.lower().startswith(header.rstrip(":").lower()):
-                return s
+                return str(s)
         for k, v in self.aliases.items():
             if header.lower() in v:
                 return k
         raise ValueError("Could not find match for section:", header)
 
-    def _read_sections(self):
+    def _read_sections(self) -> Iterator[tuple[str, Any]]:
         for name, data in super()._read_sections():
             name = self._guess_header(name)
             yield name, data
 
-    def _parse_param_list(self, *args, **kwargs):
+    def _parse_param_list(self, *args: Any, **kwargs: Any) -> list[Any]:
         """
         Normalize parameters
         """

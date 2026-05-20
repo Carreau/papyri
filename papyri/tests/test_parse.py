@@ -202,7 +202,7 @@ def test_backtick_genuine_stray_backtick():
 def _flatten_text(paragraph: Paragraph) -> str:
     """Concatenate the .value of every Text-bearing leaf in a paragraph."""
     parts: list[str] = []
-    stack: list = list(paragraph.children)
+    stack: list[Any] = list(paragraph.children)
     while stack:
         node = stack.pop(0)
         value = getattr(node, "value", None)
@@ -357,7 +357,7 @@ def test_parse_example_with_citations_docstring():
 
     # Walk the tree and collect every CitationReference label.
     found: list[str] = []
-    stack: list = list(sections)
+    stack: list[Any] = list(sections)
     while stack:
         node = stack.pop()
         if isinstance(node, CitationReference):
@@ -393,7 +393,7 @@ def test_parse_citation_block():
         "test_parse_citation_block",
     )
     citations = []
-    stack: list = list(sections)
+    stack: list[Any] = list(sections)
     while stack:
         node = stack.pop()
         if isinstance(node, Citation):
@@ -462,7 +462,7 @@ def test_parse_footnote_block():
         "test_parse_footnote_block",
     )
     footnotes = []
-    stack: list = list(sections)
+    stack: list[Any] = list(sections)
     while stack:
         node = stack.pop()
         if isinstance(node, Footnote):

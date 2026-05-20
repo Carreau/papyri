@@ -42,7 +42,7 @@ class TimeElapsedColumn(ProgressColumn):
         self.avg = None
         super().__init__(*args, **kwargs)
 
-    def render(self, task: Task):
+    def render(self, task: Task) -> Any:
         elapsed = task.elapsed
         if elapsed is None:
             return Text("-:--:--", style="progress.elapsed")

@@ -6,6 +6,7 @@ import gzip
 import json
 import os
 from pathlib import Path
+from typing import Any
 
 import cbor2
 import pytest
@@ -30,7 +31,7 @@ def _make_minimal_bundle_dir(
     *,
     module: str = "mypkg",
     version: str = "1.0",
-    extra_meta: dict | None = None,
+    extra_meta: dict[str, Any] | None = None,
 ) -> Path:
     """
     Create a tiny but well-formed DocBundle directory.
@@ -49,9 +50,9 @@ def _make_minimal_bundle_dir(
     return root
 
 
-def _make_bundle_node(**overrides) -> Bundle:
+def _make_bundle_node(**overrides: Any) -> Bundle:
     """Construct a Bundle Node with sensible defaults — no on-disk dance."""
-    defaults: dict = dict(
+    defaults: dict[str, Any] = dict(
         pack_format_version=PACK_FORMAT_VERSION,
         ir_schema_version=IR_SCHEMA_VERSION,
         module="mypkg",

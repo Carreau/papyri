@@ -123,7 +123,7 @@ class DelayedResolver:
         self._targets = dict()
         self._references = dict()
 
-    def add_target(self, target_ref: RefInfo | LocalRef, target: str):
+    def add_target(self, target_ref: RefInfo | LocalRef, target: str) -> None:
         assert target is not None
         assert target not in self._targets, "two targets with the same name"
         self._targets[target] = target_ref
@@ -343,7 +343,7 @@ class TreeReplacer:
     define replace_XXX(xxx) that return a list of new nodes, and call visit(and the root tree)
     """
 
-    _replacements: Counter
+    _replacements: Counter[Any]
 
     def __init__(self):
         self._replacements = Counter()
@@ -360,7 +360,7 @@ class TreeReplacer:
     def _call_method(self, method, node):
         return method(node)
 
-    def generic_visit(self, node) -> list[Node]:
+    def generic_visit(self, node: Node) -> list[Node]:
         assert node is not None
         assert not isinstance(node, str)
         assert isinstance(node, Node), node
@@ -521,7 +521,7 @@ def set_github_slug(slug: str | None) -> None:
     _WARNED_MISSING_SLUG.clear()
 
 
-def _gh_link_or_warn(role: str, path_segment: str, value: str) -> list:
+def _gh_link_or_warn(role: str, path_segment: str, value: str) -> list[Any]:
     if _GITHUB_SLUG is None:
         if role not in _WARNED_MISSING_SLUG:
             _WARNED_MISSING_SLUG.add(role)
@@ -609,10 +609,10 @@ class DirectiveVisiter(TreeReplacer):
         self,
         qa: str,
         known_refs: frozenset[RefInfo],
-        local_refs,
-        aliases,
-        version,
-        config=None,
+        local_refs: frozenset[str] | set[str],
+        aliases: dict[str, str],
+        version: str,
+        config: dict[str, str] | None = None,
         module: str | None = None,
         doc_path: Path | None = None,
         asset_store: Callable[[str, bytes], None] | None = None,
@@ -640,7 +640,7 @@ class DirectiveVisiter(TreeReplacer):
         assert isinstance(known_refs, (set, frozenset)), known_refs
         assert isinstance(local_refs, (set, frozenset)), local_refs
 
-        self._handlers = {
+        self._handlers: dict[str, Callable[..., Any]] = {
             "math": block_math_handler,
             "warning": warning_handler,
             "note": note_handler,
@@ -689,7 +689,7 @@ class DirectiveVisiter(TreeReplacer):
         # Keyed by RST name with pipes (e.g. '|foo|').  Populated by
         # collect_substitutions() before visiting; can be pre-seeded with
         # config-level global substitutions.
-        self._substitutions: dict[str, list] = {}
+        self._substitutions: dict[str, list[Any]] = {}
         # Register the default ``.. image::`` handler unless the caller already
         # provided one via *config*.  Config-supplied handlers are applied above
         # and win over this default.
@@ -730,10 +730,10 @@ class DirectiveVisiter(TreeReplacer):
                         self.qa,
                     )
 
-    def replace_SubstitutionDef(self, node: SubstitutionDef) -> list:
+    def replace_SubstitutionDef(self, node: SubstitutionDef) -> list[Any]:
         return []
 
-    def replace_SubstitutionRef(self, node: SubstitutionRef) -> list:
+    def replace_SubstitutionRef(self, node: SubstitutionRef) -> list[Any]:
         name = node.value  # e.g. '|foo|'
         if name in self._substitutions:
             return list(self._substitutions[name])
@@ -749,14 +749,18 @@ class DirectiveVisiter(TreeReplacer):
         )
         return [Code(code_, status, code.out)]
 
-    def _block_verbatim_helper(self, name: str, argument: str, options: dict, content):
+    def _block_verbatim_helper(
+        self, name: str, argument: str, options: dict[str, str], content: str
+    ) -> list[Code]:
         data = f".. {name}:: {argument}\n"
         for k, v in options.items():
             data = data + f"    :{k}:{v}\n"
         data = data + indent(content, "    ")
         return [Code(data)]
 
-    def _autosummary_handler(self, argument, options: dict, content):
+    def _autosummary_handler(
+        self, argument: str, options: dict[str, str], content: str
+    ) -> list[Code]:
         # assert False
         return self._block_verbatim_helper("autosummary", argument, options, content)
 
@@ -839,7 +843,9 @@ class DirectiveVisiter(TreeReplacer):
         acc = [ListItem(False, [Paragraph([line])]) for line in lls]
         return [BulletList(ordered=False, start=1, spread=False, children=acc)]
 
-    def replace_UnprocessedDirective(self, directive: UnprocessedDirective):
+    def replace_UnprocessedDirective(
+        self, directive: UnprocessedDirective
+    ) -> list[Any]:
         meth = getattr(self, "_" + directive.name + "_handler", None)
         if meth is None:
             meth = self._handlers.get(directive.name, None)
@@ -879,7 +885,11 @@ class DirectiveVisiter(TreeReplacer):
         """
         assert isinstance(text, str)
         return resolve_(
-            self.qa, self.known_refs, loc, text, rev_aliases=self.rev_aliases
+            self.qa,
+            self.known_refs,
+            loc,
+            text,
+            rev_aliases=self.rev_aliases,  # type: ignore[arg-type]
         )
 
     def _ref_to_crossref(self, text: str, r: RefInfo, exists: str) -> CrossRef:
@@ -890,7 +900,7 @@ class DirectiveVisiter(TreeReplacer):
         return CrossRef(text, r, exists)
 
     @classmethod
-    def _import_solver(cls, maybe_qa: str):
+    def _import_solver(cls, maybe_qa: str) -> str | None:
         parts = maybe_qa.split(".")
         are_id = [x.isidentifier() for x in parts]
 
@@ -900,8 +910,9 @@ class DirectiveVisiter(TreeReplacer):
             target_qa = full_qual(_obj_from_path(parts))
             if target_qa is not None:
                 return target_qa
+        return None
 
-    def replace_InlineRole(self, directive: InlineRole):
+    def replace_InlineRole(self, directive: InlineRole) -> list[Any]:
         domain, role = directive.domain, directive.role
         if domain is None:
             domain = "py"

@@ -3,7 +3,8 @@ from __future__ import annotations
 import json
 import types
 import typing
-from typing import Any
+from collections.abc import Callable
+from typing import Any, Self
 
 import cbor2
 
@@ -12,16 +13,16 @@ from .serde import deserialize, get_type_hints
 
 
 class Base:
-    def validate(self):
+    def validate(self) -> Self:
         validate(self)
         return self
 
     @classmethod
-    def _instance(cls):
+    def _instance(cls) -> Self:
         return cls()
 
 
-def _coerce_field(ann, val):
+def _coerce_field(ann: Any, val: Any) -> Any:
     """Coerce val to the mutable→immutable type the annotation requires.
 
     Node fields annotated as tuple[T, ...] must be tuples at runtime so that
@@ -42,7 +43,7 @@ def _coerce_field(ann, val):
 
 
 class Node(Base):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         tt = get_type_hints(type(self))  # type: ignore[arg-type]
         if type(self).__name__ == "Directive":
             tt = {k: v for k, v in tt.items() if k != "type"}
@@ -54,7 +55,7 @@ class Node(Base):
         if hasattr(self, "_post_deserialise"):
             self._post_deserialise()
 
-    def cbor(self, encoder):
+    def cbor(self, encoder: Any) -> None:
         tag = TAG_MAP[type(self)]
         attrs = get_type_hints(type(self))  # type: ignore[arg-type]
         values = []
@@ -68,7 +69,7 @@ class Node(Base):
             values.append(v)
         encoder.encode(cbor2.CBORTag(tag, values))
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         if not (type(self) == type(other)):
             return False
         tt = get_type_hints(type(self))  # type: ignore[arg-type]
@@ -79,7 +80,7 @@ class Node(Base):
 
         return True
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         tt = get_type_hints(type(self))  # type: ignore[arg-type]
         acc = ""
         for t in tt:
@@ -91,15 +92,15 @@ class Node(Base):
         return json.dumps(self.to_dict(), indent=2, sort_keys=True).encode()
 
     @classmethod
-    def from_json(cls, data: bytes):
+    def from_json(cls, data: bytes) -> Self:
         return cls.from_dict(json.loads(data))
 
-    def to_dict(self):
-        return _serialize(self, type(self))
+    def to_dict(self) -> dict[str, Any]:
+        return _serialize(self, type(self))  # type: ignore[no-any-return]
 
     @classmethod
-    def from_dict(cls, data):
-        return deserialize(cls, cls, data)
+    def from_dict(cls, data: Any) -> Self:
+        return deserialize(cls, cls, data)  # type: ignore[no-any-return]
 
     def __hash__(self) -> int:
         return hash(
@@ -142,7 +143,7 @@ DEBUG_TYPES: set[Any] = set()
 DEBUG_TAG_SET: set[int] = set()
 
 
-def indent(text, marker="   |"):
+def indent(text: str, marker: str = "   |") -> str:
     """
     Return the given text indented with 3 space plus a pipe for display.
     """
@@ -150,7 +151,7 @@ def indent(text, marker="   |"):
     return "\n".join(marker + l for l in lines)
 
 
-def _invalidate(obj, depth=0):
+def _invalidate(obj: Any, depth: int = 0) -> str | None:
     """
     Recursively validate type anotated classes.
     """
@@ -178,7 +179,7 @@ def _invalidate(obj, depth=0):
             if sub is not None:
                 return f"{k}.{sub}." + sub
 
-    # return outcome,s
+    return None
 
 
 class WrongTypeAtField(ValueError):
@@ -191,7 +192,7 @@ def validate(obj: Any) -> None:
         raise WrongTypeAtField(f"Wrong type at field :: {res}")
 
 
-def not_type_check(item, annotation):
+def not_type_check(item: Any, annotation: Any) -> str | None:
     if isinstance(annotation, types.UnionType):
         if any(not_type_check(item, arg) is None for arg in annotation.__args__):
             return None
@@ -236,10 +237,10 @@ def not_type_check(item, annotation):
     raise ValueError(item, annotation)
 
 
-def register(value):
+def register(value: int) -> Callable[[type], type]:
     assert value not in REV_TAG_MAP, REV_TAG_MAP[value]
 
-    def _inner(type_):
+    def _inner(type_: type) -> type:
         assert type_ not in TAG_MAP
         TAG_MAP[type_] = value
         REV_TAG_MAP[value] = type_
@@ -249,7 +250,7 @@ def register(value):
     return _inner
 
 
-def debug(value):
+def debug(value: int) -> Callable[[type], type]:
     """Like @register but marks the node type as debug/in-flux.
 
     Debug nodes appear in the IR while their schema is still being worked out.
@@ -259,7 +260,7 @@ def debug(value):
     """
     assert value not in REV_TAG_MAP, REV_TAG_MAP[value]
 
-    def _inner(type_):
+    def _inner(type_: type) -> type:
         assert type_ not in TAG_MAP
         TAG_MAP[type_] = value
         REV_TAG_MAP[value] = type_

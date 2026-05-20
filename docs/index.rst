@@ -6,6 +6,7 @@ Papyri
 
 .. toctree::
 
+   configuration
    crossrefs
 
 Welcome to Papyri narrative docs. 

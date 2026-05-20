@@ -113,6 +113,13 @@ class UnserializableNode(Node):
 TAG_MAP: dict[Any, int] = {}
 REV_TAG_MAP: dict[int, Any] = {}
 
+# Types registered with @debug instead of @register. These nodes appear in
+# the IR while their schema is still in flux and must not be treated as stable
+# output. They carry a CBOR tag so they round-trip correctly, but callers
+# should not rely on them remaining in published bundles.
+DEBUG_TYPES: set[Any] = set()
+DEBUG_TAG_SET: set[int] = set()
+
 
 def indent(text, marker="   |"):
     """
@@ -213,6 +220,27 @@ def register(value):
         TAG_MAP[type_] = value
         REV_TAG_MAP[value] = type_
 
+        return type_
+
+    return _inner
+
+
+def debug(value):
+    """Like @register but marks the node type as debug/in-flux.
+
+    Debug nodes appear in the IR while their schema is still being worked out.
+    They carry a CBOR tag so they round-trip correctly, but they are not
+    considered stable output and should be visually distinguished from
+    production nodes in tooling and the viewer.
+    """
+    assert value not in REV_TAG_MAP, REV_TAG_MAP[value]
+
+    def _inner(type_):
+        assert type_ not in TAG_MAP
+        TAG_MAP[type_] = value
+        REV_TAG_MAP[value] = type_
+        DEBUG_TYPES.add(type_)
+        DEBUG_TAG_SET.add(value)
         return type_
 
     return _inner

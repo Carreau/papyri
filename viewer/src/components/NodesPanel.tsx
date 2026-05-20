@@ -8,7 +8,7 @@
 // the full bundle and stops when 100 of the requested type are found.
 
 import { useEffect, useState } from "react";
-import { IR_TYPE_NAMES, slugFromType } from "../lib/ir-types.ts";
+import { DEBUG_TYPE_NAMES, IR_TYPE_NAMES, slugFromType } from "../lib/ir-types.ts";
 
 interface PageRef {
   label: string;
@@ -85,12 +85,18 @@ export default function NodesPanel({ pkg, ver, nodetype }: Props) {
         </a>
         {SORTED_TYPES.map((typeName) => {
           const slug = slugFromType(typeName);
+          const isDebug = DEBUG_TYPE_NAMES.has(typeName);
           return (
             <a
               key={slug}
               href={`/${pkg}/${ver}/nodes/${slug}/`}
-              className={"node-type-nav-item" + (nodetype === slug ? " active" : "")}
+              className={
+                "node-type-nav-item" +
+                (nodetype === slug ? " active" : "") +
+                (isDebug ? " debug" : "")
+              }
               aria-current={nodetype === slug ? "page" : undefined}
+              title={isDebug ? "Debug node — schema in flux, not stable IR output" : undefined}
             >
               {typeName}
             </a>
@@ -113,7 +119,11 @@ export default function NodesPanel({ pkg, ver, nodetype }: Props) {
           ) : (
             <dl className="node-list">
               {data.entries.map((entry, i) => (
-                <div key={i} className="node-entry" data-nodetype={entry.type}>
+                <div
+                  key={i}
+                  className={"node-entry" + (DEBUG_TYPE_NAMES.has(entry.type) ? " debug" : "")}
+                  data-nodetype={entry.type}
+                >
                   <dt>
                     <span className="node-kind">{entry.type}</span>
                     <div className="node-value">

@@ -97,9 +97,10 @@ a:visited {
   display: grid;
   grid-template-columns: 18rem 1fr;
   grid-template-areas: "sidebar main";
-  max-width: 72rem;
+  max-width: 96rem;
   margin: 0 auto;
   min-height: 0;
+  position: relative;
 }
 
 /* The toggle checkbox is SR-only on desktop and completely hidden when the
@@ -348,6 +349,115 @@ section.doc-section h6 {
   grid-template-areas: "sidebar main toc";
 }
 
+/* ---------------------------------------------------------------------------
+   Desktop collapse buttons. Two CSS-only checkbox toggles (#sidebar-collapse
+   and #toc-collapse) sit at the top of .bundle-layout; the labels render as
+   small chevron buttons anchored to the inner edges of the sidebar / TOC.
+   When checked, :has() rewrites the grid template to drop that column.
+   The narrow-viewport hamburger (#sidebar-toggle) is independent.
+--------------------------------------------------------------------------- */
+.sidebar-collapse-cb,
+.toc-collapse-cb {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.sidebar-collapse-label,
+.toc-collapse-label {
+  position: sticky;
+  top: 0.25rem;
+  z-index: 5;
+  align-self: start;
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--fg-muted);
+  cursor: pointer;
+  font-size: 0.75rem;
+  line-height: 1;
+  user-select: none;
+}
+.sidebar-collapse-label:hover,
+.toc-collapse-label:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.sidebar-collapse-label {
+  grid-area: sidebar;
+}
+.toc-collapse-label {
+  grid-area: toc;
+  justify-self: start;
+}
+
+.sidebar-collapse-label .collapse-icon-expand,
+.toc-collapse-label .collapse-icon-expand {
+  display: none;
+}
+.sidebar-collapse-cb:checked ~ .sidebar-collapse-label .collapse-icon-collapse {
+  display: none;
+}
+.sidebar-collapse-cb:checked ~ .sidebar-collapse-label .collapse-icon-expand {
+  display: inline;
+}
+.toc-collapse-cb:checked ~ .toc-collapse-label .collapse-icon-collapse {
+  display: none;
+}
+.toc-collapse-cb:checked ~ .toc-collapse-label .collapse-icon-expand {
+  display: inline;
+}
+
+/* When collapsed: hide the column contents and shrink the column to a thin
+   rail that still hosts the re-expand button. */
+.bundle-layout:has(.sidebar-collapse-cb:checked) {
+  grid-template-columns: 2rem 1fr;
+}
+.bundle-layout.has-page-toc:has(.sidebar-collapse-cb:checked) {
+  grid-template-columns: 2rem 1fr 15rem;
+}
+.bundle-layout:has(.sidebar-collapse-cb:checked) .bundle-sidebar {
+  display: none;
+}
+.bundle-layout:has(.sidebar-collapse-cb:checked) .sidebar-collapse-label {
+  justify-self: center;
+}
+
+.bundle-layout.has-page-toc:has(.toc-collapse-cb:checked) {
+  grid-template-columns: 18rem 1fr 2rem;
+}
+.bundle-layout.has-page-toc:has(.sidebar-collapse-cb:checked):has(.toc-collapse-cb:checked) {
+  grid-template-columns: 2rem 1fr 2rem;
+}
+.bundle-layout:has(.toc-collapse-cb:checked) .page-toc-panel {
+  display: none;
+}
+.bundle-layout:has(.toc-collapse-cb:checked) .toc-collapse-label {
+  justify-self: center;
+}
+
+/* Hide the desktop collapse affordances on narrow viewports — the existing
+   hamburger handles mobile navigation. */
+@media (max-width: 899px) {
+  .sidebar-collapse-label,
+  .toc-collapse-label {
+    display: none;
+  }
+}
+
 .page-toc-panel {
   grid-area: toc;
   position: sticky;
@@ -516,7 +626,7 @@ section.backrefs ul.qualnames {
   align-items: center;
   padding: 0 1.25rem;
   height: 3rem;
-  max-width: 72rem;
+  max-width: 96rem;
   margin: 0 auto;
   border-bottom: 1px solid var(--border);
   background: var(--surface);

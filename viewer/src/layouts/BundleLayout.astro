@@ -32,11 +32,43 @@ const nav = await loadBundleNav(blobStore, pkg, ver);
     <SiteHeader />
     <div class:list={["bundle-layout", hasToc && "has-page-toc"]}>
       <input type="checkbox" id="sidebar-toggle" class="sidebar-toggle-cb" aria-hidden="true" />
+      <input type="checkbox" id="sidebar-collapse" class="sidebar-collapse-cb" aria-hidden="true" />
+      {
+        hasToc && (
+          <input type="checkbox" id="toc-collapse" class="toc-collapse-cb" aria-hidden="true" />
+        )
+      }
       <label for="sidebar-toggle" class="sidebar-toggle-label">
         <span class="sidebar-toggle-open" aria-hidden="true">&#9776;</span>
         <span class="sidebar-toggle-close" aria-hidden="true">&times;</span>
         <span class="sidebar-toggle-text">Navigation</span>
       </label>
+      <label
+        for="sidebar-collapse"
+        class="sidebar-collapse-label"
+        title="Collapse navigation"
+        aria-label="Collapse navigation sidebar"
+      >
+        <span class="collapse-icon-collapse" aria-hidden="true">&#x2B05;</span>
+        <span class="collapse-icon-expand" aria-hidden="true">&#x2B95;</span>
+      </label>
+      {
+        hasToc && (
+          <label
+            for="toc-collapse"
+            class="toc-collapse-label"
+            title="Collapse on-this-page"
+            aria-label="Collapse on-this-page panel"
+          >
+            <span class="collapse-icon-collapse" aria-hidden="true">
+              &#x2B95;
+            </span>
+            <span class="collapse-icon-expand" aria-hidden="true">
+              &#x2B05;
+            </span>
+          </label>
+        )
+      }
       <BundleSidebar
         nav={nav}
         activeQualname={activeQualname}

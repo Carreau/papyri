@@ -20,13 +20,15 @@ import shutil
 import site
 import sys
 import tempfile
+import traceback
 import warnings
 from collections import defaultdict, deque
+from collections.abc import Callable
 from functools import lru_cache
 from hashlib import sha256
 from itertools import count
 from pathlib import Path
-from types import FunctionType, ModuleType
+from types import FunctionType, ModuleType, TracebackType
 from typing import (
     Any,
 )
@@ -665,11 +667,18 @@ class PapyriDocTestRunner(doctest.DocTestRunner):
             )
         self.figs.extend(figs)
 
-    def report_unexpected_exception(self, out, test, example, exc_info):
-        out(f"Unexpected exception after running example in `{self.qa}`", exc_info)
+    def report_unexpected_exception(
+        self,
+        out: Callable[[str], object],
+        test: doctest.DocTest,
+        example: doctest.Example,
+        exc_info: tuple[type[BaseException], BaseException, TracebackType | None],
+    ) -> None:
+        formatted = "".join(traceback.format_exception(*exc_info))
+        out(f"Unexpected exception after running example in `{self.qa}`\n{formatted}")
         tok_entries = self._get_tok_entries(example)
         self._example_section_data.append(
-            GenCode(tok_entries, exc_info, ExecutionStatus.unexpected_exception)
+            GenCode(tok_entries, formatted, ExecutionStatus.unexpected_exception)
         )
 
     def report_failure(self, out, test, example, got):

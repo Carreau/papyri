@@ -9,7 +9,7 @@ classifiers = ["License :: OSI Approved :: MIT License"]
 readme = "Readme.md"
 license = {file = "LICENSE"}
 dynamic = ["version","description"]
-requires-python=">=3.14"
+requires-python=">=3.13"
 dependencies = [
     "cbor2>=5",
     "ipython",
@@ -38,7 +38,7 @@ markers = [
 Home = "https://github.com/carreau/papyri"
 
 [tool.mypy]
-python_version = '3.14'
+python_version = '3.13'
 ignore_missing_imports = true
 warn_unused_ignores = true
 warn_redundant_casts = true

@@ -29,13 +29,19 @@ export type BundleVisitor = (doc: unknown, page: PageRef) => boolean;
  * Walk every API page, narrative doc, and example in a bundle, calling
  * `visitor` for each successfully loaded document.  The walk stops as soon
  * as `visitor` returns `false`, allowing callers to implement result limits.
+ *
+ * `ver` is the actual stored version used for blob reads.  `urlVer` (optional,
+ * defaults to `ver`) is used for all PageRef hrefs — pass "latest" here when
+ * the caller is serving a "latest" URL so result links stay canonical.
  */
 export async function walkBundle(
   blobStore: BlobStore,
   pkg: string,
   ver: string,
-  visitor: BundleVisitor
+  visitor: BundleVisitor,
+  urlVer?: string
 ): Promise<void> {
+  const uv = urlVer ?? ver;
   const qualnames = await listModules(blobStore, pkg, ver);
   for (const qa of qualnames) {
     let doc;
@@ -44,7 +50,7 @@ export async function walkBundle(
     } catch {
       continue;
     }
-    if (!visitor(doc, { label: qa, href: linkForQualname(pkg, ver, qa) })) return;
+    if (!visitor(doc, { label: qa, href: linkForQualname(pkg, uv, qa) })) return;
   }
 
   const docPaths = await listDocs(blobStore, pkg, ver);
@@ -55,7 +61,7 @@ export async function walkBundle(
     } catch {
       continue;
     }
-    if (!visitor(section, { label: docPath, href: linkForDoc(pkg, ver, docPath) })) return;
+    if (!visitor(section, { label: docPath, href: linkForDoc(pkg, uv, docPath) })) return;
   }
 
   const exPaths = await listExamples(blobStore, pkg, ver);
@@ -66,7 +72,7 @@ export async function walkBundle(
     } catch {
       continue;
     }
-    if (!visitor(section, { label: exPath, href: linkForExample(pkg, ver, exPath) })) return;
+    if (!visitor(section, { label: exPath, href: linkForExample(pkg, uv, exPath) })) return;
   }
 }
 

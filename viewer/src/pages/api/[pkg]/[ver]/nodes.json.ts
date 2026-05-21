@@ -14,6 +14,7 @@ import type { BlobStore } from "papyri-ingest";
 import {
   collectNodes,
   ALL_NODE_TYPES,
+  resolveVersion,
   type IRNode,
   type TypedNode,
 } from "../../../../lib/ir-reader.ts";
@@ -49,7 +50,8 @@ async function collectBundleNodes(
   pkg: string,
   ver: string,
   types: ReadonlySet<string>,
-  limit: number
+  limit: number,
+  urlVer?: string
 ): Promise<NodesResponse> {
   const valueMap = new Map<string, NodeEntry>();
   const nodeMap = new Map<string, IRNode>();
@@ -80,11 +82,17 @@ async function collectBundleNodes(
     }
   }
 
-  await walkBundle(blobStore, pkg, ver, (doc, page) => {
-    if (valueMap.size >= limit) return false;
-    addHits(collectNodes(doc, types), page);
-    return valueMap.size < limit;
-  });
+  await walkBundle(
+    blobStore,
+    pkg,
+    ver,
+    (doc, page) => {
+      if (valueMap.size >= limit) return false;
+      addHits(collectNodes(doc, types), page);
+      return valueMap.size < limit;
+    },
+    urlVer
+  );
 
   const entries = [...valueMap.values()].sort((a, b) => {
     if (a.type !== b.type) return a.type.localeCompare(b.type);
@@ -126,8 +134,10 @@ export const GET: APIRoute = async ({ params, url }) => {
     types = new Set([typeName]);
   }
 
-  const { blobStore } = await getBackends();
-  const result = await collectBundleNodes(blobStore, pkg, ver, types, limit);
+  const { blobStore, graphDb } = await getBackends();
+  const actualVer = await resolveVersion(graphDb, pkg, ver);
+  if (!actualVer) return respond({ error: `Package ${pkg} not found` }, 404);
+  const result = await collectBundleNodes(blobStore, pkg, actualVer, types, limit, ver);
 
   return respond(result, 200, { "Cache-Control": "no-store" });
 };

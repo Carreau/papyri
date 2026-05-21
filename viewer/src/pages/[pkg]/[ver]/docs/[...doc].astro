@@ -1,5 +1,10 @@
 ---
-import { loadCbor, sectionChildren, type IngestedDoc } from "../../../../lib/ir-reader.ts";
+import {
+  loadCbor,
+  sectionChildren,
+  resolveVersion,
+  type IngestedDoc,
+} from "../../../../lib/ir-reader.ts";
 import { buildDocPageView } from "../../../../lib/doc-page.ts";
 import { getBackends } from "../../../../lib/backends.ts";
 import { buildXrefResolver } from "../../../../lib/xref.ts";
@@ -19,18 +24,21 @@ const docPath = docParam.split("/").join(":");
 
 const { blobStore, graphDb } = await getBackends();
 
+const actualVer = await resolveVersion(graphDb, pkg, ver);
+if (!actualVer) return new Response(`Package ${pkg} not found`, { status: 404 });
+
 let doc: IngestedDoc;
 try {
-  doc = (await loadCbor(blobStore, pkg, ver, "docs", docPath)) as IngestedDoc;
+  doc = (await loadCbor(blobStore, pkg, actualVer, "docs", docPath)) as IngestedDoc;
 } catch {
   return new Response(`Doc ${docPath} not found`, { status: 404 });
 }
 const view = buildDocPageView(doc, docPath);
-const resolveXref = await buildXrefResolver(graphDb, doc, pkg, ver);
+const resolveXref = await buildXrefResolver(graphDb, doc, pkg, actualVer);
 
 // Build ordered page list for prev/next navigation.
 // loadBundleNav is memoised — this call is effectively free.
-const nav = await loadBundleNav(blobStore, pkg, ver);
+const nav = await loadBundleNav(blobStore, pkg, actualVer, ver);
 interface PageLink {
   title: string;
   href: string;
@@ -59,6 +67,7 @@ function sectionHeading(title: string, level: number): string {
 <BundleLayout
   pkg={pkg}
   ver={ver}
+  actualVer={actualVer}
   title={`${view.pageTitle} — ${pkg} ${ver}`}
   activeDocPath={docPath}
   hasToc={view.tocEntries.length >= 2}

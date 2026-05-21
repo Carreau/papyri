@@ -1,6 +1,7 @@
 ---
 import BundleLayout from "../../../../layouts/BundleLayout.astro";
 import { collectBundleImages } from "../../../../lib/image-index.ts";
+import { resolveVersion } from "../../../../lib/ir-reader.ts";
 import { getBackends } from "../../../../lib/backends.ts";
 
 export const prerender = false;
@@ -8,11 +9,18 @@ export const prerender = false;
 const { pkg, ver } = Astro.params;
 if (!pkg || !ver) return new Response(null, { status: 404 });
 
-const { blobStore } = await getBackends();
-const entries = await collectBundleImages(blobStore, pkg, ver);
+const { blobStore, graphDb } = await getBackends();
+const actualVer = await resolveVersion(graphDb, pkg, ver);
+if (!actualVer) return new Response(`Package ${pkg} not found`, { status: 404 });
+const entries = await collectBundleImages(blobStore, pkg, actualVer, ver);
 ---
 
-<BundleLayout pkg={pkg} ver={ver} title={`Images — ${pkg} ${ver} — Papyri viewer`}>
+<BundleLayout
+  pkg={pkg}
+  ver={ver}
+  actualVer={actualVer}
+  title={`Images — ${pkg} ${ver} — Papyri viewer`}
+>
   <p class="crumb"><a href={`/${pkg}/${ver}/`}>&larr; {pkg} {ver}</a></p>
   <h1>Images</h1>
   <p class="lede">

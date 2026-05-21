@@ -11,7 +11,7 @@
 
 import type { APIRoute } from "astro";
 import type { BlobStore } from "papyri-ingest";
-import { collectNodes, type TypedNode } from "../../../../lib/ir-reader.ts";
+import { collectNodes, resolveVersion, type TypedNode } from "../../../../lib/ir-reader.ts";
 import { getBackends } from "../../../../lib/backends.ts";
 import { walkBundle, type PageRef } from "../../../../lib/bundle-walk.ts";
 import { respond } from "../../../../lib/api-utils.ts";
@@ -51,18 +51,25 @@ async function searchBundle(
   pkg: string,
   ver: string,
   query: string,
-  limit: number
+  limit: number,
+  urlVer?: string
 ): Promise<TextHit[]> {
   const hits: TextHit[] = [];
   const q = query.toLowerCase();
 
-  await walkBundle(blobStore, pkg, ver, (doc, page: PageRef) => {
-    const text = extractText(doc);
-    if (text.toLowerCase().includes(q)) {
-      hits.push({ label: page.label, href: page.href, snippet: makeSnippet(text, query) });
-    }
-    return hits.length < limit;
-  });
+  await walkBundle(
+    blobStore,
+    pkg,
+    ver,
+    (doc, page: PageRef) => {
+      const text = extractText(doc);
+      if (text.toLowerCase().includes(q)) {
+        hits.push({ label: page.label, href: page.href, snippet: makeSnippet(text, query) });
+      }
+      return hits.length < limit;
+    },
+    urlVer
+  );
 
   return hits;
 }
@@ -82,8 +89,10 @@ export const GET: APIRoute = async ({ params, url }) => {
     });
   }
 
-  const { blobStore } = await getBackends();
-  const hits = await searchBundle(blobStore, pkg, ver, q, limit);
+  const { blobStore, graphDb } = await getBackends();
+  const actualVer = await resolveVersion(graphDb, pkg, ver);
+  if (!actualVer) return respond({ error: `Package ${pkg} not found` }, 404);
+  const hits = await searchBundle(blobStore, pkg, actualVer, q, limit, ver);
 
   return respond({ hits, query: q } satisfies TextSearchResponse, 200, {
     "Cache-Control": "no-store",

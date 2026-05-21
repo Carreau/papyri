@@ -29,20 +29,30 @@ function addHit(map: Map<string, ImgEntry>, found: FoundImgNode, page: PageRef):
  * Walk every API page, narrative doc, and example in a bundle and return
  * one entry per unique image source, with the list of pages that
  * reference it. Sorted lexicographically by source URL.
+ *
+ * `ver` is the actual stored version; `urlVer` (optional, defaults to `ver`)
+ * is used for page hrefs — pass "latest" when serving the canonical latest URL.
  */
 export async function collectBundleImages(
   blobStore: BlobStore,
   pkg: string,
-  ver: string
+  ver: string,
+  urlVer?: string
 ): Promise<ImgEntry[]> {
   const map = new Map<string, ImgEntry>();
   const t0 = performance.now();
   console.log(`[images] scan start pkg=${pkg} ver=${ver}`);
 
-  await walkBundle(blobStore, pkg, ver, (doc, page) => {
-    for (const found of collectImages(doc)) addHit(map, found, page);
-    return true;
-  });
+  await walkBundle(
+    blobStore,
+    pkg,
+    ver,
+    (doc, page) => {
+      for (const found of collectImages(doc)) addHit(map, found, page);
+      return true;
+    },
+    urlVer
+  );
 
   console.log(
     `[images] scan done pkg=${pkg} ver=${ver} unique=${map.size} ` +

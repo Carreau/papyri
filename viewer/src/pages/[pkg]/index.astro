@@ -173,22 +173,26 @@ const defaultTo = entry.versions[0]!;
           </thead>
           <tbody>
             {
-              rows.map((r) => (
-                <tr>
-                  <td>
-                    <a href={`/${pkg}/${r.version}/`}>{r.version}</a>
-                    {r.version === entry.latest ? <span class="badge">latest</span> : null}
-                  </td>
-                  <td class="num">{r.qualnameCount}</td>
-                  <td class="num">{r.size != null ? formatBytes(r.size) : "—"}</td>
-                  <td class="muted">
-                    {r.ingestedAt != null ? formatTimestamp(r.ingestedAt) : "—"}
-                  </td>
-                  <td>
-                    <a href={`/${pkg}/${r.version}/`}>browse →</a>
-                  </td>
-                </tr>
-              ))
+              rows.map((r) => {
+                const isLatest = r.version === entry.latest;
+                const browseHref = isLatest ? `/${pkg}/latest/` : `/${pkg}/${r.version}/`;
+                return (
+                  <tr>
+                    <td>
+                      <a href={browseHref}>{r.version}</a>
+                      {isLatest ? <span class="badge">latest</span> : null}
+                    </td>
+                    <td class="num">{r.qualnameCount}</td>
+                    <td class="num">{r.size != null ? formatBytes(r.size) : "—"}</td>
+                    <td class="muted">
+                      {r.ingestedAt != null ? formatTimestamp(r.ingestedAt) : "—"}
+                    </td>
+                    <td>
+                      <a href={browseHref}>browse →</a>
+                    </td>
+                  </tr>
+                );
+              })
             }
           </tbody>
         </table>

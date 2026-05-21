@@ -3,12 +3,23 @@ export const prerender = false;
 
 import BundleLayout from "../../../../layouts/BundleLayout.astro";
 import NodesPanel from "../../../../components/NodesPanel.tsx";
+import { resolveVersion } from "../../../../lib/ir-reader.ts";
+import { getBackends } from "../../../../lib/backends.ts";
 
 const { pkg, ver } = Astro.params;
 if (!pkg || !ver) return new Response(null, { status: 404 });
+
+const { graphDb } = await getBackends();
+const actualVer = await resolveVersion(graphDb, pkg, ver);
+if (!actualVer) return new Response(`Package ${pkg} not found`, { status: 404 });
 ---
 
-<BundleLayout pkg={pkg} ver={ver} title={`All nodes — ${pkg} ${ver} — Papyri viewer`}>
+<BundleLayout
+  pkg={pkg}
+  ver={ver}
+  actualVer={actualVer}
+  title={`All nodes — ${pkg} ${ver} — Papyri viewer`}
+>
   <p class="crumb"><a href={`/${pkg}/${ver}/`}>&larr; {pkg} {ver}</a></p>
   <h1>All nodes</h1>
 

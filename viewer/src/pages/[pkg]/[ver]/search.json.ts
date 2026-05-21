@@ -7,7 +7,7 @@
 // at `/api/search.json`.
 
 import type { APIRoute } from "astro";
-import { listModules } from "../../../lib/ir-reader.ts";
+import { listModules, resolveVersion } from "../../../lib/ir-reader.ts";
 import { getBackends } from "../../../lib/backends.ts";
 import { respond } from "../../../lib/api-utils.ts";
 
@@ -18,7 +18,9 @@ export const GET: APIRoute = async ({ params }) => {
   if (!pkg || !ver) {
     return respond({ error: "Bundle not found" }, 404);
   }
-  const { blobStore } = await getBackends();
-  const qualnames = await listModules(blobStore, pkg, ver);
+  const { blobStore, graphDb } = await getBackends();
+  const actualVer = await resolveVersion(graphDb, pkg, ver);
+  if (!actualVer) return respond({ error: `Package ${pkg} not found` }, 404);
+  const qualnames = await listModules(blobStore, pkg, actualVer);
   return respond({ qualnames });
 };

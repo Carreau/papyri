@@ -75,6 +75,21 @@ export async function listIngestedPackages(graphDb: GraphDb): Promise<IngestedPa
   return out;
 }
 
+/**
+ * Resolve the string "latest" to the actual latest version for `pkg`.
+ * Returns the version unchanged for any other value, or null if `pkg` is
+ * not found (only possible when ver === "latest").
+ */
+export async function resolveVersion(
+  graphDb: GraphDb,
+  pkg: string,
+  ver: string
+): Promise<string | null> {
+  if (ver !== "latest") return ver;
+  const packages = await listIngestedPackages(graphDb);
+  return packages.find((p) => p.pkg === pkg)?.latest ?? null;
+}
+
 /** Distinct (pkg, version) pairs from the bundles table. */
 export async function listBundlesFromDb(graphDb: GraphDb): Promise<IngestedBundle[]> {
   const rows = await graphDb.all<{ module: string; version: string }>(

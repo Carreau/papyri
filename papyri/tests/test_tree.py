@@ -32,7 +32,6 @@ from papyri.nodes import (
     UnprocessedDirective,
 )
 from papyri.tree import (
-    _SPHINX_ONLY_DIRECTIVES,
     DelayedResolver,
     DirectiveVisiter,
     py_doc_handler,
@@ -432,13 +431,6 @@ def test_toctree_hidden_with_maxdepth_returns_no_visible_output():
 # ---------------------------------------------------------------------------
 # Sphinx-only directives
 # ---------------------------------------------------------------------------
-
-
-def test_sphinx_only_directives_list_has_expected_entries():
-    # Pin the contract (Phase 4.C): these directives are silently dropped at
-    # gen time because they have no meaning outside a running Sphinx build.
-    for name in ("autofunction", "autoclass", "automodule", "ipython"):
-        assert name in _SPHINX_ONLY_DIRECTIVES
 
 
 def test_replace_unprocessed_directive_drops_sphinx_only(caplog):

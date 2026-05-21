@@ -461,6 +461,67 @@ def test_parse_footnote_reference_named():
     assert [c.label for c in fnotes] == ["#name", "#", "*"]
 
 
+def test_auto_number_footnotes():
+    """``#`` and ``#name`` labels should resolve to unique numbers shared
+    between references and definitions, so anchors don't collide."""
+    from papyri.nodes import Footnote, FootnoteReference
+
+    sections = parse(
+        b"See [#]_ and [#]_ and [#foo]_ and [#foo]_.\n"
+        b"\n"
+        b".. [#] First.\n"
+        b".. [#] Second.\n"
+        b".. [#foo] Named.\n",
+        "test_auto_number_footnotes",
+    )
+
+    refs: list[FootnoteReference] = []
+    defs: list[Footnote] = []
+    stack: list[Any] = list(sections)
+    while stack:
+        n = stack.pop(0)
+        if isinstance(n, FootnoteReference):
+            refs.append(n)
+        elif isinstance(n, Footnote):
+            defs.append(n)
+            continue
+        if hasattr(n, "children"):
+            stack[:0] = list(n.children or [])
+
+    assert [r.label for r in refs] == ["1", "2", "3", "3"]
+    assert [d.label for d in defs] == ["1", "2", "3"]
+
+
+def test_auto_number_footnotes_skips_explicit():
+    """Auto-numbering must skip integers already used by explicit labels."""
+    from papyri.nodes import Footnote, FootnoteReference
+
+    sections = parse(
+        b"See [1]_ and [#]_ and [#]_.\n"
+        b"\n"
+        b".. [1] One.\n"
+        b".. [#] Auto first.\n"
+        b".. [#] Auto second.\n",
+        "test_auto_number_footnotes_skips_explicit",
+    )
+
+    refs: list[FootnoteReference] = []
+    defs: list[Footnote] = []
+    stack: list[Any] = list(sections)
+    while stack:
+        n = stack.pop(0)
+        if isinstance(n, FootnoteReference):
+            refs.append(n)
+        elif isinstance(n, Footnote):
+            defs.append(n)
+            continue
+        if hasattr(n, "children"):
+            stack[:0] = list(n.children or [])
+
+    assert [r.label for r in refs] == ["1", "2", "3"]
+    assert [d.label for d in defs] == ["1", "2", "3"]
+
+
 def test_footnote_reference_roundtrip():
     """
     FootnoteReference should survive a CBOR encode/decode roundtrip via the

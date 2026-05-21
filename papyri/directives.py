@@ -10,11 +10,17 @@ from typing import Any
 from .nodes import (
     Admonition,
     AdmonitionTitle,
+    BulletList,
     Figure,
     Image,
+    ListItem,
     Math,
+    Paragraph,
     RefInfo,
     Section,
+    Table,
+    TableCell,
+    TableRow,
     Text,
 )
 from .ts import parse
@@ -129,6 +135,93 @@ def deprecated_handler(argument, options, content):
 
 def seealso_handler(argument, options, content):
     return admonition_helper("seealso", argument, options, content)
+
+
+def _parse_int_option(options: dict[str, str], key: str, default: int = 0) -> int:
+    raw = (options or {}).get(key)
+    if raw is None:
+        return default
+    try:
+        return int(str(raw).strip())
+    except ValueError:
+        log.warning("list-table: option %r is not an integer: %r", key, raw)
+        return default
+
+
+def list_table_handler(
+    argument: str, options: dict[str, str], content: str
+) -> list[Any]:
+    """Handler for the ``.. list-table::`` directive.
+
+    The directive body is a two-level bullet list — outer items are rows,
+    inner items are cells.  The ``:header-rows:`` option (an integer count)
+    marks how many leading rows are headers.
+
+    ``argument`` is the optional caption; if present it's emitted as a
+    leading ``Paragraph`` before the table (papyri has no caption-aware
+    Table node yet — keeps the text from being silently dropped).
+
+    Unsupported options (``:widths:``, ``:stub-columns:``, ``:align:``,
+    ``:class:``, ``:name:``) are tolerated and ignored — the structured
+    Table model doesn't carry presentation hints.
+    """
+
+    if not content.strip():
+        log.warning("list-table: empty body; dropping directive")
+        return []
+
+    parsed = parse(content.encode(), qa="")
+    bullet_list: BulletList | None = None
+    if parsed and isinstance(parsed[0], Section):
+        for node in parsed[0].children:
+            if isinstance(node, BulletList):
+                bullet_list = node
+                break
+
+    if bullet_list is None:
+        log.warning(
+            "list-table: body did not parse as a bullet list; dropping directive"
+        )
+        return []
+
+    header_count = _parse_int_option(options or {}, "header-rows", 0)
+
+    rows: list[TableRow] = []
+    for row_idx, outer_item in enumerate(bullet_list.children):
+        if not isinstance(outer_item, ListItem):
+            log.warning(
+                "list-table: outer row %d is not a list item; skipping", row_idx
+            )
+            continue
+        inner_list: BulletList | None = None
+        for c in outer_item.children:
+            if isinstance(c, BulletList):
+                inner_list = c
+                break
+        if inner_list is None:
+            log.warning(
+                "list-table: row %d has no inner bullet list of cells; skipping",
+                row_idx,
+            )
+            continue
+
+        cells: list[TableCell] = []
+        for cell_item in inner_list.children:
+            if not isinstance(cell_item, ListItem):
+                continue
+            cells.append(TableCell(children=tuple(cell_item.children)))
+
+        rows.append(TableRow(header=row_idx < header_count, children=tuple(cells)))
+
+    if not rows:
+        log.warning("list-table: no rows parsed; dropping directive")
+        return []
+
+    out: list[Any] = []
+    if argument and argument.strip():
+        out.append(Paragraph([Text(argument.strip())]))
+    out.append(Table(children=tuple(rows)))
+    return out
 
 
 def make_image_handler(

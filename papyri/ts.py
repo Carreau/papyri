@@ -30,7 +30,6 @@ from .nodes import (
     Strong,
     SubstitutionDef,
     SubstitutionRef,
-    Table,
     Target,
     Text,
     ThematicBreak,
@@ -950,10 +949,14 @@ class TSVisitor:
         return dedent(" " * col + self.as_text(node))
 
     def visit_grid_table(self, node):
-        return [Table(self._table_text(node))]
+        # Grid tables aren't yet parsed into structured Table rows; preserve
+        # the verbatim RST source as a Code block until a real parser lands.
+        return [Code(self._table_text(node))]
 
     def visit_simple_table(self, node):
-        return [Table(self._table_text(node))]
+        # Simple tables aren't yet parsed into structured Table rows; preserve
+        # the verbatim RST source as a Code block until a real parser lands.
+        return [Code(self._table_text(node))]
 
     def visit_ERROR(self, node):
         """

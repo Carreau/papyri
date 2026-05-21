@@ -270,6 +270,65 @@ aside.directive .directive-args {
   font-family: var(--mono);
 }
 
+/* Footnotes from RST: superscripted inline references, and block-level
+   footnote definitions that link back to the place they were cited. */
+a.footnote-reference {
+  text-decoration: none;
+  color: var(--accent);
+}
+a.footnote-reference sup {
+  font-size: 0.75em;
+  line-height: 0;
+}
+a.footnote-reference:hover sup {
+  text-decoration: underline;
+}
+
+div.footnote {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin: 0.35rem 0;
+  font-size: 0.875rem;
+  color: var(--fg);
+}
+div.footnote .footnote-body {
+  flex: 1;
+  min-width: 0;
+}
+div.footnote .footnote-body > p {
+  margin: 0 0 0.25rem;
+}
+div.footnote .footnote-body > p:last-child {
+  margin-bottom: 0;
+}
+a.footnote-backref {
+  text-decoration: none;
+  color: var(--fg-muted);
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+a.footnote-backref:hover {
+  color: var(--accent);
+}
+a.footnote-backref .footnote-label {
+  font-weight: 600;
+}
+a.footnote-backref .footnote-backref-arrow {
+  margin-left: 0.15em;
+  font-size: 0.85em;
+  opacity: 0.7;
+}
+
+/* Brief highlight when arrived via in-page jump from a reference. */
+div.footnote:target,
+a.footnote-reference:target {
+  background: var(--admonition-bg);
+  border-radius: 3px;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .substitution {
   font-style: italic;
   color: var(--fg-muted);

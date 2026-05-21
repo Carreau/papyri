@@ -45,6 +45,16 @@ function displayValueFor(n: IRNode): string {
   return JSON.stringify(n).slice(0, 120);
 }
 
+// Dedup uses full content, not the truncated display value: structural
+// nodes (Table, Paragraph, …) have no string `value`, and their first 120
+// stringified chars are mostly schema overhead — distinct nodes on the
+// same page would collapse onto one entry and lose page references.
+function dedupKeyFor(n: IRNode): string {
+  const v = (n as Record<string, unknown>).value;
+  if (typeof v === "string") return v;
+  return JSON.stringify(n);
+}
+
 async function collectBundleNodes(
   blobStore: BlobStore,
   pkg: string,
@@ -60,23 +70,18 @@ async function collectBundleNodes(
   const overallStart = performance.now();
   console.log(`[nodes] scan start pkg=${pkg} ver=${ver} types=${typesLabel} limit=${limit}`);
 
-  function entryKey(type: string, val: string): string {
-    return `${type}\0${val}`;
-  }
-
   function addHits(nodes: IRNode[], page: PageRef): void {
     for (const n of nodes) {
       if (valueMap.size >= limit) return;
-      const val = displayValueFor(n);
       const type = (n as TypedNode).__type;
-      const k = entryKey(type, val);
+      const k = `${type}\0${dedupKeyFor(n)}`;
       const existing = valueMap.get(k);
       if (existing) {
         if (!existing.pages.some((p) => p.href === page.href)) {
           existing.pages.push(page);
         }
       } else {
-        valueMap.set(k, { type, value: val, pages: [page] });
+        valueMap.set(k, { type, value: displayValueFor(n), pages: [page] });
         nodeMap.set(k, n);
       }
     }
@@ -94,17 +99,19 @@ async function collectBundleNodes(
     urlVer
   );
 
-  const entries = [...valueMap.values()].sort((a, b) => {
-    if (a.type !== b.type) return a.type.localeCompare(b.type);
-    return a.value.length - b.value.length || a.value.localeCompare(b.value);
+  const sortedKeys = [...valueMap.keys()].sort((a, b) => {
+    const ea = valueMap.get(a)!;
+    const eb = valueMap.get(b)!;
+    if (ea.type !== eb.type) return ea.type.localeCompare(eb.type);
+    return ea.value.length - eb.value.length || ea.value.localeCompare(eb.value);
   });
+  const entries = sortedKeys.map((k) => valueMap.get(k)!);
 
   await Promise.all(
-    entries.map(async (entry) => {
-      const k = entryKey(entry.type, entry.value);
+    sortedKeys.map(async (k, i) => {
       const originalNode = nodeMap.get(k);
       if (originalNode) {
-        entry.html = await renderNode(originalNode);
+        entries[i].html = await renderNode(originalNode);
       }
     })
   );

@@ -221,6 +221,34 @@ dl.fieldlist > dd > p:first-child {
   margin-top: 0.15rem;
 }
 
+/* Structured tables from the Table / TableRow / TableCell IR nodes
+   (e.g. :list-table: directives). Tokens flip with the site theme. */
+table.ir-table {
+  border-collapse: collapse;
+  margin: 0.75rem 0;
+  font-size: 0.95em;
+  max-width: 100%;
+}
+table.ir-table th,
+table.ir-table td {
+  border: 1px solid var(--border);
+  padding: 0.35rem 0.6rem;
+  text-align: left;
+  vertical-align: top;
+}
+table.ir-table thead th {
+  background: var(--surface);
+  font-weight: 600;
+}
+table.ir-table td > p:first-child,
+table.ir-table th > p:first-child {
+  margin-top: 0;
+}
+table.ir-table td > p:last-child,
+table.ir-table th > p:last-child {
+  margin-bottom: 0;
+}
+
 /* Generic "directive" admonition for block directives we didn't specialise. */
 aside.directive {
   border-left: 3px solid var(--fg-muted);

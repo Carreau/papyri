@@ -124,15 +124,15 @@ export async function renderNode(node: IRNode, opts: RenderOptions = {}): Promis
       const headers: string[] = [];
       const body: string[] = [];
       for (const row of rows) {
-        const rowNode = row as { type?: string; header?: boolean; children?: unknown };
-        if (rowNode.type !== "TableRow") continue;
+        const rowNode = row as { __type?: string; header?: boolean; children?: unknown };
+        if (rowNode.__type !== "TableRow") continue;
         const cells = asArray(rowNode.children);
         const tag = rowNode.header ? "th" : "td";
         const cellHtml = await Promise.all(
           cells.map(async (cell) => {
-            const cellNode = cell as { type?: string; children?: unknown };
+            const cellNode = cell as { __type?: string; children?: unknown };
             const inner =
-              cellNode.type === "TableCell"
+              cellNode.__type === "TableCell"
                 ? await renderChildren(asArray(cellNode.children), opts)
                 : await renderNode(cell, opts);
             return `<${tag}>${inner}</${tag}>`;
@@ -154,9 +154,9 @@ export async function renderNode(node: IRNode, opts: RenderOptions = {}): Promis
       const tag = n.header ? "th" : "td";
       const cellHtml = await Promise.all(
         cells.map(async (cell) => {
-          const cellNode = cell as { type?: string; children?: unknown };
+          const cellNode = cell as { __type?: string; children?: unknown };
           const inner =
-            cellNode.type === "TableCell"
+            cellNode.__type === "TableCell"
               ? await renderChildren(asArray(cellNode.children), opts)
               : await renderNode(cell, opts);
           return `<${tag}>${inner}</${tag}>`;

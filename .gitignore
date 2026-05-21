@@ -25,6 +25,10 @@ node_modules
 .ipynb_checkpoints/
 .ignore
 
+# Local env files (PAPYRI_UPLOAD_URL/TOKEN etc.) — never commit
+.env
+.env.*
+
 # Phase 1 scope cuts: these directories were deleted from the repo but may
 # linger on disk from older checkouts. Keep them out of `git status` noise.
 frontend/

@@ -579,13 +579,9 @@ _SPHINX_ONLY_DIRECTIVES: frozenset[str] = frozenset(
     {
         "autofunction",
         "autoclass",
-        "automodule",
-        "automethod",
         "autoattribute",
         "autodata",
         "autoexception",
-        "ipython",
-        "ipython3",
     }
 )
 

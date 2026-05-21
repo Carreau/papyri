@@ -1,0 +1,25 @@
+[global]
+module = 'ipykernel'
+submodules = ['comm', 'inprocess', 'compiler']
+exec_failure = 'fallback'
+docs_path = "~/dev/ipykernel/docs"
+execute_doctests = false
+exclude = []
+# Skip Sphinx-generated API stubs (``.. automodule::`` / ``.. autoclass::``
+# directives that have no meaning outside a Sphinx build).
+narrative_exclude = [
+    "api",
+    "_build",
+]
+
+[global.directives]
+automodule   = 'papyri.directives:warn'
+autoclass    = 'papyri.directives:warn'
+automethod   = 'papyri.directives:warn'
+
+[meta]
+github_slug = 'ipython/ipykernel'
+tag = 'v{version}'
+pypi = 'ipykernel'
+homepage = 'https://ipython.org/'
+docspage = 'https://ipykernel.readthedocs.org/'

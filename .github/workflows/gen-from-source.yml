@@ -99,6 +99,16 @@ jobs:
               "gen_flags": "",
               "install_cmd": "",
               "pypi_name": "astropy"
+            },
+            {
+              "lib": "traitlets",
+              "repo": "https://github.com/ipython/traitlets.git",
+              "tags": ["v5.14.3", "main"],
+              "clone_dir": "traitlets",
+              "config": "examples/traitlets.toml",
+              "gen_flags": "",
+              "install_cmd": "",
+              "pypi_name": "traitlets"
             }
           ]'
           matrix=$(echo "$libs" | jq -c '{

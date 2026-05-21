@@ -1,0 +1,22 @@
+[global]
+module = 'traitlets'
+submodules = ['config', 'utils']
+exec_failure = 'fallback'
+docs_path = "~/dev/traitlets/docs/source"
+execute_doctests = false
+exclude = []
+narrative_exclude = [
+    "_build",
+]
+
+[global.directives]
+automodule   = 'papyri.directives:warn'
+autoclass    = 'papyri.directives:warn'
+automethod   = 'papyri.directives:warn'
+
+[meta]
+github_slug = 'ipython/traitlets'
+tag = '{version}'
+pypi = 'traitlets'
+homepage = 'https://github.com/ipython/traitlets'
+docspage = 'https://traitlets.readthedocs.org/'

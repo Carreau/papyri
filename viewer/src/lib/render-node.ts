@@ -119,6 +119,57 @@ export async function renderNode(node: IRNode, opts: RenderOptions = {}): Promis
       return `<a href="${href}"${title}>${inner}</a>`;
     }
 
+    case "Table": {
+      const rows = asArray(n.children);
+      const headers: string[] = [];
+      const body: string[] = [];
+      for (const row of rows) {
+        const rowNode = row as { type?: string; header?: boolean; children?: unknown };
+        if (rowNode.type !== "TableRow") continue;
+        const cells = asArray(rowNode.children);
+        const tag = rowNode.header ? "th" : "td";
+        const cellHtml = await Promise.all(
+          cells.map(async (cell) => {
+            const cellNode = cell as { type?: string; children?: unknown };
+            const inner =
+              cellNode.type === "TableCell"
+                ? await renderChildren(asArray(cellNode.children), opts)
+                : await renderNode(cell, opts);
+            return `<${tag}>${inner}</${tag}>`;
+          })
+        );
+        const tr = `<tr>${cellHtml.join("")}</tr>`;
+        if (rowNode.header) headers.push(tr);
+        else body.push(tr);
+      }
+      const thead = headers.length ? `<thead>${headers.join("")}</thead>` : "";
+      const tbody = body.length ? `<tbody>${body.join("")}</tbody>` : "";
+      return `<table class="ir-table">${thead}${tbody}</table>`;
+    }
+
+    case "TableRow": {
+      // Bare-row fallback: renderer above usually handles TableRow inside a
+      // Table.  Emit a row without a wrapping <table> if we ever hit one.
+      const cells = asArray(n.children);
+      const tag = n.header ? "th" : "td";
+      const cellHtml = await Promise.all(
+        cells.map(async (cell) => {
+          const cellNode = cell as { type?: string; children?: unknown };
+          const inner =
+            cellNode.type === "TableCell"
+              ? await renderChildren(asArray(cellNode.children), opts)
+              : await renderNode(cell, opts);
+          return `<${tag}>${inner}</${tag}>`;
+        })
+      );
+      return `<tr>${cellHtml.join("")}</tr>`;
+    }
+
+    case "TableCell": {
+      const inner = await renderChildren(asArray(n.children), opts);
+      return `<td>${inner}</td>`;
+    }
+
     case "BulletList": {
       const inner = await renderChildren(asArray(n.children), opts);
       return `<ul>${inner}</ul>`;

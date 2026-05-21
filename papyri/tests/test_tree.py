@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import pytest
 
-from papyri.directives import make_image_handler
+from papyri.directives import list_table_handler, make_image_handler
 from papyri.nodes import (
     Admonition,
     CrossRef,
@@ -27,6 +27,9 @@ from papyri.nodes import (
     Paragraph,
     RefInfo,
     Section,
+    Table,
+    TableCell,
+    TableRow,
     Target,
     Text,
     UnprocessedDirective,
@@ -846,3 +849,90 @@ def test_section_with_mixed_children_traverses_target():
     result = v.visit(section)
     types = [type(c).__name__ for c in result.children]
     assert types == ["Paragraph", "Target", "Paragraph"]
+
+
+# ---------------------------------------------------------------------------
+# list-table directive
+# ---------------------------------------------------------------------------
+
+
+def _list_table_content() -> str:
+    return "* - Header A\n  - Header B\n* - r1a\n  - r1b\n* - r2a\n  - r2b\n"
+
+
+def test_list_table_basic_shape():
+    out = list_table_handler("", {"header-rows": "1"}, _list_table_content())
+    assert len(out) == 1
+    table = out[0]
+    assert isinstance(table, Table)
+    assert len(table.children) == 3
+    for row in table.children:
+        assert isinstance(row, TableRow)
+        assert len(row.children) == 2
+        for cell in row.children:
+            assert isinstance(cell, TableCell)
+
+
+def test_list_table_header_rows_marks_first_row():
+    out = list_table_handler("", {"header-rows": "1"}, _list_table_content())
+    table = out[0]
+    assert table.children[0].header is True
+    assert table.children[1].header is False
+    assert table.children[2].header is False
+
+
+def test_list_table_no_header_rows_option_defaults_to_zero():
+    out = list_table_handler("", {}, _list_table_content())
+    table = out[0]
+    assert all(row.header is False for row in table.children)
+
+
+def test_list_table_cell_contents_are_flow_nodes():
+    out = list_table_handler("", {"header-rows": "1"}, _list_table_content())
+    table = out[0]
+    cell = table.children[0].children[0]
+    # First cell holds a Paragraph(Text("Header A")).
+    para = cell.children[0]
+    assert isinstance(para, Paragraph)
+    inline = para.children[0]
+    assert isinstance(inline, Text)
+    assert inline.value == "Header A"
+
+
+def test_list_table_caption_emitted_as_paragraph():
+    out = list_table_handler("My Caption", {}, _list_table_content())
+    assert len(out) == 2
+    caption = out[0]
+    assert isinstance(caption, Paragraph)
+    inline = caption.children[0]
+    assert isinstance(inline, Text)
+    assert inline.value == "My Caption"
+    assert isinstance(out[1], Table)
+
+
+def test_list_table_empty_body_returns_nothing():
+    assert list_table_handler("", {}, "") == []
+    assert list_table_handler("", {}, "   \n  \n") == []
+
+
+def test_list_table_registered_on_visitor():
+    v = _make_visitor()
+    assert "list-table" in v._handlers
+
+
+def test_list_table_via_full_directive_pipeline():
+    # End-to-end: an UnprocessedDirective for ``list-table`` is dispatched
+    # through the visitor and replaced with a structured Table node.
+    v = _make_visitor()
+    up = UnprocessedDirective(
+        name="list-table",
+        args="",
+        options={"header-rows": "1"},
+        value=_list_table_content(),
+        children=(),
+        raw="",
+    )
+    out = v.replace_UnprocessedDirective(up)
+    tables = [x for x in out if isinstance(x, Table)]
+    assert len(tables) == 1
+    assert tables[0].children[0].header is True

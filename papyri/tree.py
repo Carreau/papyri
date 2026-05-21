@@ -15,6 +15,7 @@ from typing import Any, cast
 from .directives import (
     block_math_handler,
     deprecated_handler,
+    list_table_handler,
     make_image_handler,
     note_handler,
     seealso_handler,
@@ -390,7 +391,6 @@ class TreeReplacer:
                 "SubstitutionRef",
                 "Target",
                 "Text",
-                "Table",
                 "ThematicBreak",
                 "Unimplemented",
                 "CrossRef",
@@ -640,6 +640,7 @@ class DirectiveVisiter(TreeReplacer):
             "versionchanged": versionchanged_handler,
             "deprecated": deprecated_handler,
             "code-block": self._code_handler,
+            "list-table": list_table_handler,
         }
 
         for k, v in (config or {}).items():

@@ -256,14 +256,34 @@ class Unimplemented(Node):
 
 @register(4065)
 class Table(Node):
-    """Verbatim table content (grid or simple RST table).
+    """Structured table.
 
-    Stored as raw source text for now; a structured cell model can be added
-    later without changing the CBOR tag.
+    Holds an ordered sequence of ``TableRow`` children.  Header rows carry
+    ``header=True``; everything else is a body row.  Produced from
+    ``.. list-table::`` (see ``papyri.directives.list_table_handler``);
+    grid- and simple-table RST forms still flow through as ``Code`` nodes
+    until a parser for them lands.
     """
 
     type = "table"
-    value: str
+    children: tuple[TableRow, ...] = field(default_factory=tuple)
+
+
+@register(4068)
+class TableRow(Node):
+    """One row of a ``Table``.  ``header`` marks header (``<th>``) rows."""
+
+    type = "tableRow"
+    header: bool = False
+    children: tuple[TableCell, ...] = field(default_factory=tuple)
+
+
+@register(4069)
+class TableCell(Node):
+    """One cell of a ``TableRow``.  Children are flow / phrasing content."""
+
+    type = "tableCell"
+    children: tuple[FlowContent | PhrasingContent, ...] = field(default_factory=tuple)
 
 
 # ---- Document AST nodes -----------------------------------------------------

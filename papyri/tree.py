@@ -586,6 +586,17 @@ _SPHINX_ONLY_DIRECTIVES: frozenset[str] = frozenset(
         "autoexception",
         "ipython",
         "ipython3",
+        # doctest infrastructure — numpy/scipy narrative docs; no IR representation
+        "testsetup",
+        "testcleanup",
+        "testcode",
+        "testoutput",
+        # render/build hints with no IR equivalent
+        "highlight",
+        # requires a live matplotlib build; drop rather than error
+        "plot",
+        # needs filesystem access at gen time; drop with a warning
+        "literalinclude",
     }
 )
 

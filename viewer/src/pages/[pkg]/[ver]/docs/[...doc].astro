@@ -2,8 +2,11 @@
 import {
   loadCbor,
   sectionChildren,
+  sectionTitleNodes,
+  sectionTitleText,
   resolveVersion,
   type IngestedDoc,
+  type SectionNode,
 } from "../../../../lib/ir-reader.ts";
 import { buildDocPageView } from "../../../../lib/doc-page.ts";
 import { getBackends } from "../../../../lib/backends.ts";
@@ -57,10 +60,12 @@ const prevPage: PageLink | null = currentIdx > 0 ? orderedPages[currentIdx - 1] 
 const nextPage: PageLink | null =
   currentIdx !== -1 && currentIdx < orderedPages.length - 1 ? orderedPages[currentIdx + 1] : null;
 
-function sectionHeading(title: string, level: number): string {
-  const tag = `h${Math.min(Math.max(level + 1, 2), 6)}`;
-  const safe = title.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  return `<${tag}>${safe}</${tag}>`;
+function headingTag(level: number): "h2" | "h3" | "h4" | "h5" | "h6" {
+  const n = Math.min(Math.max(level + 1, 2), 6);
+  return `h${n}` as "h2" | "h3" | "h4" | "h5" | "h6";
+}
+function sectionHasTitle(s: SectionNode): boolean {
+  return sectionTitleNodes(s).length > 0;
 }
 ---
 
@@ -116,10 +121,17 @@ function sectionHeading(title: string, level: number): string {
     ) : (
       view.sections.map((s, i) => {
         const id = view.sectionIds.get(s);
-        const showH2 = s.title && !(i === 0 && view.firstTitleIsH1);
+        const showH2 = sectionHasTitle(s) && !(i === 0 && view.firstTitleIsH1);
+        const Heading = headingTag(s.level ?? 0);
         return (
           <section class="doc-section" id={id}>
-            {showH2 ? <Fragment set:html={sectionHeading(s.title!, s.level ?? 0)} /> : null}
+            {showH2 ? (
+              <Heading>
+                {sectionTitleNodes(s).map((n) => (
+                  <IrNode node={n} resolveXref={resolveXref} />
+                ))}
+              </Heading>
+            ) : null}
             {sectionChildren(s).map((c) => (
               <IrNode node={c} resolveXref={resolveXref} />
             ))}
@@ -169,7 +181,7 @@ function sectionHeading(title: string, level: number): string {
                 data-level={e.level}
               >
                 <a class="page-toc-link" href={`#${e.id}`}>
-                  {e.section.title}
+                  {sectionTitleText(e.section)}
                 </a>
               </li>
             ))}

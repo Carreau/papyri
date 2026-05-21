@@ -158,13 +158,45 @@ export interface SectionNode {
   __type: "Section";
   __tag: 4015;
   children: IRNode[];
-  title: string | null;
+  /** Inline content for the section heading (Text, InlineCode, InlineRole,
+   * Link, ...). Empty array means the section has no title. Bundles
+   * generated before this schema change may serialise `null` or a plain
+   * string here; readers should treat both as "no title" / "single-text
+   * title" respectively via `sectionTitleText`. */
+  title: IRNode[] | string | null;
   level: number;
   target: string | null;
 }
 
 export function sectionChildren(s: SectionNode): IRNode[] {
   return Array.isArray(s.children) ? s.children : [];
+}
+
+/** Inline nodes that make up a Section heading, normalised across legacy
+ * bundle formats. Returns `[]` when the section is title-less. */
+export function sectionTitleNodes(s: SectionNode): IRNode[] {
+  const t = s.title;
+  if (Array.isArray(t)) return t;
+  if (typeof t === "string" && t.length > 0) {
+    return [{ __type: "Text", __tag: 4043, value: t } as unknown as IRNode];
+  }
+  return [];
+}
+
+/** Plain-text projection of a Section title, used wherever the heading
+ * needs to flow into a `<title>`, a slug, or a nav label. */
+export function sectionTitleText(s: SectionNode): string {
+  const nodes = sectionTitleNodes(s);
+  return nodes.map(inlineNodeText).join("");
+}
+
+function inlineNodeText(n: IRNode): string {
+  if (!n || typeof n !== "object") return "";
+  const v = (n as { value?: unknown }).value;
+  if (typeof v === "string") return v;
+  const kids = (n as { children?: unknown }).children;
+  if (Array.isArray(kids)) return kids.map(inlineNodeText).join("");
+  return "";
 }
 
 export interface SigParamT {

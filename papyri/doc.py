@@ -222,9 +222,9 @@ def _numpy_data_to_section(
                 assert not isinstance(l, Section)
         acc.append(DocParam(param, type_, desc=items).validate())
     if acc:
-        return Section([Parameters(acc)], title).validate()
+        return Section([Parameters(acc)], (Text(title),)).validate()
     else:
-        return Section([], title)
+        return Section([], (Text(title),))
 
 
 def _normalize_see_also(see_also: Section, qa: str) -> tuple[SeeAlsoItem, ...]:

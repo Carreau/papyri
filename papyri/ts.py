@@ -38,6 +38,9 @@ from .nodes import (
     compress_word,
     inline_nodes,
 )
+from .nodes import (
+    Node as _IRNode,
+)
 
 parser = tree_sitter.Parser(tree_sitter.Language(_tree_sitter_rst.language()))
 allowed_adorn = "=-`:.'\"~^_*+#<>"
@@ -1045,6 +1048,78 @@ def _visitor_failure_byte(exc: BaseException) -> int | None:
     return byte
 
 
+def _iter_footnote_nodes(nodes):
+    """Yield Footnote and FootnoteReference instances in document order.
+
+    Walks anything exposing a ``children`` attribute; also descends into
+    ``Section.title`` so references inside section titles get rewritten.
+    """
+    for n in nodes:
+        if isinstance(n, (Footnote, FootnoteReference)):
+            yield n
+        title = getattr(n, "title", None)
+        if title:
+            yield from _iter_footnote_nodes(title)
+        children = getattr(n, "children", None)
+        if children and isinstance(n, _IRNode):
+            yield from _iter_footnote_nodes(children)
+
+
+def _auto_number_footnotes(sections):
+    """Resolve ``#`` and ``#name`` footnote labels to concrete numbers.
+
+    RST allows three kinds of label: explicit (``1``), auto-numbered
+    anonymous (``#``), and auto-numbered named (``#name``). The
+    anonymous form is ambiguous on its own — the renderer keys anchors
+    on the label, so multiple ``#`` footnotes would collide. Resolve to
+    sequential integers (skipping any explicitly-used numbers) so each
+    definition gets a unique anchor and each reference points at the
+    matching definition.
+    """
+    all_fn = list(_iter_footnote_nodes(sections))
+    used: set[int] = set()
+    for n in all_fn:
+        if isinstance(n, Footnote) and n.label.isdigit():
+            used.add(int(n.label))
+
+    counter = itertools.count(1)
+
+    def next_number() -> str:
+        for i in counter:
+            if i not in used:
+                used.add(i)
+                return str(i)
+        raise AssertionError("unreachable")
+
+    anon_queue: list[str] = []
+    name_map: dict[str, str] = {}
+    for n in all_fn:
+        if not isinstance(n, Footnote):
+            continue
+        label = n.label
+        if label == "#":
+            new = next_number()
+            n.label = new
+            anon_queue.append(new)
+        elif label.startswith("#") and len(label) > 1:
+            name = label[1:]
+            if name not in name_map:
+                name_map[name] = next_number()
+            n.label = name_map[name]
+
+    anon_iter = iter(anon_queue)
+    for n in all_fn:
+        if not isinstance(n, FootnoteReference):
+            continue
+        label = n.label
+        if label == "#":
+            n.label = next(anon_iter, label)
+        elif label.startswith("#") and len(label) > 1:
+            name = label[1:]
+            if name in name_map:
+                n.label = name_map[name]
+
+
 def parse(text: bytes, qa: str | None = None) -> list[Section]:
     """
     Parse text using Tree sitter RST, and return a list of serialised section I guess ?
@@ -1067,6 +1142,7 @@ def parse(text: bytes, qa: str | None = None) -> list[Section]:
         line = _byte_offset_to_line(text, byte) if byte is not None else 1
         raise TreeSitterParseError(str(e), line=line) from e
     ns = nest_sections(res)
+    _auto_number_footnotes(ns)
     return ns
 
 

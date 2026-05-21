@@ -73,6 +73,15 @@ register(4444)(tuple)
 
 @debug(4003)
 class InlineRole(Node):
+    """Unresolved RST interpreted-text role, e.g. ``:func:`numpy.linspace```.
+
+    ``domain`` and ``role`` mirror Sphinx domain notation (``"py"``,
+    ``"func"``).  ``inventory`` is set for intersphinx
+    ``:external+<inv>:…:`` references; ``None`` for same-project roles.
+    Gen replaces most ``InlineRole`` nodes with ``CrossRef``; remaining
+    instances are schema-in-flux (``@debug``).
+    """
+
     value: str
     domain: str | None
     role: str | None
@@ -247,6 +256,14 @@ class Footnote(Node):
 
 @debug(4018)
 class Unimplemented(Node):
+    """Block-level RST construct that gen does not yet handle.
+
+    ``placeholder`` names the directive or construct (e.g. ``"rubric"``);
+    ``value`` is the raw source text.  These nodes are ``@debug`` — their
+    schema may change as handlers are added.  The renderer should display
+    them as a visible warning so contributors can track coverage gaps.
+    """
+
     placeholder: str
     value: str
 
@@ -277,6 +294,8 @@ class Table(Node):
 
 @register(4046)
 class Text(Node):
+    """Literal text run with no formatting."""
+
     type = "text"
     value: str
 
@@ -288,18 +307,25 @@ class Text(Node):
 
 @register(4047)
 class Emphasis(Node):
+    """Inline emphasis (RST ``*text*``, rendered as ``<em>``)."""
+
     type = "emphasis"
     children: tuple[PhrasingContent, ...]
 
 
 @register(4048)
 class Strong(Node):
+    """Inline strong emphasis (RST ``**text**``, rendered as ``<strong>``)."""
+
     type = "strong"
     children: tuple[PhrasingContent, ...]
 
 
 @register(4049)
 class Link(Node):
+    """Inline hyperlink.  ``url`` is the destination; ``title`` is the
+    hover text (empty string when absent)."""
+
     type = "link"
     children: tuple[StaticPhrasingContent, ...]
     url: str
@@ -308,6 +334,13 @@ class Link(Node):
 
 @register(4050)
 class Code(Node):
+    """Block-level fenced code, optionally executed.
+
+    ``execution_status`` is ``None`` when the block was not run, or a
+    string status (e.g. ``"ok"``, ``"error"``) when the gen step executed
+    the example.  ``out`` holds captured stdout/stderr from execution.
+    """
+
     type = "code"
     value: str
     execution_status: str | None
@@ -319,6 +352,8 @@ class Code(Node):
 
 @register(4051)
 class InlineCode(Node):
+    """Inline code span (RST double backticks ``code``).  Single-line only."""
+
     type = "inlineCode"
     value: str
 
@@ -329,12 +364,18 @@ class InlineCode(Node):
 
 @register(4045)
 class Paragraph(Node):
+    """Block-level paragraph containing inline content."""
+
     type = "paragraph"
     children: tuple[PhrasingContent | UnimplementedInline, ...]
 
 
 @register(4053)
 class BulletList(Node):
+    """Ordered or unordered list.  ``ordered`` distinguishes the two;
+    ``start`` is the first item number for ordered lists (typically 1).
+    ``spread`` is true when items are separated by blank lines."""
+
     type = "list"
     ordered: bool
     start: int
@@ -344,6 +385,8 @@ class BulletList(Node):
 
 @register(4054)
 class ListItem(Node):
+    """Single item in a ``BulletList``."""
+
     type = "listItem"
     spread: bool
     children: tuple[FlowContent | PhrasingContent | DefList | UnprocessedDirective, ...]
@@ -351,6 +394,15 @@ class ListItem(Node):
 
 @debug(4052)
 class Directive(Node):
+    """Catch-all for RST directives that gen partially handles.
+
+    ``name`` is the directive name (e.g. ``"note"``, ``"code-block"``).
+    ``args`` is the directive argument line; ``options`` holds the
+    ``:key: value`` option block; ``value`` is the raw body text;
+    ``children`` holds any parsed child nodes.  Schema is ``@debug`` —
+    well-known directives gain dedicated node types over time.
+    """
+
     type = "directive"
     name: str
     args: str | None
@@ -381,12 +433,20 @@ class UnprocessedDirective(UnserializableNode):
 
 @register(4055)
 class AdmonitionTitle(Node):
+    """Title of an ``Admonition`` block (e.g. the ``"Note"`` heading)."""
+
     type = "admonitionTitle"
     children: tuple[PhrasingContent | None, ...] = field(default_factory=tuple)
 
 
 @register(4056)
 class Admonition(Node):
+    """Block-level admonition (note, warning, tip, …).
+
+    ``kind`` is the admonition type string (``"note"``, ``"warning"``,
+    etc.).  The first child is typically an ``AdmonitionTitle``.
+    """
+
     type = "admonition"
     kind: str = "note"
     children: tuple[FlowContent | AdmonitionTitle | Unimplemented | DefList, ...] = (
@@ -410,24 +470,37 @@ class Comment(Node):
 
 @register(4058)
 class Math(Node):
+    """Block-level LaTeX math expression.  ``value`` is raw LaTeX."""
+
     type = "math"
     value: str
 
 
 @register(4057)
 class InlineMath(Node):
+    """Inline LaTeX math expression.  ``value`` is raw LaTeX."""
+
     type = "inlineMath"
     value: str
 
 
 @register(4059)
 class Blockquote(Node):
+    """Indented block quote."""
+
     type = "blockquote"
     children: tuple[FlowContent, ...] = field(default_factory=tuple)
 
 
 @register(4061)
 class Target(Node):
+    """RST hyperlink target or internal anchor.
+
+    ``label`` is the anchor name (used by ``CrossRef`` for same-page
+    jumps).  ``url`` is set for external-URL targets; ``None`` for
+    internal anchors.
+    """
+
     type = "target"
     label: str
     url: str | None
@@ -438,6 +511,8 @@ class Target(Node):
 
 @register(4062)
 class Image(Node):
+    """Inline image.  ``url`` is the asset path; ``alt`` is the alt text."""
+
     type = "image"
     url: str
     alt: str
@@ -445,11 +520,15 @@ class Image(Node):
 
 @register(4019)
 class ThematicBreak(Node):
+    """Horizontal rule (RST ``----`` transition)."""
+
     type = "thematicBreak"
 
 
 @register(4001)
 class Root(Node):
+    """Top-level document node; the root of every IR document tree."""
+
     type = "root"
     children: tuple[
         FlowContent
@@ -464,6 +543,12 @@ class Root(Node):
 
 @debug(4017)
 class UnimplementedInline(Node):
+    """Inline RST construct that gen does not yet handle.
+
+    Like ``Unimplemented`` but for inline (phrasing) content.  Schema is
+    ``@debug``; these nodes should shrink as more roles are implemented.
+    """
+
     children: tuple[Text, ...]
 
     def __repr__(self):
@@ -508,6 +593,12 @@ class LocalRef(Node):
 
 @register(4024)
 class Figure(Node):
+    """Image figure whose asset is identified by a ``RefInfo`` cross-reference.
+
+    The renderer resolves ``value`` against the bundle's asset store to
+    obtain the actual image URL.
+    """
+
     value: RefInfo
 
 
@@ -556,24 +647,39 @@ class RefInfo(Node):
 
 @register(4012)
 class NumpydocExample(Node):
+    """Numpydoc ``Examples`` section; ``value`` holds the raw example lines."""
+
     value: tuple[str, ...]
     title = "Examples"
 
 
 @register(4013)
 class NumpydocSeeAlso(Node):
+    """Numpydoc ``See Also`` section; ``value`` is a sequence of ``SeeAlsoItem``
+    nodes."""
+
     value: tuple[SeeAlsoItem, ...]
     title = "See Also"
 
 
 @register(4014)
 class NumpydocSignature(Node):
+    """Numpydoc ``Signature`` section; ``value`` is the raw signature string."""
+
     value: str
     title = "Signature"
 
 
 @register(4015)
 class Section(Node):
+    """Document section (heading + body).
+
+    ``title`` is a tuple of inline nodes; an empty tuple means the section
+    has no explicit heading (anonymous wrapper sections emitted by numpydoc
+    parsers).  ``level`` is the nesting depth (0 = top-level).  ``target``
+    is the RST anchor label, if one was defined above this heading.
+    """
+
     children: tuple[
         DefList
         | FieldList
@@ -657,6 +763,9 @@ def section_title_text(title: tuple[Any, ...]) -> str:
 
 @register(4026)
 class Parameters(Node):
+    """Container for a numpydoc parameter list (Parameters, Returns, etc.).
+    Must have at least one ``DocParam`` child."""
+
     children: tuple[DocParam, ...]
 
     def validate(self):
@@ -666,6 +775,12 @@ class Parameters(Node):
 
 @register(4016)
 class DocParam(Node):
+    """Single parameter/return entry inside a ``Parameters`` block.
+
+    ``name`` is the parameter name; ``annotation`` is its type string
+    (empty string when absent); ``desc`` holds the description body.
+    """
+
     name: str
     annotation: str
     desc: tuple[
@@ -766,6 +881,14 @@ inline_nodes = tuple(
 
 @register(4021)
 class TocTree(Node):
+    """One node in the table-of-contents tree.
+
+    ``ref`` points to the document this entry links to.  ``children``
+    holds sub-entries.  ``open`` and ``current`` are render hints for
+    the sidebar: ``open`` means the subtree should be expanded,
+    ``current`` marks the active page.
+    """
+
     children: tuple[TocTree, ...]
     title: str
     ref: LocalRef
@@ -775,16 +898,24 @@ class TocTree(Node):
 
 @debug(4034)
 class Options(Node):
+    """Directive option block (key-value pairs) as raw strings.  ``@debug``
+    — schema may change once a structured representation is settled."""
+
     values: tuple[str, ...]
 
 
 @register(4035)
 class FieldList(Node):
+    """RST field list (e.g. Sphinx ``:param x:`` blocks)."""
+
     children: tuple[FieldListItem, ...]
 
 
 @register(4036)
 class FieldListItem(Node):
+    """Single entry in a ``FieldList``.  ``name`` is the field label
+    (e.g. ``param x``); ``body`` holds the description."""
+
     name: tuple[Text | Code, ...]
     body: tuple[Directive | Text | Paragraph | Code, ...]
 
@@ -808,11 +939,19 @@ class FieldListItem(Node):
 
 @register(4033)
 class DefList(Node):
+    """RST definition list; a sequence of term/definition pairs."""
+
     children: tuple[DefListItem, ...]
 
 
 @register(4037)
 class DefListItem(Node):
+    """One term/definition pair in a ``DefList``.
+
+    ``dt`` is the term (definition list term); ``dd`` holds the
+    definition body paragraphs.
+    """
+
     dt: (
         Paragraph | Text | Link | UnimplementedInline
     )  # TODO: this is technically incorrect and should

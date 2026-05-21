@@ -36,17 +36,21 @@ interface Props {
   nodetype?: string;
 }
 
+// Node types excluded from the type-filter nav.  These are either structural
+// helpers (AdmonitionTitle, ListItem, …), internal graph primitives (RefInfo,
+// LocalRef, TocTree), or sentinel values with no display content (Empty).
 const EXCLUDED = new Set([
   "AdmonitionTitle",
   "DefListItem",
   "DocParam",
+  "Empty",
   "FieldListItem",
   "ListItem",
   "LocalRef",
   "RefInfo",
   "SeeAlsoItem",
-  "TocTree",
   "ThematicBreak",
+  "TocTree",
 ]);
 const SORTED_TYPES = [...IR_TYPE_NAMES].filter((t) => !EXCLUDED.has(t)).sort();
 

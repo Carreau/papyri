@@ -15,6 +15,14 @@ from .node_base import Node, register
 
 @register(4031)
 class Empty(Node):
+    """Sentinel for an absent parameter annotation or default value.
+
+    Mirrors ``inspect._empty``.  A ``SigParam`` field that holds ``Empty``
+    means "not provided" — distinct from the annotation or default being the
+    Python value ``None``.  The renderer must never display ``Empty``
+    directly; use it only to detect absence.
+    """
+
     pass
 
 
@@ -26,6 +34,17 @@ NoneType = type(None)
 @register(4030)
 @dataclass
 class SigParam(Node):
+    """One parameter in a callable signature.
+
+    ``annotation`` and ``default`` are three-valued:
+    - ``str`` — the annotation/default as a string.
+    - ``None`` — the annotation or default is the Python value ``None``.
+    - ``Empty`` — no annotation or no default was provided.
+
+    ``kind`` is the ``inspect._ParameterKind`` name, e.g.
+    ``"POSITIONAL_OR_KEYWORD"``.
+    """
+
     name: str
     # we likely want to make sure annotation is a structured object in the long run
     annotation: str | NoneType | Empty
@@ -50,6 +69,14 @@ class SigParam(Node):
 
 @register(4029)
 class SignatureNode(Node):
+    """Structured callable signature extracted from ``inspect.signature``.
+
+    ``kind`` classifies the callable: ``"function"``, ``"coroutine function"``,
+    ``"generator function"``, ``"async_generator function"``, or
+    ``"built-in function"``.  ``parameters`` preserves declaration order.
+    ``return_annotation`` is ``Empty`` when no return annotation was given.
+    """
+
     kind: str  # maybe enum, is it a function, async generator, generator, etc.
     parameters: tuple[SigParam, ...]  # of pairs, we don't use dict because of ordering
     return_annotation: Empty | str

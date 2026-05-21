@@ -49,6 +49,8 @@ const EXCLUDED = new Set([
   "LocalRef",
   "RefInfo",
   "SeeAlsoItem",
+  "TableCell",
+  "TableRow",
   "ThematicBreak",
   "TocTree",
 ]);

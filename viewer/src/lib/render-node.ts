@@ -124,15 +124,15 @@ export async function renderNode(node: IRNode, opts: RenderOptions = {}): Promis
       const headers: string[] = [];
       const body: string[] = [];
       for (const row of rows) {
-        const rowNode = row as { type?: string; header?: boolean; children?: unknown };
-        if (rowNode.type !== "TableRow") continue;
+        const rowNode = row as { __type?: string; header?: boolean; children?: unknown };
+        if (rowNode.__type !== "TableRow") continue;
         const cells = asArray(rowNode.children);
         const tag = rowNode.header ? "th" : "td";
         const cellHtml = await Promise.all(
           cells.map(async (cell) => {
-            const cellNode = cell as { type?: string; children?: unknown };
+            const cellNode = cell as { __type?: string; children?: unknown };
             const inner =
-              cellNode.type === "TableCell"
+              cellNode.__type === "TableCell"
                 ? await renderChildren(asArray(cellNode.children), opts)
                 : await renderNode(cell, opts);
             return `<${tag}>${inner}</${tag}>`;
@@ -154,9 +154,9 @@ export async function renderNode(node: IRNode, opts: RenderOptions = {}): Promis
       const tag = n.header ? "th" : "td";
       const cellHtml = await Promise.all(
         cells.map(async (cell) => {
-          const cellNode = cell as { type?: string; children?: unknown };
+          const cellNode = cell as { __type?: string; children?: unknown };
           const inner =
-            cellNode.type === "TableCell"
+            cellNode.__type === "TableCell"
               ? await renderChildren(asArray(cellNode.children), opts)
               : await renderNode(cell, opts);
           return `<${tag}>${inner}</${tag}>`;
@@ -306,13 +306,22 @@ export async function renderNode(node: IRNode, opts: RenderOptions = {}): Promis
 
     case "FootnoteReference": {
       const label = escapeHtml(String(n.label ?? ""));
-      return `<a class="footnote-reference" href="#footnote-${label}"><sup>[${label}]</sup></a>`;
+      // The id lets the matching Footnote link back here via .footnote-backref.
+      return `<a class="footnote-reference" id="footnote-ref-${label}" href="#footnote-${label}"><sup>[${label}]</sup></a>`;
     }
 
     case "Footnote": {
       const label = escapeHtml(String(n.label ?? ""));
       const inner = await renderChildren(asArray(n.children), opts);
-      return `<div id="footnote-${label}" class="footnote"><span class="footnote-label">[${label}]</span>${inner}</div>`;
+      return (
+        `<div id="footnote-${label}" class="footnote">` +
+        `<a class="footnote-backref" href="#footnote-ref-${label}" aria-label="Jump back to footnote ${label} in text">` +
+        `<span class="footnote-label">[${label}]</span>` +
+        `<span class="footnote-backref-arrow" aria-hidden="true">↩</span>` +
+        `</a>` +
+        `<div class="footnote-body">${inner}</div>` +
+        `</div>`
+      );
     }
 
     case "SubstitutionRef":

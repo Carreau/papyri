@@ -50,10 +50,7 @@ class Node(Base):
         for attr, val in zip(tt, args, strict=False):
             setattr(self, attr, _coerce_field(tt[attr], val))
         for k, v in kwargs.items():
-            if k not in tt:
-                raise TypeError(
-                    f"unexpected keyword argument {k!r} (valid: {list(tt)})"
-                )
+            assert k in tt, f"{k} not in {tt}"
             setattr(self, k, _coerce_field(tt[k], v))
         if hasattr(self, "_post_deserialise"):
             self._post_deserialise()

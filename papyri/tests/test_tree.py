@@ -785,6 +785,24 @@ def test_named_hyperlink_angle_bracket_uses_display_text():
     assert child.value == "Show"
 
 
+def test_embedded_uri_autolink_produces_link():
+    # `<https://example.com/>`_ — embedded URI with no display text. visit_reference
+    # in ts.py synthesizes ``uri <uri>`` so replace_InlineRole turns it into a Link
+    # with the URI as both display text and target.
+    v = _make_visitor_with_external({})
+    role = InlineRole(
+        domain=None, role=None, value="https://example.com/ <https://example.com/>"
+    )
+    out = v.replace_InlineRole(role)
+    assert len(out) == 1
+    link = out[0]
+    assert isinstance(link, Link)
+    assert link.url == "https://example.com/"
+    child = link.children[0]
+    assert isinstance(child, Text)
+    assert child.value == "https://example.com/"
+
+
 def test_simple_hyperlink_reference_trailing_underscore_resolves():
     # Bare ``vim_`` reference. visit_reference keeps the trailing ``_`` in the
     # value because the same shape is also a Python identifier (``np.bool_``).

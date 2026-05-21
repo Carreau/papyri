@@ -1,0 +1,69 @@
+---
+// Shown when the viewer is browsing a non-latest, dev, or pre-release bundle.
+// Dismissible via a button; dismissal state lives in sessionStorage so the
+// banner reappears on the next browser session.
+import type { VersionStatus } from "../lib/version-utils.ts";
+
+interface Props {
+  pkg: string;
+  ver: string;
+  status: VersionStatus;
+}
+
+const { pkg, ver, status } = Astro.props;
+
+let message: string;
+let latestVersion: string | null = null;
+
+if (status.kind === "old") {
+  message = `You are viewing an older version (${ver}).`;
+  latestVersion = status.latestVersion;
+} else if (status.kind === "dev") {
+  message = `This is a development version (${ver}) and may be unstable.`;
+  latestVersion = status.latestVersion;
+} else if (status.kind === "pre") {
+  message = `This is a pre-release version (${ver}).`;
+  latestVersion = status.latestVersion;
+} else {
+  message = `You are viewing version ${ver}.`;
+}
+
+const latestHref = latestVersion ? `/${pkg}/${latestVersion}/` : null;
+const bannerId = `version-banner-${pkg}-${ver}`;
+---
+
+<div class="version-banner" id={bannerId} aria-live="polite">
+  <span class="version-banner-msg">
+    {message}
+    {
+      latestHref && (
+        <a href={latestHref} class="version-banner-link">
+          Go to latest ({latestVersion})
+        </a>
+      )
+    }
+  </span>
+  <button
+    class="version-banner-dismiss"
+    aria-label="Dismiss version warning"
+    data-banner-id={bannerId}
+  >
+    &times;
+  </button>
+</div>
+
+<script>
+  // Dismiss the banner and persist the decision in sessionStorage.
+  document.querySelectorAll<HTMLButtonElement>(".version-banner-dismiss").forEach((btn) => {
+    const id = btn.dataset.bannerId;
+    if (!id) return;
+    if (sessionStorage.getItem(`dismissed:${id}`) === "1") {
+      document.getElementById(id)?.remove();
+      return;
+    }
+    btn.addEventListener("click", () => {
+      sessionStorage.setItem(`dismissed:${id}`, "1");
+      document.getElementById(id)?.remove();
+    });
+  });
+</script>

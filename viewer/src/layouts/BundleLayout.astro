@@ -5,9 +5,11 @@
 import Head from "../components/Head.astro";
 import SiteHeader from "../components/SiteHeader.astro";
 import BundleSidebar from "../components/BundleSidebar.astro";
+import VersionBanner from "../components/VersionBanner.astro";
 import { loadBundleNav } from "../lib/nav.ts";
 import { resolveVersion } from "../lib/ir-reader.ts";
 import { getBackends } from "../lib/backends.ts";
+import { getVersionStatus } from "../lib/version-utils.ts";
 import "../styles/global.css";
 
 interface Props {
@@ -34,7 +36,10 @@ const {
 } = Astro.props;
 const { blobStore, graphDb } = await getBackends();
 const actualVer = propActualVer ?? (await resolveVersion(graphDb, pkg, ver)) ?? ver;
-const nav = await loadBundleNav(blobStore, pkg, actualVer, ver);
+const [nav, versionStatus] = await Promise.all([
+  loadBundleNav(blobStore, pkg, actualVer, ver),
+  getVersionStatus(graphDb, pkg, actualVer),
+]);
 ---
 
 <html lang="en">
@@ -89,6 +94,11 @@ const nav = await loadBundleNav(blobStore, pkg, actualVer, ver);
         activeExamplePath={activeExamplePath}
       />
       <main class="bundle-main">
+        {
+          versionStatus.kind !== "latest" && (
+            <VersionBanner pkg={pkg} ver={ver} status={versionStatus} />
+          )
+        }
         <slot />
       </main>
       {

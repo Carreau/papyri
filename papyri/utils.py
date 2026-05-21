@@ -122,6 +122,12 @@ def obj_from_qualname(name: str) -> Any:
     else:
         obj: Any = module
         parts = objs.split(".")
-        for p in parts:
-            obj = getattr(obj, p)
+        for i, p in enumerate(parts):
+            next_obj = getattr(obj, p)
+            # If an intermediate part resolves to a class and there are more
+            # parts to walk, instantiate it once so subsequent lookups return
+            # bound methods rather than unbound functions.
+            if isinstance(next_obj, type) and i < len(parts) - 1:
+                next_obj = next_obj()
+            obj = next_obj
         return obj

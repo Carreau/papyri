@@ -39,6 +39,39 @@ from papyri.tree import (
     DirectiveVisiter,
     py_doc_handler,
 )
+from papyri.utils import obj_from_qualname
+
+# ---------------------------------------------------------------------------
+# obj_from_qualname — Class.method pattern
+# ---------------------------------------------------------------------------
+
+
+def test_obj_from_qualname_plain_function():
+    fn = obj_from_qualname("papyri.directives:warn")
+    from papyri.directives import warn
+
+    assert fn is warn
+
+
+def test_obj_from_qualname_class_method_returns_bound():
+    # "Class.method" reference: the class is instantiated once and the returned
+    # callable must be bound to that instance (has __self__ pointing at it).
+    import io
+
+    method = obj_from_qualname("io:StringIO.write")
+    assert callable(method)
+    assert isinstance(getattr(method, "__self__", None), io.StringIO)
+    # Calling it works without passing self.
+    assert method("hello") == 5
+
+
+def test_obj_from_qualname_class_itself_unchanged():
+    # When the path ends on the class (no trailing attribute), return the class.
+    import io
+
+    cls = obj_from_qualname("io:StringIO")
+    assert cls is io.StringIO
+
 
 # ---------------------------------------------------------------------------
 # :doc: role  (py_doc_handler)

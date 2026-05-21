@@ -38,6 +38,9 @@ from .nodes import (
     compress_word,
     inline_nodes,
 )
+from .nodes import (
+    Node as _IRNode,
+)
 
 parser = tree_sitter.Parser(tree_sitter.Language(_tree_sitter_rst.language()))
 allowed_adorn = "=-`:.'\"~^_*+#<>"
@@ -1051,8 +1054,6 @@ def _iter_footnote_nodes(nodes):
     Walks anything exposing a ``children`` attribute; also descends into
     ``Section.title`` so references inside section titles get rewritten.
     """
-    from .nodes import Node as _Node
-
     for n in nodes:
         if isinstance(n, (Footnote, FootnoteReference)):
             yield n
@@ -1060,7 +1061,7 @@ def _iter_footnote_nodes(nodes):
         if title:
             yield from _iter_footnote_nodes(title)
         children = getattr(n, "children", None)
-        if children and isinstance(n, _Node):
+        if children and isinstance(n, _IRNode):
             yield from _iter_footnote_nodes(children)
 
 

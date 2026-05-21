@@ -12,11 +12,11 @@
 // over the IR bytes, written by the ingester. Volatile fields like
 // `IngestedDoc.item_line` are stripped before hashing, so a rebuild that
 // only shifts source line numbers does NOT show as "changed").
-import { listIngestedPackages } from "../../lib/ir-reader.ts";
-import { listDigests } from "../../lib/graph.ts";
-import { getBackends } from "../../lib/backends.ts";
-import { linkForDoc, linkForExample, linkForQualname } from "../../lib/links.ts";
-import BaseLayout from "../../layouts/BaseLayout.astro";
+import { listIngestedPackages } from "../../../lib/ir-reader.ts";
+import { listDigests } from "../../../lib/graph.ts";
+import { getBackends } from "../../../lib/backends.ts";
+import { linkForDoc, linkForExample, linkForQualname } from "../../../lib/links.ts";
+import BaseLayout from "../../../layouts/BaseLayout.astro";
 
 export const prerender = false;
 
@@ -101,7 +101,7 @@ if (haveBoth && fromVer && toVer) {
 
 <BaseLayout title={`${pkg} diff — Papyri viewer`}>
   <p class="crumb">
-    <a href={`/${pkg}/`}>&larr; {pkg}</a>
+    <a href={`/project/${pkg}/`}>&larr; {pkg}</a>
   </p>
   <h1>
     {pkg}

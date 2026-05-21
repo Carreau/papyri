@@ -23,7 +23,7 @@ export default function BundleSearch({ pkg, ver }: Props): ReactElement {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`/${pkg}/${ver}/search.json`);
+        const res = await fetch(`/project/${pkg}/${ver}/search.json`);
         if (!res.ok) {
           throw new Error(`HTTP ${res.status}`);
         }

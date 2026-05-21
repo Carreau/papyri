@@ -4,11 +4,11 @@ import {
   sectionChildren,
   resolveVersion,
   type SectionNode,
-} from "../../../../lib/ir-reader.ts";
-import { getBackends } from "../../../../lib/backends.ts";
-import { buildXrefResolver } from "../../../../lib/xref.ts";
-import IrNode from "../../../../components/IrNode.astro";
-import BundleLayout from "../../../../layouts/BundleLayout.astro";
+} from "../../../../../lib/ir-reader.ts";
+import { getBackends } from "../../../../../lib/backends.ts";
+import { buildXrefResolver } from "../../../../../lib/xref.ts";
+import IrNode from "../../../../../components/IrNode.astro";
+import BundleLayout from "../../../../../layouts/BundleLayout.astro";
 
 export const prerender = false;
 
@@ -40,7 +40,7 @@ const children = sectionChildren(section);
   activeExamplePath={examplePath}
 >
   <p class="crumb">
-    <a href="/">bundles</a> / <a href={`/${pkg}/${ver}/`}>{pkg} {ver}</a> /
+    <a href="/">bundles</a> / <a href={`/project/${pkg}/${ver}/`}>{pkg} {ver}</a> /
     <span>examples</span>
   </p>
 

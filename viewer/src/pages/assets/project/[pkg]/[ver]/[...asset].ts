@@ -1,16 +1,16 @@
 // SSR endpoint that serves files from a bundle's `assets/` namespace.
 //
 // URL shape (built by `linkForAsset` in `lib/links.ts`):
-//   /assets/<pkg>/<ver>/<filename-with-colons-as-dollars>
+//   /assets/project/<pkg>/<ver>/<filename-with-colons-as-dollars>
 //
 // Reads through the active BlobStore so it works under both Node fs and
 // Cloudflare R2. R2 doesn't infer Content-Type, so we map by extension.
 
 import { extname } from "node:path";
 import type { APIRoute } from "astro";
-import { loadAsset } from "../../../../lib/ir-reader.ts";
-import { getBackends } from "../../../../lib/backends.ts";
-import { slugToQualname } from "../../../../lib/slugs.ts";
+import { loadAsset } from "../../../../../lib/ir-reader.ts";
+import { getBackends } from "../../../../../lib/backends.ts";
+import { slugToQualname } from "../../../../../lib/slugs.ts";
 
 const MIME: Record<string, string> = {
   ".png": "image/png",

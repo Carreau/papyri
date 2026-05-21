@@ -7,14 +7,14 @@ import {
   resolveVersion,
   type IngestedDoc,
   type SectionNode,
-} from "../../../../lib/ir-reader.ts";
-import { buildDocPageView } from "../../../../lib/doc-page.ts";
-import { getBackends } from "../../../../lib/backends.ts";
-import { buildXrefResolver } from "../../../../lib/xref.ts";
-import { loadBundleNav, flattenToc } from "../../../../lib/nav.ts";
-import { linkForDoc } from "../../../../lib/links.ts";
-import IrNode from "../../../../components/IrNode.astro";
-import BundleLayout from "../../../../layouts/BundleLayout.astro";
+} from "../../../../../lib/ir-reader.ts";
+import { buildDocPageView } from "../../../../../lib/doc-page.ts";
+import { getBackends } from "../../../../../lib/backends.ts";
+import { buildXrefResolver } from "../../../../../lib/xref.ts";
+import { loadBundleNav, flattenToc } from "../../../../../lib/nav.ts";
+import { linkForDoc } from "../../../../../lib/links.ts";
+import IrNode from "../../../../../components/IrNode.astro";
+import BundleLayout from "../../../../../layouts/BundleLayout.astro";
 
 export const prerender = false;
 
@@ -78,7 +78,7 @@ function sectionHasTitle(s: SectionNode): boolean {
   hasToc={view.tocEntries.length >= 2}
 >
   <p class="crumb">
-    <a href="/">bundles</a> / <a href={`/${pkg}/${ver}/`}>{pkg} {ver}</a> /
+    <a href="/">bundles</a> / <a href={`/project/${pkg}/${ver}/`}>{pkg} {ver}</a> /
     <span>docs</span>
   </p>
 

@@ -6,6 +6,7 @@ import Head from "../components/Head.astro";
 import SiteHeader from "../components/SiteHeader.astro";
 import BundleSidebar from "../components/BundleSidebar.astro";
 import { loadBundleNav } from "../lib/nav.ts";
+import { resolveVersion } from "../lib/ir-reader.ts";
 import { getBackends } from "../lib/backends.ts";
 import "../styles/global.css";
 
@@ -17,11 +18,23 @@ interface Props {
   activeDocPath?: string;
   activeExamplePath?: string;
   hasToc?: boolean;
+  /** Resolved actual version for blob reads when `ver` is "latest". */
+  actualVer?: string;
 }
 
-const { pkg, ver, title, activeQualname, activeDocPath, activeExamplePath, hasToc } = Astro.props;
-const { blobStore } = await getBackends();
-const nav = await loadBundleNav(blobStore, pkg, ver);
+const {
+  pkg,
+  ver,
+  title,
+  activeQualname,
+  activeDocPath,
+  activeExamplePath,
+  hasToc,
+  actualVer: propActualVer,
+} = Astro.props;
+const { blobStore, graphDb } = await getBackends();
+const actualVer = propActualVer ?? (await resolveVersion(graphDb, pkg, ver)) ?? ver;
+const nav = await loadBundleNav(blobStore, pkg, actualVer, ver);
 ---
 
 <html lang="en">

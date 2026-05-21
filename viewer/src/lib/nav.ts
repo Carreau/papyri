@@ -162,14 +162,19 @@ interface ReadTocResult {
   rootHref: string | null;
 }
 
-async function readToc(blobStore: BlobStore, pkg: string, ver: string): Promise<ReadTocResult> {
+async function readToc(
+  blobStore: BlobStore,
+  pkg: string,
+  ver: string,
+  urlVer: string
+): Promise<ReadTocResult> {
   try {
     const raw = await loadCbor(blobStore, pkg, ver, "meta", "toc.cbor");
     if (Array.isArray(raw)) {
-      return { toc: raw.map((n) => walkToc(n as TocTreeNode, pkg, ver)), rootHref: null };
+      return { toc: raw.map((n) => walkToc(n as TocTreeNode, pkg, urlVer)), rootHref: null };
     }
     if (raw && (raw as TocTreeNode).__type === "TocTree") {
-      const t = walkToc(raw as TocTreeNode, pkg, ver);
+      const t = walkToc(raw as TocTreeNode, pkg, urlVer);
       const rootHref = t.href;
       return { toc: t.children.length > 0 ? t.children : [t], rootHref };
     }
@@ -218,21 +223,26 @@ export async function listExamples(
   return listFiles(blobStore, pkg, ver, "examples");
 }
 
-async function buildNav(blobStore: BlobStore, pkg: string, version: string): Promise<BundleNav> {
+async function buildNav(
+  blobStore: BlobStore,
+  pkg: string,
+  version: string,
+  urlVer: string
+): Promise<BundleNav> {
   const [meta, tocResult, docPaths, examplePaths, qualnames] = await Promise.all([
     readMetaCbor(blobStore, pkg, version),
-    readToc(blobStore, pkg, version),
+    readToc(blobStore, pkg, version, urlVer),
     listDocs(blobStore, pkg, version),
     listExamples(blobStore, pkg, version),
     listModules(blobStore, pkg, version),
   ]);
   const url = await logoDataUrl(blobStore, pkg, version, meta.logo);
-  const { docs, tutorials } = docsToEntries(pkg, version, docPaths);
-  const examples = examplesToEntries(pkg, version, examplePaths);
+  const { docs, tutorials } = docsToEntries(pkg, urlVer, docPaths);
+  const examples = examplesToEntries(pkg, urlVer, examplePaths);
   const docsIndexHref = tocResult.rootHref ?? docs.find((e) => e.name === "index")?.href ?? null;
   return {
     pkg,
-    version,
+    version: urlVer,
     meta,
     logoDataUrl: url,
     toc: tocResult.toc,
@@ -261,15 +271,26 @@ export function flattenToc(toc: TocItem[]): TocItem[] {
   return result;
 }
 
+/**
+ * Load the bundle navigation view-model.
+ *
+ * `version` is the actual stored version used for blob reads.
+ * `urlVer` (optional, defaults to `version`) is used for all generated link
+ * hrefs — pass "latest" here when rendering the canonical latest URL so that
+ * every sidebar link keeps "latest" in its path rather than switching to the
+ * resolved version string.
+ */
 export async function loadBundleNav(
   blobStore: BlobStore,
   pkg: string,
-  version: string
+  version: string,
+  urlVer?: string
 ): Promise<BundleNav> {
-  const id = `${pkg}/${version}`;
+  const uv = urlVer ?? version;
+  const id = `${pkg}/${uv}`;
   const cached = _navCache.get(id);
   if (cached) return cached;
-  const p = buildNav(blobStore, pkg, version);
+  const p = buildNav(blobStore, pkg, version, uv);
   _navCache.set(id, p);
   return p;
 }

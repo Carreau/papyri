@@ -1,5 +1,10 @@
 ---
-import { loadCbor, sectionChildren, type SectionNode } from "../../../../lib/ir-reader.ts";
+import {
+  loadCbor,
+  sectionChildren,
+  resolveVersion,
+  type SectionNode,
+} from "../../../../lib/ir-reader.ts";
 import { getBackends } from "../../../../lib/backends.ts";
 import { buildXrefResolver } from "../../../../lib/xref.ts";
 import IrNode from "../../../../components/IrNode.astro";
@@ -13,13 +18,16 @@ if (!pkg || !ver || !ex) return new Response("Not found", { status: 404 });
 const examplePath = ex;
 const { blobStore, graphDb } = await getBackends();
 
+const actualVer = await resolveVersion(graphDb, pkg, ver);
+if (!actualVer) return new Response(`Package ${pkg} not found`, { status: 404 });
+
 let section: SectionNode;
 try {
-  section = (await loadCbor(blobStore, pkg, ver, "examples", examplePath)) as SectionNode;
+  section = (await loadCbor(blobStore, pkg, actualVer, "examples", examplePath)) as SectionNode;
 } catch {
   return new Response(`Example ${examplePath} not found`, { status: 404 });
 }
-const resolveXref = await buildXrefResolver(graphDb, section, pkg, ver);
+const resolveXref = await buildXrefResolver(graphDb, section, pkg, actualVer);
 
 const children = sectionChildren(section);
 ---
@@ -27,6 +35,7 @@ const children = sectionChildren(section);
 <BundleLayout
   pkg={pkg}
   ver={ver}
+  actualVer={actualVer}
   title={`${examplePath} — ${pkg} ${ver}`}
   activeExamplePath={examplePath}
 >

@@ -3,6 +3,7 @@ import {
   loadModule,
   sectionChildren,
   slugToQualname,
+  resolveVersion,
   type IngestedDoc,
 } from "../../../lib/ir-reader.ts";
 import { getBackrefs } from "../../../lib/graph.ts";
@@ -27,9 +28,12 @@ if (!pkg || !ver || slug === undefined) {
 const qualname = slugToQualname(slug);
 const { blobStore, graphDb } = await getBackends();
 
+const actualVer = await resolveVersion(graphDb, pkg, ver);
+if (!actualVer) return new Response(`Package ${pkg} not found`, { status: 404 });
+
 let doc: IngestedDoc;
 try {
-  doc = await loadModule(blobStore, pkg, ver, qualname);
+  doc = await loadModule(blobStore, pkg, actualVer, qualname);
 } catch {
   return new Response(`Module ${qualname} not found`, { status: 404 });
 }
@@ -37,9 +41,9 @@ try {
 // Three independent async operations: graph backrefs, xref resolution, and
 // sidebar nav. None depends on the others, so run them concurrently.
 const [backrefs, resolveXref, nav] = await Promise.all([
-  getBackrefs(graphDb, { pkg, ver, kind: "module", path: qualname }),
-  buildXrefResolver(graphDb, doc, pkg, ver),
-  loadBundleNav(blobStore, pkg, ver),
+  getBackrefs(graphDb, { pkg, ver: actualVer, kind: "module", path: qualname }),
+  buildXrefResolver(graphDb, doc, pkg, actualVer),
+  loadBundleNav(blobStore, pkg, actualVer, ver),
 ]);
 const view = buildQualnamePageView(doc, backrefs, pkg);
 const hasBackrefs = view.internalBackrefs.length > 0 || view.externalBackrefs.length > 0;
@@ -47,7 +51,7 @@ const hasBackrefs = view.internalBackrefs.length > 0 || view.externalBackrefs.le
 const githubSlug =
   typeof nav.meta.github_slug === "string" && nav.meta.github_slug ? nav.meta.github_slug : null;
 // Prefer the explicit git tag over the version string (e.g. "v1.2.3" vs "1.2.3").
-const sourceRef = typeof nav.meta.tag === "string" && nav.meta.tag ? nav.meta.tag : ver;
+const sourceRef = typeof nav.meta.tag === "string" && nav.meta.tag ? nav.meta.tag : actualVer;
 const sourceUrl =
   githubSlug && doc.item_file
     ? `https://github.com/${githubSlug}/blob/${sourceRef}/${doc.item_file}${doc.item_line != null ? `#L${doc.item_line}` : ""}`
@@ -110,7 +114,13 @@ const crumbs = qualnameAncestors(qualname).map((qa) => ({
 }));
 ---
 
-<BundleLayout pkg={pkg} ver={ver} title={`${qualname} — Papyri viewer`} activeQualname={qualname}>
+<BundleLayout
+  pkg={pkg}
+  ver={ver}
+  actualVer={actualVer}
+  title={`${qualname} — Papyri viewer`}
+  activeQualname={qualname}
+>
   <p class="crumb">
     <a href="/">bundles</a> / <a href={`/${pkg}/${ver}/`}>{pkg} {ver}</a>
     {

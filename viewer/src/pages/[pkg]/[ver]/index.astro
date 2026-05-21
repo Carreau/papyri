@@ -1,5 +1,6 @@
 ---
 import { loadBundleNav } from "../../../lib/nav.ts";
+import { resolveVersion } from "../../../lib/ir-reader.ts";
 import { getBackends } from "../../../lib/backends.ts";
 import BundleLayout from "../../../layouts/BundleLayout.astro";
 
@@ -8,8 +9,10 @@ export const prerender = false;
 const { pkg, ver } = Astro.params;
 if (!pkg || !ver) return new Response(null, { status: 404 });
 
-const { blobStore } = await getBackends();
-const nav = await loadBundleNav(blobStore, pkg, ver);
+const { blobStore, graphDb } = await getBackends();
+const actualVer = await resolveVersion(graphDb, pkg, ver);
+if (!actualVer) return new Response(`Package ${pkg} not found`, { status: 404 });
+const nav = await loadBundleNav(blobStore, pkg, actualVer, ver);
 
 const hasDocs = nav.toc.length > 0 || nav.docs.length > 0;
 const hasExamples = nav.examples.length > 0;
@@ -22,7 +25,7 @@ const apiHref = nav.qualnames.includes(pkg)
     : null;
 ---
 
-<BundleLayout pkg={pkg} ver={ver} title={`${pkg} ${ver} — Papyri viewer`}>
+<BundleLayout pkg={pkg} ver={ver} actualVer={actualVer} title={`${pkg} ${ver} — Papyri viewer`}>
   <p class="crumb"><a href="/">&larr; bundles</a></p>
   <h1>
     {pkg}

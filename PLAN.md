@@ -84,18 +84,6 @@ the raw archive, not via reading the graphstore back.
 
 ## Open work
 
-### Phase 6b — gen-side encoding
-
-Keep `papyri gen` writing a per-file directory tree as today, but consider
-switching the on-disk encoding to JSON so that standard tooling (`jq`,
-`diff`, text grep) and custom maintainer workflows can inspect and verify the
-intermediate output before `pack` runs. The contract `pack` produces stays
-the binary `.papyri` artifact; the per-file form is a debugging and
-customization surface, not a publication format.
-
-Explicitly *not* in scope: making `gen` produce a `.papyri` directly —
-that would close off the inspect-and-modify workflow.
-
 ### Viewer — M9 (Cloudflare Workers)
 
 Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
@@ -178,20 +166,18 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   - `currentmodule` — `.. currentmodule:: numpy`. Sphinx directive that shifts
     the implicit module prefix for subsequent cross-refs. Gen has no hook for
     it; refs in sections that follow it silently fail to resolve.
-  - `testsetup` / `testcleanup` / `testcode` / `testoutput` — doctest
-    infrastructure directives used in numpy / scipy narrative docs. Should be
-    added to `_SPHINX_ONLY_DIRECTIVES` (silently dropped), not emitted as IR
-    nodes.
+  - `testcleanup` / `testcode` / `testoutput` — doctest infrastructure
+    directives used in numpy / scipy narrative docs. Should be added to
+    `_SPHINX_ONLY_DIRECTIVES` (silently dropped), not emitted as IR nodes.
+    (`testsetup` is already handled.)
 
   *Low priority* (infrequent or render-only):
   - `highlight` — sets the default code-highlight language for a section.
     Safe to ignore or silently drop.
-  - `plot` — matplotlib's plot directive; requires a live matplotlib build.
-    Add to `_SPHINX_ONLY_DIRECTIVES`.
   - `literalinclude` — includes a source file verbatim. Needs filesystem
     access at gen time; drop with a warning for now.
-  - `list-table` / `csv-table` — structured table directives (scipy). No IR
-    table node exists yet; emit verbatim `Code` as a stopgap.
+  - `csv-table` — structured table directive (scipy). `list-table` now has a
+    full handler and Table IR node; `csv-table` still needs one.
   - `function` / `class` / `method` / `attribute` / `data` / `exception` /
     `module` (Sphinx py-domain, no `auto` prefix) — appear in handwritten
     numpy / scipy API reference `.rst` pages. Could be added to
@@ -361,42 +347,25 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   *Out of scope for the first PR:* PEP 440 pre-release exclusion (item 1),
   precomputed table (item 5). Land the render-time filter + tests first.
 
-- **Viewer: Version status banners and link validation warnings** (designed 2026-05-04).
-  Help users understand documentation state with banners and link warnings.
-  
-  *Features to implement:*
-  - **Version status banner** (top of page, dismissible): Show when browsing non-latest,
-    dev, or pre-release versions. Use PEP 440 pattern matching (`.dev`, `rc`, `alpha`,
-    `beta`) to classify versions. Include "Go to latest" link for old versions.
-  - **Unresolved link warnings** (inline + optional report page): Display special styling
-    (strikethrough, error color) on CrossRef nodes where `.exists === false`. Optional
-    `/[pkg]/[ver]/validate` page shows all unresolved refs in a bundle grouped by
-    location and kind.
-  
+- **Viewer: Unresolved link warnings** (designed 2026-05-04; banner half done).
+  The version status banner (`viewer/src/components/VersionBanner.astro`,
+  `viewer/src/lib/version-utils.ts`) is already shipped. What remains is the
+  outgoing unresolved-ref surface:
+
+  - **Inline warnings**: Display special styling (strikethrough, error color)
+    on `CrossRef` nodes where `.exists === false`.
+  - **Report page** (`/[pkg]/[ver]/validate`): List all unresolved refs in a
+    bundle grouped by location and kind.
+
   *Design notes:*
-  - Version detection uses string patterns, no IR schema changes needed.
-  - Banner dismissal persists in `sessionStorage` (clears on browser close).
-  - Reuses existing `.admonition` styling patterns and warn/error color tokens.
   - Link validation leverages `CrossRef.exists` property computed by gen.
-  - Render-time detection only; defer CLI/background validation tooling.
-  
-  *Alternative approaches considered:*
-  - Version detection: metadata flags in bundle (no, for backward compat)
-    vs. config file (no, too complex for multi-project)
-  - Banner placement: sidebar (less discoverable) vs. breadcrumb (easy to miss)
-    vs. floating widget (non-standard) — top-of-page chosen for visibility
-  - Link warnings: inline-only (no overview) vs. report-only (proactive nav needed)
-    vs. prevent-upload (blocks legitimate forward refs) — both chosen for balance
-  - Link validation: ingest-time (slower, redundant) vs. hybrid (complex schema)
-    — render-time chosen for simplicity
-  
+  - Reuses existing `.admonition` styling patterns and warn/error color tokens.
+  - Render-time only; defer CLI/background validation tooling.
+
   *Files to create/modify (when implemented):*
-  - `viewer/src/lib/version-utils.ts` — version status classification
-  - `viewer/src/components/VersionBanner.astro` — banner component
-  - `viewer/src/layouts/BundleLayout.astro` — inject banner
   - `viewer/src/components/CrossRef.tsx` — add unresolved styling
   - `viewer/src/styles/ir-nodes.css` — `.unresolved-ref` styles
-  - `viewer/src/pages/[pkg]/[ver]/validate.astro` — optional report page
+  - `viewer/src/pages/[pkg]/[ver]/validate.astro` — report page
 
 - **Bundle staging area** (captured 2026-05-20).
   Support uploading a bundle into a *staging* zone that is isolated from the

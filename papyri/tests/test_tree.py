@@ -65,6 +65,19 @@ def test_obj_from_qualname_class_method_returns_bound():
     assert method("hello") == 5
 
 
+def test_obj_from_qualname_class_method_ctor_args():
+    # ctor_args are forwarded to the class constructor before method lookup.
+    method = obj_from_qualname("io:StringIO.getvalue", ctor_args=("seed",))
+    assert method() == "seed"
+
+
+def test_obj_from_qualname_class_method_ctor_kwargs():
+    method = obj_from_qualname(
+        "io:StringIO.getvalue", ctor_kwargs={"initial_value": "seed"}
+    )
+    assert method() == "seed"
+
+
 def test_obj_from_qualname_class_itself_unchanged():
     # When the path ends on the class (no trailing attribute), return the class.
     import io

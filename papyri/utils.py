@@ -114,7 +114,11 @@ def pos_to_nl(script: str, pos: int) -> tuple[int, int]:
     raise RuntimeError
 
 
-def obj_from_qualname(name: str) -> Any:
+def obj_from_qualname(
+    name: str,
+    ctor_args: tuple[Any, ...] = (),
+    ctor_kwargs: dict[str, Any] | None = None,
+) -> Any:
     mod_name, sep, objs = name.partition(":")
     module = importlib.import_module(mod_name)
     if not sep:
@@ -128,6 +132,6 @@ def obj_from_qualname(name: str) -> Any:
             # parts to walk, instantiate it once so subsequent lookups return
             # bound methods rather than unbound functions.
             if isinstance(next_obj, type) and i < len(parts) - 1:
-                next_obj = next_obj()
+                next_obj = next_obj(*ctor_args, **(ctor_kwargs or {}))
             obj = next_obj
         return obj

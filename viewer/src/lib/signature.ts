@@ -3,21 +3,19 @@
 import type { SignatureNodeT, SigParamT } from "./ir-reader.ts";
 
 /**
- * Return a keyword prefix to display before the function name, or null.
- * "coroutine function" and "async_generator function" both get "async".
+ * Return the Python declaration prefix for a callable kind.
+ * Built-in functions are not defined with `def`, so they return null.
  */
-export function sigQualifier(kind: string): "async" | null {
-  if (kind === "coroutine function" || kind === "async_generator function") return "async";
-  return null;
+export function sigQualifier(kind: string): "def" | "async def" | null {
+  if (kind === "coroutine function" || kind === "async_generator function") return "async def";
+  if (kind === "built-in function") return null;
+  return "def";
 }
 
 /**
- * Return a short badge label for uncommon callable kinds, or null for plain functions.
- * Async is handled by sigQualifier; only generator/built-in get a badge here.
+ * Return a badge label for callable kinds that have no `def` syntax, or null.
  */
 export function sigKindBadge(kind: string): string | null {
-  if (kind === "generator function") return "generator";
-  if (kind === "async_generator function") return "async generator";
   if (kind === "built-in function") return "built-in";
   return null;
 }

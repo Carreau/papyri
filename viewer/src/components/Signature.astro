@@ -1,6 +1,12 @@
 ---
 import type { SignatureNodeT } from "../lib/ir-reader.ts";
-import { annText, buildSignatureEntries, defaultText } from "../lib/signature.ts";
+import {
+  annText,
+  buildSignatureEntries,
+  defaultText,
+  sigKindBadge,
+  sigQualifier,
+} from "../lib/signature.ts";
 
 interface Props {
   signature: SignatureNodeT;
@@ -9,10 +15,23 @@ interface Props {
 const { signature } = Astro.props;
 const { entries, trailingSlash } = buildSignatureEntries(signature);
 const returnAnn = annText(signature.return_annotation);
+const qualifier = sigQualifier(signature.kind);
+const kindBadge = sigKindBadge(signature.kind);
 ---
 
 <div class="sig" role="group" aria-label="Function signature">
+  {kindBadge && <span class="sig-kind-badge">{kindBadge}</span>}
   <code class="sig-code">
+    {
+      qualifier && (
+        <>
+          <>
+            <span class="sig-qualifier">{qualifier}</span>
+            <span class="sig-qualifier-space">&nbsp;</span>
+          </>
+        </>
+      )
+    }
     <span class="sig-name">{signature.target_name}</span>
     <span class="sig-punct">(</span>
     {

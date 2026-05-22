@@ -18,6 +18,7 @@
   --warn-bg: #fffbeb;
   --error-border: #b91c1c;
   --error-bg: #fef2f2;
+  --sig-keyword: #6b46c1;
   --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
@@ -44,6 +45,7 @@ html[data-theme="dark"] {
   --warn-bg: #2a1f00;
   --error-border: #f87171;
   --error-bg: #2d0f0f;
+  --sig-keyword: #b794f4;
 }
 
 * {
@@ -585,6 +587,22 @@ section.signature .sig-stars {
 section.signature .sig-punct,
 section.signature .sig-arrow {
   color: var(--fg-muted);
+}
+section.signature .sig-qualifier {
+  color: var(--sig-keyword);
+  font-style: italic;
+}
+section.signature .sig-qualifier-space {
+  /* non-breaking space between qualifier and function name */
+}
+section.signature .sig-kind-badge {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-style: italic;
+  color: var(--sig-keyword);
+  margin-bottom: 0.25rem;
+  opacity: 0.8;
 }
 
 /* Page chrome only — IR-node styles live in ir-nodes.css (imported at top). */

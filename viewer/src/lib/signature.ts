@@ -2,6 +2,26 @@
 // so the parameter classification logic is testable without Astro.
 import type { SignatureNodeT, SigParamT } from "./ir-reader.ts";
 
+/**
+ * Return a keyword prefix to display before the function name, or null.
+ * "coroutine function" and "async_generator function" both get "async".
+ */
+export function sigQualifier(kind: string): "async" | null {
+  if (kind === "coroutine function" || kind === "async_generator function") return "async";
+  return null;
+}
+
+/**
+ * Return a short badge label for uncommon callable kinds, or null for plain functions.
+ * Async is handled by sigQualifier; only generator/built-in get a badge here.
+ */
+export function sigKindBadge(kind: string): string | null {
+  if (kind === "generator function") return "generator";
+  if (kind === "async_generator function") return "async generator";
+  if (kind === "built-in function") return "built-in";
+  return null;
+}
+
 export interface SignatureEntry {
   marker: "/" | "*" | null;
   param: SigParamT;

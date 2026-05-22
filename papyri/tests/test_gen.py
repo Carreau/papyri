@@ -9,6 +9,7 @@ from papyri.doc import GeneratedDoc, _normalize_see_also
 from papyri.executors import BlockExecutor
 from papyri.gen import APIObjectInfo, Gen
 from papyri.numpydoc_compat import NumpyDocString
+from papyri.utils import strip_clinic_signature
 
 
 @lru_cache
@@ -350,3 +351,87 @@ def test_normalize_see_also_real_description():
     assert len(items) == 1
     assert len(items[0].descriptions) == 1
     assert isinstance(items[0].descriptions[0], Paragraph)
+
+
+# ---------------------------------------------------------------------------
+# strip_clinic_signature
+# ---------------------------------------------------------------------------
+
+
+def test_strip_clinic_signature_strips_prefix():
+    doc = "MyClass(x, y=1)\n--\n\nDescription here."
+    assert strip_clinic_signature(doc) == "Description here."
+
+
+def test_strip_clinic_signature_no_prefix():
+    doc = "Just a plain docstring.\n\nNo clinic header."
+    assert strip_clinic_signature(doc) == doc
+
+
+def test_strip_clinic_signature_double_dash_not_on_line2():
+    # '--' appearing later in the doc must not be stripped
+    doc = "First line.\nSecond line.\n--\n\nBody."
+    assert strip_clinic_signature(doc) == doc
+
+
+def test_strip_clinic_signature_empty():
+    assert strip_clinic_signature("") == ""
+
+
+def test_strip_clinic_signature_only_header_no_body():
+    doc = "Func()\n--\n"
+    assert strip_clinic_signature(doc) == ""
+
+
+def test_strip_clinic_signature_leading_blank_stripped():
+    # Body typically starts with a blank line after '--'; that blank is removed.
+    doc = "Func(a, b)\n--\n\nActual body."
+    result = strip_clinic_signature(doc)
+    assert not result.startswith("\n")
+    assert result == "Actual body."
+
+
+# ---------------------------------------------------------------------------
+# Integration: C extension types with clinic signatures must not fail gen
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "qa",
+    [
+        "numpy:dtype",
+        "numpy.dtypes:BoolDType",
+        "numpy.dtypes:Int8DType",
+    ],
+)
+def test_clinic_signature_objects_are_generated(qa):
+    """C extension types whose __doc__ has a clinic prefix must not be skipped.
+
+    Before the fix, extract_docstring raised TreeSitterParseError for these
+    objects because tree-sitter RST misread the '--' separator as a too-short
+    section underline.  The objects were silently dropped from gen.data.
+    """
+    from papyri.nodes import Paragraph, Text
+
+    pytest.importorskip("numpy")
+    dotted, _, _ = qa.partition(":")
+    module = dotted.split(".")[0]
+    config = Config(execute_doctests=False, infer=False, submodules=())
+    gen = Gen(dummy_progress=True, config=config)
+    gen.collect_package_metadata(module, relative_dir=Path("."), meta={})
+    gen.collect_api_docs(module, limit_to=(qa,))
+    assert qa in gen.data, (
+        f"{qa} was dropped from gen.data (clinic prefix not stripped)"
+    )
+    # The numpydoc Summary section must contain meaningful content, not the
+    # bare '--' separator that was the symptom of an unstripped clinic prefix.
+    summary = gen.data[qa]._content.get("Summary", ())
+    assert summary, f"{qa}: Summary section is empty"
+    first = summary[0]
+    assert isinstance(first, Paragraph), (
+        f"{qa}: Summary[0] is not a Paragraph: {first!r}"
+    )
+    texts = [c.value for c in first.children if isinstance(c, Text)]
+    assert "--" not in texts, (
+        f"{qa}: Summary contains bare '--' (clinic separator not stripped)"
+    )

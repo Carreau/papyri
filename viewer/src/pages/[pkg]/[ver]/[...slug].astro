@@ -172,7 +172,7 @@ const crumbs = qualnameAncestors(qualname).map((qa) => ({
     doc.signature ? (
       <section class="signature">
         <h2>Signature</h2>
-        <Signature signature={doc.signature} />
+        <Signature signature={doc.signature} itemType={doc.item_type} />
       </section>
     ) : null
   }

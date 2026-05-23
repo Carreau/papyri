@@ -1328,7 +1328,16 @@ class Gen:
             set(blob.ordered_sections) - set(blob.content.keys()),
         )
 
-        item_type = str(type(target_item))
+        _ITEM_TYPE_MAP: dict[str, str] = {
+            "type": "class",
+            "builtin_function_or_method": "built-in",
+            "method_descriptor": "built-in",
+            "method_wrapper": "built-in",
+            "wrapper_descriptor": "built-in",
+        }
+        item_type = _ITEM_TYPE_MAP.get(
+            type(target_item).__name__, type(target_item).__name__
+        )
         if blob.content["Signature"]:
             try:
                 # the type ignore below is wrong and need to be refactored.

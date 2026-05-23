@@ -10,13 +10,14 @@ import {
 
 interface Props {
   signature: SignatureNodeT;
+  itemType: string | null;
 }
 
-const { signature } = Astro.props;
+const { signature, itemType } = Astro.props;
 const { entries, trailingSlash } = buildSignatureEntries(signature);
 const returnAnn = annText(signature.return_annotation);
-const qualifier = sigQualifier(signature.kind);
-const kindBadge = sigKindBadge(signature.kind);
+const qualifier = sigQualifier(signature.kind, itemType);
+const kindBadge = sigKindBadge(signature.kind, itemType);
 ---
 
 <div class="sig" role="group" aria-label="Function signature">

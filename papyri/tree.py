@@ -599,7 +599,7 @@ class DirectiveVisiter(TreeReplacer):
         local_refs: frozenset[str] | set[str],
         aliases: dict[str, str],
         version: str,
-        config: dict[str, str] | None = None,
+        config: dict[str, str | dict[str, Any]] | None = None,
         module: str | None = None,
         doc_path: Path | None = None,
         asset_store: Callable[[str, bytes], None] | None = None,
@@ -640,7 +640,15 @@ class DirectiveVisiter(TreeReplacer):
         }
 
         for k, v in (config or {}).items():
-            self._handlers[k] = obj_from_qualname(v)
+            if isinstance(v, str):
+                self._handlers[k] = obj_from_qualname(v)
+            else:
+                handler_ref = v["handler"]
+                ctor_args = tuple(v.get("init_args") or ())
+                ctor_kwargs: dict[str, Any] = v.get("init_kwargs") or {}
+                self._handlers[k] = obj_from_qualname(
+                    handler_ref, ctor_args, ctor_kwargs
+                )
 
         self.known_refs = frozenset(known_refs)
         self.local_refs = frozenset(local_refs)

@@ -48,7 +48,11 @@ class Config:
     execute_doctests: bool = True
     # Names of doctest.OPTIONFLAGS_BY_NAME flags to enable (e.g. ["ELLIPSIS", "NORMALIZE_WHITESPACE"]).
     doctest_optionflags: Sequence[str] = ("ELLIPSIS",)
-    directives: dict[str, str] = dataclasses.field(default_factory=lambda: {})
+    # Values are either a plain handler qualname ("mod:Class.method") or a table
+    # with "handler", optional "init_args" list, and optional "init_kwargs" dict.
+    directives: dict[str, str | dict[str, Any]] = dataclasses.field(
+        default_factory=dict
+    )
 
     def replace(self, **kwargs: Any) -> Config:
         return dataclasses.replace(self, **kwargs)

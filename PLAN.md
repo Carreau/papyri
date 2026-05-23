@@ -150,6 +150,30 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
 
 ## Follow-ups (not yet scheduled)
 
+- **C extension (clinic) signatures: use as fallback ObjectSignature for types.**
+  `Gen.extract_docstring` now strips the Python C clinic prefix
+  (`FuncName(args)\n--\n`) before RST/numpydoc parsing (fixed 2026-05-21).
+  The stripped signature string is discarded, but it is the only structured
+  source of parameter information for many C extension types where
+  `inspect.signature()` raises `ValueError`/`TypeError`.
+
+  *What to do:*
+  - Change `strip_clinic_signature` (or add a sibling
+    `extract_clinic_signature`) to return both the clinic signature string
+    (or `None`) and the stripped body, instead of the body alone.
+  - In `extract_docstring`, when the object is a `type` and we stripped a
+    clinic prefix, attempt `Signature.from_str(clinic_sig)` (already exists
+    in `papyri/signature.py`) and use the result as the `sig` argument to
+    `APIObjectInfo` instead of `None`.
+  - Fall back to `sig = None` if `from_str` raises (malformed clinic string).
+  - Note: for numpy.dtype specifically, `inspect.signature()` already works
+    (returns the correct sig), but the class branch in `extract_docstring`
+    hardcodes `sig = None` without calling it. A broader fix would also try
+    `inspect.signature()` for classes and only fall back to the clinic string
+    — but that is a separate, larger change.
+  - Add a test in `papyri/tests/test_gen.py` covering a C-extension type
+    whose docstring starts with a clinic signature.
+
 - **Missing block directives for numpy / scipy / IPython builds.**
   Audited 2026-04-30. The following directives are encountered when running
   `papyri gen` against these packages but have no handler; they fall through

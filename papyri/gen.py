@@ -87,6 +87,7 @@ from .utils import (
     dedent_but_first,
     full_qual,
     obj_from_qualname,
+    strip_clinic_signature,
 )
 
 try:
@@ -1656,6 +1657,7 @@ class Gen:
         item_docstring: str = target_item.__doc__
         if item_docstring is not None:
             item_docstring = dedent_but_first(item_docstring)
+            item_docstring = strip_clinic_signature(item_docstring)
         builtin_function_or_method = type(sum)
 
         if isinstance(target_item, ModuleType):

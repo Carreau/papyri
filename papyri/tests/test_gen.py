@@ -419,7 +419,7 @@ def test_clinic_signature_objects_are_generated(qa):
     config = Config(execute_doctests=False, infer=False, submodules=())
     gen = Gen(dummy_progress=True, config=config)
     gen.collect_package_metadata(module, relative_dir=Path("."), meta={})
-    gen.collect_api_docs(module, limit_to=(qa,))
+    gen.collect_api_docs(module, limit_to=[qa])
     assert qa in gen.data, (
         f"{qa} was dropped from gen.data (clinic prefix not stripped)"
     )

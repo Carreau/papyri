@@ -73,6 +73,7 @@ from .nodes import (
     Target,
     Text,
     TocTree,
+    encoder,
     parse_rst_section,
     section_title_text,
 )
@@ -1099,7 +1100,7 @@ class Gen:
 
                 blbs[key] = blob
         for k, b in blbs.items():
-            self.docs[k] = b.to_json()
+            self.docs[k] = encoder.encode(b)
 
         root, raw_tree = make_tree(trees)
 
@@ -1131,11 +1132,7 @@ class Gen:
 
     def write_narrative(self, where: Path) -> None:
         if self._toc_nodes:
-            (where / "toc.json").write_bytes(
-                json.dumps(
-                    [t.to_dict() for t in self._toc_nodes], indent=2, sort_keys=True
-                ).encode()
-            )
+            (where / "toc.cbor").write_bytes(encoder.encode(self._toc_nodes))
         (where / "docs").mkdir(exist_ok=True)
         for file, v in self.docs.items():
             subf = where / "docs"
@@ -1153,7 +1150,7 @@ class Gen:
         """
         (where / "module").mkdir(exist_ok=True)
         for k, v in self.data.items():
-            (where / "module" / (k + ".json")).write_bytes(v.to_json())
+            (where / "module" / (k + ".cbor")).write_bytes(encoder.encode(v))
 
     def partial_write(self, where: Path) -> None:
         self.write_api(where)
@@ -1622,7 +1619,7 @@ class Gen:
                 config=self.config,
             )
             for edoc, figs in examples_data:
-                self.examples.update({k: v.to_json() for k, v in edoc.items()})
+                self.examples.update({k: encoder.encode(v) for k, v in edoc.items()})
                 for name, data in figs:
                     self.put_raw(name, data)
 

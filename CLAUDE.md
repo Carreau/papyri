@@ -239,18 +239,20 @@ docs/                     Project-level documentation (RST)
 
 ## IR encoding
 
-The IR encoding is **mixed**: some fields use CBOR (`cbor2`), others use JSON.
-Do not assume "the IR is JSON". See `node_base.py`, `serde.py`,
-`node_serializer.py`. Two serialization paths coexist intentionally:
+The IR is **CBOR throughout** — do not add JSON serialization of IR nodes.
+See `node_base.py`, `node_serializer.py`. Two serialization helpers exist:
 
-- `node_serializer.py` — CBOR with internal type tags. Used for most IR nodes.
-- `serde.py` — generic dataclass round-trip (JSON or CBOR). Used for config
-  and metadata blobs.
+- `node_serializer.py` — internally-tagged dict serializer used by `Node.to_dict()` / `Node.to_json()` (kept for debugging tools only; not used for bundle output).
+- `serde.py` — generic dataclass round-trip. Used for config and metadata.
 
-The `.papyri` artifact format is a gzip-compressed CBOR-encoded `Bundle` node.
-The per-bundle directory (`~/.papyri/data/<pkg>_<ver>/`) contains
-`papyri.json` (manifest), `toc.json`, and per-object files under `module/`,
-`docs/`, `examples/`, `assets/`.
+The `.papyri` artifact is a gzip-compressed CBOR-encoded `Bundle` node.
+The per-bundle directory (`~/.papyri/data/<pkg>_<ver>/`) contains:
+- `papyri.json` — human-readable manifest (JSON, intentional).
+- `toc.cbor` — CBOR-encoded list of `TocTree` nodes (absent when empty).
+- `module/<qa>.cbor` — one CBOR-encoded `GeneratedDoc` per API object.
+- `docs/<name>` — CBOR-encoded `GeneratedDoc` per narrative page (no suffix).
+- `examples/<name>` — CBOR-encoded `Section` per example (no suffix).
+- `assets/<name>` — binary assets (images etc.), stored as-is.
 
 The **graphstore is a derived cache** — the raw `.papyri.gz` archive stored
 at `_raw/<pkg>/<ver>.papyri.gz` is the only authoritative IR. Everything in
@@ -261,9 +263,8 @@ the graphstore and blob store is rebuildable via `POST /api/reingest`.
 - RST parsing uses `py-tree-sitter-rst` (PyPI) on top of `tree-sitter >= 0.24`.
   The parser is constructed via `tree_sitter.Parser(tree_sitter.Language(tree_sitter_rst.language()))`.
   Do not reintroduce `tree_sitter_languages` or `tree-sitter-language-pack`.
-- The IR encoding is mixed: some fields use CBOR (`cbor2`), others use JSON.
-  Do not assume "the IR is JSON". See `node_base.py`, `serde.py`. The
-  encoding is an implementation detail and may change.
+- IR nodes are CBOR — do not write them as JSON. `papyri.json` (manifest)
+  is the only JSON file in a bundle directory; everything else is CBOR.
 - `papyri upload` sends `PUT` (not `POST`) to `/api/bundle`. The viewer's
   CSRF protection requires the `Origin` header to match the upload host; the
   upload CLI sets it automatically. Cloudflare's default bot-protection

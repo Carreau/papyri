@@ -20,7 +20,7 @@ from .bundle import IR_SCHEMA_VERSION, PACK_FORMAT_VERSION, Bundle
 from .node_base import Node
 from .nodes import encoder
 
-_ALLOWED_TOPLEVEL = {"papyri.json", "toc.json", "module", "docs", "examples", "assets"}
+_ALLOWED_TOPLEVEL = {"papyri.json", "toc.cbor", "module", "docs", "examples", "assets"}
 _OPTIONAL_DIRS = ("docs", "examples", "assets")
 
 
@@ -59,8 +59,8 @@ def _check_layout(path: Path) -> None:
     for entry in module_dir.iterdir():
         if not entry.is_file():
             raise BundleError(f"module/{entry.name} is not a regular file")
-        if entry.suffix != ".json":
-            raise BundleError(f"module/{entry.name} does not have .json suffix")
+        if entry.suffix != ".cbor":
+            raise BundleError(f"module/{entry.name} does not have .cbor suffix")
 
     for sub in _OPTIONAL_DIRS:
         d = path / sub
@@ -102,7 +102,7 @@ def _decode_dir(
         if not entry.is_file():
             continue
         try:
-            value = expected_type.from_dict(json.loads(entry.read_bytes()))
+            value = encoder.decode(entry.read_bytes())
         except Exception as exc:
             raise BundleError(
                 f"{path.name}/{entry.name} failed to decode: {exc}"
@@ -140,7 +140,7 @@ def read_bundle_dir(path: Path, log: Callable[[str], None] | None = None) -> Bun
     if log:
         n = _count_files(module_dir)
         log(f"  decoding module/   ({n} item{_plural(n)}) …")
-    api = _decode_dir(module_dir, GeneratedDoc, strip_suffix=".json")
+    api = _decode_dir(module_dir, GeneratedDoc, strip_suffix=".cbor")
 
     docs_dir = path / "docs"
     if log:
@@ -175,18 +175,18 @@ def read_bundle_dir(path: Path, log: Callable[[str], None] | None = None) -> Bun
         log("  assets/   (none)")
 
     toc: list[TocTree] = []
-    toc_path = path / "toc.json"
+    toc_path = path / "toc.cbor"
     if log:
-        log("  decoding toc.json …" if toc_path.is_file() else "  toc.json  (absent)")
+        log("  decoding toc.cbor …" if toc_path.is_file() else "  toc.cbor  (absent)")
     if toc_path.is_file():
         try:
-            decoded = [TocTree.from_dict(t) for t in json.loads(toc_path.read_bytes())]
+            decoded = encoder.decode(toc_path.read_bytes())
         except Exception as exc:
-            raise BundleError(f"toc.json failed to decode: {exc}") from exc
+            raise BundleError(f"toc.cbor failed to decode: {exc}") from exc
         if isinstance(decoded, list) and all(isinstance(t, TocTree) for t in decoded):
             toc = decoded
         elif decoded:
-            raise BundleError("toc.json did not decode to list[TocTree]")
+            raise BundleError("toc.cbor did not decode to list[TocTree]")
 
     known = {"module", "version", "summary", "github_slug", "tag", "logo", "aliases"}
     extra = {

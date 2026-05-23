@@ -10,10 +10,10 @@ import {
 
 interface Props {
   signature: SignatureNodeT;
-  itemType: string | null;
+  itemType?: string | null;
 }
 
-const { signature, itemType } = Astro.props;
+const { signature, itemType = null } = Astro.props;
 const { entries, trailingSlash } = buildSignatureEntries(signature);
 const returnAnn = annText(signature.return_annotation);
 const qualifier = sigQualifier(signature.kind, itemType);

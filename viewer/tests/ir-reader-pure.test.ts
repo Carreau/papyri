@@ -30,16 +30,16 @@ describe("linkForRef", () => {
   it("shapes URLs per kind and slugifies module paths", () => {
     expect(
       linkForRef({ pkg: "numpy", ver: "1.26.4", kind: "module", path: "numpy.fft:fft" }),
-    ).toBe("/numpy/1.26.4/numpy.fft$fft/");
+    ).toBe("/project/numpy/1.26.4/numpy.fft$fft/");
     expect(
       linkForRef({ pkg: "np", ver: "1.0", kind: "docs", path: "user guide" }),
-    ).toBe("/np/1.0/docs/user%20guide/");
+    ).toBe("/project/np/1.0/docs/user%20guide/");
     expect(
       linkForRef({ pkg: "np", ver: "1.0", kind: "examples", path: "intro" }),
-    ).toBe("/np/1.0/examples/intro/");
+    ).toBe("/project/np/1.0/examples/intro/");
     expect(
       linkForRef({ pkg: "np", ver: "1.0", kind: "assets", path: "img/logo.png" }),
-    ).toBe("/assets/np/1.0/img/logo.png");
+    ).toBe("/assets/project/np/1.0/img/logo.png");
   });
 
   it("returns null for unknown kinds", () => {
@@ -131,7 +131,7 @@ describe("collectImages", () => {
     expect(result[0]).toMatchObject({
       kind: "Figure",
       assetPath: "fig:plot.png",
-      src: "/assets/numpy/2.0/fig$plot.png",
+      src: "/assets/project/numpy/2.0/fig$plot.png",
     });
   });
 

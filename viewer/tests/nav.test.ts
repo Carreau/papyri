@@ -87,7 +87,7 @@ describe("nav.ts", () => {
       await writeFile(join(dir, pkg, ver, "docs", "a b"), "x");
       const nav = await loadBundleNav(new FsBlobStore(dir), pkg, ver);
       const entry = nav.docs.find((e) => e.name === "a b");
-      expect(entry?.href).toBe(`/${pkg}/${ver}/docs/a%20b/`);
+      expect(entry?.href).toBe(`/project/${pkg}/${ver}/docs/a%20b/`);
     });
 
     it("returns an empty view-model for a bare bundle dir", async () => {

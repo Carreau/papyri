@@ -3,15 +3,11 @@ export const prerender = false;
 
 import BundleLayout from "../../../../../layouts/BundleLayout.astro";
 import NodesPanel from "../../../../../components/NodesPanel.tsx";
-import { typeFromSlug } from "../../../../../lib/ir-types.ts";
 import { resolveVersion } from "../../../../../lib/ir-reader.ts";
 import { getBackends } from "../../../../../lib/backends.ts";
 
-const { pkg, ver, nodetype } = Astro.params;
-if (!pkg || !ver || !nodetype) return new Response(null, { status: 404 });
-
-const typeName = typeFromSlug(nodetype);
-if (!typeName) return new Response(null, { status: 404 });
+const { pkg, ver } = Astro.params;
+if (!pkg || !ver) return new Response(null, { status: 404 });
 
 const { graphDb } = await getBackends();
 const actualVer = await resolveVersion(graphDb, pkg, ver);
@@ -22,10 +18,10 @@ if (!actualVer) return new Response(`Package ${pkg} not found`, { status: 404 })
   pkg={pkg}
   ver={ver}
   actualVer={actualVer}
-  title={`${typeName} — ${pkg} ${ver} — Papyri viewer`}
+  title={`All nodes — ${pkg} ${ver} — Papyri viewer`}
 >
-  <p class="crumb"><a href={`/${pkg}/${ver}/`}>&larr; {pkg} {ver}</a></p>
-  <h1>{typeName}</h1>
+  <p class="crumb"><a href={`/project/${pkg}/${ver}/`}>&larr; {pkg} {ver}</a></p>
+  <h1>All nodes</h1>
 
-  <NodesPanel client:load pkg={pkg} ver={ver} nodetype={nodetype} />
+  <NodesPanel client:load pkg={pkg} ver={ver} />
 </BundleLayout>

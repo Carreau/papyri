@@ -23,23 +23,23 @@ function encodeSegments(parts: string[]): string {
   return parts.map(encodeURIComponent).join("/");
 }
 
-/** Qualname page: `/<pkg>/<ver>/<qa-with-colons-as-dollars>/`. */
+/** Qualname page: `/project/<pkg>/<ver>/<qa-with-colons-as-dollars>/`. */
 export function linkForQualname(pkg: string, ver: string, qualname: string): string {
-  return `/${pkg}/${ver}/${qualnameToSlug(qualname)}/`;
+  return `/project/${pkg}/${ver}/${qualnameToSlug(qualname)}/`;
 }
 
 /**
  * Narrative doc page. Doc keys use ':' as the path separator (gen joins
  * directory components with ':'); we map ':' -> URL '/' so
- * `whatsnew:index` becomes `/<pkg>/<ver>/docs/whatsnew/index/`.
+ * `whatsnew:index` becomes `/project/<pkg>/<ver>/docs/whatsnew/index/`.
  */
 export function linkForDoc(pkg: string, ver: string, docKey: string): string {
-  return `/${pkg}/${ver}/docs/${encodeSegments(docKey.split(":"))}/`;
+  return `/project/${pkg}/${ver}/docs/${encodeSegments(docKey.split(":"))}/`;
 }
 
 /** Example page. Example paths are real filesystem paths (already use '/'). */
 export function linkForExample(pkg: string, ver: string, exPath: string): string {
-  return `/${pkg}/${ver}/examples/${encodeSegments(exPath.split("/"))}/`;
+  return `/project/${pkg}/${ver}/examples/${encodeSegments(exPath.split("/"))}/`;
 }
 
 /**
@@ -49,7 +49,7 @@ export function linkForExample(pkg: string, ver: string, exPath: string): string
  * asset endpoint reverses the substitution when reading from disk.
  */
 export function linkForAsset(pkg: string, ver: string, assetPath: string): string {
-  return `/assets/${pkg}/${ver}/${qualnameToSlug(assetPath)}`;
+  return `/assets/project/${pkg}/${ver}/${qualnameToSlug(assetPath)}`;
 }
 
 /**

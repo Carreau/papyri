@@ -1,8 +1,9 @@
 ---
-import { loadBundleNav } from "../../../lib/nav.ts";
-import { resolveVersion } from "../../../lib/ir-reader.ts";
-import { getBackends } from "../../../lib/backends.ts";
-import BundleLayout from "../../../layouts/BundleLayout.astro";
+import { loadBundleNav } from "../../../../lib/nav.ts";
+import { resolveVersion } from "../../../../lib/ir-reader.ts";
+import { getBackends } from "../../../../lib/backends.ts";
+import { linkForQualname } from "../../../../lib/links.ts";
+import BundleLayout from "../../../../layouts/BundleLayout.astro";
 
 export const prerender = false;
 
@@ -19,9 +20,9 @@ const hasExamples = nav.examples.length > 0;
 const docsHref = nav.docsIndexHref ?? nav.docs[0]?.href ?? null;
 // Link to the root-package qualname page if it exists, otherwise the first qualname.
 const apiHref = nav.qualnames.includes(pkg)
-  ? `/${pkg}/${ver}/${pkg}/`
+  ? linkForQualname(pkg, ver, pkg)
   : nav.qualnames.length > 0
-    ? `/${pkg}/${ver}/${nav.qualnames[0]}/`
+    ? linkForQualname(pkg, ver, nav.qualnames[0]!)
     : null;
 ---
 

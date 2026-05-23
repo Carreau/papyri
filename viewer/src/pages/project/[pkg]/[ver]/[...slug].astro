@@ -6,17 +6,17 @@ import {
   slugToQualname,
   resolveVersion,
   type IngestedDoc,
-} from "../../../lib/ir-reader.ts";
-import { getBackrefs } from "../../../lib/graph.ts";
-import { getBackends } from "../../../lib/backends.ts";
-import { buildQualnamePageView } from "../../../lib/qualname-page.ts";
-import { buildXrefResolver } from "../../../lib/xref.ts";
-import { linkForQualname } from "../../../lib/links.ts";
-import { loadBundleNav } from "../../../lib/nav.ts";
-import { qualnameAncestors, qualnameLabel } from "../../../lib/qualname.ts";
-import IrNode from "../../../components/IrNode.astro";
-import Signature from "../../../components/Signature.astro";
-import BundleLayout from "../../../layouts/BundleLayout.astro";
+} from "../../../../lib/ir-reader.ts";
+import { getBackrefs } from "../../../../lib/graph.ts";
+import { getBackends } from "../../../../lib/backends.ts";
+import { buildQualnamePageView } from "../../../../lib/qualname-page.ts";
+import { buildXrefResolver } from "../../../../lib/xref.ts";
+import { linkForQualname } from "../../../../lib/links.ts";
+import { loadBundleNav } from "../../../../lib/nav.ts";
+import { qualnameAncestors, qualnameLabel } from "../../../../lib/qualname.ts";
+import IrNode from "../../../../components/IrNode.astro";
+import Signature from "../../../../components/Signature.astro";
+import BundleLayout from "../../../../layouts/BundleLayout.astro";
 
 export const prerender = false;
 
@@ -123,7 +123,7 @@ const crumbs = qualnameAncestors(qualname).map((qa) => ({
   activeQualname={qualname}
 >
   <p class="crumb">
-    <a href="/">bundles</a> / <a href={`/${pkg}/${ver}/`}>{pkg} {ver}</a>
+    <a href="/">bundles</a> / <a href={`/project/${pkg}/${ver}/`}>{pkg} {ver}</a>
     {
       crumbs.map((c, i) =>
         i === crumbs.length - 1 ? (

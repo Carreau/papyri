@@ -19,7 +19,7 @@ const nav = await loadBundleNav(blobStore, pkg, latest);
 const docCount = nav.docs.length + nav.tutorials.length;
 const exampleCount = nav.examples.length;
 const summary = typeof nav.meta.summary === "string" ? nav.meta.summary : null;
-const href = `/${pkg}/`;
+const href = `/project/${pkg}/`;
 ---
 
 <a class="bundle-card" href={href} data-pkg={pkg} data-summary={summary ?? ""}>

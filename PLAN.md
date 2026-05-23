@@ -72,8 +72,8 @@ the raw archive, not via reading the graphstore back.
 
 ## Python version
 
-- Minimum: **Python 3.14**. `requires-python = ">=3.14"`.
-- CI matrix: `3.14` only. Add newer versions later; don't carry legacy ones.
+- Minimum: **Python 3.13**. `requires-python = ">=3.13"`.
+- CI matrix: `3.13` only. Add newer versions later; don't carry legacy ones.
 
 ## Dependency notes
 

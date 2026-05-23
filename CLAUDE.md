@@ -69,9 +69,8 @@ service *could* be built later without a breaking change to the IR.
    JupyterLab extension.** Dangling references to `render.py`, `rich_render`,
    `textual`, `ipython`, `jlab`, `install`, `browse`, or `serve` should be
    deleted, not restored.
-4. **Python 3.14+.** `requires-python = ">=3.14"` (PLAN.md). Note: `pyproject.toml`
-   currently says `>=3.13` — update it if you touch the file. CI runs 3.14 only.
-   Don't add shims for anything older than 3.14.
+4. **Python 3.13+.** `requires-python = ">=3.13"`. CI runs 3.13 only.
+   Don't add shims for anything older than 3.13.
 5. **Verify locally before committing.** At minimum:
    ```
    pip install -e .

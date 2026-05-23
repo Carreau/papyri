@@ -264,7 +264,8 @@ the graphstore and blob store is rebuildable via `POST /api/reingest`.
   The parser is constructed via `tree_sitter.Parser(tree_sitter.Language(tree_sitter_rst.language()))`.
   Do not reintroduce `tree_sitter_languages` or `tree-sitter-language-pack`.
 - IR nodes are CBOR — do not write them as JSON. `papyri.json` (manifest)
-  is the only JSON file in a bundle directory; everything else is CBOR.
+  is currently the only JSON file in a bundle directory; migration to
+  `papyri.cbor` is tracked in `PLAN.md` but not yet done.
 - `papyri upload` sends `PUT` (not `POST`) to `/api/bundle`. The viewer's
   CSRF protection requires the `Origin` header to match the upload host; the
   upload CLI sets it automatically. Cloudflare's default bot-protection

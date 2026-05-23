@@ -474,6 +474,19 @@ Items below come from a full-tree review (Python / TS ingest / viewer). Each
 is intended to be its own small PR. Items already covered elsewhere in this
 file are cross-referenced rather than duplicated.
 
+### Cross-format
+
+- **Migrate `papyri.json` manifest to CBOR.** The manifest is the last JSON
+  file in a bundle directory; everything else is already CBOR. Keeping JSON
+  here was originally justified by human-readability, but CBOR tools (`papyri
+  debug`, `cbor2` CLI) already provide that. Migrating removes the last
+  mixed-encoding exception, simplifies the invariant ("bundle directory is
+  CBOR throughout"), and makes `pack.py` / `ingest.ts` symmetric. The rename
+  would be `papyri.json` → `papyri.cbor`; `_read_meta` in `pack.py` and the
+  `PapyriMeta` reader in `ingest.ts` both need updating. Keep a
+  backward-compatibility read of `papyri.json` during a transition window so
+  bundles generated before the change can still be packed.
+
 ### Python (`papyri/`)
 
 - **LRU-cache `ts.parse()` results** (`gen.py:534/555/979/1349/1610`). The

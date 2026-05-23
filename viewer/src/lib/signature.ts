@@ -2,6 +2,33 @@
 // so the parameter classification logic is testable without Astro.
 import type { SignatureNodeT, SigParamT } from "./ir-reader.ts";
 
+/**
+ * Return the Python declaration keyword prefix for a callable.
+ * Classes get "class"; async callables get "async def"; built-ins get null
+ * (no `def` in Python syntax); everything else gets "def".
+ */
+export function sigQualifier(
+  kind: string,
+  itemType: string | null
+): "def" | "async def" | "class" | null {
+  if (itemType === "class") return "class";
+  if (kind === "coroutine function" || kind === "async_generator function") return "async def";
+  if (itemType === "built-in" || kind === "built-in function") return null;
+  return "def";
+}
+
+/**
+ * Return a badge label for callable kinds that warrant an extra decoration,
+ * or null for plain functions and classes.
+ */
+export function sigKindBadge(kind: string, itemType: string | null): string | null {
+  if (itemType === "property") return "property";
+  if (itemType === "classmethod") return "classmethod";
+  if (itemType === "staticmethod") return "staticmethod";
+  if (itemType === "built-in" || kind === "built-in function") return "built-in";
+  return null;
+}
+
 export interface SignatureEntry {
   marker: "/" | "*" | null;
   param: SigParamT;

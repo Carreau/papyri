@@ -476,16 +476,15 @@ file are cross-referenced rather than duplicated.
 
 ### Cross-format
 
-- **Migrate `papyri.json` manifest to CBOR.** The manifest is the last JSON
-  file in a bundle directory; everything else is already CBOR. Keeping JSON
-  here was originally justified by human-readability, but CBOR tools (`papyri
-  debug`, `cbor2` CLI) already provide that. Migrating removes the last
-  mixed-encoding exception, simplifies the invariant ("bundle directory is
-  CBOR throughout"), and makes `pack.py` / `ingest.ts` symmetric. The rename
-  would be `papyri.json` → `papyri.cbor`; `_read_meta` in `pack.py` and the
-  `PapyriMeta` reader in `ingest.ts` both need updating. Keep a
-  backward-compatibility read of `papyri.json` during a transition window so
-  bundles generated before the change can still be packed.
+- **CBOR-encode the manifest at pack time.** The bundle directory (what
+  `papyri gen` writes) is a human-readable staging area — JSON is fine there.
+  CBOR lives only in the packed `.papyri` artifact. The manifest is already
+  embedded in the CBOR-encoded `Bundle` node, but via a JSON read
+  (`_read_meta` in `pack.py`). A future cleanup: represent the manifest as a
+  typed struct inside `Bundle` rather than a freeform JSON-derived dict, so
+  the round-trip is fully typed from `pack.py` onward. The corresponding
+  change in `ingest.ts` is the `PapyriMeta` reader. The on-disk `papyri.json`
+  stays JSON — it is intentionally human-readable.
 
 ### Python (`papyri/`)
 

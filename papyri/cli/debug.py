@@ -72,8 +72,8 @@ def debug(
         str,
         typer.Argument(
             help=(
-                "Path to a bundle IR file to inspect (.cbor for data-tree and "
-                "ingest-tree files, .papyri for packed artifacts). "
+                "Path to a bundle IR file to inspect (.json for data-tree files, "
+                ".cbor for ingest-tree files, .papyri for packed artifacts). "
                 "Can be an absolute/relative path, or a shorthand relative to "
                 "~/.papyri/data/ (e.g. 'numpy_2.3.5/module/numpy.linspace'). "
                 "The extension is added automatically when absent."

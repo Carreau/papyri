@@ -31,13 +31,13 @@ def test_resolve_debug_path_appends_cbor_suffix(tmp_path):
 
 def test_resolve_debug_path_checks_data_dir(tmp_path):
     (tmp_path / "bundle_1.0").mkdir()
-    p = tmp_path / "bundle_1.0" / "module" / "pkg.foo.cbor"
+    p = tmp_path / "bundle_1.0" / "module" / "pkg.foo.json"
     p.parent.mkdir()
     p.write_bytes(b"x")
-    # Shorthand relative to data dir, no .cbor suffix.
+    # Shorthand relative to data dir, no .json suffix.
     assert (
         _resolve_debug_path("bundle_1.0/module/pkg.foo", tmp_path)
-        == tmp_path / "bundle_1.0" / "module" / "pkg.foo.cbor"
+        == tmp_path / "bundle_1.0" / "module" / "pkg.foo.json"
     )
 
 
@@ -51,15 +51,15 @@ def test_resolve_debug_path_returns_none_for_missing(tmp_path):
 
 
 def test_print_data_context_splits_bundle_dir_name(capsys):
-    rel = Path("numpy_2.3.5/module/numpy.linspace.cbor")
+    rel = Path("numpy_2.3.5/module/numpy.linspace.json")
     _print_data_context(rel)
     out = capsys.readouterr().out
     assert "package : numpy" in out
     assert "version : 2.3.5" in out
     assert "kind    : module" in out
-    # The .cbor suffix must be stripped from the printed identifier.
+    # The .json suffix must be stripped from the printed identifier.
     assert "id      : numpy.linspace" in out
-    assert ".cbor" not in out
+    assert ".json" not in out
 
 
 def test_print_data_context_handles_bundle_without_version(capsys):

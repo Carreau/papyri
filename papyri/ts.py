@@ -6,7 +6,6 @@ from typing import Any
 import tree_sitter
 import tree_sitter_rst as _tree_sitter_rst
 
-from . import errors
 from .nodes import (
     Blockquote,
     BulletList,
@@ -542,12 +541,20 @@ class TSVisitor:
         items = []
         for list_item in node.children:
             assert list_item.type == "list_item"
-            assert len(list_item.children) == 2, list_item.children
-            _bullet, body = list_item.children
-            # assert len(body.children) == 1
-            # parg = body.children[0]
-            # assert parg.type == "paragraph", parg.type
-            items.append(ListItem(False, self.visit(body)))
+            children = list_item.children
+            # tree-sitter-rst produces ERROR nodes for characters it can't
+            # classify (e.g. '>' in '- >0 : ...' is parsed as an ERROR).
+            # Collect their raw text so we can re-attach it to the body.
+            error_text = "".join(self.as_text(c) for c in children if c.type == "ERROR")
+            kept = [c for c in children if c.type != "ERROR"]
+            assert len(kept) == 2, children
+            _bullet, body = kept
+            body_items = self.visit(body)
+            if error_text and body_items and isinstance(body_items[0], Paragraph):
+                body_items[0] = Paragraph((Text(error_text), *body_items[0].children))
+            elif error_text:
+                body_items.insert(0, Paragraph((Text(error_text),)))
+            items.append(ListItem(False, body_items))
         return [BulletList(ordered=False, start=1, spread=False, children=items)]
 
     def visit_section(self, node):
@@ -777,10 +784,13 @@ class TSVisitor:
         else:
             raise ValueError(f"Wrong number of children: {len(node.children)}")
 
-        # Sphinx / docutils a bit more lenient
+        # Sphinx / docutils allow '.. name ::' (space before '::').
+        # Log and continue rather than aborting — the node is still parseable.
         if _role.end_point != _2.start_point and not is_substitution_definition:
-            raise errors.SpaceAfterBlockDirectiveError(
-                f"space present in {self.as_text(node)!r}"
+            log.debug(
+                "Space in directive syntax in %s: %r",
+                self._qa,
+                self.as_text(node),
             )
 
         role = self.as_text(_role)
@@ -1129,10 +1139,6 @@ def parse(text: bytes, qa: str | None = None) -> list[Section]:
     root = Node(tree.root_node)
     try:
         res = TSVisitor(text, qa if qa is not None else "").visit_document(root)
-    except errors.SpaceAfterBlockDirectiveError:
-        # Deliberate semantic error raised by the visitor; callers (and tests)
-        # rely on the specific type, so don't wrap it.
-        raise
     except Exception as e:
         byte = _visitor_failure_byte(e)
         if byte is None:

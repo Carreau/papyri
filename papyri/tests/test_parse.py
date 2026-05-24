@@ -3,7 +3,6 @@ from typing import Any, cast
 
 import pytest
 
-from papyri import errors
 from papyri.nodes import (
     CitationReference,
     InlineCode,
@@ -15,19 +14,23 @@ from papyri.nodes import (
 from papyri.ts import Node, TSVisitor, parse, parser
 
 
-# @pytest.mark.xfail(strict=True)
 def test_parse_space_in_directive_section():
+    # Docutils allows '.. name ::' (space before '::'). Papyri used to reject
+    # it; now it logs a debug message and parses the directive normally.
     data = dedent("""
 
     .. directive ::
 
         this type of directive is supported by docutils but
-        should raise/warn in papyri.
-        It may depends on the tree-sitter rst version.
+        should not raise in papyri.
 
     """)
-    with pytest.raises(errors.SpaceAfterBlockDirectiveError):
-        parse(data.encode(), "test_parse_space_in_directive_section")
+    result = parse(data.encode(), "test_parse_space_in_directive_section")
+    # Should produce exactly one section containing an UnprocessedDirective.
+    from papyri.nodes import UnprocessedDirective
+
+    assert len(result) == 1
+    assert any(isinstance(node, UnprocessedDirective) for node in result[0].children)
 
 
 def test_parse_directive_body():

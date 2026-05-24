@@ -14,10 +14,14 @@ from typing import Any, cast
 
 from .directives import (
     block_math_handler,
+    csv_table_handler,
     deprecated_handler,
     list_table_handler,
+    literalinclude_handler,
     make_image_handler,
     note_handler,
+    only_handler,
+    rubric_handler,
     seealso_handler,
     versionadded_handler,
     versionchanged_handler,
@@ -577,11 +581,38 @@ _MISSING_DIRECTIVES: list[str] = []
 
 _SPHINX_ONLY_DIRECTIVES: frozenset[str] = frozenset(
     {
+        # autodoc directives — not meaningful outside a Sphinx build
         "autofunction",
         "autoclass",
         "autoattribute",
         "autodata",
         "autoexception",
+        # doctest infrastructure — drop; content is not documentation prose
+        "testsetup",
+        "testcleanup",
+        "testcode",
+        "testoutput",
+        # presentation hint — safe to drop (highlight language is render-side)
+        "highlight",
+        # currentmodule shifts cross-ref resolution; drop to avoid raw Directive nodes
+        # until full ref-resolution support is added (see PLAN.md)
+        "currentmodule",
+        # Sphinx py-domain manual API directives (handwritten, no "auto" prefix)
+        "py:function",
+        "py:class",
+        "py:method",
+        "py:attribute",
+        "py:data",
+        "py:exception",
+        "py:module",
+        # Also handle without explicit domain prefix (common in older scipy/numpy docs)
+        "function",
+        "class",
+        "method",
+        "attribute",
+        "data",
+        "exception",
+        "module",
     }
 )
 
@@ -637,6 +668,10 @@ class DirectiveVisiter(TreeReplacer):
             "deprecated": deprecated_handler,
             "code-block": self._code_handler,
             "list-table": list_table_handler,
+            "rubric": rubric_handler,
+            "only": only_handler,
+            "literalinclude": literalinclude_handler,
+            "csv-table": csv_table_handler,
         }
 
         for k, v in (config or {}).items():

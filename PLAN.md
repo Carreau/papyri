@@ -150,6 +150,41 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
 
 ## Follow-ups (not yet scheduled)
 
+### Viewer preferences
+
+- **Inline class members (methods and attributes).**
+  Add a per-page (or per-bundle) toggle that expands each class's methods and
+  attributes inline on the class page, rendering their full docstrings,
+  signatures, and parameter tables directly rather than showing only a summary
+  table with links to individual qualname pages.
+
+  *Design notes:*
+  - The class page already fetches member qualname blobs for the summary table
+    (`viewer/src/lib/qualname-page.ts`). Inlining reuses those same blobs; no
+    new data fetching is required.
+  - Toggle state can live in a `?inline-members=1` query-string flag (shareable
+    URL) with a client-side React island to flip it without a full navigation.
+  - The toggle should default to collapsed (current behaviour) so existing URLs
+    are unaffected.
+  - Consider a persistent user preference via `localStorage` so the user's
+    choice survives navigation; the URL flag takes precedence when present.
+
+- **Inline module-level functions.**
+  Add a per-page (or per-bundle) toggle that renders the full docstring,
+  signature, and parameter tables of every function defined directly in a
+  module, inline on the module overview page, rather than showing only the
+  summary listing.
+
+  *Design notes:*
+  - Mirrors the class-member inlining above. Module pages already enumerate
+    their functions; inlining fetches and expands the same qualname blobs.
+  - Same URL-flag + `localStorage` pattern as above (`?inline-functions=1`).
+  - For large modules (e.g. `numpy`) the expanded view can be very long;
+    consider a "collapse all" shortcut and anchor links to each function so the
+    page stays navigable.
+  - Both toggles (class members, module functions) should share a single
+    rendering component so the inline layout is consistent.
+
 - **C extension (clinic) signatures: use as fallback ObjectSignature for types.**
   `Gen.extract_docstring` now strips the Python C clinic prefix
   (`FuncName(args)\n--\n`) before RST/numpydoc parsing (fixed 2026-05-21).

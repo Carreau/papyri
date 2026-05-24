@@ -14,6 +14,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { IR_TYPE_NAMES } from "../lib/ir-types.ts";
+import { IR_SCHEMA } from "../lib/ir-schema.ts";
 
 // ---- types mirrored from the API endpoint --------------------------------
 
@@ -35,15 +36,30 @@ function isIRNodeType(valueType: string): boolean {
   return IR_TYPE_SET.has(valueType);
 }
 
-/** A field is interesting if it has multiple types OR contains typed IR nodes. */
+/** A field is interesting if it has multiple types OR contains typed IR nodes.
+ *  Only observed (count > 0) entries are considered — declared-but-unobserved
+ *  zero pills are decoration, not evidence the field is interesting. */
 function isInteresting(typeCounts: Record<string, number>): boolean {
-  const types = Object.keys(typeCounts);
-  if (types.length > 1) return true;
-  return types.some(isIRNodeType);
+  const observed = Object.entries(typeCounts).filter(([, n]) => n > 0);
+  if (observed.length > 1) return true;
+  return observed.some(([t]) => isIRNodeType(t));
 }
 
 function total(counts: Record<string, number>): number {
   return Object.values(counts).reduce((s, n) => s + n, 0);
+}
+
+/** Merge declared-but-unobserved type tags into an observed counts map as 0s. */
+function withDeclaredZeros(
+  observed: Record<string, number>,
+  declared: readonly string[] | undefined
+): Record<string, number> {
+  if (!declared || declared.length === 0) return observed;
+  const merged: Record<string, number> = { ...observed };
+  for (const t of declared) {
+    if (!(t in merged)) merged[t] = 0;
+  }
+  return merged;
 }
 
 function fmtN(n: number): string {
@@ -51,12 +67,16 @@ function fmtN(n: number): string {
 }
 
 // Sort entries: IR node types first (alphabetical), then primitives.
+// Observed (count > 0) always sorts before unobserved zero pills within each
+// group, so the 0-count tail doesn't push real data offscreen.
 function sortedValueTypes(counts: Record<string, number>): [string, number][] {
   return Object.entries(counts).sort(([a, ca], [b, cb]) => {
     const aIsIR = isIRNodeType(a);
     const bIsIR = isIRNodeType(b);
     if (aIsIR !== bIsIR) return aIsIR ? -1 : 1;
-    // Within each group: sort by count descending, then name ascending.
+    const aZero = ca === 0;
+    const bZero = cb === 0;
+    if (aZero !== bZero) return aZero ? 1 : -1;
     if (cb !== ca) return cb - ca;
     return a.localeCompare(b);
   });
@@ -69,16 +89,22 @@ function ValueTypePills({ counts }: { counts: Record<string, number> }) {
   const tot = total(counts);
   return (
     <span className="irstats-pills">
-      {sorted.map(([vt, n]) => (
-        <span
-          key={vt}
-          className={"irstats-pill" + (isIRNodeType(vt) ? " irstats-pill--ir" : "")}
-          title={`${fmtN(n)} / ${fmtN(tot)}`}
-        >
-          {vt}
-          <span className="irstats-pill-count">{fmtN(n)}</span>
-        </span>
-      ))}
+      {sorted.map(([vt, n]) => {
+        const cls =
+          "irstats-pill" +
+          (isIRNodeType(vt) ? " irstats-pill--ir" : "") +
+          (n === 0 ? " irstats-pill--zero" : "");
+        return (
+          <span
+            key={vt}
+            className={cls}
+            title={n === 0 ? `declared but never observed` : `${fmtN(n)} / ${fmtN(tot)}`}
+          >
+            {vt}
+            <span className="irstats-pill-count">{fmtN(n)}</span>
+          </span>
+        );
+      })}
     </span>
   );
 }
@@ -158,19 +184,38 @@ export default function IRStatsPanel() {
       .catch((e: unknown) => setError(String(e)));
   }, []);
 
-  // Build per-node-type field rows from the flat fieldTypes map.
+  // Build per-node-type field rows from the flat fieldTypes map, merged with
+  // the static schema so declared-but-unobserved fields/types still surface.
   const nodeFieldMap = useMemo<Map<string, FieldRow[]>>(() => {
     if (!data) return new Map();
     const m = new Map<string, FieldRow[]>();
-    for (const [fieldKey, counts] of Object.entries(data.fieldTypes)) {
+
+    // 1) Observed rows.
+    for (const [fieldKey, observed] of Object.entries(data.fieldTypes)) {
       const dot = fieldKey.indexOf(".");
       if (dot === -1) continue;
       const nodeType = fieldKey.slice(0, dot);
       const fieldName = fieldKey.slice(dot + 1);
+      const declared = IR_SCHEMA[nodeType]?.[fieldName]?.types;
+      const counts = withDeclaredZeros(observed, declared);
       const rows = m.get(nodeType) ?? [];
       rows.push({ fieldName, counts, interesting: isInteresting(counts) });
       m.set(nodeType, rows);
     }
+
+    // 2) Declared-but-never-observed fields & entire node types.
+    for (const [nodeType, fields] of Object.entries(IR_SCHEMA)) {
+      const rows = m.get(nodeType) ?? [];
+      const seen = new Set(rows.map((r) => r.fieldName));
+      for (const [fieldName, schema] of Object.entries(fields)) {
+        if (seen.has(fieldName)) continue;
+        const counts: Record<string, number> = {};
+        for (const t of schema.types) counts[t] = 0;
+        rows.push({ fieldName, counts, interesting: isInteresting(counts) });
+      }
+      if (rows.length > 0) m.set(nodeType, rows);
+    }
+
     // Sort fields: interesting first, then alphabetical.
     for (const rows of m.values()) {
       rows.sort((a, b) => {
@@ -181,10 +226,17 @@ export default function IRStatsPanel() {
     return m;
   }, [data]);
 
-  // Node types sorted by count descending for the counts tab.
+  // Node types sorted by count descending for the counts tab. Includes every
+  // declared IR type, with 0 for those that no bundle contained.
   const sortedNodeCounts = useMemo<[string, number][]>(() => {
     if (!data) return [];
-    return Object.entries(data.nodeCounts).sort(([, a], [, b]) => b - a);
+    const all = new Map<string, number>();
+    for (const t of IR_TYPE_NAMES) all.set(t, 0);
+    for (const [t, n] of Object.entries(data.nodeCounts)) all.set(t, n);
+    return [...all.entries()].sort(([ta, a], [tb, b]) => {
+      if (b !== a) return b - a;
+      return ta.localeCompare(tb);
+    });
   }, [data]);
 
   // Filtered node types for the fields tab.
@@ -243,7 +295,7 @@ export default function IRStatsPanel() {
           </thead>
           <tbody>
             {sortedNodeCounts.map(([t, n]) => (
-              <tr key={t}>
+              <tr key={t} className={n === 0 ? "irstats-counts-row--zero" : undefined}>
                 <td>
                   <code>{t}</code>
                 </td>
@@ -299,7 +351,7 @@ export default function IRStatsPanel() {
               <NodeTypeSection
                 key={nodeType}
                 nodeType={nodeType}
-                nodeCount={data.nodeCounts[nodeType]}
+                nodeCount={data.nodeCounts[nodeType] ?? 0}
                 fields={nodeFieldMap.get(nodeType) ?? []}
                 onlyInteresting={onlyInteresting}
               />

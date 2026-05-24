@@ -226,4 +226,15 @@ import IRStatsPanel from "../../components/IRStatsPanel.tsx";
   :global(.irstats-pill--ir .irstats-pill-count) {
     color: color-mix(in oklab, var(--accent) 60%, var(--fg-muted));
   }
+
+  /* Declared-but-unobserved: zero-count pills and rows are de-emphasised. */
+  :global(.irstats-pill--zero) {
+    opacity: 0.4;
+    border: 1px dashed var(--border);
+    background: transparent;
+  }
+
+  :global(.irstats-counts-row--zero) {
+    opacity: 0.4;
+  }
 </style>

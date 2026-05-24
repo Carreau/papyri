@@ -1007,7 +1007,9 @@ def test_rubric_handler_title_text():
 
     title = adm.children[0]
     assert isinstance(title, AdmonitionTitle)
-    assert title.children[0].value == "References"
+    first = title.children[0]
+    assert isinstance(first, Text)
+    assert first.value == "References"
 
 
 def test_rubric_handler_empty_argument():

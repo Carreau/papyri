@@ -438,3 +438,131 @@ def make_image_handler(
         return [Figure(RefInfo.from_untrusted(module, version, "assets", asset_name))]
 
     return image_handler
+
+
+def make_include_handler(
+    doc_path: Path | None,
+    doc_root: Path | None,
+) -> "Callable[[str, dict[str, str], str], list[Any]]":
+    """Return an ``.. include::`` directive handler bound to the given path context.
+
+    The returned callable has the standard ``(argument, options, content)``
+    handler signature.  It resolves the included file relative to *doc_path*
+    (for relative paths) or *doc_root* (for ``/``-prefixed Sphinx-absolute
+    paths), reads it as RST, and returns the parsed IR nodes inline.
+
+    Supported options:
+
+    - ``:start-line:`` — first line to include (0-based, inclusive; negative
+      values count from the end).
+    - ``:end-line:``   — line at which to stop (0-based, exclusive; negative
+      values count from the end).
+    - ``:start-after:`` — skip everything up to and including the first
+      occurrence of this text.
+    - ``:end-after:``   — stop after the first occurrence of this text
+      (the matching text itself is included in the output).
+
+    When the file cannot be found, or when the required path context is absent,
+    a warning is logged and an empty list is returned.
+    """
+
+    def include_handler(
+        argument: str, options: dict[str, str], content: str
+    ) -> list[Any]:
+        from .ts import parse
+
+        uri = (argument or "").strip()
+        if not uri:
+            log.warning("include directive: no file argument given; dropping")
+            return []
+
+        if content and content.strip():
+            log.warning(
+                "include directive: unexpected body content for %r; "
+                "the include directive takes only a filename argument — dropping",
+                uri,
+            )
+            return []
+
+        if uri.startswith("/"):
+            if doc_root is None:
+                log.warning(
+                    "include directive: cannot resolve root-relative path %r "
+                    "— no doc_root available",
+                    uri,
+                )
+                return []
+            inc_path = (doc_root / uri.lstrip("/")).resolve()
+        else:
+            if doc_path is None:
+                log.warning(
+                    "include directive: cannot resolve relative path %r "
+                    "— no doc_path available",
+                    uri,
+                )
+                return []
+            inc_path = (doc_path / uri).resolve()
+
+        if not inc_path.is_file():
+            log.warning("include directive: %s not found; dropping", inc_path)
+            return []
+
+        text = inc_path.read_text(encoding="utf-8", errors="replace")
+        lines = text.splitlines(keepends=True)
+
+        # Line-range options (Python slice semantics handle negatives naturally).
+        opts = options or {}
+        start_line: int = _parse_int_option(opts, "start-line", 0)
+        end_line: int | None = None
+        raw_end = opts.get("end-line")
+        if raw_end is not None:
+            try:
+                end_line = int(str(raw_end).strip())
+            except ValueError:
+                log.warning(
+                    "include directive: :end-line: is not an integer: %r; ignoring",
+                    raw_end,
+                )
+
+        lines = lines[start_line:end_line]
+
+        # Text-search options applied to the (possibly sliced) lines.
+        start_after = opts.get("start-after")
+        if start_after:
+            joined = "".join(lines)
+            idx = joined.find(start_after)
+            if idx == -1:
+                log.warning(
+                    "include directive: :start-after: text %r not found; "
+                    "including entire (sliced) content",
+                    start_after,
+                )
+            else:
+                lines = (joined[idx + len(start_after) :]).splitlines(keepends=True)
+
+        end_after = opts.get("end-after")
+        if end_after:
+            joined = "".join(lines)
+            idx = joined.find(end_after)
+            if idx == -1:
+                log.warning(
+                    "include directive: :end-after: text %r not found; "
+                    "including entire (sliced) content",
+                    end_after,
+                )
+            else:
+                lines = (joined[: idx + len(end_after)]).splitlines(keepends=True)
+
+        final_text = "".join(lines)
+        if not final_text.strip():
+            return []
+
+        try:
+            sections = parse(final_text.encode(), qa="")
+        except Exception as e:
+            log.warning("include directive: failed to parse %s: %s", inc_path, e)
+            return []
+
+        return list(sections)
+
+    return include_handler

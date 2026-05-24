@@ -14,6 +14,7 @@ from typing import Any, TypeVar, cast
 
 from .directives import (
     block_math_handler,
+    code_handler,
     csv_table_handler,
     deprecated_handler,
     list_table_handler,
@@ -678,11 +679,11 @@ class DirectiveVisiter(TreeReplacer):
             "versionadded": versionadded_handler,
             "versionchanged": versionchanged_handler,
             "deprecated": deprecated_handler,
-            "code-block": self._code_handler,
+            "code-block": code_handler,
             # Docutils alias of ``code-block``; common in IPython/Sphinx docs
             # as ``.. sourcecode:: ipython``.
-            "sourcecode": self._code_handler,
-            "code": self._code_handler,
+            "sourcecode": code_handler,
+            "code": code_handler,
             "list-table": list_table_handler,
             "rubric": rubric_handler,
             "only": only_handler,
@@ -814,11 +815,6 @@ class DirectiveVisiter(TreeReplacer):
     ) -> list[Code]:
         # assert False
         return self._block_verbatim_helper("autosummary", argument, options, content)
-
-    def _code_handler(
-        self, argument: str, options: dict[str, str], content: str
-    ) -> list[Code]:
-        return [Code(content)]
 
     def _resolve_doc_path(self, path: str) -> str:
         """Resolve a toctree entry to a doc key (':' separator).

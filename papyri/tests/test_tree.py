@@ -1044,25 +1044,25 @@ def test_rubric_via_visitor_dispatch():
 # ---------------------------------------------------------------------------
 
 
-def test_only_html_condition_includes_content():
-    content = "Some HTML-only text."
-    out = only_handler("html", {}, content)
-    assert len(out) >= 1
-
-
-def test_only_non_html_condition_drops_content():
-    out = only_handler("latex", {}, "Some latex-only text.")
+def test_only_html_condition_drops_with_warning(caplog):
+    # Even ``.. only:: html`` blocks are dropped — they frequently contain
+    # raw HTML which is a security risk in the IR.
+    with caplog.at_level("WARNING", logger="papyri"):
+        out = only_handler("html", {}, "Some HTML-only text.")
     assert out == []
+    assert any("only" in r.getMessage() for r in caplog.records)
 
 
-def test_only_html_and_latex_includes_content():
-    # Expression contains "html" → include.
-    out = only_handler("html or latex", {}, "Shared text.")
-    assert len(out) >= 1
+def test_only_non_html_condition_drops_with_warning(caplog):
+    with caplog.at_level("WARNING", logger="papyri"):
+        out = only_handler("latex", {}, "Some latex-only text.")
+    assert out == []
+    assert any("only" in r.getMessage() for r in caplog.records)
 
 
-def test_only_empty_content_returns_empty():
-    out = only_handler("html", {}, "")
+def test_only_empty_content_drops_with_warning(caplog):
+    with caplog.at_level("WARNING", logger="papyri"):
+        out = only_handler("html", {}, "")
     assert out == []
 
 
@@ -1071,17 +1071,18 @@ def test_only_registered_on_visitor():
     assert "only" in v._handlers
 
 
-def test_only_drops_non_html_via_visitor():
+def test_only_drops_html_via_visitor(caplog):
     v = _make_visitor()
     up = UnprocessedDirective(
         name="only",
-        args="latex",
+        args="html",
         options={},
-        value="LaTeX-only paragraph.",
+        value=".. raw:: html\n\n   <script>alert('xss')</script>",
         children=(),
-        raw=".. only:: latex\n\n   LaTeX-only paragraph.",
+        raw=".. only:: html\n\n   .. raw:: html\n\n      <script>alert('xss')</script>",
     )
-    out = v.replace_UnprocessedDirective(up)
+    with caplog.at_level("WARNING", logger="papyri"):
+        out = v.replace_UnprocessedDirective(up)
     assert out == []
 
 

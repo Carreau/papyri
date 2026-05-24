@@ -241,25 +241,19 @@ def rubric_handler(argument: str, options: dict[str, str], content: str) -> list
 
 
 def only_handler(argument: str, options: dict[str, str], content: str) -> list[Any]:
-    """Handler for ``.. only::`` — conditional content block.
+    """Handler for ``.. only::`` — always drop with a warning.
 
-    Papyri targets HTML rendering, so we include the block when the condition
-    mentions ``html`` and drop it otherwise.  Complex Sphinx expressions (e.g.
-    ``"html and not latex"``) are handled conservatively: include when the
-    string contains ``"html"`` as a word.
+    ``.. only:: html`` blocks frequently contain ``.. raw:: html`` nodes, which
+    must never reach the IR — raw HTML in untrusted doc sources is a security
+    risk.  We cannot safely parse Sphinx conditional expressions, so we drop
+    every ``only`` block regardless of the condition.
     """
-    import re
-
-    if not content or not content.strip():
-        return []
     expr = (argument or "").strip()
-    # Include when the expression contains the bare word "html".
-    if re.search(r"\bhtml\b", expr):
-        parsed = parse(content.encode(), qa="")
-        if parsed and isinstance(parsed[0], Section):
-            return list(parsed[0].children)
-        return []
-    log.debug("only directive: dropping non-html block (condition=%r)", expr)
+    log.warning(
+        "only directive: dropping block (condition=%r); "
+        "raw HTML content is not safe to include in the IR",
+        expr,
+    )
     return []
 
 

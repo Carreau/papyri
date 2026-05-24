@@ -16,7 +16,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from .bundle import IR_SCHEMA_VERSION, PACK_FORMAT_VERSION, Bundle
+from .bundle import IR_SCHEMA_VERSION, PACK_FORMAT_VERSION, Bundle, BundleManifest
 from .node_base import Node
 from .nodes import encoder
 
@@ -77,19 +77,35 @@ def _check_layout(path: Path) -> None:
             raise BundleError(f"unexpected top-level entry: {entry.name}")
 
 
-def _read_meta(path: Path) -> dict[str, Any]:
+def _read_meta(path: Path) -> BundleManifest:
     try:
-        meta = json.loads((path / "papyri.json").read_text())
+        raw: Any = json.loads((path / "papyri.json").read_text())
     except Exception as exc:
         raise BundleError(f"papyri.json is not valid JSON: {exc}") from exc
-    if not isinstance(meta, dict):
+    if not isinstance(raw, dict):
         raise BundleError("papyri.json is not a JSON object")
     for key in ("module", "version"):
-        if key not in meta:
+        if key not in raw:
             raise BundleError(f"papyri.json is missing required key {key!r}")
-        if not isinstance(meta[key], str):
+        if not isinstance(raw[key], str):
             raise BundleError(f"papyri.json[{key!r}] is not a string")
-    return meta
+
+    known = {"module", "version", "summary", "github_slug", "tag", "logo", "aliases"}
+    extra: dict[str, str] = {
+        k: str(v)
+        for k, v in raw.items()
+        if k not in known and isinstance(v, (str, int, float, bool))
+    }
+    return BundleManifest(
+        module=raw["module"],
+        version=raw["version"],
+        summary=raw.get("summary") or "",
+        github_slug=raw.get("github_slug") or "",
+        tag=raw.get("tag") or "",
+        logo=raw.get("logo") or "",
+        aliases={str(k): str(v) for k, v in (raw.get("aliases") or {}).items()},
+        extra=extra,
+    )
 
 
 def _decode_dir(
@@ -132,9 +148,9 @@ def read_bundle_dir(path: Path, log: Callable[[str], None] | None = None) -> Bun
     if log:
         log("  checking layout …")
     _check_layout(path)
-    meta = _read_meta(path)
-    if log and "module" in meta and "version" in meta:
-        log(f"  metadata: module={meta['module']!r}, version={meta['version']!r}")
+    manifest = _read_meta(path)
+    if log:
+        log(f"  metadata: module={manifest.module!r}, version={manifest.version!r}")
 
     module_dir = path / "module"
     if log:
@@ -174,38 +190,27 @@ def read_bundle_dir(path: Path, log: Callable[[str], None] | None = None) -> Bun
     elif log:
         log("  assets/   (none)")
 
-    toc: list[TocTree] = []
+    toc: tuple[TocTree, ...] = ()
     toc_path = path / "toc.json"
     if log:
         log("  decoding toc.json …" if toc_path.is_file() else "  toc.json  (absent)")
     if toc_path.is_file():
         try:
-            decoded = [TocTree.from_dict(t) for t in json.loads(toc_path.read_bytes())]
+            toc = tuple(TocTree.from_dict(t) for t in json.loads(toc_path.read_bytes()))
         except Exception as exc:
             raise BundleError(f"toc.json failed to decode: {exc}") from exc
-        if isinstance(decoded, list) and all(isinstance(t, TocTree) for t in decoded):
-            toc = decoded
-        elif decoded:
-            raise BundleError("toc.json did not decode to list[TocTree]")
-
-    known = {"module", "version", "summary", "github_slug", "tag", "logo", "aliases"}
-    extra = {
-        k: str(v)
-        for k, v in meta.items()
-        if k not in known and isinstance(v, (str, int, float, bool))
-    }
 
     bundle = Bundle(
         pack_format_version=PACK_FORMAT_VERSION,
         ir_schema_version=IR_SCHEMA_VERSION,
-        module=meta["module"],
-        version=meta["version"],
-        summary=meta.get("summary") or "",
-        github_slug=meta.get("github_slug") or "",
-        tag=meta.get("tag") or "",
-        logo=meta.get("logo") or "",
-        aliases={str(k): str(v) for k, v in (meta.get("aliases") or {}).items()},
-        extra=extra,
+        module=manifest.module,
+        version=manifest.version,
+        summary=manifest.summary,
+        github_slug=manifest.github_slug,
+        tag=manifest.tag,
+        logo=manifest.logo,
+        aliases=manifest.aliases,
+        extra=manifest.extra,
         api=api,
         narrative=narrative,
         examples=examples,

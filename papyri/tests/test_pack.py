@@ -350,3 +350,68 @@ def test_read_bundle_dir_collects_assets(tmp_path):
     (bundle_dir / "assets" / "fig2.svg").write_bytes(b"data2")
     bundle = read_bundle_dir(bundle_dir)
     assert bundle.assets == {"fig1.png": b"data1", "fig2.svg": b"data2"}
+
+
+# ---------------------------------------------------------------------------
+# BundleManifest — typed manifest extracted from papyri.json.
+# ---------------------------------------------------------------------------
+
+
+def test_bundle_manifest_typed_fields(tmp_path):
+    """read_bundle_dir produces a Bundle whose manifest fields are all str."""
+    bundle_dir = _make_minimal_bundle_dir(
+        tmp_path / "mypkg_1.0",
+        extra_meta={
+            "summary": "A package.",
+            "github_slug": "me/mypkg",
+            "tag": "v1.0",
+            "logo": "logo.png",
+            "aliases": {"a": "b"},
+            "pypi": "mypkg",
+        },
+    )
+    (bundle_dir / "assets").mkdir()
+    (bundle_dir / "assets" / "logo.png").write_bytes(b"\x89PNG")
+    bundle = read_bundle_dir(bundle_dir)
+    assert isinstance(bundle.module, str)
+    assert isinstance(bundle.version, str)
+    assert isinstance(bundle.summary, str)
+    assert isinstance(bundle.github_slug, str)
+    assert isinstance(bundle.tag, str)
+    assert isinstance(bundle.logo, str)
+    assert isinstance(bundle.aliases, dict)
+    assert isinstance(bundle.extra, dict)
+
+
+def test_bundle_manifest_null_logo_becomes_empty_string(tmp_path):
+    """logo: null in papyri.json must become '' in Bundle (logo is str, not str|None)."""
+    bundle_dir = _make_minimal_bundle_dir(
+        tmp_path / "mypkg_1.0",
+        extra_meta={"logo": None},
+    )
+    bundle = read_bundle_dir(bundle_dir)
+    assert bundle.logo == ""
+    assert isinstance(bundle.logo, str)
+
+
+def test_toc_bundle_field_is_tuple(tmp_path):
+    """Bundle.toc must be a tuple[TocTree, ...], not a list."""
+    from papyri.nodes import LocalRef, TocTree
+
+    bundle_dir = _make_minimal_bundle_dir(tmp_path / "mypkg_1.0")
+    (bundle_dir / "docs").mkdir()
+    root_toc = TocTree(
+        children=(TocTree(children=(), title="Page", ref=LocalRef("docs", "page")),),
+        title="Root",
+        ref=LocalRef("docs", "index"),
+    )
+    (bundle_dir / "toc.json").write_text(
+        json.dumps([root_toc.to_dict()], indent=2, sort_keys=True)
+    )
+    bundle = read_bundle_dir(bundle_dir)
+    assert isinstance(bundle.toc, tuple)
+    assert len(bundle.toc) == 1
+    assert isinstance(bundle.toc[0], TocTree)
+    assert bundle.toc[0].title == "Root"
+    assert len(bundle.toc[0].children) == 1
+    assert bundle.toc[0].children[0].ref.path == "page"

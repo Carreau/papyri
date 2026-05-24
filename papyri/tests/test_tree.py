@@ -8,6 +8,10 @@ Covered surfaces:
 - ``_toctree_handler`` (blank lines, comments, glob, hidden, malformed entries, LocalRef links)
 - ``_SPHINX_ONLY_DIRECTIVES`` (silent drop via warning)
 - ``:ref:`` role resolution via doc_targets map
+- ``rubric_handler`` (unnumbered section heading → Admonition(kind="rubric"))
+- ``only_handler`` (conditional block → include when html, drop otherwise)
+- ``literalinclude_handler`` (drop with warning)
+- ``csv_table_handler`` (CSV table → Table node)
 - ``Target`` leaf-node traversal (no crash when Target appears in section children)
 """
 
@@ -15,7 +19,14 @@ from __future__ import annotations
 
 import pytest
 
-from papyri.directives import list_table_handler, make_image_handler
+from papyri.directives import (
+    csv_table_handler,
+    list_table_handler,
+    literalinclude_handler,
+    make_image_handler,
+    only_handler,
+    rubric_handler,
+)
 from papyri.nodes import (
     Admonition,
     CrossRef,
@@ -974,3 +985,260 @@ def test_list_table_via_full_directive_pipeline():
     tables = [x for x in out if isinstance(x, Table)]
     assert len(tables) == 1
     assert tables[0].children[0].header is True
+
+
+# ---------------------------------------------------------------------------
+# rubric_handler
+# ---------------------------------------------------------------------------
+
+
+def test_rubric_handler_produces_admonition():
+    out = rubric_handler("References", {}, "")
+    assert len(out) == 1
+    adm = out[0]
+    assert isinstance(adm, Admonition)
+    assert adm.kind == "rubric"
+
+
+def test_rubric_handler_title_text():
+    out = rubric_handler("References", {}, "")
+    adm = out[0]
+    from papyri.nodes import AdmonitionTitle
+
+    title = adm.children[0]
+    assert isinstance(title, AdmonitionTitle)
+    first = title.children[0]
+    assert isinstance(first, Text)
+    assert first.value == "References"
+
+
+def test_rubric_handler_empty_argument():
+    out = rubric_handler("", {}, "")
+    assert len(out) == 1
+    adm = out[0]
+    assert isinstance(adm, Admonition)
+    assert adm.kind == "rubric"
+
+
+def test_rubric_registered_on_visitor():
+    v = _make_visitor()
+    assert "rubric" in v._handlers
+
+
+def test_rubric_via_visitor_dispatch():
+    v = _make_visitor()
+    up = UnprocessedDirective(
+        name="rubric",
+        args="References",
+        options={},
+        value="",
+        children=(),
+        raw=".. rubric:: References",
+    )
+    out = v.replace_UnprocessedDirective(up)
+    assert len(out) == 1
+    assert isinstance(out[0], Admonition)
+    assert out[0].kind == "rubric"
+
+
+# ---------------------------------------------------------------------------
+# only_handler
+# ---------------------------------------------------------------------------
+
+
+def test_only_html_condition_drops_with_warning(caplog):
+    # Even ``.. only:: html`` blocks are dropped — they frequently contain
+    # raw HTML which is a security risk in the IR.
+    with caplog.at_level("WARNING", logger="papyri"):
+        out = only_handler("html", {}, "Some HTML-only text.")
+    assert out == []
+    assert any("only" in r.getMessage() for r in caplog.records)
+
+
+def test_only_non_html_condition_drops_with_warning(caplog):
+    with caplog.at_level("WARNING", logger="papyri"):
+        out = only_handler("latex", {}, "Some latex-only text.")
+    assert out == []
+    assert any("only" in r.getMessage() for r in caplog.records)
+
+
+def test_only_empty_content_drops_with_warning(caplog):
+    with caplog.at_level("WARNING", logger="papyri"):
+        out = only_handler("html", {}, "")
+    assert out == []
+
+
+def test_only_registered_on_visitor():
+    v = _make_visitor()
+    assert "only" in v._handlers
+
+
+def test_only_drops_html_via_visitor(caplog):
+    v = _make_visitor()
+    up = UnprocessedDirective(
+        name="only",
+        args="html",
+        options={},
+        value=".. raw:: html\n\n   <script>alert('xss')</script>",
+        children=(),
+        raw=".. only:: html\n\n   .. raw:: html\n\n      <script>alert('xss')</script>",
+    )
+    with caplog.at_level("WARNING", logger="papyri"):
+        out = v.replace_UnprocessedDirective(up)
+    assert out == []
+
+
+# ---------------------------------------------------------------------------
+# literalinclude_handler
+# ---------------------------------------------------------------------------
+
+
+def test_literalinclude_drops_with_warning(caplog):
+    with caplog.at_level("WARNING", logger="papyri"):
+        out = literalinclude_handler("myfile.py", {}, "")
+    assert out == []
+    assert any("literalinclude" in r.getMessage() for r in caplog.records)
+
+
+def test_literalinclude_registered_on_visitor():
+    v = _make_visitor()
+    assert "literalinclude" in v._handlers
+
+
+# ---------------------------------------------------------------------------
+# csv_table_handler
+# ---------------------------------------------------------------------------
+
+
+def test_csv_table_basic():
+    content = '"Alice","30"\n"Bob","25"'
+    out = csv_table_handler("", {}, content)
+    assert len(out) == 1
+    table = out[0]
+    assert isinstance(table, Table)
+    assert len(table.children) == 2
+
+
+def test_csv_table_header_option():
+    content = '"Alice","30"\n"Bob","25"'
+    opts = {"header": '"Name","Age"'}
+    out = csv_table_handler("", opts, content)
+    assert len(out) == 1
+    table = out[0]
+    assert table.children[0].header is True
+    assert len(table.children) == 3  # 1 header + 2 data rows
+
+
+def test_csv_table_header_rows_option():
+    content = '"Name","Age"\n"Alice","30"\n"Bob","25"'
+    out = csv_table_handler("", {"header-rows": "1"}, content)
+    assert len(out) == 1
+    table = out[0]
+    assert table.children[0].header is True
+    assert table.children[1].header is False
+
+
+def test_csv_table_caption_emits_paragraph():
+    content = '"Alice","30"'
+    out = csv_table_handler("My Caption", {}, content)
+    assert len(out) == 2
+    assert isinstance(out[0], Paragraph)
+    assert isinstance(out[1], Table)
+
+
+def test_csv_table_empty_body_returns_nothing():
+    assert csv_table_handler("", {}, "") == []
+    assert csv_table_handler("", {}, "   \n  ") == []
+
+
+def test_csv_table_registered_on_visitor():
+    v = _make_visitor()
+    assert "csv-table" in v._handlers
+
+
+def test_csv_table_via_visitor_dispatch():
+    v = _make_visitor()
+    up = UnprocessedDirective(
+        name="csv-table",
+        args="",
+        options={},
+        value='"A","B"\n"1","2"',
+        children=(),
+        raw="",
+    )
+    out = v.replace_UnprocessedDirective(up)
+    tables = [x for x in out if isinstance(x, Table)]
+    assert len(tables) == 1
+    assert len(tables[0].children) == 2
+
+
+# ---------------------------------------------------------------------------
+# _SPHINX_ONLY_DIRECTIVES additions
+# ---------------------------------------------------------------------------
+
+
+def test_sphinx_only_directives_includes_doctest_infra():
+    from papyri.tree import _SPHINX_ONLY_DIRECTIVES
+
+    for name in ("testsetup", "testcleanup", "testcode", "testoutput"):
+        assert name in _SPHINX_ONLY_DIRECTIVES, (
+            f"{name!r} not in _SPHINX_ONLY_DIRECTIVES"
+        )
+
+
+def test_sphinx_only_directives_includes_highlight():
+    from papyri.tree import _SPHINX_ONLY_DIRECTIVES
+
+    assert "highlight" in _SPHINX_ONLY_DIRECTIVES
+
+
+def test_sphinx_only_directives_includes_currentmodule():
+    from papyri.tree import _SPHINX_ONLY_DIRECTIVES
+
+    assert "currentmodule" in _SPHINX_ONLY_DIRECTIVES
+
+
+def test_sphinx_only_directives_includes_py_domain_manual():
+    from papyri.tree import _SPHINX_ONLY_DIRECTIVES
+
+    for name in (
+        "function",
+        "class",
+        "method",
+        "attribute",
+        "data",
+        "exception",
+        "module",
+    ):
+        assert name in _SPHINX_ONLY_DIRECTIVES, (
+            f"{name!r} not in _SPHINX_ONLY_DIRECTIVES"
+        )
+
+
+def test_sphinx_only_drops_testcleanup_via_visitor(caplog):
+    v = _make_visitor()
+    ud = UnprocessedDirective(
+        name="testcleanup",
+        args="",
+        options={},
+        value="del x",
+        children=[],
+        raw=".. testcleanup::\n\n   del x",
+    )
+    with caplog.at_level("WARNING", logger="papyri"):
+        out = v.replace_UnprocessedDirective(ud)
+    assert out == []
+
+
+def test_sphinx_only_drops_currentmodule_via_visitor():
+    v = _make_visitor()
+    ud = UnprocessedDirective(
+        name="currentmodule",
+        args="numpy",
+        options={},
+        value="",
+        children=[],
+        raw=".. currentmodule:: numpy",
+    )
+    out = v.replace_UnprocessedDirective(ud)
+    assert out == []

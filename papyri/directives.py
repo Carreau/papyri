@@ -224,6 +224,117 @@ def list_table_handler(
     return out
 
 
+def rubric_handler(argument: str, options: dict[str, str], content: str) -> list[Any]:
+    """Handler for ``.. rubric::`` — an unnumbered section heading.
+
+    Produces an ``Admonition(kind="rubric")`` so the text is visible without
+    polluting the table-of-contents.  The argument is the heading text; an
+    optional body (uncommon in practice) is parsed and appended.
+    """
+    title_text = (argument or "").strip()
+    children: list[Any] = [AdmonitionTitle([Text(title_text)])] if title_text else []
+    if content and content.strip():
+        parsed = parse(content.encode(), qa="")
+        if parsed and isinstance(parsed[0], Section):
+            children.extend(parsed[0].children)
+    return [Admonition(kind="rubric", children=tuple(children))]
+
+
+def only_handler(argument: str, options: dict[str, str], content: str) -> list[Any]:
+    """Handler for ``.. only::`` — always drop with a warning.
+
+    ``.. only:: html`` blocks frequently contain ``.. raw:: html`` nodes, which
+    must never reach the IR — raw HTML in untrusted doc sources is a security
+    risk.  We cannot safely parse Sphinx conditional expressions, so we drop
+    every ``only`` block regardless of the condition.
+    """
+    expr = (argument or "").strip()
+    log.warning(
+        "only directive: dropping block (condition=%r); "
+        "raw HTML content is not safe to include in the IR",
+        expr,
+    )
+    return []
+
+
+def literalinclude_handler(
+    argument: str, options: dict[str, str], content: str
+) -> list[Any]:
+    """Handler for ``.. literalinclude::`` — drop with a warning.
+
+    Verbatim file inclusion requires filesystem access at gen time; we emit
+    nothing and warn so the maintainer knows content was skipped.
+    """
+    log.warning(
+        "literalinclude directive: file %r not embedded (filesystem access "
+        "not available at gen time); dropping",
+        (argument or "").strip(),
+    )
+    return []
+
+
+def _parse_csv_row(line: str) -> list[str]:
+    """Parse a single CSV row, respecting quoted fields."""
+    import csv
+
+    rows = list(csv.reader([line]))
+    return rows[0] if rows else []
+
+
+def csv_table_handler(
+    argument: str, options: dict[str, str], content: str
+) -> list[Any]:
+    """Handler for ``.. csv-table::`` — CSV-formatted table directive.
+
+    Mirrors ``list-table`` in producing ``Table`` / ``TableRow`` / ``TableCell``
+    nodes.  Supported options: ``:header:`` (comma-separated header cells),
+    ``:header-rows:`` (integer).  Unsupported presentation options
+    (``:widths:``, ``:stub-columns:``, ``:align:``, etc.) are tolerated and
+    ignored.
+    """
+    import csv as csv_mod
+
+    opts = options or {}
+    header_rows: list[TableRow] = []
+
+    # Header from the :header: option (comma-separated quoted values).
+    header_opt = opts.get("header", "")
+    if header_opt and header_opt.strip():
+        cells = [
+            TableCell(children=(Paragraph([Text(cell.strip())]),))
+            for cell in _parse_csv_row(header_opt)
+        ]
+        if cells:
+            header_rows.append(TableRow(header=True, children=tuple(cells)))
+
+    header_count = _parse_int_option(opts, "header-rows", 0)
+
+    data_rows: list[TableRow] = []
+    if content and content.strip():
+        reader = csv_mod.reader(content.splitlines())
+        for row_idx, raw_row in enumerate(reader):
+            if not raw_row:
+                continue
+            cells = [
+                TableCell(children=(Paragraph([Text(cell.strip())]),))
+                for cell in raw_row
+            ]
+            data_rows.append(
+                TableRow(header=row_idx < header_count, children=tuple(cells))
+            )
+
+    all_rows = header_rows + data_rows
+    if not all_rows:
+        log.warning("csv-table: no rows parsed; dropping directive")
+        return []
+
+    out: list[Any] = []
+    if argument and argument.strip():
+        out.append(Paragraph([Text(argument.strip())]))
+    out.append(Table(children=tuple(all_rows)))
+    return out
+
+
 def make_image_handler(
     doc_path: Path | None,
     asset_store: Callable[[str, bytes], None] | None,

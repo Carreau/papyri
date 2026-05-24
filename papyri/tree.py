@@ -6,11 +6,11 @@ usually trees, and update nodes.
 
 import logging
 from collections import Counter, defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from functools import lru_cache
 from pathlib import Path
 from textwrap import indent
-from typing import Any, cast
+from typing import Any, TypeVar, cast
 
 from .directives import (
     block_math_handler,
@@ -28,6 +28,8 @@ from .directives import (
     warning_handler,
 )
 from .node_base import Node
+
+_N = TypeVar("_N", bound=Node)
 from .nodes import (
     BulletList,
     CitationReference,
@@ -283,18 +285,18 @@ def resolve_(
 
 
 class TreeVisitor:
-    def __init__(self, find: Any) -> None:
-        self.skipped: set[Any] = set()
+    def __init__(self, find: Collection[type[Node]]) -> None:
+        self.skipped: set[type[Node]] = set()
         self.find = find
 
-    def generic_visit(self, node: Any) -> dict[Any, list[Any]]:
+    def generic_visit(self, node: Node) -> dict[type[Node], list[Node]]:
         from .nodes import Options, ThematicBreak
 
         name = node.__class__.__name__
         if method := getattr(self, "visit_" + name, None):
-            return cast(dict[Any, list[Any]], method(node))
+            return cast(dict[type[Node], list[Node]], method(node))
         elif hasattr(node, "children"):
-            acc: dict[Any, list[Any]] = {}
+            acc: dict[type[Node], list[Node]] = {}
             for c in node.children:
                 if c is None or isinstance(c, (str, bool)):
                     continue
@@ -348,21 +350,23 @@ class TreeReplacer:
     define replace_XXX(xxx) that return a list of new nodes, and call visit(and the root tree)
     """
 
-    _replacements: Counter[Any]
+    _replacements: Counter[str]
 
     def __init__(self) -> None:
         self._replacements = Counter()
 
-    def visit(self, node: Any) -> Any:
+    def visit(self, node: _N) -> _N:
         self._replacements = Counter()
         self._cr = 0
         assert not isinstance(node, list), node
         assert node is not None
         res = self.generic_visit(node)
         assert len(res) == 1, res
-        return res[0]
+        return cast(_N, res[0])
 
-    def _call_method(self, method: Any, node: Any) -> Any:
+    def _call_method(
+        self, method: Callable[[Node], list[Node]], node: Node
+    ) -> list[Node]:
         return method(node)
 
     def generic_visit(self, node: Node) -> list[Node]:

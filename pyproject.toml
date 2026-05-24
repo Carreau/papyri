@@ -11,7 +11,7 @@ license = {file = "LICENSE"}
 dynamic = ["version","description"]
 requires-python=">=3.13"
 dependencies = [
-    "cbor2>=5",
+    "cbor2>=6.1.1",
     "ipython",
     "jedi",
     "matplotlib",

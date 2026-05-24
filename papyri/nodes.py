@@ -60,7 +60,7 @@ from __future__ import annotations
 import sys
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import Any, ClassVar, Self, TypeAlias, cast
+from typing import Any, ClassVar, Self, TypeAlias
 
 import cbor2
 
@@ -1128,14 +1128,12 @@ class Encoder:
         # the class definition. The only dict whose iteration order is
         # semantic (GeneratedDoc._content) has its order carried separately
         # via _ordered_sections, so sorting its keys here loses no information.
-        return cast(
-            bytes,
-            cbor2.dumps(
-                obj,
-                default=lambda encoder, obj: obj.cbor(encoder),
-                canonical=True,
-            ),
+        out: bytes = cbor2.dumps(
+            obj,
+            default=lambda encoder, obj: obj.cbor(encoder),
+            canonical=True,
         )
+        return out
 
     def _type_from_tag(self, tag: Any) -> Any:
         return self._rev_map[tag.tag]

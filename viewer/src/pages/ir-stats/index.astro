@@ -1,0 +1,229 @@
+---
+export const prerender = false;
+
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import IRStatsPanel from "../../components/IRStatsPanel.tsx";
+---
+
+<BaseLayout title="IR statistics — Papyri viewer">
+  <p class="crumb"><a href="/">&larr; All bundles</a></p>
+  <h1>IR node statistics</h1>
+  <p class="lede">
+    Global counts and field-type breakdowns across every ingested bundle. Use the field breakdown to
+    identify which union-typed fields only ever carry a subset of their declared types — a signal to
+    tighten the IR schema.
+  </p>
+
+  <IRStatsPanel client:load />
+</BaseLayout>
+
+<style>
+  /* ---- IRStatsPanel styles ------------------------------------------------ */
+
+  :global(.irstats-root) {
+    margin-top: 1.5rem;
+  }
+
+  :global(.irstats-meta) {
+    font-size: 0.85rem;
+    color: var(--fg-muted);
+    margin: 0 0 1rem;
+  }
+
+  :global(.irstats-loading),
+  :global(.irstats-error),
+  :global(.irstats-empty) {
+    color: var(--fg-muted);
+    font-style: italic;
+  }
+
+  :global(.irstats-error) {
+    color: var(--error-border);
+  }
+
+  /* tabs */
+  :global(.irstats-tabs) {
+    display: flex;
+    gap: 0.25rem;
+    margin-bottom: 1.25rem;
+    border-bottom: 2px solid var(--border);
+  }
+
+  :global(.irstats-tab) {
+    padding: 0.4rem 1rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    cursor: pointer;
+    color: var(--fg-muted);
+    transition:
+      color 0.1s,
+      border-color 0.1s;
+  }
+
+  :global(.irstats-tab:hover) {
+    color: var(--fg);
+  }
+
+  :global(.irstats-tab--active) {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  /* node counts table */
+  :global(.irstats-counts-table) {
+    border-collapse: collapse;
+    font-size: 0.9rem;
+    min-width: 280px;
+  }
+
+  :global(.irstats-counts-table th) {
+    text-align: left;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--fg-muted);
+    padding: 0.3rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  :global(.irstats-counts-table td) {
+    padding: 0.25rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  :global(.irstats-count-cell) {
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+
+  /* controls */
+  :global(.irstats-controls) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+  }
+
+  :global(.irstats-filter-label),
+  :global(.irstats-toggle-label) {
+    font-size: 0.875rem;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  :global(.irstats-filter-input) {
+    padding: 0.25rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 0.875rem;
+    background: var(--surface);
+    color: var(--fg);
+    width: 14rem;
+  }
+
+  /* legend */
+  :global(.irstats-legend) {
+    font-size: 0.82rem;
+    color: var(--fg-muted);
+    margin: 0 0 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
+
+  /* per-node-type section */
+  :global(.irstats-node-section) {
+    margin-bottom: 1.75rem;
+  }
+
+  :global(.irstats-node-title) {
+    font-size: 0.95rem;
+    font-weight: 700;
+    margin: 0 0 0.4rem;
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+  }
+
+  :global(.irstats-node-count) {
+    font-size: 0.8rem;
+    font-weight: 400;
+    color: var(--fg-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* field table */
+  :global(.irstats-field-table) {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.875rem;
+  }
+
+  :global(.irstats-field-row td) {
+    padding: 0.2rem 0.5rem 0.2rem 0;
+    vertical-align: top;
+    border-bottom: 1px solid var(--border);
+  }
+
+  :global(.irstats-field-row:last-child td) {
+    border-bottom: none;
+  }
+
+  :global(.irstats-field-row--plain) {
+    opacity: 0.55;
+  }
+
+  :global(.irstats-field-name) {
+    width: 14rem;
+    white-space: nowrap;
+  }
+
+  :global(.irstats-hidden-count) {
+    font-size: 0.8rem;
+    color: var(--fg-muted);
+    font-style: italic;
+    padding-top: 0.3rem !important;
+  }
+
+  /* pills */
+  :global(.irstats-pills) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+  }
+
+  :global(.irstats-pill) {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.78rem;
+    background: var(--surface-alt);
+    color: var(--fg);
+    font-family: var(--mono);
+    white-space: nowrap;
+  }
+
+  :global(.irstats-pill--ir) {
+    background: color-mix(in oklab, var(--accent) 15%, var(--surface));
+    color: var(--accent);
+  }
+
+  :global(.irstats-pill-count) {
+    font-variant-numeric: tabular-nums;
+    color: var(--fg-muted);
+    font-size: 0.72rem;
+  }
+
+  :global(.irstats-pill--ir .irstats-pill-count) {
+    color: color-mix(in oklab, var(--accent) 60%, var(--fg-muted));
+  }
+</style>

@@ -72,7 +72,7 @@ the raw archive, not via reading the graphstore back.
 
 ## Python version
 
-- Minimum: **Python 3.14**. `requires-python = ">=3.14"`.
+- Minimum: **Python 3.13**. `requires-python = ">=3.13"`.
 - CI matrix: `3.14` only. Add newer versions later; don't carry legacy ones.
 
 ## Dependency notes
@@ -497,6 +497,18 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
 Items below come from a full-tree review (Python / TS ingest / viewer). Each
 is intended to be its own small PR. Items already covered elsewhere in this
 file are cross-referenced rather than duplicated.
+
+### Cross-format
+
+- **CBOR-encode the manifest at pack time.** The bundle directory (what
+  `papyri gen` writes) is a human-readable staging area — JSON is fine there.
+  CBOR lives only in the packed `.papyri` artifact. The manifest is already
+  embedded in the CBOR-encoded `Bundle` node, but via a JSON read
+  (`_read_meta` in `pack.py`). A future cleanup: represent the manifest as a
+  typed struct inside `Bundle` rather than a freeform JSON-derived dict, so
+  the round-trip is fully typed from `pack.py` onward. The corresponding
+  change in `ingest.ts` is the `PapyriMeta` reader. The on-disk `papyri.json`
+  stays JSON — it is intentionally human-readable.
 
 ### Python (`papyri/`)
 

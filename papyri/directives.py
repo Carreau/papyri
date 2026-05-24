@@ -247,6 +247,15 @@ def only_handler(argument: str, options: dict[str, str], content: str) -> list[A
     must never reach the IR — raw HTML in untrusted doc sources is a security
     risk.  We cannot safely parse Sphinx conditional expressions, so we drop
     every ``only`` block regardless of the condition.
+
+    TODO: this is the only HTML-adjacent handler and it should probably accept
+    a ``passthrough=True`` option (or a set of safe condition expressions) so
+    callers can opt in to receiving the parsed RST content when they know the
+    block does not contain raw HTML.  The handler would then parse *content*
+    via ``parse()`` and return the resulting nodes just like other handlers do,
+    rather than always returning ``[]``.  Until that option exists, maintainers
+    who want the content must rewrite or remove the ``.. only::`` wrapper in
+    their source.
     """
     expr = (argument or "").strip()
     log.warning(

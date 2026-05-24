@@ -6,6 +6,7 @@ from typing import Any
 import tree_sitter
 import tree_sitter_rst as _tree_sitter_rst
 
+from . import errors
 from .nodes import (
     Blockquote,
     BulletList,
@@ -784,13 +785,10 @@ class TSVisitor:
         else:
             raise ValueError(f"Wrong number of children: {len(node.children)}")
 
-        # Sphinx / docutils allow '.. name ::' (space before '::').
-        # Log and continue rather than aborting — the node is still parseable.
+        # Sphinx / docutils a bit more lenient
         if _role.end_point != _2.start_point and not is_substitution_definition:
-            log.debug(
-                "Space in directive syntax in %s: %r",
-                self._qa,
-                self.as_text(node),
+            raise errors.SpaceAfterBlockDirectiveError(
+                f"space present in {self.as_text(node)!r}"
             )
 
         role = self.as_text(_role)
@@ -1139,6 +1137,10 @@ def parse(text: bytes, qa: str | None = None) -> list[Section]:
     root = Node(tree.root_node)
     try:
         res = TSVisitor(text, qa if qa is not None else "").visit_document(root)
+    except errors.SpaceAfterBlockDirectiveError:
+        # Deliberate semantic error raised by the visitor; callers (and tests)
+        # rely on the specific type, so don't wrap it.
+        raise
     except Exception as e:
         byte = _visitor_failure_byte(e)
         if byte is None:

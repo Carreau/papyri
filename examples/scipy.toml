@@ -72,6 +72,9 @@ ua = 'scipy._lib.uarray'
 array = 'numpy:array'
 arange = 'numpy:arange'
 [global.expected_errors]
+SpaceAfterBlockDirectiveError = [
+    "scipy.stats._morestats:anderson",
+]
 VisitCitationReferenceNotImplementedError = [
     "scipy.constants",
     "scipy.integrate._ode:ode",

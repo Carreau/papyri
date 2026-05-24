@@ -2,13 +2,15 @@
 Tests for GraphStore: schema creation, put/get/glob, link tracking.
 """
 
+from typing import Any
+
 import pytest
 
 from papyri.graphstore import GraphStore, Key
 
 
 @pytest.fixture()
-def store(tmp_path, monkeypatch):
+def store(tmp_path: Any, monkeypatch: Any) -> GraphStore:
     """GraphStore backed by a temp directory with a temp database file."""
     import papyri.graphstore as gs
 
@@ -17,7 +19,7 @@ def store(tmp_path, monkeypatch):
     return GraphStore(tmp_path)
 
 
-def test_init_creates_schema(store):
+def test_init_creates_schema(store: GraphStore) -> None:
     tables = {
         row[0]
         for row in store.conn.execute(
@@ -28,14 +30,14 @@ def test_init_creates_schema(store):
     assert "links" in tables
 
 
-def test_put_and_get_roundtrip(store):
+def test_put_and_get_roundtrip(store: GraphStore) -> None:
     key = Key("pkg", "1.0", "module", "pkg.foo")
     data = b"hello world"
     store.put(key, data, [])
     assert store.get(key) == data
 
 
-def test_put_with_refs_and_forwardrefs(store):
+def test_put_with_refs_and_forwardrefs(store: GraphStore) -> None:
     k1 = Key("pkg", "1.0", "module", "pkg.foo")
     k2 = Key("pkg", "1.0", "module", "pkg.bar")
     store.put(k1, b"foo", [k2])
@@ -46,7 +48,7 @@ def test_put_with_refs_and_forwardrefs(store):
     assert k1 not in fwd
 
 
-def test_backrefs(store):
+def test_backrefs(store: GraphStore) -> None:
     k1 = Key("pkg", "1.0", "module", "pkg.foo")
     k2 = Key("pkg", "1.0", "module", "pkg.bar")
     store.put(k1, b"foo", [k2])
@@ -56,7 +58,7 @@ def test_backrefs(store):
     assert k1 in back
 
 
-def test_glob_all(store):
+def test_glob_all(store: GraphStore) -> None:
     keys = [
         Key("pkg", "1.0", "module", "pkg.foo"),
         Key("pkg", "1.0", "module", "pkg.bar"),
@@ -69,7 +71,7 @@ def test_glob_all(store):
     assert set(results) == set(keys)
 
 
-def test_glob_by_category(store):
+def test_glob_by_category(store: GraphStore) -> None:
     module_key = Key("pkg", "1.0", "module", "pkg.foo")
     docs_key = Key("pkg", "1.0", "docs", "intro")
     store.put(module_key, b"a", [])
@@ -80,7 +82,7 @@ def test_glob_by_category(store):
     assert docs_key not in module_results
 
 
-def test_glob_specific(store):
+def test_glob_specific(store: GraphStore) -> None:
     key = Key("pkg", "1.0", "meta", "aliases.cbor")
     store.put(key, b"aliases", [])
 
@@ -88,7 +90,7 @@ def test_glob_specific(store):
     assert key in results
 
 
-def test_glob_excludes_placeholder_nodes(store):
+def test_glob_excludes_placeholder_nodes(store: GraphStore) -> None:
     k1 = Key("pkg", "1.0", "module", "pkg.foo")
     k2 = Key("other", "2.0", "module", "other.bar")
     # k1 references k2, but k2 is never put() — it becomes a placeholder node
@@ -99,7 +101,7 @@ def test_glob_excludes_placeholder_nodes(store):
     assert k2 not in results
 
 
-def test_put_updates_links_on_second_call(store):
+def test_put_updates_links_on_second_call(store: GraphStore) -> None:
     k1 = Key("pkg", "1.0", "module", "pkg.foo")
     k2 = Key("pkg", "1.0", "module", "pkg.bar")
     k3 = Key("pkg", "1.0", "module", "pkg.baz")
@@ -115,7 +117,7 @@ def test_put_updates_links_on_second_call(store):
     assert k2 not in fwd
 
 
-def test_get_all(store):
+def test_get_all(store: GraphStore) -> None:
     k1 = Key("pkg", "1.0", "module", "pkg.foo")
     k2 = Key("pkg", "1.0", "module", "pkg.bar")
     store.put(k1, b"foo", [k2])
@@ -127,14 +129,14 @@ def test_get_all(store):
     assert len(back) == 0
 
 
-def test_put_meta(store):
+def test_put_meta(store: GraphStore) -> None:
     store.put_meta("pkg", "1.0", b"meta data")
     meta_path = store._meta_path("pkg", "1.0")
     assert meta_path.exists()
     assert meta_path.read_bytes() == b"meta data"
 
 
-def test_second_connection_sees_data(tmp_path, monkeypatch):
+def test_second_connection_sees_data(tmp_path: Any, monkeypatch: Any) -> None:
     """Simulate two sequential papyri-ingest calls sharing the same db file."""
     import papyri.graphstore as gs
 
@@ -154,7 +156,7 @@ def test_second_connection_sees_data(tmp_path, monkeypatch):
     assert k in results
 
 
-def test_remove_drops_blob_and_outgoing_links(store):
+def test_remove_drops_blob_and_outgoing_links(store: GraphStore) -> None:
     """``remove`` must delete the blob file and outgoing links, but keep the
     node row so documents that still reference it don't end up with dangling
     dest rows."""
@@ -177,13 +179,13 @@ def test_remove_drops_blob_and_outgoing_links(store):
     assert k1 in store.get_forwardrefs(k2)
 
 
-def test_meta_roundtrip(store):
+def test_meta_roundtrip(store: GraphStore) -> None:
     store.put_meta("pkg", "1.0", b"meta bytes")
     key = Key("pkg", "1.0", "meta", "meta.cbor")
     assert store.get_meta(key) == b"meta bytes"
 
 
-def test_glob_ignores_links_without_blobs(store):
+def test_glob_ignores_links_without_blobs(store: GraphStore) -> None:
     """Referenced but never-put keys are placeholder rows: glob must skip them,
     but they remain discoverable through ``get_forwardrefs``."""
     src = Key("pkg", "1.0", "module", "pkg.foo")
@@ -197,7 +199,7 @@ def test_glob_ignores_links_without_blobs(store):
     assert dest in store.get_forwardrefs(src)
 
 
-def test_put_assets_key_does_not_check_old_refs(store):
+def test_put_assets_key_does_not_check_old_refs(store: GraphStore) -> None:
     """Assets bypass the old_refs lookup (``"assets" not in key``).
 
     Pinning this: the fast path writes the file even on re-put without
@@ -210,7 +212,7 @@ def test_put_assets_key_does_not_check_old_refs(store):
     assert store.get(akey) == b"v2"
 
 
-def test_put_records_blake2b_digest(store):
+def test_put_records_blake2b_digest(store: GraphStore) -> None:
     from hashlib import blake2b
 
     key = Key("pkg", "1.0", "module", "pkg.foo")
@@ -219,7 +221,7 @@ def test_put_records_blake2b_digest(store):
     assert store.get_digest(key) == blake2b(data, digest_size=16).digest()
 
 
-def test_put_overwrites_digest(store):
+def test_put_overwrites_digest(store: GraphStore) -> None:
     from hashlib import blake2b
 
     key = Key("pkg", "1.0", "module", "pkg.foo")
@@ -229,12 +231,12 @@ def test_put_overwrites_digest(store):
     assert store.get_digest(key) == blake2b(b"v2", digest_size=16).digest()
 
 
-def test_get_digest_missing_key_raises(store):
+def test_get_digest_missing_key_raises(store: GraphStore) -> None:
     with pytest.raises(KeyError):
         store.get_digest(Key("pkg", "1.0", "module", "absent"))
 
 
-def test_get_digest_skips_placeholder_node(store):
+def test_get_digest_skips_placeholder_node(store: GraphStore) -> None:
     """Placeholder nodes (link destination, never put) have has_blob=0 and
     must not be returned by ``get_digest`` — they would otherwise look like
     'page exists with NULL digest'."""
@@ -245,7 +247,7 @@ def test_get_digest_skips_placeholder_node(store):
         store.get_digest(dest)
 
 
-def test_diff_versions_added_removed_modified(store):
+def test_diff_versions_added_removed_modified(store: GraphStore) -> None:
     common_same = Key("pkg", "1.0", "module", "pkg.same")
     common_changed_a = Key("pkg", "1.0", "module", "pkg.changed")
     common_changed_b = Key("pkg", "2.0", "module", "pkg.changed")
@@ -279,7 +281,7 @@ def test_diff_versions_added_removed_modified(store):
     assert da is None and db is not None
 
 
-def test_diff_versions_empty_when_identical(store):
+def test_diff_versions_empty_when_identical(store: GraphStore) -> None:
     """Two versions whose pages are byte-identical produce an empty diff."""
     a = Key("pkg", "1.0", "module", "pkg.foo")
     b = Key("pkg", "2.0", "module", "pkg.foo")
@@ -288,7 +290,7 @@ def test_diff_versions_empty_when_identical(store):
     assert store.diff_versions("pkg", "1.0", "2.0") == []
 
 
-def test_diff_versions_includes_all_categories(store):
+def test_diff_versions_includes_all_categories(store: GraphStore) -> None:
     """diff_versions returns every changed page across every category;
     callers that only care about one category filter the returned list."""
     store.put(Key("pkg", "1.0", "module", "pkg.foo"), b"old mod", [])

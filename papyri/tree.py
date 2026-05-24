@@ -101,7 +101,7 @@ def _build_resolver_cache(
 
 
 @lru_cache(10000)
-def root_start(root, refs):
+def root_start(root: str, refs: frozenset[str]) -> frozenset[str]:
     """
     Compute a subset of references that start with given root.
     """
@@ -109,7 +109,7 @@ def root_start(root, refs):
 
 
 @lru_cache(10000)
-def endswith(end, refs):
+def endswith(end: str, refs: frozenset[str]) -> frozenset[str]:
     """
     Compute as subset of references that ends with given root.
     """
@@ -120,7 +120,7 @@ class DelayedResolver:
     _targets: dict[str, RefInfo | LocalRef]
     _references: dict[str, list[CrossRef]]
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._targets = dict()
         self._references = dict()
 
@@ -279,16 +279,16 @@ def resolve_(
 
 
 class TreeVisitor:
-    def __init__(self, find):
-        self.skipped = set()
+    def __init__(self, find: Any) -> None:
+        self.skipped: set[Any] = set()
         self.find = find
 
-    def generic_visit(self, node):
+    def generic_visit(self, node: Any) -> dict[Any, list[Any]]:
         from .nodes import Options, ThematicBreak
 
         name = node.__class__.__name__
         if method := getattr(self, "visit_" + name, None):
-            return method(node)
+            return cast(dict[Any, list[Any]], method(node))
         elif hasattr(node, "children"):
             acc: dict[Any, list[Any]] = {}
             for c in node.children:
@@ -346,10 +346,10 @@ class TreeReplacer:
 
     _replacements: Counter[Any]
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._replacements = Counter()
 
-    def visit(self, node):
+    def visit(self, node: Any) -> Any:
         self._replacements = Counter()
         self._cr = 0
         assert not isinstance(node, list), node
@@ -358,7 +358,7 @@ class TreeReplacer:
         assert len(res) == 1, res
         return res[0]
 
-    def _call_method(self, method, node):
+    def _call_method(self, method: Any, node: Any) -> Any:
         return method(node)
 
     def generic_visit(self, node: Node) -> list[Node]:
@@ -439,15 +439,15 @@ Handler = Callable[[str], list[Node]]
 DIRECTIVE_MAP: dict[str, dict[str, list[Handler]]] = {}
 
 
-def directive_handler(domain, role):
-    def _inner(func):
+def directive_handler(domain: str, role: str) -> Callable[[Any], Any]:
+    def _inner(func: Any) -> Any:
         DIRECTIVE_MAP.setdefault(domain, {}).setdefault(role, []).append(func)
         return func
 
     return _inner
 
 
-def _x_any_unimplemented_to_verbatim(domain, role, value):
+def _x_any_unimplemented_to_verbatim(domain: str, role: str, value: str) -> list[Any]:
     return [InlineCode(value)]
 
 
@@ -534,23 +534,23 @@ def _gh_link_or_warn(role: str, path_segment: str, value: str) -> list[Any]:
 
 
 @directive_handler("py", "ghpull")
-def py_ghpull_handler(value):
+def py_ghpull_handler(value: str) -> list[Any]:
     return _gh_link_or_warn("ghpull", "pull", value)
 
 
 @directive_handler("py", "ghissue")
-def py_ghissue_handler(value):
+def py_ghissue_handler(value: str) -> list[Any]:
     return _gh_link_or_warn("ghissue", "issues", value)
 
 
 @directive_handler("py", "math")
-def py_math_handler(value):
+def py_math_handler(value: str) -> list[Any]:
     m = InlineMath(value)
     return [m]
 
 
 @directive_handler("py", "pep")
-def py_pep_hander(value):
+def py_pep_hander(value: str) -> list[Any]:
     number = int(value)
     target = f"https://peps.python.org/pep-{number:04d}/"
     return [
@@ -563,7 +563,7 @@ def py_pep_hander(value):
 
 
 @directive_handler("py", "doc")
-def py_doc_handler(value):
+def py_doc_handler(value: str) -> list[Any]:
     text = value
     path = value
     if " <" in value and value.endswith(">"):
@@ -737,7 +737,7 @@ class DirectiveVisiter(TreeReplacer):
         inner = name[1:-1] if name.startswith("|") and name.endswith("|") else name
         return [Text(inner)]
 
-    def replace_GenCode(self, code):
+    def replace_GenCode(self, code: Any) -> list[Any]:
         """Flatten a GenCode intermediate into a plain Code node."""
         code_ = "".join([entry.value for entry in code.entries])
         status = (
@@ -789,9 +789,11 @@ class DirectiveVisiter(TreeReplacer):
             anchor=None,
         )
 
-    def _toctree_handler(self, argument, options, content):
+    def _toctree_handler(
+        self, argument: str | None, options: Any, content: str
+    ) -> list[Any]:
         # argument is ignored (rare cases like ``.. toctree:: My Title``).
-        toc = []
+        toc: list[list[str | None]] = []
         lls = []
 
         opts = options if isinstance(options, dict) else {}
@@ -874,7 +876,7 @@ class DirectiveVisiter(TreeReplacer):
 
         return [Directive.from_unprocessed(directive)]
 
-    def _resolve(self, loc, text):
+    def _resolve(self, loc: frozenset[str], text: str) -> RefInfo:
         """
         Resolve `text` within local references `loc`
 
@@ -1063,7 +1065,7 @@ class DirectiveVisiter(TreeReplacer):
         return [directive]
 
 
-def _import_max(parts):
+def _import_max(parts: list[str]) -> None:
     p = parts[0]
     try:
         __import__(p)
@@ -1079,7 +1081,7 @@ def _import_max(parts):
             raise type(e)(parts) from e
 
 
-def _obj_from_path(parts):
+def _obj_from_path(parts: list[str]) -> Any:
     _import_max(parts)
     try:
         target = __import__(parts[0])
@@ -1091,11 +1093,11 @@ def _obj_from_path(parts):
 
 
 class GenVisitor(DirectiveVisiter):
-    def visit_Section(self, node):
+    def visit_Section(self, node: Any) -> None:
         if node.target:
             RESOLVER.add_target(LocalRef("docs", node.target), node.target)
 
-    def replace_Fig(self, fig):
+    def replace_Fig(self, fig: Any) -> list[Any]:
         # todo: add version number here
         self._targets.add(fig.value)
 

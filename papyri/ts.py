@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import itertools
 import logging
+from collections.abc import Iterator
 from textwrap import dedent, indent
 from typing import Any
 
@@ -60,14 +63,14 @@ class Node:
     sitter official nodes.
     """
 
-    def tree(self, bytes):
+    def tree(self, bytes: bytes) -> str:
         return (
             self._repr(bytes)
             + indent("\n" + "\n".join([x.tree(bytes) for x in self.children]), "   ")
         ).rstrip()
 
     @property
-    def children(self):
+    def children(self) -> list[Whitespace | Node]:
         if not self._with_whitespace:
             return [Node(n, _with_whitespace=False) for n in self.node.children]
 
@@ -97,75 +100,81 @@ class Node:
                 )
         return new_nodes
 
-    def _repr(self, bytes):
+    def _repr(self, bytes: bytes) -> str:
         return repr(self.node) + bytes[self.start_byte : self.end_byte].decode()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<ts.Node {self.node.type}>"
 
-    def with_whitespace(self):
+    def with_whitespace(self) -> Node:
         return Node(self.node, _with_whitespace=True)
 
-    def without_whitespace(self):
+    def without_whitespace(self) -> Node:
         return Node(self.node, _with_whitespace=False)
 
     @property
-    def start_point(self):
-        return self.node.start_point
+    def start_point(self) -> tuple[int, int]:
+        return self.node.start_point  # type: ignore[no-any-return]
 
     @property
-    def end_point(self):
-        return self.node.end_point
+    def end_point(self) -> tuple[int, int]:
+        return self.node.end_point  # type: ignore[no-any-return]
 
     @property
-    def start_byte(self):
-        return self.node.start_byte
+    def start_byte(self) -> int:
+        return self.node.start_byte  # type: ignore[no-any-return]
 
     @property
-    def end_byte(self):
-        return self.node.end_byte
+    def end_byte(self) -> int:
+        return self.node.end_byte  # type: ignore[no-any-return]
 
     @property
-    def type(self):
-        return self.node.type
+    def type(self) -> str:
+        return self.node.type  # type: ignore[no-any-return]
 
-    def __init__(self, node, *, _with_whitespace=True):
+    def __init__(self, node: Any, *, _with_whitespace: bool = True) -> None:
         self.node = node
         self._with_whitespace = _with_whitespace
 
 
 class Whitespace(Node):
-    def __init__(self, byte_start, byte_end, start_point, end_point):
+    def __init__(
+        self,
+        byte_start: int,
+        byte_end: int,
+        start_point: tuple[int, int],
+        end_point: tuple[int, int],
+    ) -> None:
         self._start_byte = byte_start
         self._end_byte = byte_end
         self._end_point = end_point
         self._start_point = start_point
 
     @property
-    def start_point(self):
+    def start_point(self) -> tuple[int, int]:
         return self._start_point
 
     @property
-    def end_point(self):
+    def end_point(self) -> tuple[int, int]:
         return self._end_point
 
     @property
-    def children(self):
+    def children(self) -> list[Whitespace | Node]:
         return []
 
     @property
-    def start_byte(self):
+    def start_byte(self) -> int:
         return self._start_byte
 
     @property
-    def end_byte(self):
+    def end_byte(self) -> int:
         return self._end_byte
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f'<Node kind="whitespace", start_point={self.start_point}, end_point={self.end_point}>'
 
     @property
-    def type(self):
+    def type(self) -> str:
         return "whitespace"
 
 
@@ -242,7 +251,7 @@ class TSVisitor:
 
         return acc
 
-    def _targetify(self, acc):
+    def _targetify(self, acc: list[Any]) -> list[Any]:
         """
         Here we look for targets, and if they are just
         before a section
@@ -269,7 +278,7 @@ class TSVisitor:
 
         return nacc
 
-    def visit(self, node):
+    def visit(self, node: Node) -> list[Any]:
         acc: list[Any] = []
         # Tree-sitter produces ERROR nodes when it can't reconcile a run of
         # tokens with any grammar rule. Dropping the whole node loses
@@ -300,7 +309,7 @@ class TSVisitor:
         acc = self._targetify(acc)
         return acc
 
-    def visit_citation(self, node):
+    def visit_citation(self, node: Node) -> list[Any]:
         # RST block citation: ``.. [LABEL] body text``.
         # Extract the label and body via simple string parsing on the raw text
         # (tree-sitter exposes the bracketed label and body as a flat string
@@ -317,7 +326,7 @@ class TSVisitor:
                 pass
         return [Unimplemented("citation", text)]
 
-    def visit_citation_reference(self, node):
+    def visit_citation_reference(self, node: Node) -> list[Any]:
         # Inline citation reference, RST form ``[LABEL]_``.
         text = self.as_text(node).strip()
         if text.startswith("[") and text.endswith("]_"):
@@ -327,10 +336,10 @@ class TSVisitor:
             label = text.strip("[]_")
         return [CitationReference(label=label)]
 
-    def visit_transition(self, node):
+    def visit_transition(self, node: Node) -> list[Any]:
         return [ThematicBreak()]
 
-    def visit_reference(self, node):
+    def visit_reference(self, node: Node) -> list[Any]:
         """
         RST hyperlink references.
 
@@ -375,11 +384,11 @@ class TSVisitor:
         uri_text = self.as_text(uri).replace("\n", " ")
         return [InlineRole(f"{name_text} <{uri_text}>", None, None)]
 
-    def _text_fallback(self, node, fmt, *args):
+    def _text_fallback(self, node: Node, fmt: str, *args: Any) -> list[Any]:
         log.warning(fmt + " in (%s); rendering as plain text.", *args, self._qa)
         return [Text(self.as_text(node))]
 
-    def visit_interpreted_text(self, node):
+    def visit_interpreted_text(self, node: Node) -> list[Any]:
         inventory = None
         domain = None
         role_value = None
@@ -498,10 +507,10 @@ class TSVisitor:
         )
         return [t]
 
-    def visit_standalone_hyperlink(self, node):
+    def visit_standalone_hyperlink(self, node: Node) -> list[Any]:
         return self.visit_text(node)
 
-    def visit_text(self, node):
+    def visit_text(self, node: Node) -> list[Any]:
         text = self.as_text(node)
         if text.startswith(":func:"):
             log.warning(
@@ -512,7 +521,7 @@ class TSVisitor:
         t = Text(text)
         return [t]
 
-    def visit_whitespace(self, node):
+    def visit_whitespace(self, node: Node) -> list[Any]:
         """
         Here whitespace seem to mean both spaces and newline.
 
@@ -525,7 +534,7 @@ class TSVisitor:
         t = Text(" " * len(content))
         return [t]
 
-    def visit_literal(self, node):
+    def visit_literal(self, node: Node) -> list[Any]:
         text = self.as_text(node)[2:-2]
         assert "\n\n" not in text
         t = InlineCode(text.replace("\n", " "))
@@ -538,7 +547,7 @@ class TSVisitor:
         b = Code(dedent(datas))
         return [b]
 
-    def visit_bullet_list(self, node):
+    def visit_bullet_list(self, node: Node) -> list[Any]:
         items = []
         for list_item in node.children:
             assert list_item.type == "list_item"
@@ -550,7 +559,7 @@ class TSVisitor:
             items.append(ListItem(False, self.visit(body)))
         return [BulletList(ordered=False, start=1, spread=False, children=items)]
 
-    def visit_section(self, node):
+    def visit_section(self, node: Node) -> list[Any]:
         if node.children[0].type == "adornment":
             assert node.children[1].type == "title"
             tc = node.children[1]
@@ -610,10 +619,10 @@ class TSVisitor:
             title_inline.pop()
         return [Section([], tuple(title_inline), level=level)]
 
-    def visit_block_quote(self, node):
+    def visit_block_quote(self, node: Node) -> list[Any]:
         return [Blockquote(self.visit(node))]
 
-    def visit_paragraph(self, node):
+    def visit_paragraph(self, node: Node) -> list[Any]:
         sub = self.visit(node.with_whitespace())
         acc = []
         acc2 = []
@@ -629,7 +638,7 @@ class TSVisitor:
         p = Paragraph(compress_word(acc))
         return [p, *acc2]
 
-    def visit_line_block(self, node):
+    def visit_line_block(self, node: Node) -> list[Any]:
         # TODO
         # e.g: numpy/doc/source/user/c-info.how-to-extend.rst
         log.warning("Skipping line_block node: %s", self.as_text(node))
@@ -673,7 +682,7 @@ class TSVisitor:
 
         raise ValueError("mixed len...")
 
-    def visit_enumerated_list(self, node):
+    def visit_enumerated_list(self, node: Node) -> list[Any]:
         items = []
         for list_item in node.children:
             assert list_item.type == "list_item"
@@ -681,7 +690,7 @@ class TSVisitor:
             items.append(ListItem(False, self.visit(body)))
         return [BulletList(ordered=True, start=1, spread=False, children=items)]
 
-    def visit_target(self, node):
+    def visit_target(self, node: Node) -> list[Any]:
         # Internal anchor target: ``.. _label:``
         if len(node.children) == 2:
             pp, name = node.children
@@ -705,17 +714,17 @@ class TSVisitor:
                 return [Target(label=label, url=url)]
         return [Unimplemented("target", self.as_text(node))]
 
-    def visit_attribution(self, node):
+    def visit_attribution(self, node: Node) -> list[Any]:
         # TODO:
         log.warning("attribution not implemented")
         return [Unimplemented("attribution", self.as_text(node))]
 
-    def visit_inline_target(self, node):
+    def visit_inline_target(self, node: Node) -> list[Any]:
         # TODO:
         log.warning("inline_target not implemented")
         return [Unimplemented("inline_target", self.as_text(node))]
 
-    def visit_directive(self, node):
+    def visit_directive(self, node: Node) -> list[Any]:
         """
         Main entry point for directives.
 
@@ -860,7 +869,7 @@ class TSVisitor:
         )
         return [directive]
 
-    def visit_footnote_reference(self, node):
+    def visit_footnote_reference(self, node: Node) -> list[Any]:
         # Inline footnote reference, RST forms ``[1]_``, ``[#]_``,
         # ``[#name]_``, ``[*]_``.
         text = self.as_text(node).strip()
@@ -871,11 +880,11 @@ class TSVisitor:
             label = text.strip("[]_")
         return [FootnoteReference(label=label)]
 
-    def visit_emphasis(self, node):
+    def visit_emphasis(self, node: Node) -> list[Any]:
         # TODO
         return [Emphasis([Text(self.as_text(node)[1:-1])])]
 
-    def visit_substitution_definition(self, node):
+    def visit_substitution_definition(self, node: Node) -> list[Any]:
         assert len(node.children) == 3
         _dotdot, sub, directive = node.children
         assert self.as_text(_dotdot) == ".."
@@ -888,16 +897,16 @@ class TSVisitor:
             )
         ]
 
-    def visit_comment(self, node):
+    def visit_comment(self, node: Node) -> list[Any]:
         # Comments survive into the JSON IR so downstream tooling can
         # post-process them. They are stripped during CBOR pack — see
         # ``Node.cbor`` — and never appear in published bundles.
         return [Comment(self.as_text(node))]
 
-    def visit_strong(self, node):
+    def visit_strong(self, node: Node) -> list[Any]:
         return [Strong([Text(self.as_text(node)[2:-2])])]
 
-    def visit_footnote(self, node):
+    def visit_footnote(self, node: Node) -> list[Any]:
         # RST block footnote: ``.. [LABEL] body text`` where LABEL is one of
         # a number (``1``), ``#`` (auto-numbered), ``#name`` (auto-numbered
         # named), or ``*`` (auto-symbol).
@@ -934,7 +943,7 @@ class TSVisitor:
                 pass
         return [Unimplemented("footnote", text)]
 
-    def visit_escape_sequence(self, node):
+    def visit_escape_sequence(self, node: Node) -> list[Any]:
         # RST escape: backslash followed by the escaped character.
         # `\ ` (backslash-space) is a zero-width separator used to adjoin
         # inline markup to surrounding text (e.g. ``**word**\ s``); emit
@@ -951,17 +960,17 @@ class TSVisitor:
         col = node.start_point[1]
         return dedent(" " * col + self.as_text(node))
 
-    def visit_grid_table(self, node):
+    def visit_grid_table(self, node: Node) -> list[Any]:
         # Grid tables aren't yet parsed into structured Table rows; preserve
         # the verbatim RST source as a Code block until a real parser lands.
         return [Code(self._table_text(node))]
 
-    def visit_simple_table(self, node):
+    def visit_simple_table(self, node: Node) -> list[Any]:
         # Simple tables aren't yet parsed into structured Table rows; preserve
         # the verbatim RST source as a Code block until a real parser lands.
         return [Code(self._table_text(node))]
 
-    def visit_ERROR(self, node):
+    def visit_ERROR(self, node: Node) -> list[Any]:
         """
         Called with parsing error nodes.
         """
@@ -969,7 +978,7 @@ class TSVisitor:
         # raise TreeSitterParseError()
         return []
 
-    def visit_definition_list(self, node):
+    def visit_definition_list(self, node: Node) -> list[Any]:
         acc = []
         for list_item in node.children:
             assert list_item.type == "list_item"
@@ -1048,7 +1057,7 @@ def _visitor_failure_byte(exc: BaseException) -> int | None:
     return byte
 
 
-def _iter_footnote_nodes(nodes):
+def _iter_footnote_nodes(nodes: Any) -> Iterator[Footnote | FootnoteReference]:
     """Yield Footnote and FootnoteReference instances in document order.
 
     Walks anything exposing a ``children`` attribute; also descends into
@@ -1065,7 +1074,7 @@ def _iter_footnote_nodes(nodes):
             yield from _iter_footnote_nodes(children)
 
 
-def _auto_number_footnotes(sections):
+def _auto_number_footnotes(sections: list[Section]) -> None:
     """Resolve ``#`` and ``#name`` footnote labels to concrete numbers.
 
     RST allows three kinds of label: explicit (``1``), auto-numbered

@@ -38,8 +38,8 @@ class TimeElapsedColumn(ProgressColumn):
     # Only refresh twice a second to prevent jitter
     max_refresh = 0.5
 
-    def __init__(self, *args, **kwargs):
-        self.avg = None
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        self.avg: timedelta | None = None
         super().__init__(*args, **kwargs)
 
     def render(self, task: Task) -> Any:
@@ -75,19 +75,19 @@ class DummyProgress(Progress):
     nothing and the context-manager hooks skip the live-display setup.
     """
 
-    def add_task(self, *args, **kwargs):  # type: ignore[override,unused-ignore]
+    def add_task(self, *args: Any, **kwargs: Any) -> int:  # type: ignore[override,unused-ignore]
         return 0
 
-    def advance(self, *args, **kwargs):  # type: ignore[override,unused-ignore]
+    def advance(self, *args: Any, **kwargs: Any) -> None:  # type: ignore[override,unused-ignore]
         pass
 
-    def update(self, *args, **kwargs):  # type: ignore[override,unused-ignore]
+    def update(self, *args: Any, **kwargs: Any) -> None:  # type: ignore[override,unused-ignore]
         pass
 
-    def __enter__(self, *args, **kwargs):
+    def __enter__(self, *args: Any, **kwargs: Any) -> DummyProgress:
         return self
 
-    def __exit__(self, *args, **kwargs):
+    def __exit__(self, *args: Any, **kwargs: Any) -> None:
         pass
 
 

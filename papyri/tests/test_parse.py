@@ -16,7 +16,7 @@ from papyri.ts import Node, TSVisitor, parse, parser
 
 
 # @pytest.mark.xfail(strict=True)
-def test_parse_space_in_directive_section():
+def test_parse_space_in_directive_section() -> None:
     data = dedent("""
 
     .. directive ::
@@ -30,7 +30,7 @@ def test_parse_space_in_directive_section():
         parse(data.encode(), "test_parse_space_in_directive_section")
 
 
-def test_parse_directive_body():
+def test_parse_directive_body() -> None:
     data1 = dedent("""
 
     .. directive:: Directive title
@@ -87,7 +87,7 @@ def test_parse_directive_body():
     )
 
 
-def test_parse_warning_directive():
+def test_parse_warning_directive() -> None:
     data = dedent("""
 
     .. warning:: Title
@@ -113,7 +113,7 @@ def test_parse_warning_directive():
     assert len(items[0].children) == 0
 
 
-def test_parse_section_title_inline_content():
+def test_parse_section_title_inline_content() -> None:
     """Section titles preserve inline nodes (code, roles, refs) instead of
     being flattened to a single string. Renderers can then style them."""
     data = dedent(
@@ -137,7 +137,7 @@ def test_parse_section_title_inline_content():
     assert role.value == "foo"
 
 
-def test_parse_space():
+def test_parse_space() -> None:
     [section] = parse(
         b"Element-wise maximum of two arrays, propagating any NaNs.",
         "test_parse_space",
@@ -155,7 +155,7 @@ def test_parse_space():
     )
 
 
-def test_parse_no_newline():
+def test_parse_no_newline() -> None:
     """
     Here we test that sections of test that contain new line in the source do
     not have new line in the output. This make it simpler to render on output
@@ -176,7 +176,7 @@ def test_parse_no_newline():
     assert reference.value == "this reference"  # type: ignore[union-attr]
 
 
-def test_backtick_trailing_alpha_suffix():
+def test_backtick_trailing_alpha_suffix() -> None:
     """
     "`None`s" is invalid RST (alphanumeric char after closing backtick),
     but common in scipy/numpy docstrings.
@@ -196,7 +196,7 @@ def test_backtick_trailing_alpha_suffix():
             assert "`" not in node.value
 
 
-def test_backtick_trailing_alpha_no_role():
+def test_backtick_trailing_alpha_no_role() -> None:
     """`:class:`True`s` — if tree-sitter produces a role, value must be uncontaminated."""
     data = b"Pass :class:`True`s to enable."
     [section] = parse(data, "test_backtick_trailing_alpha_no_role")
@@ -214,7 +214,7 @@ def test_backtick_trailing_alpha_no_role():
         assert "`" not in r.value
 
 
-def test_backtick_genuine_stray_backtick():
+def test_backtick_genuine_stray_backtick() -> None:
     """
     A genuinely malformed sequence (stray inner backtick, not just a trailing
     suffix) should fall through to the corruption-prevention path without raising.
@@ -237,7 +237,7 @@ def _flatten_text(paragraph: Paragraph) -> str:
     return "".join(parts)
 
 
-def test_parse_escaped_backtick_in_text():
+def test_parse_escaped_backtick_in_text() -> None:
     """
     Per RST spec, ``\\`` inside a paragraph is an escape: the backslash should be
     consumed and a literal backtick should appear in the resulting text.
@@ -252,7 +252,7 @@ def test_parse_escaped_backtick_in_text():
     assert text == "Use ` for backticks."
 
 
-def test_parse_multiple_escaped_backticks_in_text():
+def test_parse_multiple_escaped_backticks_in_text() -> None:
     """
     Multiple ``\\``` escapes in a single paragraph should each yield a literal
     backtick in the text, with no backslashes left behind.
@@ -273,7 +273,7 @@ def test_parse_multiple_escaped_backticks_in_text():
     "interpreted_text or literal spans; backslash escapes inside those "
     "contexts are still not processed.",
 )
-def test_parse_escaped_backtick_in_interpreted_text():
+def test_parse_escaped_backtick_in_interpreted_text() -> None:
     """
     Inside interpreted text ``\\``` should embed a literal backtick into the
     role's value without prematurely terminating the interpreted-text span.
@@ -294,7 +294,7 @@ def test_parse_escaped_backtick_in_interpreted_text():
     "interpreted_text or literal spans; backslash escapes inside those "
     "contexts are still not processed.",
 )
-def test_parse_escaped_backtick_in_inline_literal():
+def test_parse_escaped_backtick_in_inline_literal() -> None:
     """
     A backslash-escaped backtick inside an inline literal ``\\````\\``` should
     produce an ``InlineCode`` whose value contains a single literal backtick
@@ -311,7 +311,7 @@ def test_parse_escaped_backtick_in_inline_literal():
     assert literals[0].value == "with ` literal", literals[0].value
 
 
-def test_parse_reference():
+def test_parse_reference() -> None:
     [section] = parse(b"This is a `reference <to this>`_", "test_parse_reference")
     [paragraph_node] = section.children
     assert isinstance(paragraph_node, Paragraph)
@@ -320,7 +320,7 @@ def test_parse_reference():
     assert text.value == "This is a "  # type: ignore[union-attr]
 
 
-def test_parse_citation_reference():
+def test_parse_citation_reference() -> None:
     """
     Inline citation references like ``[CIT2002]_`` should parse as a
     CitationReference node carrying both label and content.
@@ -338,7 +338,7 @@ def test_parse_citation_reference():
     assert cites[0].label == "CIT2002"
 
 
-def test_parse_citation_reference_does_not_raise():
+def test_parse_citation_reference_does_not_raise() -> None:
     """
     Regression test: parsing a citation reference must not raise
     VisitCitationReferenceNotImplementedError.
@@ -347,7 +347,7 @@ def test_parse_citation_reference_does_not_raise():
     parse(b"See [CIT2002]_ for more.", "test_parse_citation_reference_does_not_raise")
 
 
-def test_parse_citation_reference_multiple():
+def test_parse_citation_reference_multiple() -> None:
     """
     Multiple citation references in the same paragraph should each produce
     a CitationReference with the correct label.
@@ -364,7 +364,7 @@ def test_parse_citation_reference_multiple():
     assert [c.label for c in cites] == ["Smith2020", "Jones1999"]
 
 
-def test_parse_example_with_citations_docstring():
+def test_parse_example_with_citations_docstring() -> None:
     """
     Parse the example_with_citations docstring end-to-end to lock in that
     the citation references inside a real-shaped numpydoc docstring produce
@@ -392,7 +392,7 @@ def test_parse_example_with_citations_docstring():
     assert set(found) >= {"CIT2002", "Nielsen2020", "Smith2020", "Jones1999"}, found
 
 
-def test_citation_reference_roundtrip():
+def test_citation_reference_roundtrip() -> None:
     """
     CitationReference should survive a CBOR encode/decode roundtrip via the
     shared IR encoder, confirming CBOR tag 4063 is wired in.
@@ -405,7 +405,7 @@ def test_citation_reference_roundtrip():
     assert decoded.label == "CIT2002"
 
 
-def test_parse_citation_block():
+def test_parse_citation_block() -> None:
     """
     Block-level ``.. [label] body`` citation definitions should parse as
     Citation nodes carrying a label and a body Paragraph.
@@ -430,7 +430,7 @@ def test_parse_citation_block():
     assert citations[0].children[0].children[0].value == "Book title, Author, Year."  # type: ignore[union-attr]
 
 
-def test_parse_footnote_reference():
+def test_parse_footnote_reference() -> None:
     """
     Inline footnote references like ``[1]_`` should parse as a
     FootnoteReference node carrying the label.
@@ -447,7 +447,7 @@ def test_parse_footnote_reference():
     assert fnotes[0].label == "1"
 
 
-def test_parse_footnote_reference_named():
+def test_parse_footnote_reference_named() -> None:
     """Named (``[#name]_``) and auto (``[#]_``, ``[*]_``) footnote refs."""
     from papyri.nodes import FootnoteReference
 
@@ -461,7 +461,7 @@ def test_parse_footnote_reference_named():
     assert [c.label for c in fnotes] == ["#name", "#", "*"]
 
 
-def test_auto_number_footnotes():
+def test_auto_number_footnotes() -> None:
     """``#`` and ``#name`` labels should resolve to unique numbers shared
     between references and definitions, so anchors don't collide."""
     from papyri.nodes import Footnote, FootnoteReference
@@ -492,7 +492,7 @@ def test_auto_number_footnotes():
     assert [d.label for d in defs] == ["1", "2", "3"]
 
 
-def test_auto_number_footnotes_skips_explicit():
+def test_auto_number_footnotes_skips_explicit() -> None:
     """Auto-numbering must skip integers already used by explicit labels."""
     from papyri.nodes import Footnote, FootnoteReference
 
@@ -522,7 +522,7 @@ def test_auto_number_footnotes_skips_explicit():
     assert [d.label for d in defs] == ["1", "2", "3"]
 
 
-def test_footnote_reference_roundtrip():
+def test_footnote_reference_roundtrip() -> None:
     """
     FootnoteReference should survive a CBOR encode/decode roundtrip via the
     shared IR encoder, confirming CBOR tag 4066 is wired in.
@@ -535,7 +535,7 @@ def test_footnote_reference_roundtrip():
     assert decoded.label == "1"
 
 
-def test_parse_footnote_block():
+def test_parse_footnote_block() -> None:
     """
     Block-level ``.. [label] body`` footnote definitions should parse as
     Footnote nodes carrying a label and a body Paragraph.
@@ -568,7 +568,7 @@ def test_parse_footnote_block():
     assert "body" in text_content
 
 
-def test_footnote_roundtrip():
+def test_footnote_roundtrip() -> None:
     """
     Footnote block node should survive a CBOR encode/decode roundtrip
     via the shared IR encoder, confirming tag 4067 is wired in.
@@ -582,7 +582,7 @@ def test_footnote_roundtrip():
     assert decoded.children[0].children[0].value == "Body."  # type: ignore[union-attr]
 
 
-def test_citation_roundtrip():
+def test_citation_roundtrip() -> None:
     """
     Citation block node should survive a CBOR encode/decode roundtrip
     via the shared IR encoder, confirming tag 4064 is wired in.
@@ -600,7 +600,7 @@ def test_citation_roundtrip():
     "role",
     ["class", "func", "meth", "method", "obj", "attr", "any", "mod", "data", "exc"],
 )
-def test_inline_role_resolves_to_crossref(role):
+def test_inline_role_resolves_to_crossref(role: Any) -> None:
     """
     Explicit Python-domain reference roles (`:class:`, `:func:`, ...) must
     produce a ``CrossRef`` when the target is in ``known_refs``. Regression
@@ -631,7 +631,7 @@ def test_inline_role_resolves_to_crossref(role):
     "role",
     ["kbd", "sub", "sup", "term", "samp", "program", "file", "keyword"],
 )
-def test_inline_role_formatting_stays_verbatim(role):
+def test_inline_role_formatting_stays_verbatim(role: Any) -> None:
     """
     Formatting-only roles (`:kbd:`, `:sub:`, ...) are not cross-references;
     they should continue to render as verbatim ``InlineCode``.
@@ -653,7 +653,7 @@ def test_inline_role_formatting_stays_verbatim(role):
     assert isinstance(out[0], InlineCode), (role, out)
 
 
-def test_inline_role_unresolved_falls_back_to_inline_role():
+def test_inline_role_unresolved_falls_back_to_inline_role() -> None:
     """
     When a cross-reference role can't be resolved (target not in ``known_refs``
     and not importable), the original ``InlineRole`` is preserved so the
@@ -682,7 +682,7 @@ def test_inline_role_unresolved_falls_back_to_inline_role():
     "role",
     ["class", "func", "meth", "any", None],
 )
-def test_tilde_prefix_sets_short_display_text(role):
+def test_tilde_prefix_sets_short_display_text(role: Any) -> None:
     """
     A tilde-prefixed reference like ``~numpy.char.chararray`` must resolve to a
     ``CrossRef`` whose ``value`` is only the last dotted component (``chararray``),
@@ -713,7 +713,7 @@ def test_tilde_prefix_sets_short_display_text(role):
     "role",
     ["class", "func", "meth", "any", None],
 )
-def test_tilde_prefix_explicit_text_unchanged(role):
+def test_tilde_prefix_explicit_text_unchanged(role: Any) -> None:
     """
     When explicit display text is given with a tilde target, e.g.
     ``mytext <~numpy.char.chararray>``, the explicit text must be preserved.
@@ -743,7 +743,7 @@ def test_tilde_prefix_explicit_text_unchanged(role):
     "role",
     ["class", "func", "meth", "any", None],
 )
-def test_directive_visiter_inline_role_resolves(role):
+def test_directive_visiter_inline_role_resolves(role: Any) -> None:
     """
     ``DirectiveVisiter.replace_InlineRole`` must produce a ``CrossRef`` when
     the target is in ``known_refs``.
@@ -770,7 +770,7 @@ def test_directive_visiter_inline_role_resolves(role):
     assert out[0].reference == target, (role, out)
 
 
-def test_resolve_colon_notation_path_via_dot_notation():
+def test_resolve_colon_notation_path_via_dot_notation() -> None:
     """
     Regression: API objects are stored with colon-notation paths by full_qual()
     (e.g. "numpy:sin"), but RST inline roles produce dot-notation references
@@ -803,7 +803,7 @@ def test_resolve_colon_notation_path_via_dot_notation():
 @pytest.mark.parametrize(
     "kind", ["note", "warning", "deprecated", "versionadded", "versionchanged"]
 )
-def test_admonition_helper_children_is_sequence(kind):
+def test_admonition_helper_children_is_sequence(kind: Any) -> None:
     """Admonition children must be a sequence, not a dataclasses.Field sentinel.
 
     Regression: admonition_helper passed children as the first positional arg
@@ -828,7 +828,7 @@ def test_admonition_helper_children_is_sequence(kind):
 # ---------------------------------------------------------------------------
 
 
-def test_target_before_section_absorbed_into_section_target():
+def test_target_before_section_absorbed_into_section_target() -> None:
     # A ``.. _label:`` immediately before a section heading must be absorbed
     # into Section.target and must NOT appear as a child node.
     rst = dedent("""
@@ -849,7 +849,7 @@ def test_target_before_section_absorbed_into_section_target():
     assert target_children == []
 
 
-def test_standalone_target_stays_as_target_node():
+def test_standalone_target_stays_as_target_node() -> None:
     # A ``.. _label:`` that is NOT immediately before a section heading must
     # remain in the tree as a Target node so renderers can emit an anchor.
     rst = dedent("""
@@ -870,7 +870,7 @@ def test_standalone_target_stays_as_target_node():
     assert target_children[0].label == "standalone-anchor"
 
 
-def test_target_label_stripped_of_underscore_and_colon():
+def test_target_label_stripped_of_underscore_and_colon() -> None:
     # The raw tree-sitter text for ``.. _my-label:`` is ``_my-label:``.
     # visit_target must strip the leading ``_`` and trailing ``:`` so the
     # stored label is just ``my-label``.
@@ -879,7 +879,7 @@ def test_target_label_stripped_of_underscore_and_colon():
     assert sections[0].target == "my-label"
 
 
-def test_named_hyperlink_target_with_url_recorded():
+def test_named_hyperlink_target_with_url_recorded() -> None:
     # ``.. _label: http://...`` (3-child target). The label/url must end up on
     # the Target node so gen can register them in external_targets.
     rst = dedent("""
@@ -898,7 +898,7 @@ def test_named_hyperlink_target_with_url_recorded():
     assert targets[0].url == "http://www.vim.org/"
 
 
-def test_backtick_quoted_hyperlink_target_with_url_recorded():
+def test_backtick_quoted_hyperlink_target_with_url_recorded() -> None:
     # ``.. _`Display Name`: http://...`` — backtick-quoted label for names that
     # contain punctuation or spaces. Backticks must be stripped from the label.
     rst = dedent("""

@@ -114,7 +114,7 @@ class ExecutionStatus(Enum):
     syntax_error = "syntax_error"
 
 
-def _execute_inout(item):
+def _execute_inout(item: Any) -> tuple[str, Any, str]:
     script = "\n".join(item.in_)
     ce_status = ExecutionStatus.none
     try:
@@ -126,7 +126,7 @@ def _execute_inout(item):
     return script, item.out, ce_status.value
 
 
-def _get_implied_imports(obj):
+def _get_implied_imports(obj: Any) -> dict[str, Any]:
     """
     Most examples in methods or modules needs names defined in current module,
     or name of the class they are part of.
@@ -162,8 +162,8 @@ class _MatplotlibFontFilter(logging.Filter):
         "Substituting symbol",
     )
 
-    def filter(self, record):
-        return 0 if any(s in record.msg for s in self._DROP) else 1
+    def filter(self, record: logging.LogRecord) -> bool:
+        return not any(s in record.msg for s in self._DROP)
 
 
 def processed_example_data(example_section_data: Section) -> Section:
@@ -178,7 +178,7 @@ def processed_example_data(example_section_data: Section) -> Section:
 
 
 @lru_cache(maxsize=4096)
-def normalise_ref(ref):
+def normalise_ref(ref: str) -> str:
     """
     Consistently normalize references.
 
@@ -207,7 +207,7 @@ def normalise_ref(ref):
         if getattr(obj, "__name__", None) is None:
             return ref
 
-        return obj.__module__ + "." + obj.__name__
+        return str(obj.__module__) + "." + str(obj.__name__)
     except Exception:
         pass
     return ref
@@ -405,7 +405,7 @@ class DFSCollector:
         self.prune()
         return self.obj
 
-    def visit(self, obj, stack):
+    def visit(self, obj: Any, stack: list[str]) -> None:
         """
         Recursively visit Module, Classes, and Functions by tracking which path
         we took there.
@@ -451,7 +451,7 @@ class DFSCollector:
         else:
             pass
 
-    def visit_ModuleType(self, mod, stack):
+    def visit_ModuleType(self, mod: Any, stack: list[str]) -> None:
         for k in dir(mod):
             # Defensive: modules with a custom __dir__ / __getattr__ can list
             # names that aren't actually resolvable, or raise non-AttributeError
@@ -464,11 +464,11 @@ class DFSCollector:
                 continue
             self._open_list.append((val, [*stack, k]))
 
-    def visit_ClassType(self, klass, stack):
+    def visit_ClassType(self, klass: Any, stack: list[str]) -> None:
         for k, v in klass.__dict__.items():
             self._open_list.append((v, [*stack, k]))
 
-    def visit_FunctionType(self, fun, stack):
+    def visit_FunctionType(self, fun: Any, stack: list[str]) -> None:
         pass
 
     def compute_aliases(self) -> tuple[dict[FullQual, Canonical], list[Any]]:
@@ -517,7 +517,7 @@ class APIObjectInfo:
     signature: ObjectSignature | None
     name: str
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<APIObject {self.kind=} {self.docstring=} self.signature={self.signature!s} {self.name=}>"
 
     def __init__(
@@ -577,7 +577,7 @@ class APIObjectInfo:
             self.parsed = ts.parse(docstring.encode(), qa)
         self.validate()
 
-    def special(self, title):
+    def special(self, title: str) -> Any:
         if self.kind == "module":
             return None
 
@@ -585,7 +585,7 @@ class APIObjectInfo:
         # SeeAlso,Signature} nodes still carry a plain ClassVar string. Compare
         # via the inline-projection helper for Sections and direct equality
         # otherwise.
-        def _t(s):
+        def _t(s: Any) -> Any:
             t = s.title
             return section_title_text(t) if isinstance(t, tuple) else t
 
@@ -596,7 +596,7 @@ class APIObjectInfo:
         assert not isinstance(res[0], Section), self.parsed
         return res[0]
 
-    def validate(self):
+    def validate(self) -> None:
         for p in self.parsed:
             assert isinstance(
                 p, (Section, NumpydocExample, NumpydocSeeAlso, NumpydocSignature)
@@ -605,7 +605,9 @@ class APIObjectInfo:
 
 
 class PapyriDocTestRunner(doctest.DocTestRunner):
-    def __init__(self, *args, gen, obj, qa, config, **kwargs):
+    def __init__(
+        self, *args: Any, gen: Any, obj: Any, qa: str, config: Any, **kwargs: Any
+    ) -> None:
         self._count = count(0)
         self.gen = gen
         self.obj = obj
@@ -624,9 +626,9 @@ class PapyriDocTestRunner(doctest.DocTestRunner):
         for k, v in config.implied_imports.items():
             self.globs[k] = obj_from_qualname(v)
 
-        self.figs = []
+        self.figs: list[tuple[str, bytes]] = []
 
-    def _get_tok_entries(self, example):
+    def _get_tok_entries(self, example: Any) -> list[Any]:
         entries = parse_script(
             example.source, ns=self.globs, prev="", config=self.config, where=self.qa
         )
@@ -635,7 +637,7 @@ class PapyriDocTestRunner(doctest.DocTestRunner):
         tok_entries = [GenToken(*x) for x in _add_classes(entries)]
         return tok_entries
 
-    def _next_figure_name(self):
+    def _next_figure_name(self) -> str:
         """
         File system can be case insensitive, we are not.
         """
@@ -644,10 +646,10 @@ class PapyriDocTestRunner(doctest.DocTestRunner):
         sha = sha256(pat.encode()).hexdigest()[:8]
         return f"{pat}-{sha}.png"
 
-    def report_start(self, out, test, example):
+    def report_start(self, out: Any, test: Any, example: Any) -> None:
         pass
 
-    def report_success(self, out, test, example, got):
+    def report_success(self, out: Any, test: Any, example: Any, got: Any) -> None:
         import matplotlib.pyplot as plt
 
         tok_entries = self._get_tok_entries(example)
@@ -692,7 +694,7 @@ class PapyriDocTestRunner(doctest.DocTestRunner):
             GenCode(tok_entries, formatted, ExecutionStatus.unexpected_exception)
         )
 
-    def report_failure(self, out, test, example, got):
+    def report_failure(self, out: Any, test: Any, example: Any, got: Any) -> None:
         tok_entries = self._get_tok_entries(example)
         self._example_section_data.append(
             GenCode(tok_entries, got, ExecutionStatus.failure)
@@ -869,7 +871,7 @@ class Gen:
 
         sys_stdout = sys.stdout
 
-        def dbg(*args):
+        def dbg(*args: Any) -> None:
             for arg in args:
                 sys_stdout.write(f"{arg}\n")
             sys_stdout.flush()
@@ -900,7 +902,7 @@ class Gen:
         )
         example_section_data = Section([], ())
 
-        def debugprint(*args):
+        def debugprint(*args: Any) -> None:
             """
             version of print that capture current stdout to use during testing to debug
             """
@@ -972,7 +974,7 @@ class Gen:
                     external[child.label] = child.url
         return labels, external
 
-    def collect_narrative_docs(self):
+    def collect_narrative_docs(self) -> None:
         """
         Crawl the filesystem for all docs/rst files
 
@@ -1250,7 +1252,7 @@ class Gen:
 
         return blob
 
-    def _resolve_item_line(self, blob, target_item):
+    def _resolve_item_line(self, blob: GeneratedDoc, target_item: Any) -> GeneratedDoc:
         """
         Try to find source line number for target object and populate item_line
         field for GeneratedDoc.
@@ -1613,7 +1615,7 @@ class Gen:
         )
         return DFSCollector(n0, submodules)
 
-    def collect_examples_out(self):
+    def collect_examples_out(self) -> None:
         examples_folder = self.config.examples_folder
         self.log.debug("Example Folder: %s", examples_folder)
         if examples_folder is not None:
@@ -1706,7 +1708,9 @@ class Gen:
         assert api_object is not None
         return item_docstring, sections, api_object
 
-    def collect_package_metadata(self, root, relative_dir, meta):
+    def collect_package_metadata(
+        self, root: str, relative_dir: Path, meta: dict[str, Any]
+    ) -> None:
         """
         Try to gather generic metadata about the current package we are going to
         build the documentation for.
@@ -2047,7 +2051,7 @@ class Gen:
                     self._meta["summary"] = blurb
 
 
-def is_private(path):
+def is_private(path: str) -> bool:
     """
     Determine if a import path, or fully qualified is private.
     that usually implies that (one of) the path part starts with a single underscore.
@@ -2070,7 +2074,7 @@ def find_canonical(qa: str, aliases: list[str]) -> str | None:
     If we can't find a canonical, there are many, or are identical to the fqa, return None.
     """
 
-    def _level(c):
+    def _level(c: str) -> int:
         return c.count(".") + c.count(":")
 
     qa_level = _level(qa)

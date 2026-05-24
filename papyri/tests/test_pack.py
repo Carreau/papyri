@@ -78,7 +78,7 @@ def _make_bundle_node(**overrides: Any) -> Bundle:
 # ---------------------------------------------------------------------------
 
 
-def test_pack_is_byte_reproducible_from_node():
+def test_pack_is_byte_reproducible_from_node() -> None:
     """Two encodings of the same Bundle Node must be byte-identical."""
     bundle = _make_bundle_node(
         aliases={"a": "1", "b": "2"},
@@ -90,7 +90,7 @@ def test_pack_is_byte_reproducible_from_node():
     assert a == b
 
 
-def test_pack_is_byte_reproducible_from_dir(tmp_path):
+def test_pack_is_byte_reproducible_from_dir(tmp_path: Any) -> None:
     """Pack a directory twice — bytes match."""
     bundle_dir = _make_minimal_bundle_dir(tmp_path / "mypkg_1.0")
     (bundle_dir / "assets").mkdir()
@@ -100,7 +100,7 @@ def test_pack_is_byte_reproducible_from_dir(tmp_path):
     assert a == b
 
 
-def test_pack_is_byte_reproducible_under_filesystem_noise(tmp_path):
+def test_pack_is_byte_reproducible_under_filesystem_noise(tmp_path: Any) -> None:
     """
     Two packs of the same logical bundle laid out in different directories
     with different filesystem mtimes must produce identical bytes. This
@@ -123,7 +123,7 @@ def test_pack_is_byte_reproducible_under_filesystem_noise(tmp_path):
     assert a == b
 
 
-def test_artifact_has_zero_mtime_in_gzip_header():
+def test_artifact_has_zero_mtime_in_gzip_header() -> None:
     """Gzip header bytes 4..8 are mtime; must be zero for reproducibility."""
     bundle = _make_bundle_node()
     data = make_artifact(bundle)
@@ -136,7 +136,7 @@ def test_artifact_has_zero_mtime_in_gzip_header():
 # ---------------------------------------------------------------------------
 
 
-def test_pack_roundtrip_preserves_fields():
+def test_pack_roundtrip_preserves_fields() -> None:
     bundle = _make_bundle_node(
         module="numpy",
         version="2.4.4",
@@ -153,14 +153,14 @@ def test_pack_roundtrip_preserves_fields():
     assert decoded == bundle
 
 
-def test_load_artifact_decodes_to_bundle():
+def test_load_artifact_decodes_to_bundle() -> None:
     bundle = _make_bundle_node()
     data = make_artifact(bundle)
     decoded = load_artifact(data)
     assert isinstance(decoded, Bundle)
 
 
-def test_artifact_is_gzipped_cbor_with_bundle_tag():
+def test_artifact_is_gzipped_cbor_with_bundle_tag() -> None:
     """
     Peek the artifact: gunzip, then read the first CBOR major type. It
     should be a tag with the Bundle's registered value.
@@ -173,7 +173,7 @@ def test_artifact_is_gzipped_cbor_with_bundle_tag():
     assert obj.tag == TAG_MAP[Bundle]
 
 
-def test_pack_version_peek_is_cheap():
+def test_pack_version_peek_is_cheap() -> None:
     """
     The pack/IR version is in the first two positional fields of the
     Bundle CBOR-tagged array. A consumer that wants to gate compatibility
@@ -194,7 +194,7 @@ def test_pack_version_peek_is_cheap():
 # ---------------------------------------------------------------------------
 
 
-def test_pack_rejects_missing_papyri_json(tmp_path):
+def test_pack_rejects_missing_papyri_json(tmp_path: Any) -> None:
     bundle_dir = tmp_path / "mypkg_1.0"
     bundle_dir.mkdir()
     (bundle_dir / "module").mkdir()
@@ -203,7 +203,7 @@ def test_pack_rejects_missing_papyri_json(tmp_path):
     assert any("papyri.json" in p for p in excinfo.value.problems)
 
 
-def test_pack_rejects_missing_module_dir(tmp_path):
+def test_pack_rejects_missing_module_dir(tmp_path: Any) -> None:
     bundle_dir = tmp_path / "mypkg_1.0"
     bundle_dir.mkdir()
     (bundle_dir / "papyri.json").write_text('{"module":"mypkg","version":"1.0"}')
@@ -212,7 +212,7 @@ def test_pack_rejects_missing_module_dir(tmp_path):
     assert any("module/" in p for p in excinfo.value.problems)
 
 
-def test_pack_rejects_papyri_json_missing_keys(tmp_path):
+def test_pack_rejects_papyri_json_missing_keys(tmp_path: Any) -> None:
     bundle_dir = tmp_path / "mypkg_1.0"
     bundle_dir.mkdir()
     (bundle_dir / "module").mkdir()
@@ -223,7 +223,7 @@ def test_pack_rejects_papyri_json_missing_keys(tmp_path):
     assert "module" in excinfo.value.problems[0]
 
 
-def test_pack_rejects_module_with_non_json_file(tmp_path):
+def test_pack_rejects_module_with_non_json_file(tmp_path: Any) -> None:
     bundle_dir = _make_minimal_bundle_dir(tmp_path / "mypkg_1.0")
     (bundle_dir / "module" / "stray.txt").write_text("oops")
     with pytest.raises(BundleError) as excinfo:
@@ -231,7 +231,7 @@ def test_pack_rejects_module_with_non_json_file(tmp_path):
     assert any(".json" in p for p in excinfo.value.problems)
 
 
-def test_pack_rejects_unexpected_toplevel_entry(tmp_path):
+def test_pack_rejects_unexpected_toplevel_entry(tmp_path: Any) -> None:
     bundle_dir = _make_minimal_bundle_dir(tmp_path / "mypkg_1.0")
     (bundle_dir / ".DS_Store").write_text("junk")
     with pytest.raises(BundleError) as excinfo:
@@ -239,7 +239,7 @@ def test_pack_rejects_unexpected_toplevel_entry(tmp_path):
     assert any(".DS_Store" in p for p in excinfo.value.problems)
 
 
-def test_pack_rejects_invalid_papyri_json(tmp_path):
+def test_pack_rejects_invalid_papyri_json(tmp_path: Any) -> None:
     bundle_dir = tmp_path / "mypkg_1.0"
     bundle_dir.mkdir()
     (bundle_dir / "module").mkdir()
@@ -249,7 +249,7 @@ def test_pack_rejects_invalid_papyri_json(tmp_path):
     assert any("valid JSON" in p for p in excinfo.value.problems)
 
 
-def test_bundle_error_is_fail_fast(tmp_path):
+def test_bundle_error_is_fail_fast(tmp_path: Any) -> None:
     """Validation stops at the first problem; only one is reported."""
     bundle_dir = tmp_path / "mypkg_1.0"
     bundle_dir.mkdir()
@@ -266,7 +266,7 @@ def test_bundle_error_is_fail_fast(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_read_bundle_dir_minimal(tmp_path):
+def test_read_bundle_dir_minimal(tmp_path: Any) -> None:
     bundle_dir = _make_minimal_bundle_dir(tmp_path / "mypkg_1.0")
     bundle = read_bundle_dir(bundle_dir)
     assert bundle.module == "mypkg"
@@ -274,7 +274,7 @@ def test_read_bundle_dir_minimal(tmp_path):
     assert bundle.api == {}
 
 
-def test_read_bundle_dir_carries_extra_meta(tmp_path):
+def test_read_bundle_dir_carries_extra_meta(tmp_path: Any) -> None:
     bundle_dir = _make_minimal_bundle_dir(
         tmp_path / "mypkg_1.0",
         extra_meta={
@@ -303,7 +303,7 @@ def test_read_bundle_dir_carries_extra_meta(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_pack_cli_bulk_mode(tmp_path, monkeypatch):
+def test_pack_cli_bulk_mode(tmp_path: Any, monkeypatch: Any) -> None:
     """No-arg `papyri pack` packs every bundle under ~/.papyri/data/."""
     import typer
     from typer.testing import CliRunner
@@ -326,7 +326,9 @@ def test_pack_cli_bulk_mode(tmp_path, monkeypatch):
     assert (data_dir / "pkg2-2.0.papyri").is_file()
 
 
-def test_pack_cli_bulk_mode_rejects_output_flag(tmp_path, monkeypatch):
+def test_pack_cli_bulk_mode_rejects_output_flag(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
     """--output is single-bundle-only; no-arg + --output is a usage error."""
     import typer
     from typer.testing import CliRunner
@@ -343,7 +345,7 @@ def test_pack_cli_bulk_mode_rejects_output_flag(tmp_path, monkeypatch):
     assert "single bundle" in result.output
 
 
-def test_read_bundle_dir_collects_assets(tmp_path):
+def test_read_bundle_dir_collects_assets(tmp_path: Any) -> None:
     bundle_dir = _make_minimal_bundle_dir(tmp_path / "mypkg_1.0")
     (bundle_dir / "assets").mkdir()
     (bundle_dir / "assets" / "fig1.png").write_bytes(b"data1")

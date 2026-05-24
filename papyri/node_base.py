@@ -121,7 +121,7 @@ class UnserializableNode(Node):
 
     _dont_serialise = True
 
-    def cbor(self, encoder):
+    def cbor(self, encoder: Any) -> None:
         raise NotImplementedError(
             f"{type(self).__name__} must be rewritten before serialization"
         )

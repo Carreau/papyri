@@ -6,12 +6,14 @@ These cover small pure-function surfaces that had regressions in Phase 4
 those guarantees don't silently disappear.
 """
 
+from typing import Any
+
 import pytest
 
 from papyri.toc import _tree, dotdotcount, flatten, make_tree
 
 
-def test_flatten_concatenates_sublists():
+def test_flatten_concatenates_sublists() -> None:
     data = {
         "a": [[("x", "p1"), ("y", "p2")], [("z", "p3")]],
         "b": [],
@@ -23,29 +25,29 @@ def test_flatten_concatenates_sublists():
     }
 
 
-def test_dotdotcount_no_dotdot():
+def test_dotdotcount_no_dotdot() -> None:
     n, parts = dotdotcount(["a", "b", "c"])
     assert n == 0
     assert parts == ["a", "b", "c"]
 
 
-def test_dotdotcount_leading_dotdot():
+def test_dotdotcount_leading_dotdot() -> None:
     n, parts = dotdotcount(["..", "..", "a", "b"])
     assert n == 2
     assert parts == ["a", "b"]
 
 
-def test_dotdotcount_rejects_non_leading():
+def test_dotdotcount_rejects_non_leading() -> None:
     with pytest.raises(AssertionError):
         dotdotcount(["a", "..", "b"])
 
 
-def test_make_tree_empty_input_returns_empty_dict():
+def test_make_tree_empty_input_returns_empty_dict() -> None:
     # No entries collected — must not crash, must return an empty tree.
     assert make_tree({}) == (None, {})
 
 
-def test_make_tree_prefers_index_root():
+def test_make_tree_prefers_index_root() -> None:
     # Sphinx-style layout: "index" exists and references the other docs.
     data = {
         "index": [[(None, "tutorial"), (None, "api")]],
@@ -57,7 +59,7 @@ def test_make_tree_prefers_index_root():
     assert set(tree.keys()) == {"tutorial", "api"}
 
 
-def test_make_tree_falls_back_to_unreferenced_root(caplog):
+def test_make_tree_falls_back_to_unreferenced_root(caplog: Any) -> None:
     # IPython-style: no "index" key; pick the unique unreferenced node.
     data = {
         "whatsnew": [[(None, "tutorial"), (None, "api")]],
@@ -72,7 +74,7 @@ def test_make_tree_falls_back_to_unreferenced_root(caplog):
     assert any("no 'index' root found" in r.getMessage() for r in caplog.records)
 
 
-def test_tree_skips_absolute_paths(capsys):
+def test_tree_skips_absolute_paths(capsys: Any) -> None:
     counter = {"index": 0, "sub": 0}
     data = {"index": ["/absolute/path", "sub"], "sub": []}
     result = _tree("index", data, counter)
@@ -82,21 +84,21 @@ def test_tree_skips_absolute_paths(capsys):
     assert "absolute path" in captured.out
 
 
-def test_tree_skips_external_urls():
+def test_tree_skips_external_urls() -> None:
     counter = {"index": 0, "sub": 0}
     data = {"index": ["https://example.org/docs", "sub"], "sub": []}
     result = _tree("index", data, counter)
     assert list(result.keys()) == ["sub"]
 
 
-def test_tree_strips_rst_suffix():
+def test_tree_strips_rst_suffix() -> None:
     counter = {"index": 0, "chapter": 0}
     data = {"index": ["chapter.rst"], "chapter": []}
     result = _tree("index", data, counter)
     assert "chapter" in result
 
 
-def test_tree_appends_index_for_trailing_slash():
+def test_tree_appends_index_for_trailing_slash() -> None:
     counter = {"index": 0, "sub:index": 0}
     data = {"index": ["sub/"], "sub:index": []}
     result = _tree("index", data, counter)

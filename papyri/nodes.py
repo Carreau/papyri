@@ -58,8 +58,9 @@ Unless your use case is widely adopted it is likely not worse the complexity
 from __future__ import annotations
 
 import sys
+from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import Any, ClassVar, TypeAlias
+from typing import Any, ClassVar, Self, TypeAlias
 
 import cbor2
 
@@ -90,27 +91,34 @@ class InlineRole(Node):
     # ordinary same-project roles.
     inventory: str | None
 
-    def __init__(self, value, domain, role, inventory=None):
+    def __init__(
+        self,
+        value: str,
+        domain: str | None,
+        role: str | None,
+        inventory: str | None = None,
+    ) -> None:
         assert "\n" not in value, f"InlineRole should not contain newline {value}"
         super().__init__(value, domain, role, inventory)
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash((tuple(self.value), self.domain, self.role, self.inventory))
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, InlineRole):
+            return False
         return (
-            (type(self) == type(other))
-            and (self.role == other.role)
+            (self.role == other.role)
             and (other.domain == self.domain)
             and (self.inventory == other.inventory)
             and (self.value == other.value)
         )
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.value) + len(self.prefix) + 2
 
     @property
-    def prefix(self):
+    def prefix(self) -> str:
         prefix = ""
         if self.inventory:
             prefix += ":external+" + self.inventory
@@ -120,10 +128,10 @@ class InlineRole(Node):
             prefix += ":" + self.role + ":"
         return prefix
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<InlineRole {self.prefix}`{self.value}` `{self.to_dict()}`>"
 
-    def __str__(self):
+    def __str__(self) -> str:
         raise NotImplementedError
 
 
@@ -161,10 +169,10 @@ class CrossRef(Node):
             return True
         return self.reference.kind not in ("to-resolve", "missing")
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<CrossRef: {self.value=} {self.reference=} {self.kind=}>"
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash((self.value, self.reference, self.kind, self.anchor))
 
 
@@ -177,7 +185,12 @@ class SubstitutionDef(Node):
     value: str
     children: tuple[Directive | UnprocessedDirective, ...]
 
-    def __init__(self, value, children):
+    def __init__(
+        self,
+        value: str,
+        children: list[Directive | UnprocessedDirective]
+        | tuple[Directive | UnprocessedDirective, ...],
+    ) -> None:
         self.value = value
         assert isinstance(children, (list, tuple))
         self.children = tuple(children)
@@ -267,7 +280,7 @@ class Unimplemented(Node):
     placeholder: str
     value: str
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<Unimplemented {self.placeholder!r} {self.value!r}>"
 
 
@@ -319,7 +332,7 @@ class Text(Node):
     type = "text"
     value: str
 
-    def __init__(self, value):
+    def __init__(self, value: str) -> None:
         assert isinstance(value, str)
         self.value = value
         super().__init__()
@@ -366,7 +379,9 @@ class Code(Node):
     execution_status: str | None
     out: str
 
-    def __init__(self, value, execution_status=None, out=""):
+    def __init__(
+        self, value: str, execution_status: str | None = None, out: str = ""
+    ) -> None:
         super().__init__(value, execution_status, out)
 
 
@@ -377,7 +392,7 @@ class InlineCode(Node):
     type = "inlineCode"
     value: str
 
-    def __init__(self, value):
+    def __init__(self, value: str) -> None:
         super().__init__(value)
         assert "\n" not in value
 
@@ -433,7 +448,7 @@ class Directive(Node):
     )
 
     @classmethod
-    def from_unprocessed(cls, up):
+    def from_unprocessed(cls, up: UnprocessedDirective) -> Directive:
         return cls(up.name, up.args, up.options, up.value, up.children)
 
 
@@ -571,7 +586,7 @@ class UnimplementedInline(Node):
 
     children: tuple[Text, ...]
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<UnimplementedInline {self.children}>"
 
 
@@ -607,7 +622,7 @@ class LocalRef(Node):
     kind: str
     path: str
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[str]:
         return iter([self.kind, self.path])
 
 
@@ -651,16 +666,18 @@ class RefInfo(Node):
     kind: str
     path: str
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.module is not None:
             assert "." not in self.module, self.module
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[str | None]:
         assert isinstance(self.path, str)
         return iter([self.module, self.version, self.kind, self.path])
 
     @classmethod
-    def from_untrusted(cls, module, version, kind, path):
+    def from_untrusted(
+        cls, module: str, version: str, kind: str, path: str
+    ) -> RefInfo:
         assert ":" not in module
         return cls(module, version, kind, path)
 
@@ -735,33 +752,33 @@ class Section(Node):
     level: int = 0
     target: str | None = None
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         return super().__eq__(other)
 
-    def __getitem__(self, k):
+    def __getitem__(self, k: int) -> Any:
         return self.children[k]
 
-    def __setitem__(self, k, v):
+    def __setitem__(self, k: int, v: Any) -> None:
         lst = list(self.children)
         lst[k] = v
         self.children = tuple(lst)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[Any]:
         return iter(self.children)
 
-    def append(self, item):
+    def append(self, item: Any) -> None:
         self.children = (*self.children, item)
 
-    def extend(self, items):
+    def extend(self, items: Any) -> None:
         self.children = (*self.children, *items)
 
-    def empty(self):
+    def empty(self) -> bool:
         return len(self.children) == 0
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return len(self.children) >= 0
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.children)
 
 
@@ -788,7 +805,7 @@ class Parameters(Node):
 
     children: tuple[DocParam, ...]
 
-    def validate(self):
+    def validate(self) -> Self:
         assert len(self.children) > 0
         return super().validate()
 
@@ -821,17 +838,17 @@ class DocParam(Node):
     ]
 
     @property
-    def children(self):
+    def children(self) -> Any:
         return self.desc
 
     @children.setter
-    def children(self, values):
+    def children(self, values: Any) -> None:
         self.desc = values
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: int) -> Any:
         return [self.name, self.annotation, self.desc][index]
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<{self.__class__.__name__}: {self.name=}, {self.annotation=}, {self.desc=}>"
 
 
@@ -854,17 +871,17 @@ class GenCode(UnserializableNode):
     out: str
     ce_status: str
 
-    def validate(self):
+    def validate(self) -> Self:
         for x in self.entries:
             assert isinstance(x, GenToken)
 
         return super().validate()
 
-    def _validate(self):
+    def _validate(self) -> None:
         for _ in self.entries:
             pass
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<{self.__class__.__name__}: {self.entries=} {self.out=} {self.ce_status=}>"
 
 
@@ -939,7 +956,7 @@ class FieldListItem(Node):
     name: tuple[Text | Code, ...]
     body: tuple[Directive | Text | Paragraph | Code, ...]
 
-    def validate(self):
+    def validate(self) -> Self:
         for p in self.body:
             assert isinstance(p, Paragraph), p
         if self.name:
@@ -947,11 +964,11 @@ class FieldListItem(Node):
         return super().validate()
 
     @property
-    def children(self):
+    def children(self) -> list[Any]:
         return [*self.name, *self.body]
 
     @children.setter
-    def children(self, value):
+    def children(self, value: Any) -> None:
         x, *y = value
         self.name = (x,)
         self.body = tuple(y)
@@ -996,11 +1013,11 @@ class DefListItem(Node):
     ]
 
     @property
-    def children(self):
+    def children(self) -> list[Any]:
         return [self.dt, *self.dd]
 
     @children.setter
-    def children(self, value):
+    def children(self, value: Any) -> None:
         self.dt, *self.dd = value
         self.validate()
 
@@ -1014,19 +1031,19 @@ class SeeAlsoItem(Node):
     type: str | None
 
     @property
-    def children(self):
+    def children(self) -> list[Any]:
         return [self.name, self.type, *self.descriptions]
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash((self.name, tuple(self.descriptions)))
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return (
             f"<{self.__class__.__name__}: {self.name} {self.type} {self.descriptions}>"
         )
 
 
-def get_object(qual):
+def get_object(qual: str) -> Any:
     parts = qual.split(".")
 
     for i in range(len(parts), 1, -1):
@@ -1044,7 +1061,7 @@ def get_object(qual):
     return obj
 
 
-def parse_rst_section(text, qa):
+def parse_rst_section(text: str, qa: str) -> list[Any]:
     """
     This should at some point be completely replaced by tree sitter.
     in particular `from ts import parse`
@@ -1057,7 +1074,7 @@ def parse_rst_section(text, qa):
         return []
     if len(items) == 1:
         [section] = items
-        return section.children
+        return list(section.children)
     raise ValueError("Multiple sections present")
 
 
@@ -1103,26 +1120,26 @@ ListContent: TypeAlias = ListItem
 
 
 class Encoder:
-    def __init__(self, rev_map):
+    def __init__(self, rev_map: dict[int, Any]) -> None:
         self._rev_map = rev_map
 
-    def encode(self, obj):
+    def encode(self, obj: Any) -> bytes:
         # canonical=True sorts map keys per RFC 8949 §4.2, so the same logical
         # input always produces byte-identical CBOR. Node fields are encoded as
         # CBOR arrays (see node_base.Node.cbor), so attribute order is fixed by
         # the class definition. The only dict whose iteration order is
         # semantic (GeneratedDoc._content) has its order carried separately
         # via _ordered_sections, so sorting its keys here loses no information.
-        return cbor2.dumps(
+        return cbor2.dumps(  # type: ignore[no-any-return]
             obj,
             default=lambda encoder, obj: obj.cbor(encoder),
             canonical=True,
         )
 
-    def _type_from_tag(self, tag):
+    def _type_from_tag(self, tag: Any) -> Any:
         return self._rev_map[tag.tag]
 
-    def _tag_hook(self, *args, **_kwargs):
+    def _tag_hook(self, *args: Any, **_kwargs: Any) -> Any:
         # cbor2 has shifted calling conventions for tag_hook across major
         # versions: 5.x calls (decoder, tag[, shareable_index]); 6.x calls
         # (tag, immutable) without the decoder. We don't use any of the
@@ -1145,10 +1162,10 @@ class Encoder:
             kwds[k] = v
         return type_(**kwds)
 
-    def decode(self, bytes):
-        return cbor2.loads(bytes, tag_hook=self._tag_hook)
+    def decode(self, data: bytes) -> Any:
+        return cbor2.loads(data, tag_hook=self._tag_hook)
 
-    def _available_tags(self):
+    def _available_tags(self) -> set[int]:
         k = self._rev_map.keys()
         mi, ma = min(k), max(k)
         return set(range(mi, ma + 2)) - set(k)

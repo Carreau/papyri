@@ -38,7 +38,7 @@ markers = [
 Home = "https://github.com/carreau/papyri"
 
 [tool.mypy]
-python_version = '3.13'
+python_version = '3.14'
 ignore_missing_imports = true
 warn_unused_ignores = true
 warn_redundant_casts = true

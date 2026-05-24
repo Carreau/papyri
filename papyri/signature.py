@@ -7,7 +7,7 @@ from typing import Any
 try:
     import annotationlib
 except ImportError:
-    annotationlib = None
+    annotationlib = None  # type: ignore[assignment]
 
 from .errors import TextSignatureParsingFailed
 from .node_base import Node, register
@@ -126,7 +126,7 @@ class Signature:
         if annotationlib is not None:
             self._sig = inspect.signature(
                 target_item,
-                annotation_format=annotationlib.Format.STRING,  # type: ignore[call-arg]
+                annotation_format=annotationlib.Format.STRING,
             )
         else:
             # Python 3.13 fallback: inspect.signature returns evaluated

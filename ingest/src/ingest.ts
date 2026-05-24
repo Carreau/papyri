@@ -339,8 +339,20 @@ export class Ingester {
     }
 
     const asEntries = Object.entries(bundle.assets ?? {});
+    const nameEncoder = new TextEncoder();
     for (const [name, raw] of asEntries) {
-      stage({ module: root, version, kind: "assets", path: name }, toUint8(raw), []);
+      // Asset content (images, etc.) is treated as volatile: matplotlib and
+      // similar generators produce byte-different PNGs across runs even when
+      // the example is unchanged, which would otherwise flood the version
+      // diff with spurious "changed" entries. We hash the asset's filename
+      // instead of its bytes so the digest is stable across rebuilds, and
+      // the diff only flips on add/remove/rename.
+      stage(
+        { module: root, version, kind: "assets", path: name },
+        toUint8(raw),
+        [],
+        nameEncoder.encode(name),
+      );
     }
     if (asEntries.length > 0) {
       console.log(`  [${elapsed()}] assets: ${asEntries.length} staged`);

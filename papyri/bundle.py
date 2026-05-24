@@ -17,8 +17,7 @@ staging area and the fully-typed ``Bundle`` Node that ``papyri pack`` produces.
 
 from __future__ import annotations
 
-import dataclasses
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .doc import GeneratedDoc
 from .node_base import Node, register
@@ -44,8 +43,8 @@ class BundleManifest:
     github_slug: str = ""
     tag: str = ""
     logo: str = ""
-    aliases: dict[str, str] = dataclasses.field(default_factory=dict)
-    extra: dict[str, str] = dataclasses.field(default_factory=dict)
+    aliases: dict[str, str] = field(default_factory=dict)
+    extra: dict[str, str] = field(default_factory=dict)
 
 
 @register(4070)

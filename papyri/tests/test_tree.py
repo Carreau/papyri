@@ -1205,6 +1205,14 @@ def test_include_empty_argument_warns(caplog, tmp_path):
     assert any("include" in r.getMessage() for r in caplog.records)
 
 
+def test_include_nonempty_content_warns(caplog, tmp_path):
+    handler = make_include_handler(doc_path=tmp_path, doc_root=None)
+    with caplog.at_level("WARNING", logger="papyri"):
+        out = handler("somefile.rst", {}, "unexpected body text")
+    assert out == []
+    assert any("include" in r.getMessage() for r in caplog.records)
+
+
 def test_include_basic_rst(tmp_path):
     rst_file = tmp_path / "fragment.rst"
     rst_file.write_text("Hello world.\n", encoding="utf-8")

@@ -476,6 +476,14 @@ def make_include_handler(
             log.warning("include directive: no file argument given; dropping")
             return []
 
+        if content and content.strip():
+            log.warning(
+                "include directive: unexpected body content for %r; "
+                "the include directive takes only a filename argument — dropping",
+                uri,
+            )
+            return []
+
         if uri.startswith("/"):
             if doc_root is None:
                 log.warning(

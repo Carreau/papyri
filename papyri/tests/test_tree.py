@@ -17,6 +17,8 @@ Covered surfaces:
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from papyri.directives import (
@@ -57,14 +59,14 @@ from papyri.utils import obj_from_qualname
 # ---------------------------------------------------------------------------
 
 
-def test_obj_from_qualname_plain_function():
+def test_obj_from_qualname_plain_function() -> None:
     fn = obj_from_qualname("papyri.directives:warn")
     from papyri.directives import warn
 
     assert fn is warn
 
 
-def test_obj_from_qualname_class_method_returns_bound():
+def test_obj_from_qualname_class_method_returns_bound() -> None:
     # "Class.method" reference: the class is instantiated once and the returned
     # callable must be bound to that instance (has __self__ pointing at it).
     import io
@@ -76,20 +78,20 @@ def test_obj_from_qualname_class_method_returns_bound():
     assert method("hello") == 5
 
 
-def test_obj_from_qualname_class_method_ctor_args():
+def test_obj_from_qualname_class_method_ctor_args() -> None:
     # ctor_args are forwarded to the class constructor before method lookup.
     method = obj_from_qualname("io:StringIO.getvalue", ctor_args=("seed",))
     assert method() == "seed"
 
 
-def test_obj_from_qualname_class_method_ctor_kwargs():
+def test_obj_from_qualname_class_method_ctor_kwargs() -> None:
     method = obj_from_qualname(
         "io:StringIO.getvalue", ctor_kwargs={"initial_value": "seed"}
     )
     assert method() == "seed"
 
 
-def test_obj_from_qualname_class_itself_unchanged():
+def test_obj_from_qualname_class_itself_unchanged() -> None:
     # When the path ends on the class (no trailing attribute), return the class.
     import io
 
@@ -102,7 +104,7 @@ def test_obj_from_qualname_class_itself_unchanged():
 # ---------------------------------------------------------------------------
 
 
-def test_py_doc_handler_simple_path():
+def test_py_doc_handler_simple_path() -> None:
     out = py_doc_handler("tutorial/intro")
     assert len(out) == 1
     ref = out[0]
@@ -114,7 +116,7 @@ def test_py_doc_handler_simple_path():
     assert ref.value == "tutorial/intro"
 
 
-def test_py_doc_handler_titled_form():
+def test_py_doc_handler_titled_form() -> None:
     # "Nice Title <real/path>" — title is the display text, path the target.
     out = py_doc_handler("Nice Title <real/path>")
     ref = out[0]
@@ -129,7 +131,7 @@ def test_py_doc_handler_titled_form():
 # ---------------------------------------------------------------------------
 
 
-def test_delayed_resolver_reference_then_target():
+def test_delayed_resolver_reference_then_target() -> None:
     r = DelayedResolver()
     link = CrossRef(
         "lbl",
@@ -147,7 +149,7 @@ def test_delayed_resolver_reference_then_target():
     assert link.reference is target
 
 
-def test_delayed_resolver_target_then_reference():
+def test_delayed_resolver_target_then_reference() -> None:
     r = DelayedResolver()
     target = LocalRef("docs", "chapter1")
     r.add_target(target, "sec-1")
@@ -163,7 +165,7 @@ def test_delayed_resolver_target_then_reference():
     assert link.reference is target
 
 
-def test_delayed_resolver_rejects_duplicate_target():
+def test_delayed_resolver_rejects_duplicate_target() -> None:
     r = DelayedResolver()
     target1 = LocalRef("docs", "chapter1")
     r.add_target(target1, "label")
@@ -186,7 +188,7 @@ def _make_visitor() -> DirectiveVisiter:
     )
 
 
-def test_toctree_drops_blank_lines_and_comments():
+def test_toctree_drops_blank_lines_and_comments() -> None:
     v = _make_visitor()
     content = "\n".join(
         [
@@ -204,14 +206,14 @@ def test_toctree_drops_blank_lines_and_comments():
     assert len(items) == 2
 
 
-def test_toctree_skips_self_entry():
+def test_toctree_skips_self_entry() -> None:
     v = _make_visitor()
     content = "self\nchapter1"
     out = v._toctree_handler(argument=None, options={}, content=content)
     assert len(out[0].children) == 1
 
 
-def test_toctree_glob_option_skips_wildcards():
+def test_toctree_glob_option_skips_wildcards() -> None:
     v = _make_visitor()
     content = "chapter1\napi/*\nchapter2"
     out = v._toctree_handler(argument=None, options={"glob": True}, content=content)
@@ -219,7 +221,7 @@ def test_toctree_glob_option_skips_wildcards():
     assert len(out[0].children) == 2
 
 
-def test_toctree_title_form_parsed():
+def test_toctree_title_form_parsed() -> None:
     v = _make_visitor()
     content = "Getting Started <intro>"
     out = v._toctree_handler(argument=None, options={}, content=content)
@@ -236,7 +238,7 @@ def test_toctree_title_form_parsed():
     assert crossref.reference.path == "intro"
 
 
-def test_toctree_resolves_relative_to_current_doc():
+def test_toctree_resolves_relative_to_current_doc() -> None:
     # toctree entries are paths relative to the current doc's directory.
     # For doc key "whatsnew:index" (= whatsnew/index.rst), entry "version9"
     # must resolve to "whatsnew:version9" so the viewer can render a link.
@@ -252,7 +254,7 @@ def test_toctree_resolves_relative_to_current_doc():
     assert paths == ["whatsnew:version9", "whatsnew:version8"]
 
 
-def test_toctree_absolute_path_anchored_at_root():
+def test_toctree_absolute_path_anchored_at_root() -> None:
     v = DirectiveVisiter(
         qa="whatsnew:index",
         known_refs=frozenset(),
@@ -265,7 +267,7 @@ def test_toctree_absolute_path_anchored_at_root():
     assert crossref.reference.path == "install:quickstart"
 
 
-def test_toctree_strips_rst_extension():
+def test_toctree_strips_rst_extension() -> None:
     v = DirectiveVisiter(
         qa="whatsnew:index",
         known_refs=frozenset(),
@@ -278,7 +280,7 @@ def test_toctree_strips_rst_extension():
     assert crossref.reference.path == "whatsnew:version9"
 
 
-def test_toctree_argument_is_silently_ignored():
+def test_toctree_argument_is_silently_ignored() -> None:
     v = _make_visitor()
     # Phase 4 fix: some Sphinx builds pass a title argument. Don't assert,
     # just ignore it.
@@ -286,7 +288,7 @@ def test_toctree_argument_is_silently_ignored():
     assert len(out[0].children) == 1
 
 
-def test_toctree_malformed_entry_warns(caplog):
+def test_toctree_malformed_entry_warns(caplog: Any) -> None:
     v = _make_visitor()
     content = "ok\nbroken <no-closing"
     with caplog.at_level("WARNING", logger="papyri"):
@@ -296,7 +298,7 @@ def test_toctree_malformed_entry_warns(caplog):
     assert any("malformed" in r.getMessage().lower() for r in caplog.records)
 
 
-def test_toctree_not_hidden_produces_crossref_links():
+def test_toctree_not_hidden_produces_crossref_links() -> None:
     # Without the hidden option the handler must return a BulletList whose
     # items each wrap a CrossRef with a LocalRef("docs", ...) reference so
     # the viewer can construct a link to the page.
@@ -315,7 +317,7 @@ def test_toctree_not_hidden_produces_crossref_links():
         assert crossref.reference.path == expected_path
 
 
-def test_toctree_uses_doc_title_for_display_text():
+def test_toctree_uses_doc_title_for_display_text() -> None:
     # When the bundle knows the target document's title, the rendered bullet
     # must show that title rather than the raw reference path.
     v = DirectiveVisiter(
@@ -332,7 +334,7 @@ def test_toctree_uses_doc_title_for_display_text():
     assert titles == ["Getting Started", "Advanced Topics"]
 
 
-def test_toctree_falls_back_to_path_when_title_unknown():
+def test_toctree_falls_back_to_path_when_title_unknown() -> None:
     # If the target doc is not in the title map (forward ref, missing doc,
     # untitled doc), the display text remains the raw entry — current
     # behaviour preserved so partial bundles still render a usable bullet.
@@ -350,7 +352,7 @@ def test_toctree_falls_back_to_path_when_title_unknown():
     assert titles == ["Getting Started", "unknown"]
 
 
-def test_toctree_explicit_title_wins_over_doc_title():
+def test_toctree_explicit_title_wins_over_doc_title() -> None:
     # ``Custom <intro>`` form: the author-provided title is the contract,
     # so it must not be overridden by the destination doc's heading.
     v = DirectiveVisiter(
@@ -367,7 +369,7 @@ def test_toctree_explicit_title_wins_over_doc_title():
     assert crossref.value == "Custom"
 
 
-def test_toctree_doc_title_lookup_uses_resolved_doc_key():
+def test_toctree_doc_title_lookup_uses_resolved_doc_key() -> None:
     # Resolution is path-aware: a relative entry like ``version9`` in the
     # ``whatsnew/index`` doc resolves to ``whatsnew:version9`` — the title
     # map must be keyed accordingly.
@@ -385,7 +387,7 @@ def test_toctree_doc_title_lookup_uses_resolved_doc_key():
     assert crossref.reference.path == "whatsnew:version9"
 
 
-def test_toctree_nested_path_uses_colon_separator():
+def test_toctree_nested_path_uses_colon_separator() -> None:
     # Toctree entries like "whatsnew/index" must become LocalRef("docs",
     # "whatsnew:index") so the viewer's linkForDoc produces the correct URL.
     v = _make_visitor()
@@ -395,7 +397,7 @@ def test_toctree_nested_path_uses_colon_separator():
     assert crossref.reference.path == "whatsnew:index"
 
 
-def test_toctree_titled_nested_path_uses_colon_separator():
+def test_toctree_titled_nested_path_uses_colon_separator() -> None:
     v = _make_visitor()
     out = v._toctree_handler(
         argument=None, options={}, content="What's New <whatsnew/index>"
@@ -405,7 +407,7 @@ def test_toctree_titled_nested_path_uses_colon_separator():
     assert crossref.reference.path == "whatsnew:index"
 
 
-def test_toctree_hidden_returns_no_visible_output():
+def test_toctree_hidden_returns_no_visible_output() -> None:
     # hidden=True suppresses inline rendering while still recording the TOC
     # data so it can be used for navigation metadata.
     v = _make_visitor()
@@ -417,7 +419,7 @@ def test_toctree_hidden_returns_no_visible_output():
     assert len(v._tocs[0]) == 2
 
 
-def test_toctree_hidden_false_explicit_produces_links():
+def test_toctree_hidden_false_explicit_produces_links() -> None:
     # Passing hidden=False explicitly should behave like the default.
     v = _make_visitor()
     out = v._toctree_handler(argument=None, options={"hidden": False}, content="page1")
@@ -425,7 +427,7 @@ def test_toctree_hidden_false_explicit_produces_links():
     assert len(out[0].children) == 1
 
 
-def test_toctree_maxdepth_option_is_accepted():
+def test_toctree_maxdepth_option_is_accepted() -> None:
     # maxdepth is a common Sphinx option; the handler must not raise.
     v = _make_visitor()
     out = v._toctree_handler(
@@ -435,7 +437,7 @@ def test_toctree_maxdepth_option_is_accepted():
     assert len(out[0].children) == 2
 
 
-def test_toctree_numbered_option_is_accepted():
+def test_toctree_numbered_option_is_accepted() -> None:
     v = _make_visitor()
     out = v._toctree_handler(
         argument=None, options={"numbered": True}, content="chapter1"
@@ -444,7 +446,7 @@ def test_toctree_numbered_option_is_accepted():
     assert len(out[0].children) == 1
 
 
-def test_toctree_titlesonly_option_is_accepted():
+def test_toctree_titlesonly_option_is_accepted() -> None:
     v = _make_visitor()
     out = v._toctree_handler(
         argument=None, options={"titlesonly": True}, content="chapter1"
@@ -453,7 +455,7 @@ def test_toctree_titlesonly_option_is_accepted():
     assert len(out[0].children) == 1
 
 
-def test_toctree_includehidden_option_is_accepted():
+def test_toctree_includehidden_option_is_accepted() -> None:
     v = _make_visitor()
     out = v._toctree_handler(
         argument=None, options={"includehidden": True}, content="chapter1"
@@ -462,20 +464,20 @@ def test_toctree_includehidden_option_is_accepted():
     assert len(out[0].children) == 1
 
 
-def test_toctree_empty_content_returns_empty_bullet_list():
+def test_toctree_empty_content_returns_empty_bullet_list() -> None:
     v = _make_visitor()
     out = v._toctree_handler(argument=None, options={}, content="")
     assert len(out) == 1
     assert len(out[0].children) == 0
 
 
-def test_toctree_empty_content_hidden_returns_empty_list():
+def test_toctree_empty_content_hidden_returns_empty_list() -> None:
     v = _make_visitor()
     out = v._toctree_handler(argument=None, options={"hidden": True}, content="")
     assert out == []
 
 
-def test_toctree_hidden_with_maxdepth_returns_no_visible_output():
+def test_toctree_hidden_with_maxdepth_returns_no_visible_output() -> None:
     # Combining hidden with maxdepth (common in real Sphinx projects) must
     # still suppress inline output.
     v = _make_visitor()
@@ -493,7 +495,7 @@ def test_toctree_hidden_with_maxdepth_returns_no_visible_output():
 # ---------------------------------------------------------------------------
 
 
-def test_replace_unprocessed_directive_drops_sphinx_only(caplog):
+def test_replace_unprocessed_directive_drops_sphinx_only(caplog: Any) -> None:
     v = _make_visitor()
     ud = UnprocessedDirective(
         name="autofunction",
@@ -514,7 +516,7 @@ def test_replace_unprocessed_directive_drops_sphinx_only(caplog):
 # ---------------------------------------------------------------------------
 
 
-def test_image_handler_external_url():
+def test_image_handler_external_url() -> None:
     h = make_image_handler(None, None, "pkg", "1.0")
     out = h("https://example.com/img.png", {"alt": "logo"}, "")
     assert len(out) == 1
@@ -523,14 +525,14 @@ def test_image_handler_external_url():
     assert out[0].alt == "logo"
 
 
-def test_image_handler_external_url_no_alt():
+def test_image_handler_external_url_no_alt() -> None:
     h = make_image_handler(None, None, "pkg", "1.0")
     out = h("https://example.com/img.png", {}, "")
     assert isinstance(out[0], Image)
     assert out[0].alt == ""
 
 
-def test_image_handler_local_without_doc_path_warns(caplog):
+def test_image_handler_local_without_doc_path_warns(caplog: Any) -> None:
     h = make_image_handler(None, None, "pkg", "1.0")
     with caplog.at_level("WARNING", logger="papyri"):
         out = h("images/foo.png", {}, "")
@@ -539,7 +541,7 @@ def test_image_handler_local_without_doc_path_warns(caplog):
     assert any("doc_path" in r.getMessage() for r in caplog.records)
 
 
-def test_image_handler_local_file_stored(tmp_path):
+def test_image_handler_local_file_stored(tmp_path: Any) -> None:
     img_dir = tmp_path / "docs"
     img_dir.mkdir()
     (img_dir / "logo.png").write_bytes(b"\x89PNG fake")
@@ -555,7 +557,7 @@ def test_image_handler_local_file_stored(tmp_path):
     assert stored["logo.png"] == b"\x89PNG fake"
 
 
-def test_image_handler_missing_file_warns(tmp_path, caplog):
+def test_image_handler_missing_file_warns(tmp_path: Any, caplog: Any) -> None:
     stored: dict[str, bytes] = {}
     h = make_image_handler(tmp_path, stored.__setitem__, "pkg", "1.0")
     with caplog.at_level("WARNING", logger="papyri"):
@@ -566,7 +568,7 @@ def test_image_handler_missing_file_warns(tmp_path, caplog):
     assert any("not found" in r.getMessage() for r in caplog.records)
 
 
-def test_image_handler_root_relative_path_stored(tmp_path):
+def test_image_handler_root_relative_path_stored(tmp_path: Any) -> None:
     """``/_images/foo.png`` is resolved relative to doc_root, not doc_path."""
     doc_root = tmp_path / "docs"
     images_dir = doc_root / "_images"
@@ -588,7 +590,7 @@ def test_image_handler_root_relative_path_stored(tmp_path):
     assert stored["unicode_completion.png"] == b"\x89PNG fake"
 
 
-def test_image_handler_root_relative_no_doc_root_warns(caplog):
+def test_image_handler_root_relative_no_doc_root_warns(caplog: Any) -> None:
     stored: dict[str, bytes] = {}
     h = make_image_handler(None, stored.__setitem__, "pkg", "1.0", doc_root=None)
     with caplog.at_level("WARNING", logger="papyri"):
@@ -599,13 +601,13 @@ def test_image_handler_root_relative_no_doc_root_warns(caplog):
     assert any("doc_root" in r.getMessage() for r in caplog.records)
 
 
-def test_image_handler_registered_in_visitor(tmp_path):
+def test_image_handler_registered_in_visitor(tmp_path: Any) -> None:
     """The visitor's _handlers dict should contain an image handler by default."""
     v = _make_visitor()
     assert "image" in v._handlers
 
 
-def test_image_handler_via_visitor_dispatch(tmp_path):
+def test_image_handler_via_visitor_dispatch(tmp_path: Any) -> None:
     """End-to-end: visitor dispatches an image UnprocessedDirective to the handler."""
     img_dir = tmp_path / "docs"
     img_dir.mkdir()
@@ -641,7 +643,7 @@ def test_image_handler_via_visitor_dispatch(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_seealso_directive_produces_admonition():
+def test_seealso_directive_produces_admonition() -> None:
     v = _make_visitor()
     ud = UnprocessedDirective(
         name="seealso",
@@ -657,7 +659,7 @@ def test_seealso_directive_produces_admonition():
     assert out[0].kind == "seealso"
 
 
-def test_seealso_directive_empty_content_produces_admonition():
+def test_seealso_directive_empty_content_produces_admonition() -> None:
     v = _make_visitor()
     ud = UnprocessedDirective(
         name="seealso",
@@ -689,7 +691,7 @@ def _make_visitor_with_targets(doc_targets: dict[str, str]) -> DirectiveVisiter:
     )
 
 
-def test_ref_role_known_label_emits_crossref_to_localref():
+def test_ref_role_known_label_emits_crossref_to_localref() -> None:
     # :ref:`ipythonzmq` with that label in doc_targets must produce a CrossRef
     # pointing at LocalRef("docs", doc_key).
     v = _make_visitor_with_targets({"ipythonzmq": "overview"})
@@ -704,7 +706,7 @@ def test_ref_role_known_label_emits_crossref_to_localref():
     assert cr.value == "ipythonzmq"
 
 
-def test_ref_role_titled_form_uses_explicit_text():
+def test_ref_role_titled_form_uses_explicit_text() -> None:
     # :ref:`custom text <ipythonzmq>` — display text is "custom text",
     # target label is "ipythonzmq".
     v = _make_visitor_with_targets({"ipythonzmq": "overview"})
@@ -718,7 +720,7 @@ def test_ref_role_titled_form_uses_explicit_text():
     assert cr.reference.path == "overview"
 
 
-def test_ref_role_unknown_label_returns_directive_unchanged():
+def test_ref_role_unknown_label_returns_directive_unchanged() -> None:
     # An unresolved :ref: must pass through as an InlineRole rather than crash.
     v = _make_visitor_with_targets({})
     role = InlineRole(domain=None, role="ref", value="no-such-label")
@@ -727,7 +729,7 @@ def test_ref_role_unknown_label_returns_directive_unchanged():
     assert isinstance(out[0], InlineRole)
 
 
-def test_ref_role_cross_doc_resolves_to_correct_doc_key():
+def test_ref_role_cross_doc_resolves_to_correct_doc_key() -> None:
     # Label defined in a different doc within the same bundle.
     v = _make_visitor_with_targets({"zmq-architecture": "internals:zmq"})
     role = InlineRole(domain=None, role="ref", value="zmq-architecture")
@@ -737,7 +739,7 @@ def test_ref_role_cross_doc_resolves_to_correct_doc_key():
     assert cr.reference.path == "internals:zmq"
 
 
-def test_plain_hyperlink_angle_bracket_resolves_doc_target():
+def test_plain_hyperlink_angle_bracket_resolves_doc_target() -> None:
     # Plain RST hyperlink `See below <quickstart.shape-manipulation>`_ where the
     # target matches a known doc anchor. The role is None (no explicit :ref:), so
     # the existing :ref: branch never fires — this exercises the fallback check.
@@ -757,7 +759,7 @@ def test_plain_hyperlink_angle_bracket_resolves_doc_target():
     assert cr.reference.path == "quickstart:shape-manipulation"
 
 
-def test_plain_hyperlink_angle_bracket_unresolved_does_not_crash():
+def test_plain_hyperlink_angle_bracket_unresolved_does_not_crash() -> None:
     # If the target is not in doc_targets, the reference falls through to API
     # resolution; for an unresolvable target it should return the directive
     # unchanged rather than raise.
@@ -772,7 +774,7 @@ def test_plain_hyperlink_angle_bracket_unresolved_does_not_crash():
 # ---------------------------------------------------------------------------
 
 
-def test_target_node_passes_through_generic_visit():
+def test_target_node_passes_through_generic_visit() -> None:
     # Target has no children attribute; generic_visit must not crash and must
     # return the node unchanged.
     v = DirectiveVisiter(
@@ -808,7 +810,7 @@ def _make_visitor_with_external(external_targets: dict[str, str]) -> DirectiveVi
     )
 
 
-def test_named_hyperlink_resolves_to_external_link():
+def test_named_hyperlink_resolves_to_external_link() -> None:
     # `(X)Emacs`_ — bare named reference whose label points to a recorded URL.
     v = _make_visitor_with_external({"(X)Emacs": "http://www.gnu.org/software/emacs/"})
     role = InlineRole(domain=None, role=None, value="(X)Emacs")
@@ -822,7 +824,7 @@ def test_named_hyperlink_resolves_to_external_link():
     assert link.children[0].value == "(X)Emacs"
 
 
-def test_named_hyperlink_angle_bracket_uses_display_text():
+def test_named_hyperlink_angle_bracket_uses_display_text() -> None:
     # `Show <target>`_ — angle-bracket form: display text is "Show", target is
     # "target".
     v = _make_visitor_with_external({"target": "http://example.com/"})
@@ -837,7 +839,7 @@ def test_named_hyperlink_angle_bracket_uses_display_text():
     assert child.value == "Show"
 
 
-def test_embedded_uri_autolink_produces_link():
+def test_embedded_uri_autolink_produces_link() -> None:
     # `<https://example.com/>`_ — embedded URI with no display text. visit_reference
     # in ts.py synthesizes ``uri <uri>`` so replace_InlineRole turns it into a Link
     # with the URI as both display text and target.
@@ -855,7 +857,7 @@ def test_embedded_uri_autolink_produces_link():
     assert child.value == "https://example.com/"
 
 
-def test_simple_hyperlink_reference_trailing_underscore_resolves():
+def test_simple_hyperlink_reference_trailing_underscore_resolves() -> None:
     # Bare ``vim_`` reference. visit_reference keeps the trailing ``_`` in the
     # value because the same shape is also a Python identifier (``np.bool_``).
     # Resolution must strip it when probing external_targets.
@@ -872,7 +874,7 @@ def test_simple_hyperlink_reference_trailing_underscore_resolves():
     assert child.value == "vim"
 
 
-def test_named_hyperlink_unknown_label_falls_through():
+def test_named_hyperlink_unknown_label_falls_through() -> None:
     # Unrecorded label must not be silently turned into a Link; falls through
     # to the existing resolution path (returns directive unchanged).
     v = _make_visitor_with_external({})
@@ -881,7 +883,7 @@ def test_named_hyperlink_unknown_label_falls_through():
     assert len(out) == 1
 
 
-def test_section_with_mixed_children_traverses_target():
+def test_section_with_mixed_children_traverses_target() -> None:
     # Section containing a paragraph, a Target, and another paragraph must
     # survive generic_visit with all three children intact.
     v = DirectiveVisiter(
@@ -909,7 +911,7 @@ def _list_table_content() -> str:
     return "* - Header A\n  - Header B\n* - r1a\n  - r1b\n* - r2a\n  - r2b\n"
 
 
-def test_list_table_basic_shape():
+def test_list_table_basic_shape() -> None:
     out = list_table_handler("", {"header-rows": "1"}, _list_table_content())
     assert len(out) == 1
     table = out[0]
@@ -922,7 +924,7 @@ def test_list_table_basic_shape():
             assert isinstance(cell, TableCell)
 
 
-def test_list_table_header_rows_marks_first_row():
+def test_list_table_header_rows_marks_first_row() -> None:
     out = list_table_handler("", {"header-rows": "1"}, _list_table_content())
     table = out[0]
     assert table.children[0].header is True
@@ -930,13 +932,13 @@ def test_list_table_header_rows_marks_first_row():
     assert table.children[2].header is False
 
 
-def test_list_table_no_header_rows_option_defaults_to_zero():
+def test_list_table_no_header_rows_option_defaults_to_zero() -> None:
     out = list_table_handler("", {}, _list_table_content())
     table = out[0]
     assert all(row.header is False for row in table.children)
 
 
-def test_list_table_cell_contents_are_flow_nodes():
+def test_list_table_cell_contents_are_flow_nodes() -> None:
     out = list_table_handler("", {"header-rows": "1"}, _list_table_content())
     table = out[0]
     cell = table.children[0].children[0]
@@ -948,7 +950,7 @@ def test_list_table_cell_contents_are_flow_nodes():
     assert inline.value == "Header A"
 
 
-def test_list_table_caption_emitted_as_paragraph():
+def test_list_table_caption_emitted_as_paragraph() -> None:
     out = list_table_handler("My Caption", {}, _list_table_content())
     assert len(out) == 2
     caption = out[0]
@@ -959,17 +961,17 @@ def test_list_table_caption_emitted_as_paragraph():
     assert isinstance(out[1], Table)
 
 
-def test_list_table_empty_body_returns_nothing():
+def test_list_table_empty_body_returns_nothing() -> None:
     assert list_table_handler("", {}, "") == []
     assert list_table_handler("", {}, "   \n  \n") == []
 
 
-def test_list_table_registered_on_visitor():
+def test_list_table_registered_on_visitor() -> None:
     v = _make_visitor()
     assert "list-table" in v._handlers
 
 
-def test_list_table_via_full_directive_pipeline():
+def test_list_table_via_full_directive_pipeline() -> None:
     # End-to-end: an UnprocessedDirective for ``list-table`` is dispatched
     # through the visitor and replaced with a structured Table node.
     v = _make_visitor()

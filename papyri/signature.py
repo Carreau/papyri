@@ -7,7 +7,7 @@ from typing import Any
 try:
     import annotationlib
 except ImportError:
-    annotationlib = None
+    annotationlib = None  # type: ignore[assignment]
 
 from .errors import TextSignatureParsingFailed
 from .node_base import Node, register
@@ -51,7 +51,7 @@ class SigParam(Node):
     kind: str
     default: str | NoneType | Empty
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
 
     def to_parameter(self) -> inspect.Parameter:
@@ -83,11 +83,11 @@ class SignatureNode(Node):
     target_name: str
     type = "signature"
 
-    def to_signature(self):
+    def to_signature(self) -> inspect.Signature:
         return inspect.Signature([p.to_parameter() for p in self.parameters])
 
 
-def clean_hexaddress(s):
+def clean_hexaddress(s: str) -> str:
     new = re.sub("0x[0-9a-f]+", "0x0000", s)
     return new
 
@@ -112,7 +112,7 @@ class Signature:
         except Exception as e:
             raise TextSignatureParsingFailed(f"Unable to parse {toexec}") from e
 
-    def __init__(self, target_item):
+    def __init__(self, target_item: Any) -> None:
         """
         Initialize the class.
 
@@ -126,7 +126,7 @@ class Signature:
         if annotationlib is not None:
             self._sig = inspect.signature(
                 target_item,
-                annotation_format=annotationlib.Format.STRING,  # type: ignore[call-arg]
+                annotation_format=annotationlib.Format.STRING,
             )
         else:
             # Python 3.13 fallback: inspect.signature returns evaluated
@@ -207,7 +207,7 @@ class Signature:
         )
 
     @property
-    def parameters(self):
+    def parameters(self) -> Any:
         return self._sig.parameters
 
     @property
@@ -222,11 +222,11 @@ class Signature:
     def is_generator(self) -> bool:
         return inspect.isgenerator(self.target_item)
 
-    def param_default(self, param):
+    def param_default(self, param: str) -> Any:
         return self.parameters.get(param).default
 
     @property
-    def annotations(self) -> bool:
+    def annotations(self) -> dict[str, Any]:
         return self.target_item.__annotations__  # type: ignore[no-any-return]
 
     @property
@@ -243,7 +243,7 @@ class Signature:
         return not self.target_item.__name__.startswith("_")
 
     @property
-    def positional_only_parameter_count(self):
+    def positional_only_parameter_count(self) -> int | None:
         """Number of positional-only parameters in a signature.
         `None` if `obj` has no signature.
         """
@@ -257,7 +257,7 @@ class Signature:
             return None
 
     @property
-    def keyword_only_parameter_count(self):
+    def keyword_only_parameter_count(self) -> int | None:
         """Number of keyword-only parameters in a signature.
         `None` if `obj` has no signature.
         """
@@ -290,5 +290,5 @@ class Signature:
         """
         return json.dumps(self.to_dict(), indent=2, sort_keys=True).encode()
 
-    def __str__(self):
+    def __str__(self) -> str:
         return str(self._sig)

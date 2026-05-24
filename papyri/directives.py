@@ -28,7 +28,7 @@ from .ts import parse
 log = logging.getLogger("papyri")
 
 
-def drop(argument, options, content):
+def drop(argument: str, options: dict[str, str], content: str) -> list[Any]:
     """Directive handler that silently discards the directive and returns nothing.
 
     Register this for any directive whose content should not appear in the IR::
@@ -41,7 +41,7 @@ def drop(argument, options, content):
     return []
 
 
-def warn(argument, options, content):
+def warn(argument: str, options: dict[str, str], content: str) -> list[Any]:
     """Directive handler that silently discards the directive and returns nothing.
 
     Register this for any directive whose content should not appear in the IR::
@@ -55,7 +55,9 @@ def warn(argument, options, content):
     return []
 
 
-def block_math_handler(argument, options, content):
+def block_math_handler(
+    argument: str, options: dict[str, str], content: str
+) -> list[Any]:
     """
     Handler for the block math directive handler.
     """
@@ -75,7 +77,9 @@ def block_math_handler(argument, options, content):
 #  A number of directives that so far are just small wrappers around admonitions.
 
 
-def admonition_helper(name, argument, options, content):
+def admonition_helper(
+    name: str, argument: str | None, options: dict[str, str], content: str | None
+) -> list[Any]:
     """
     This is a helper to return admonition.
     """
@@ -113,27 +117,33 @@ def admonition_helper(name, argument, options, content):
         ]
 
 
-def warning_handler(argument, options, content):
+def warning_handler(argument: str, options: dict[str, str], content: str) -> list[Any]:
     return admonition_helper("warning", argument, options, content)
 
 
-def note_handler(argument, options, content):
+def note_handler(argument: str, options: dict[str, str], content: str) -> list[Any]:
     return admonition_helper("note", argument, options, content)
 
 
-def versionadded_handler(argument, options, content):
+def versionadded_handler(
+    argument: str, options: dict[str, str], content: str
+) -> list[Any]:
     return admonition_helper("versionadded", argument, options, content)
 
 
-def versionchanged_handler(argument, options, content):
+def versionchanged_handler(
+    argument: str, options: dict[str, str], content: str
+) -> list[Any]:
     return admonition_helper("versionchanged", argument, options, content)
 
 
-def deprecated_handler(argument, options, content):
+def deprecated_handler(
+    argument: str, options: dict[str, str], content: str
+) -> list[Any]:
     return admonition_helper("deprecated", argument, options, content)
 
 
-def seealso_handler(argument, options, content):
+def seealso_handler(argument: str, options: dict[str, str], content: str) -> list[Any]:
     return admonition_helper("seealso", argument, options, content)
 
 

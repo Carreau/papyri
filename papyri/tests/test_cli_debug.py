@@ -8,6 +8,7 @@ we can pin it cheaply.
 """
 
 from pathlib import Path
+from typing import Any
 
 from papyri.cli.debug import _print_data_context, _resolve_debug_path
 
@@ -16,20 +17,20 @@ from papyri.cli.debug import _print_data_context, _resolve_debug_path
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_debug_path_returns_direct_existing_file(tmp_path):
+def test_resolve_debug_path_returns_direct_existing_file(tmp_path: Any) -> None:
     p = tmp_path / "doc.cbor"
     p.write_bytes(b"x")
     assert _resolve_debug_path(str(p), tmp_path) == p
 
 
-def test_resolve_debug_path_appends_cbor_suffix(tmp_path):
+def test_resolve_debug_path_appends_cbor_suffix(tmp_path: Any) -> None:
     p = tmp_path / "doc.cbor"
     p.write_bytes(b"x")
     # Caller passes the path without .cbor — resolver should find it.
     assert _resolve_debug_path(str(tmp_path / "doc"), tmp_path) == p
 
 
-def test_resolve_debug_path_checks_data_dir(tmp_path):
+def test_resolve_debug_path_checks_data_dir(tmp_path: Any) -> None:
     (tmp_path / "bundle_1.0").mkdir()
     p = tmp_path / "bundle_1.0" / "module" / "pkg.foo.json"
     p.parent.mkdir()
@@ -41,7 +42,7 @@ def test_resolve_debug_path_checks_data_dir(tmp_path):
     )
 
 
-def test_resolve_debug_path_returns_none_for_missing(tmp_path):
+def test_resolve_debug_path_returns_none_for_missing(tmp_path: Any) -> None:
     assert _resolve_debug_path("nonexistent", tmp_path) is None
 
 
@@ -50,7 +51,7 @@ def test_resolve_debug_path_returns_none_for_missing(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_print_data_context_splits_bundle_dir_name(capsys):
+def test_print_data_context_splits_bundle_dir_name(capsys: Any) -> None:
     rel = Path("numpy_2.3.5/module/numpy.linspace.json")
     _print_data_context(rel)
     out = capsys.readouterr().out
@@ -62,7 +63,7 @@ def test_print_data_context_splits_bundle_dir_name(capsys):
     assert ".json" not in out
 
 
-def test_print_data_context_handles_bundle_without_version(capsys):
+def test_print_data_context_handles_bundle_without_version(capsys: Any) -> None:
     # Defensive: a bundle dir name with no "_" is rare but shouldn't crash.
     rel = Path("weirdbundle/module/pkg.foo")
     _print_data_context(rel)
@@ -72,6 +73,6 @@ def test_print_data_context_handles_bundle_without_version(capsys):
     assert "kind    : module" in out
 
 
-def test_print_data_context_empty_rel_is_noop(capsys):
+def test_print_data_context_empty_rel_is_noop(capsys: Any) -> None:
     _print_data_context(Path(""))
     assert capsys.readouterr().out == ""

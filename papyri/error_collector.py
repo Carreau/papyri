@@ -44,13 +44,18 @@ class ErrorCollector:
         self._qa = qa
         return self
 
-    def __enter__(self):
+    def __enter__(self) -> ErrorCollector:
         self.errored = False
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: object,
+    ) -> bool | None:
         if exc_type in (BaseException, KeyboardInterrupt):
-            return
+            return None
         if exc_type:
             self.errored = True
             ename = exc_type.__name__
@@ -67,3 +72,4 @@ class ErrorCollector:
         expecting = self._expected_unseen.get(self._qa, [])
         if expecting and self.config.fail_unseen_error:
             raise UnseenError(f"Expecting one of {expecting}")
+        return None

@@ -9,19 +9,19 @@ from papyri.errors import UnseenError
 log = logging.getLogger(__name__)
 
 
-def JustPasses():
+def JustPasses() -> None:
     pass
 
 
-def DoesValueError():
+def DoesValueError() -> None:
     raise ValueError("A")
 
 
-def ShouldValueErrorTypeError():
+def ShouldValueErrorTypeError() -> None:
     raise TypeError("B")
 
 
-def test_capture_correct():
+def test_capture_correct() -> None:
     c = Config()
     c.expected_errors = {"ValueError": ["TestIterm"]}
     c.early_error = False
@@ -34,7 +34,7 @@ def test_capture_correct():
     assert ec._unexpected_errors == {"ValueError": ["TestItem"]}
 
 
-def test_pass_no_collect():
+def test_pass_no_collect() -> None:
     c = Config()
     c.expected_errors = {}
     c.early_error = True
@@ -45,7 +45,7 @@ def test_pass_no_collect():
         JustPasses()
 
 
-def test_2():
+def test_2() -> None:
     c = Config()
     c.expected_errors = {"ValueError": ["TestItem"]}
     c.early_error = True
@@ -55,7 +55,7 @@ def test_2():
         JustPasses()
 
 
-def test_4():
+def test_4() -> None:
     c = Config()
     c.expected_errors = {"ValueError": ["TestItem"]}
     c.early_error = False

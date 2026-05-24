@@ -13,6 +13,8 @@ Python encoder produces what that decoder expects.
 
 from __future__ import annotations
 
+from typing import Any
+
 from papyri.nodes import (
     BulletList,
     Code,
@@ -32,16 +34,16 @@ from papyri.nodes import (
 )
 
 
-def _roundtrip(obj):
+def _roundtrip(obj: object) -> Any:
     return encoder.decode(encoder.encode(obj))
 
 
-def test_roundtrip_text():
+def test_roundtrip_text() -> None:
     t = Text("hello")
     assert _roundtrip(t) == t
 
 
-def test_roundtrip_refinfo():
+def test_roundtrip_refinfo() -> None:
     r = RefInfo(module="numpy", version="2.3.5", kind="module", path="numpy:linspace")
     out = _roundtrip(r)
     assert out == r
@@ -49,12 +51,12 @@ def test_roundtrip_refinfo():
     assert out.path == "numpy:linspace"
 
 
-def test_roundtrip_localref():
+def test_roundtrip_localref() -> None:
     lr = LocalRef("docs", "tutorial/intro")
     assert _roundtrip(lr) == lr
 
 
-def test_roundtrip_crossref_with_localref():
+def test_roundtrip_crossref_with_localref() -> None:
     ref = CrossRef(
         "Intro",
         reference=LocalRef("docs", "intro"),
@@ -69,7 +71,7 @@ def test_roundtrip_crossref_with_localref():
     assert out.reference.path == "intro"
 
 
-def test_roundtrip_crossref_with_refinfo():
+def test_roundtrip_crossref_with_refinfo() -> None:
     ri = RefInfo("numpy", "2.3.5", "module", "numpy:linspace")
     ref = CrossRef("linspace", reference=ri, kind="module", anchor=None)
     out = _roundtrip(ref)
@@ -77,7 +79,7 @@ def test_roundtrip_crossref_with_refinfo():
     assert out.reference == ri
 
 
-def test_roundtrip_paragraph_with_mixed_children():
+def test_roundtrip_paragraph_with_mixed_children() -> None:
     p = Paragraph(
         children=[
             Text("A "),
@@ -98,7 +100,7 @@ def test_roundtrip_paragraph_with_mixed_children():
     assert isinstance(out.children[5], InlineCode)
 
 
-def test_roundtrip_code_block():
+def test_roundtrip_code_block() -> None:
     c = Code(value="print('hi')\n", execution_status=None)
     out = _roundtrip(c)
     assert isinstance(out, Code)
@@ -106,7 +108,7 @@ def test_roundtrip_code_block():
     assert out.out == ""
 
 
-def test_roundtrip_code_block_with_output():
+def test_roundtrip_code_block_with_output() -> None:
     c = Code(value="print('hi')\n", execution_status="success", out="hi\n")
     out = _roundtrip(c)
     assert isinstance(out, Code)
@@ -115,7 +117,7 @@ def test_roundtrip_code_block_with_output():
     assert out.out == "hi\n"
 
 
-def test_roundtrip_link_preserves_url():
+def test_roundtrip_link_preserves_url() -> None:
     link = Link(children=[Text("Python")], url="https://python.org/", title="home")
     out = _roundtrip(link)
     assert out.url == "https://python.org/"
@@ -123,7 +125,7 @@ def test_roundtrip_link_preserves_url():
     assert out.children[0].value == "Python"
 
 
-def test_roundtrip_bullet_list():
+def test_roundtrip_bullet_list() -> None:
     bl = BulletList(
         ordered=False,
         start=1,
@@ -139,7 +141,7 @@ def test_roundtrip_bullet_list():
     assert out.ordered is False
 
 
-def test_roundtrip_section_preserves_target():
+def test_roundtrip_section_preserves_target() -> None:
     # Narrative section anchor (Phase 4 B): the target label is used as the
     # HTML id by the viewer. Dropping it in encode/decode breaks in-page
     # navigation.
@@ -156,7 +158,7 @@ def test_roundtrip_section_preserves_target():
     assert out.level == 1
 
 
-def test_roundtrip_toctree_nested():
+def test_roundtrip_toctree_nested() -> None:
     tt = TocTree(
         children=[
             TocTree(children=[], title="Chapter 1", ref=LocalRef("docs", "c1")),
@@ -173,7 +175,7 @@ def test_roundtrip_toctree_nested():
     assert out.children[0].ref.path == "c1"
 
 
-def test_encoder_decode_list_of_nodes():
+def test_encoder_decode_list_of_nodes() -> None:
     # Narrative docs are stored as a list of Section nodes; encode/decode a
     # list too, to cover the top-level container case.
     items = [
@@ -187,7 +189,7 @@ def test_encoder_decode_list_of_nodes():
     assert [s.title for s in out] == [(Text("Sec A"),), (Text("Sec B"),)]
 
 
-def test_encoder_is_byte_deterministic():
+def test_encoder_is_byte_deterministic() -> None:
     # Encoding the same logical IR twice must produce identical bytes:
     # this is the property that makes CBOR files comparable across runs
     # (same source -> same hash). It relies on canonical=True in
@@ -201,7 +203,7 @@ def test_encoder_is_byte_deterministic():
     assert encoder.encode(sec) == encoder.encode(sec)
 
 
-def test_encoder_dict_key_order_does_not_affect_bytes():
+def test_encoder_dict_key_order_does_not_affect_bytes() -> None:
     # A dict-typed Node field encoded with two different insertion orders
     # for the same key/value pairs must yield identical CBOR bytes.
     # We use a Directive's `options` field, which is `dict[str, str]`.

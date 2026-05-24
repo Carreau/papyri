@@ -15,7 +15,7 @@ from papyri.signature import SignatureNode
 all_funcs: list[Callable[..., Any]] = []
 
 
-def add(func):
+def add(func: Callable[..., Any]) -> Callable[..., Any]:
     all_funcs.append(func)
     return func
 
@@ -416,12 +416,12 @@ def function_with_annotation5(a: int, b: int | float) -> bool | None:
     "func",
     all_funcs,
 )
-def test_f1(func):
+def test_f1(func: Callable[..., Any]) -> None:
     so = SignatureObject(func)
     node = so.to_node()
     bytes_ = node.to_json()
     assert json.dumps(json.loads(bytes_), indent=2) == json.dumps(
-        json.loads(func.__doc__), indent=2
+        json.loads(func.__doc__ or ""), indent=2
     )
     node_back = SignatureNode.from_json(bytes_)
     assert node_back == node

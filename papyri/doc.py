@@ -10,6 +10,7 @@ post-link form of the same shape.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Any, ClassVar
 
 from . import ts
@@ -78,7 +79,7 @@ class _OrderedDictProxy:
         self.ordering.remove(key)
         del self.mapping[key]
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[str]:
         return iter(self.ordering)
 
     def keys(self) -> tuple[str, ...]:
@@ -87,10 +88,10 @@ class _OrderedDictProxy:
     def get(self, key: str, default: Any = None, /) -> Any:
         return self.mapping.get(key, default)
 
-    def items(self):
+    def items(self) -> list[tuple[str, Any]]:
         return [(k, self.mapping[k]) for k in self.ordering]
 
-    def values(self):
+    def values(self) -> list[Any]:
         return [self.mapping[k] for k in self.ordering]
 
 
@@ -124,7 +125,7 @@ class GeneratedDoc(Node):
     )
 
     @classmethod
-    def _deserialise(cls, **kwargs):
+    def _deserialise(cls, **kwargs: Any) -> GeneratedDoc:
         try:
             instance = cls(**kwargs)
         except Exception as e:
@@ -133,17 +134,17 @@ class GeneratedDoc(Node):
             setattr(instance, k, v)
         return instance
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         assert not isinstance(self._content, str)
         self._dp = _OrderedDictProxy(self._ordered_sections, self._content)  # type: ignore[arg-type]
 
     @property
-    def ordered_sections(self):
+    def ordered_sections(self) -> tuple[str, ...]:
         return tuple(self._ordered_sections)  # type: ignore[arg-type]
 
     @property
-    def content(self):
+    def content(self) -> _OrderedDictProxy:
         return self._dp
 
     sections: ClassVar[list[str]] = [
@@ -179,10 +180,10 @@ class GeneratedDoc(Node):
     arbitrary: tuple[Section, ...]
     local_refs: tuple[str, ...]
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "<GeneratedDoc ...>"
 
-    def slots(self):
+    def slots(self) -> list[str]:
         # Order tracks the class declaration above (which is what
         # `Node.cbor()` uses via `get_type_hints`); only the field names
         # matter for the attribute-by-attribute copy that ingest readers
@@ -204,7 +205,7 @@ class GeneratedDoc(Node):
         ]
 
     @classmethod
-    def new(cls):
+    def new(cls) -> GeneratedDoc:
         return cls({}, None, [], None, None, None, (), (), None, None, (), ())
 
 

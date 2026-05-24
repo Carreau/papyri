@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import Any
+
 import pytest
 
 from papyri.ts import parse
@@ -18,7 +22,7 @@ from ..nodes import (
         ("numpy.linspace", UnprocessedDirective, 1),
     ],
 )
-def test_parse_blocks(target, type_, at_least):
+def test_parse_blocks(target: str, type_: type[Any], at_least: int) -> None:
     sections = parse(dedent_but_first(get_object(target).__doc__).encode(), "test")
     filtered = [b for section in sections for b in section.children if type(b) == type_]
     assert len(filtered) >= at_least

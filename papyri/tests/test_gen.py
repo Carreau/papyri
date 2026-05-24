@@ -1,6 +1,7 @@
 import tempfile
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -13,16 +14,16 @@ from papyri.utils import strip_clinic_signature
 
 
 @lru_cache
-def ex1():
+def ex1() -> None:
     pass
 
 
-def test_BlockExecutor():
+def test_BlockExecutor() -> None:
     b = BlockExecutor({})
     b.exec("# this is a comment")
 
 
-def test_generated_doc_new():
+def test_generated_doc_new() -> None:
     """ClassVar annotations on GeneratedDoc must not shift positional args.
 
     Regression: adding `sections: ClassVar[list[str]]` caused get_type_hints to
@@ -34,7 +35,7 @@ def test_generated_doc_new():
     assert isinstance(doc._content, dict), doc._content
 
 
-def test_find_beyond_decorators():
+def test_find_beyond_decorators() -> None:
     """test that we find function locations
 
     For example the lru_decorator.
@@ -56,7 +57,7 @@ def test_find_beyond_decorators():
     assert doc.item_file.endswith("test_gen.py")
 
 
-def test_infer():
+def test_infer() -> None:
     pytest.importorskip("scipy")
     from scipy.linalg import LinAlgError
 
@@ -94,7 +95,7 @@ def test_infer():
         ),
     ],
 )
-def test_numpy(module, submodules, objects):
+def test_numpy(module: Any, submodules: Any, objects: Any) -> None:
     config = Config(execute_doctests=False, infer=False, submodules=submodules)
     gen = Gen(dummy_progress=True, config=config)
 
@@ -122,7 +123,7 @@ def test_numpy(module, submodules, objects):
         ),
     ],
 )
-def test_numpy_2(module, submodules, objects):
+def test_numpy_2(module: Any, submodules: Any, objects: Any) -> None:
     config = Config(execute_doctests=False, infer=False, submodules=submodules)
     gen = Gen(dummy_progress=True, config=config)
 
@@ -137,13 +138,13 @@ def test_numpy_2(module, submodules, objects):
         assert gen.data[o].signature is not None
 
 
-def test_self():
+def test_self() -> None:
     from papyri.config_loader import Config
     from papyri.gen import Gen
 
     c = Config(dry_run=True, dummy_progress=True, execute_doctests=False)
     g = Gen(False, config=c)
-    g.collect_package_metadata("papyri", ".", {})
+    g.collect_package_metadata("papyri", Path("."), {})
     g.collect_api_docs("papyri", list({"papyri.examples:example1", "papyri"}))
     assert g.data["papyri.examples:example1"].to_dict()["signature"] == {
         "type": "signature",
@@ -205,11 +206,11 @@ def test_self():
     assert g.data["papyri"].to_dict()["signature"] is None
 
 
-def test_self_2():
+def test_self_2() -> None:
     """RefInfo class should resolve its source file; private methods should not."""
     c = Config(dry_run=True, dummy_progress=True, execute_doctests=False)
     g = Gen(False, config=c)
-    g.collect_package_metadata("papyri", ".", {})
+    g.collect_package_metadata("papyri", Path("."), {})
     g.collect_api_docs(
         "papyri", list({"papyri.nodes:RefInfo", "papyri.nodes:RefInfo.__eq__"})
     )
@@ -220,7 +221,7 @@ def test_self_2():
     assert g.data["papyri.nodes:RefInfo.__eq__"].to_dict()["item_file"] is None
 
 
-def test_normalize_see_also_rst_comment_description():
+def test_normalize_see_also_rst_comment_description() -> None:
     """RST `..` used as placeholder description should yield an empty description.
 
     Some scipy docstrings use bare `..` in See Also sections, e.g.
@@ -246,7 +247,7 @@ def test_normalize_see_also_rst_comment_description():
         )
 
 
-def test_kaiser_bessel_derived_example_has_figure_and_code():
+def test_kaiser_bessel_derived_example_has_figure_and_code() -> None:
     """kaiser_bessel_derived examples must produce at least one figure and one code block.
 
     The docstring contains a matplotlib plot executed via doctest.  We call
@@ -292,7 +293,7 @@ def test_kaiser_bessel_derived_example_has_figure_and_code():
     )
 
 
-def _fn_with_syntax_error_example():
+def _fn_with_syntax_error_example() -> None:
     """A function whose example triggers an unexpected exception.
 
     Examples
@@ -301,7 +302,7 @@ def _fn_with_syntax_error_example():
     """
 
 
-def test_get_example_data_unexpected_exception_is_str():
+def test_get_example_data_unexpected_exception_is_str() -> None:
     """report_unexpected_exception must store a str in GenCode.out.
 
     Regression: previously the raw `(type, value, traceback)` tuple from
@@ -340,7 +341,7 @@ def test_get_example_data_unexpected_exception_is_str():
     )
 
 
-def test_normalize_see_also_real_description():
+def test_normalize_see_also_real_description() -> None:
     """Real descriptions (non-comment) should be preserved."""
     from papyri.nodes import Paragraph
 
@@ -358,32 +359,32 @@ def test_normalize_see_also_real_description():
 # ---------------------------------------------------------------------------
 
 
-def test_strip_clinic_signature_strips_prefix():
+def test_strip_clinic_signature_strips_prefix() -> None:
     doc = "MyClass(x, y=1)\n--\n\nDescription here."
     assert strip_clinic_signature(doc) == "Description here."
 
 
-def test_strip_clinic_signature_no_prefix():
+def test_strip_clinic_signature_no_prefix() -> None:
     doc = "Just a plain docstring.\n\nNo clinic header."
     assert strip_clinic_signature(doc) == doc
 
 
-def test_strip_clinic_signature_double_dash_not_on_line2():
+def test_strip_clinic_signature_double_dash_not_on_line2() -> None:
     # '--' appearing later in the doc must not be stripped
     doc = "First line.\nSecond line.\n--\n\nBody."
     assert strip_clinic_signature(doc) == doc
 
 
-def test_strip_clinic_signature_empty():
+def test_strip_clinic_signature_empty() -> None:
     assert strip_clinic_signature("") == ""
 
 
-def test_strip_clinic_signature_only_header_no_body():
+def test_strip_clinic_signature_only_header_no_body() -> None:
     doc = "Func()\n--\n"
     assert strip_clinic_signature(doc) == ""
 
 
-def test_strip_clinic_signature_leading_blank_stripped():
+def test_strip_clinic_signature_leading_blank_stripped() -> None:
     # Body typically starts with a blank line after '--'; that blank is removed.
     doc = "Func(a, b)\n--\n\nActual body."
     result = strip_clinic_signature(doc)
@@ -404,7 +405,7 @@ def test_strip_clinic_signature_leading_blank_stripped():
         "numpy.dtypes:Int8DType",
     ],
 )
-def test_clinic_signature_objects_are_generated(qa):
+def test_clinic_signature_objects_are_generated(qa: Any) -> None:
     """C extension types whose __doc__ has a clinic prefix must not be skipped.
 
     Before the fix, extract_docstring raised TreeSitterParseError for these

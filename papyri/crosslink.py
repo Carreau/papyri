@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import warnings
 from dataclasses import dataclass
+from typing import Any
 
 from rich.logging import RichHandler
 
@@ -71,21 +72,21 @@ class IngestedDoc(Node):
     arbitrary: list[Section]
     local_refs: list[str]
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._dp = _OrderedDictProxy(self._ordered_sections, self._content)
 
     @property
-    def ordered_sections(self):
+    def ordered_sections(self) -> tuple[str, ...]:
         return tuple(self._ordered_sections)
 
     @property
-    def content(self):
+    def content(self) -> _OrderedDictProxy:
         """
         A property to the dict proxy
         """
         return self._dp
 
     @classmethod
-    def new(cls):
+    def new(cls) -> IngestedDoc:
         return cls({}, [], None, None, None, [], None, None, None, None, None, None, [])

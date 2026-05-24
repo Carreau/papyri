@@ -293,7 +293,7 @@ async def example1(
     return "ok"
 
 
-def example2():
+def example2() -> None:
     """
     Examples
     --------
@@ -321,14 +321,14 @@ def example2():
     pass
 
 
-def dummy():
+def dummy() -> None:
     """
     I have no docs.
     """
     pass
 
 
-def test_duplicate_see_also():
+def test_duplicate_see_also() -> None:
     """
     There are cases where see also has two identical elements
 
@@ -342,7 +342,7 @@ def test_duplicate_see_also():
     pass
 
 
-def example_3():
+def example_3() -> None:
     """
     This show that we support *emph* and **strong**.
 
@@ -368,7 +368,7 @@ def example_3():
     """
 
 
-def example_with_citations():
+def example_with_citations() -> None:
     """
     Example with inline citation references.
 
@@ -396,7 +396,7 @@ def example_with_citations():
     pass
 
 
-def example_backtick_suffix():
+def example_backtick_suffix() -> None:
     """
     Edge cases: interpreted text with trailing alphabetic suffix.
 

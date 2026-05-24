@@ -61,7 +61,7 @@ export default function NodesPanel({ pkg, ver, nodetype }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const apiPath = pkg && ver ? `/api/${pkg}/${ver}/nodes.json` : `/api/nodes.json`;
-  const basePath = pkg && ver ? `/${pkg}/${ver}/nodes` : `/nodes`;
+  const basePath = pkg && ver ? `/project/${pkg}/${ver}/nodes` : `/nodes`;
 
   useEffect(() => {
     const u = new URL(apiPath, window.location.origin);

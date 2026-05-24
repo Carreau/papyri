@@ -21,7 +21,7 @@ def add(func: Callable[..., Any]) -> Callable[..., Any]:
 
 
 @add
-def function_1(posonly, /, pos_or_k, pos_ok_k_d=1, *varargs, **varkwargs):  # type: ignore[no-untyped-def]
+def function_1(posonly, /, pos_or_k, pos_ok_k_d=1, *varargs, **varkwargs):
     """{
       "kind": "function",
       "parameters": [
@@ -90,7 +90,7 @@ def function_1(posonly, /, pos_or_k, pos_ok_k_d=1, *varargs, **varkwargs):  # ty
 
 
 @add
-def async_function_2(posonly, /, pos_or_k, pos_ok_k_d=1, *varargs, **varkwargs):  # type: ignore[no-untyped-def]
+def async_function_2(posonly, /, pos_or_k, pos_ok_k_d=1, *varargs, **varkwargs):
     """{
       "kind": "function",
       "parameters": [
@@ -159,7 +159,7 @@ def async_function_2(posonly, /, pos_or_k, pos_ok_k_d=1, *varargs, **varkwargs):
 
 
 @add
-def generator_function_3(posonly, /, pos_or_k, pos_ok_k_d=1, *varargs, **varkwargs):  # type: ignore[no-untyped-def]
+def generator_function_3(posonly, /, pos_or_k, pos_ok_k_d=1, *varargs, **varkwargs):
     """{
       "kind": "generator function",
       "parameters": [
@@ -228,7 +228,7 @@ def generator_function_3(posonly, /, pos_or_k, pos_ok_k_d=1, *varargs, **varkwar
 
 
 @add
-async def async_generator_function_4(  # type: ignore[no-untyped-def]
+async def async_generator_function_4(
     posonly, /, pos_or_k, pos_ok_k_d=1, *varargs, **varkwargs
 ):
     """{
@@ -299,7 +299,7 @@ async def async_generator_function_4(  # type: ignore[no-untyped-def]
 
 
 @add
-async def coroutine_function_5(  # type: ignore[no-untyped-def]
+async def coroutine_function_5(
     posonly, /, pos_or_k, pos_ok_k_d=1, *varargs, **varkwargs
 ):
     """{

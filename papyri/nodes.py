@@ -675,9 +675,7 @@ class RefInfo(Node):
         return iter([self.module, self.version, self.kind, self.path])
 
     @classmethod
-    def from_untrusted(
-        cls, module: str, version: str, kind: str, path: str
-    ) -> RefInfo:
+    def from_untrusted(cls, module: str, version: str, kind: str, path: str) -> RefInfo:
         assert ":" not in module
         return cls(module, version, kind, path)
 

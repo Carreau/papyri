@@ -55,6 +55,15 @@ const DB_CHUNK_SIZE = 500;
 // `inspect.getfile()` returning different absolute paths across environments.
 const VOLATILE_FIELDS_BY_TYPE: Record<string, ReadonlySet<string>> = {
   IngestedDoc: new Set(["item_line", "item_file"]),
+  // Figure.value is a RefInfo pointing into the bundle's `assets/`
+  // directory. The underlying image bytes (matplotlib output, embedded
+  // PNGs, etc.) are non-deterministic across rebuilds, so the asset
+  // identity churns and would otherwise propagate into every containing
+  // doc/section/example digest. Null the RefInfo for hashing — Figure
+  // presence and ordering still count, only the asset identity is
+  // volatile. Image.url is the same story for narrative `.. image::`.
+  Figure: new Set(["value"]),
+  Image: new Set(["url"]),
 };
 
 function stripVolatileFields<T>(node: T): T {
@@ -331,6 +340,7 @@ export class Ingester {
         { module: root, version, kind: "examples", path: name },
         encode(section),
         collectForwardRefsFromSection(section),
+        encode(stripVolatileFields(section)),
       );
     }
     if (exEntries.length > 0) {
@@ -378,6 +388,7 @@ export class Ingester {
         { module: root, version, kind: "docs", path: name },
         encode(ingestedDoc),
         collectForwardRefs(ingestedDoc),
+        encode(stripVolatileFields(ingestedDoc)),
       );
       docCount++;
     }
@@ -742,6 +753,7 @@ export class Ingester {
         { module: root, version, kind: "examples", path: f.name },
         encode(section),
         refs,
+        encode(stripVolatileFields(section)),
       );
       count++;
     }
@@ -818,6 +830,7 @@ export class Ingester {
           { module: root, version, kind: "docs", path: qa },
           encode(ingestedDoc),
           refs,
+          encode(stripVolatileFields(ingestedDoc)),
         );
         count++;
       }

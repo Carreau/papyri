@@ -471,7 +471,9 @@ class DFSCollector:
     def visit_FunctionType(self, fun: Any, stack: list[str]) -> None:
         pass
 
-    def compute_aliases(self) -> tuple[dict[FullQual, Canonical], list[Any]]:
+    def compute_aliases(
+        self,
+    ) -> tuple[dict[FullQual, Canonical], list[tuple[str, list[str]]]]:
         aliases = {}
         not_found = []
         for k, v in self.aliases.items():
@@ -628,7 +630,7 @@ class PapyriDocTestRunner(doctest.DocTestRunner):
 
         self.figs: list[tuple[str, bytes]] = []
 
-    def _get_tok_entries(self, example: Any) -> list[Any]:
+    def _get_tok_entries(self, example: Any) -> list[GenToken]:
         entries = parse_script(
             example.source, ns=self.globs, prev="", config=self.config, where=self.qa
         )

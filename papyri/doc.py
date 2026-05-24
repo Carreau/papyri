@@ -228,7 +228,7 @@ def _numpy_data_to_section(
         return Section([], (Text(title),))
 
 
-def _normalize_see_also(see_also: Section, qa: str) -> tuple[SeeAlsoItem, ...]:
+def _normalize_see_also(see_also: Any, qa: str) -> tuple[SeeAlsoItem, ...]:
     """
     numpydoc is complex, the See Also fields can be quite complicated,
     so here we sort of try to normalise them.

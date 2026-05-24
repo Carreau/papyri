@@ -780,7 +780,7 @@ class Section(Node):
         return len(self.children)
 
 
-def section_title_text(title: tuple[Any, ...]) -> str:
+def section_title_text(title: tuple[PhrasingContent, ...]) -> str:
     """Plain-text projection of a Section.title for places that need a string
     (tab title, slug source, comparison against canonical numpydoc section
     names). Walks the inline tree and concatenates text content."""
@@ -1059,7 +1059,7 @@ def get_object(qual: str) -> Any:
     return obj
 
 
-def parse_rst_section(text: str, qa: str) -> list[Any]:
+def parse_rst_section(text: str, qa: str) -> list[SectionContent]:
     """
     This should at some point be completely replaced by tree sitter.
     in particular `from ts import parse`
@@ -1115,6 +1115,33 @@ FlowContent: TypeAlias = (
 )
 
 ListContent: TypeAlias = ListItem
+
+SectionContent: TypeAlias = (
+    DefList
+    | FieldList
+    | Figure
+    | Admonition
+    | Blockquote
+    | Code
+    | Comment
+    | BulletList
+    | Math
+    | Directive
+    | UnprocessedDirective
+    | Paragraph
+    | Target
+    | Text
+    | ThematicBreak
+    | Options
+    | Parameters
+    | SubstitutionDef
+    | SubstitutionRef
+    | Unimplemented
+    | UnimplementedInline
+    | Citation
+    | Footnote
+    | Table
+)
 
 
 class Encoder:

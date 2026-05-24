@@ -939,8 +939,8 @@ section.backrefs ul.qualnames {
   font-size: 0.8rem;
 }
 
-/* Nested toc. Two levels are enough for papyri's current trees; deeper
-   nesting inherits padding from the parent <ul>. */
+/* Nested toc. Rendered recursively — each nested <ul> indents from its
+   parent via the descendant selector below. */
 .sidebar-toc {
   font-size: 0.8rem;
 }

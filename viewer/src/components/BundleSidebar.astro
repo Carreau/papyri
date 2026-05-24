@@ -4,6 +4,7 @@
 // view-model in `nav.ts`; API is the per-bundle search island + the compact
 // qualname list.
 import BundleSearch from "./BundleSearch.tsx";
+import BundleSidebarTocItem from "./BundleSidebarTocItem.astro";
 import { linkForDoc, linkForQualname } from "../lib/links.ts";
 import {
   qualnameAncestors,
@@ -75,18 +76,29 @@ function isExampleActive(path: string): boolean {
   return activeExamplePath === path;
 }
 
-function isTocActive(item: TocItem): boolean {
-  // Match the active doc path against the toc ref's href. Cheap check that
-  // avoids re-parsing URLs.
-  if (!item.href || !activeDocPath) return false;
-  return item.href === linkForDoc(nav.pkg, nav.version, activeDocPath);
+// Resolve the active doc to an href so the toc walker can compare against
+// the same href strings it renders into links.
+const activeTocHref = activeDocPath ? linkForDoc(nav.pkg, nav.version, activeDocPath) : null;
+
+// Collect every TocItem href on the path from the root down to the active
+// item. Each ancestor on that path needs its children expanded so the
+// active entry stays visible no matter how deep it sits.
+function collectExpandedHrefs(items: TocItem[], target: string | null): Set<string> {
+  const expanded = new Set<string>();
+  if (!target) return expanded;
+  function walk(item: TocItem): boolean {
+    let onPath = item.href === target;
+    for (const child of item.children) {
+      if (walk(child)) onPath = true;
+    }
+    if (onPath && item.href !== null) expanded.add(item.href);
+    return onPath;
+  }
+  for (const item of items) walk(item);
+  return expanded;
 }
 
-function isTocSectionExpanded(item: TocItem): boolean {
-  // Expand children only when we're inside this section (the item itself or
-  // one of its direct children is the active page).
-  return isTocActive(item) || item.children.some((child) => isTocActive(child));
-}
+const expandedTocHrefs = collectExpandedHrefs(nav.toc, activeTocHref);
 ---
 
 <aside class="bundle-sidebar" aria-label="Bundle navigation">
@@ -117,22 +129,11 @@ function isTocSectionExpanded(item: TocItem): boolean {
         {hasToc ? (
           <ul class="sidebar-list sidebar-toc">
             {nav.toc.map((item) => (
-              <li class={isTocActive(item) ? "is-active" : undefined}>
-                {item.href ? <a href={item.href}>{item.title}</a> : <span>{item.title}</span>}
-                {item.children.length > 0 && isTocSectionExpanded(item) ? (
-                  <ul class="sidebar-list sidebar-toc">
-                    {item.children.map((child) => (
-                      <li class={isTocActive(child) ? "is-active" : undefined}>
-                        {child.href ? (
-                          <a href={child.href}>{child.title}</a>
-                        ) : (
-                          <span>{child.title}</span>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </li>
+              <BundleSidebarTocItem
+                item={item}
+                activeHref={activeTocHref}
+                expandedHrefs={expandedTocHrefs}
+              />
             ))}
           </ul>
         ) : (

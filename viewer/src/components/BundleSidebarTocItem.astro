@@ -1,0 +1,34 @@
+---
+// Recursive renderer for one TocItem in the bundle sidebar. Walks `children`
+// of arbitrary depth so deeply-nested toctrees stay navigable. A node is
+// rendered "open" (children visible) when it is the active page or any of
+// its descendants is — the caller computes that set once and passes hrefs
+// in `expandedHrefs`.
+import type { TocItem } from "../lib/nav.ts";
+import Self from "./BundleSidebarTocItem.astro";
+
+interface Props {
+  item: TocItem;
+  activeHref: string | null;
+  expandedHrefs: Set<string>;
+}
+
+const { item, activeHref, expandedHrefs } = Astro.props;
+
+const isActive = item.href !== null && item.href === activeHref;
+const isExpanded = item.href !== null && expandedHrefs.has(item.href);
+const showChildren = item.children.length > 0 && (isExpanded || isActive);
+---
+
+<li class={isActive ? "is-active" : undefined}>
+  {item.href ? <a href={item.href}>{item.title}</a> : <span>{item.title}</span>}
+  {
+    showChildren ? (
+      <ul class="sidebar-list sidebar-toc">
+        {item.children.map((child) => (
+          <Self item={child} activeHref={activeHref} expandedHrefs={expandedHrefs} />
+        ))}
+      </ul>
+    ) : null
+  }
+</li>

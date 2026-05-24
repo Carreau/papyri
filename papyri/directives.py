@@ -11,6 +11,7 @@ from .nodes import (
     Admonition,
     AdmonitionTitle,
     BulletList,
+    Code,
     Figure,
     Image,
     ListItem,
@@ -53,6 +54,22 @@ def warn(argument: str, options: dict[str, str], content: str) -> list[Any]:
     # TODO: in directive handler pass the name of the current directive ?
     log.warning(".. directive ignored (name missing) ")
     return []
+
+
+def code_handler(argument: str, options: dict[str, str], content: str) -> list[Any]:
+    """Directive handler that wraps the directive body in a ``Code`` node.
+
+    Registered by default for ``code``, ``code-block``, and ``sourcecode``.
+    Also useful for domain-specific code directives — for example, the
+    IPython Sphinx extension's ``.. ipython::``::
+
+        [global.directives]
+        ipython = 'papyri.directives:code_handler'
+
+    The directive argument (the lexer name, e.g. ``python`` or ``ipython``)
+    is currently ignored — ``Code`` does not yet carry a language hint.
+    """
+    return [Code(content)]
 
 
 def block_math_handler(

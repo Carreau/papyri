@@ -20,7 +20,9 @@ narrative_exclude = [
 get_ipython = 'IPython:get_ipython'
 
 [global.directives]
-ipython   = 'papyri.directives:warn'
+# ``.. ipython::`` blocks (from the IPython Sphinx extension) are code
+# sessions — capture them as Code nodes rather than dropping them.
+ipython   = 'papyri.directives:code_handler'
 automodule   = 'papyri.directives:warn'
 automethod   = 'papyri.directives:warn'
 

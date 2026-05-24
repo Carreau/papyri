@@ -679,6 +679,10 @@ class DirectiveVisiter(TreeReplacer):
             "versionchanged": versionchanged_handler,
             "deprecated": deprecated_handler,
             "code-block": self._code_handler,
+            # Docutils alias of ``code-block``; common in IPython/Sphinx docs
+            # as ``.. sourcecode:: ipython``.
+            "sourcecode": self._code_handler,
+            "code": self._code_handler,
             "list-table": list_table_handler,
             "rubric": rubric_handler,
             "only": only_handler,

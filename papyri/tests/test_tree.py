@@ -11,6 +11,7 @@ Covered surfaces:
 - ``rubric_handler`` (unnumbered section heading → Admonition(kind="rubric"))
 - ``only_handler`` (conditional block → include when html, drop otherwise)
 - ``literalinclude_handler`` (drop with warning)
+- ``make_include_handler`` (RST file inclusion)
 - ``csv_table_handler`` (CSV table → Table node)
 - ``Target`` leaf-node traversal (no crash when Target appears in section children)
 """
@@ -26,6 +27,7 @@ from papyri.directives import (
     list_table_handler,
     literalinclude_handler,
     make_image_handler,
+    make_include_handler,
     only_handler,
     rubric_handler,
 )
@@ -1172,6 +1174,162 @@ def test_csv_table_via_visitor_dispatch():
     tables = [x for x in out if isinstance(x, Table)]
     assert len(tables) == 1
     assert len(tables[0].children) == 2
+
+
+# ---------------------------------------------------------------------------
+# make_include_handler
+# ---------------------------------------------------------------------------
+
+
+def test_include_no_doc_path_warns(caplog, tmp_path):
+    handler = make_include_handler(doc_path=None, doc_root=None)
+    with caplog.at_level("WARNING", logger="papyri"):
+        out = handler("some/file.rst", {}, "")
+    assert out == []
+    assert any("include" in r.getMessage() for r in caplog.records)
+
+
+def test_include_missing_file_warns(caplog, tmp_path):
+    handler = make_include_handler(doc_path=tmp_path, doc_root=None)
+    with caplog.at_level("WARNING", logger="papyri"):
+        out = handler("nonexistent.rst", {}, "")
+    assert out == []
+    assert any("include" in r.getMessage() for r in caplog.records)
+
+
+def test_include_empty_argument_warns(caplog, tmp_path):
+    handler = make_include_handler(doc_path=tmp_path, doc_root=None)
+    with caplog.at_level("WARNING", logger="papyri"):
+        out = handler("", {}, "")
+    assert out == []
+    assert any("include" in r.getMessage() for r in caplog.records)
+
+
+def test_include_basic_rst(tmp_path):
+    rst_file = tmp_path / "fragment.rst"
+    rst_file.write_text("Hello world.\n", encoding="utf-8")
+    handler = make_include_handler(doc_path=tmp_path, doc_root=None)
+    out = handler("fragment.rst", {}, "")
+    # parse() returns Section nodes; the handler returns them as-is
+    assert len(out) >= 1
+    assert isinstance(out[0], Section)
+
+
+def test_include_returns_parsed_nodes(tmp_path):
+    rst_file = tmp_path / "frag.rst"
+    rst_file.write_text("Some included paragraph.\n", encoding="utf-8")
+    handler = make_include_handler(doc_path=tmp_path, doc_root=None)
+    out = handler("frag.rst", {}, "")
+    # Flatten all children from all returned sections and check for Text content
+    all_text = [
+        item.value
+        for section in out
+        for child in section.children
+        if isinstance(child, Paragraph)
+        for item in child.children
+        if isinstance(item, Text)
+    ]
+    assert any("included" in t for t in all_text)
+
+
+def test_include_start_line_option(tmp_path):
+    rst_file = tmp_path / "lines.rst"
+    rst_file.write_text("line0\n\nline1\n\nline2\n", encoding="utf-8")
+    handler = make_include_handler(doc_path=tmp_path, doc_root=None)
+    out = handler("lines.rst", {"start-line": "2"}, "")
+    # Content from line index 2 onward — "line1\n\nline2\n"
+    flat = _flatten_text(out)
+    assert "line0" not in flat
+    assert "line2" in flat
+
+
+def test_include_end_line_option(tmp_path):
+    rst_file = tmp_path / "lines.rst"
+    rst_file.write_text("line0\n\nline1\n\nline2\n", encoding="utf-8")
+    handler = make_include_handler(doc_path=tmp_path, doc_root=None)
+    out = handler("lines.rst", {"end-line": "2"}, "")
+    # Content up to (not including) line index 2 — "line0\n\n"
+    flat = _flatten_text(out)
+    assert "line0" in flat
+    assert "line2" not in flat
+
+
+def test_include_start_after_option(tmp_path):
+    rst_file = tmp_path / "sa.rst"
+    rst_file.write_text("BEFORE\n\nAFTER TEXT\n", encoding="utf-8")
+    handler = make_include_handler(doc_path=tmp_path, doc_root=None)
+    out = handler("sa.rst", {"start-after": "BEFORE"}, "")
+    flat = _flatten_text(out)
+    assert "BEFORE" not in flat
+    assert "AFTER TEXT" in flat
+
+
+def test_include_end_after_option(tmp_path):
+    rst_file = tmp_path / "ea.rst"
+    rst_file.write_text("KEEP THIS\n\nSTOP HERE\n\nDROP THIS\n", encoding="utf-8")
+    handler = make_include_handler(doc_path=tmp_path, doc_root=None)
+    out = handler("ea.rst", {"end-after": "STOP HERE"}, "")
+    flat = _flatten_text(out)
+    assert "KEEP THIS" in flat
+    assert "STOP HERE" in flat
+    assert "DROP THIS" not in flat
+
+
+def test_include_absolute_path_with_doc_root(tmp_path):
+    doc_root = tmp_path / "docs"
+    doc_root.mkdir()
+    (doc_root / "shared.rst").write_text("Shared content.\n", encoding="utf-8")
+    handler = make_include_handler(doc_path=None, doc_root=doc_root)
+    out = handler("/shared.rst", {}, "")
+    assert len(out) >= 1
+
+
+def test_include_absolute_path_no_doc_root_warns(caplog, tmp_path):
+    handler = make_include_handler(doc_path=tmp_path, doc_root=None)
+    with caplog.at_level("WARNING", logger="papyri"):
+        out = handler("/absolute/path.rst", {}, "")
+    assert out == []
+    assert any("include" in r.getMessage() for r in caplog.records)
+
+
+def test_include_registered_on_visitor():
+    v = _make_visitor()
+    assert "include" in v._handlers
+
+
+def test_include_via_visitor_dispatch(tmp_path):
+    rst_file = tmp_path / "snippet.rst"
+    rst_file.write_text("Dispatched content.\n", encoding="utf-8")
+    v = DirectiveVisiter(
+        qa="pkg.mod",
+        known_refs=frozenset(),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+        doc_path=tmp_path,
+    )
+    up = UnprocessedDirective(
+        name="include",
+        args="snippet.rst",
+        options={},
+        value="",
+        children=(),
+        raw="",
+    )
+    out = v.replace_UnprocessedDirective(up)
+    flat = _flatten_text(out)
+    assert "Dispatched" in flat
+
+
+def _flatten_text(nodes: list[Any]) -> str:
+    """Recursively collect all Text node values from a list of IR nodes."""
+    parts: list[str] = []
+    for node in nodes:
+        if isinstance(node, Text):
+            parts.append(node.value)
+        elif hasattr(node, "children") and node.children:
+            parts.append(_flatten_text(list(node.children)))
+    return " ".join(parts)
 
 
 # ---------------------------------------------------------------------------

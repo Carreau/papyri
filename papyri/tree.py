@@ -19,6 +19,7 @@ from .directives import (
     list_table_handler,
     literalinclude_handler,
     make_image_handler,
+    make_include_handler,
     note_handler,
     only_handler,
     rubric_handler,
@@ -729,6 +730,10 @@ class DirectiveVisiter(TreeReplacer):
             make_image_handler(
                 doc_path, asset_store, self.module, self.version, doc_root
             ),
+        )
+        self._handlers.setdefault(
+            "include",
+            make_include_handler(doc_path, doc_root),
         )
 
     def collect_substitutions(self, *sections: Section) -> None:

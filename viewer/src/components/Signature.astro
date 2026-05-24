@@ -44,7 +44,10 @@ const kindBadge = sigKindBadge(signature.kind, itemType);
               <span class="sig-punct">,&nbsp;</span>
             </>
           ) : null}
-          <span class={`sig-param sig-kind-${e.param.kind.toLowerCase()}`}>
+          <span
+            class={`sig-param sig-kind-${e.param.kind.toLowerCase()}`}
+            data-param={e.param.name}
+          >
             {e.param.kind === "VAR_POSITIONAL" ? <span class="sig-stars">*</span> : null}
             {e.param.kind === "VAR_KEYWORD" ? <span class="sig-stars">**</span> : null}
             <span class="sig-param-name">{e.param.name}</span>
@@ -84,3 +87,25 @@ const kindBadge = sigKindBadge(signature.kind, itemType);
     }
   </code>
 </div>
+
+<script>
+  // Highlight all param-ref tokens and the matching sig-param on hover.
+  // Uses event delegation on document so it works after Astro view transitions.
+  function paramHighlight(e: Event) {
+    const target = e.target as HTMLElement | null;
+    if (!target) return;
+    const ref = target.closest<HTMLElement>("[data-param]");
+    const name = ref?.dataset.param;
+    if (!name) return;
+
+    const active = e.type === "mouseenter" || e.type === "focusin";
+    document
+      .querySelectorAll<HTMLElement>(`[data-param="${CSS.escape(name)}"]`)
+      .forEach((el) => el.classList.toggle("param-highlight", active));
+  }
+
+  document.addEventListener("mouseenter", paramHighlight, true);
+  document.addEventListener("mouseleave", paramHighlight, true);
+  document.addEventListener("focusin", paramHighlight, true);
+  document.addEventListener("focusout", paramHighlight, true);
+</script>

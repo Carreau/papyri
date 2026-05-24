@@ -316,6 +316,19 @@ class TableCell(Node):
     children: tuple[FlowContent | PhrasingContent, ...] = field(default_factory=tuple)
 
 
+@register(4071)
+class ParamRef(Node):
+    """Inline reference to a named parameter in the enclosing function's signature.
+
+    Emitted when ``:param:`name``` is used in a docstring to call out a
+    sibling parameter.  ``name`` is the bare identifier (no backticks, no
+    leading stars).  The viewer highlights every ``ParamRef`` sharing the
+    same ``name`` and the corresponding entry in the rendered signature.
+    """
+
+    name: str
+
+
 # ---- Document AST nodes -----------------------------------------------------
 #
 # Previously split into two modules; merged here to eliminate a circular
@@ -1084,6 +1097,7 @@ StaticPhrasingContent: TypeAlias = (
     | InlineMath
     | InlineRole
     | CrossRef
+    | ParamRef
     | CitationReference
     | FootnoteReference
     | SubstitutionRef

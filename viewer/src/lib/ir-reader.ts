@@ -213,6 +213,12 @@ export interface EmptyNode {
   __tag: 4031;
 }
 
+export interface ParamRefT {
+  __type: "ParamRef";
+  __tag: 4071;
+  name: string;
+}
+
 export interface SignatureNodeT {
   __type: "SignatureNode";
   __tag: 4029;

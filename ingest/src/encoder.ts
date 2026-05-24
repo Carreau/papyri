@@ -133,6 +133,9 @@ export const FIELD_ORDER: Readonly<Record<number, { name: string; fields: readon
   4067: { name: "Footnote", fields: ["label", "children"] },
   4068: { name: "TableRow", fields: ["header", "children"] },
   4069: { name: "TableCell", fields: ["children"] },
+  // ParamRef (tag 4071): inline reference to a named parameter in the enclosing
+  // function's signature.  Source of truth: papyri/nodes.py ParamRef.
+  4071: { name: "ParamRef", fields: ["name"] },
   // Bundle (tag 4070): top-level publishable artifact written by `papyri pack`.
   // Source of truth: papyri/bundle.py.  Field order MUST match the Python
   // class declaration; pack_format_version + ir_schema_version come first

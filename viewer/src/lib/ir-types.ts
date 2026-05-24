@@ -40,6 +40,7 @@ export const IR_TYPE_NAMES: readonly string[] = [
   "SignatureNode",
   "SigParam",
   "Empty",
+  "ParamRef",
   "DefList",
   "Options",
   "FieldList",

@@ -82,9 +82,30 @@ service *could* be built later without a breaking change to the IR.
    Run `python -m pytest` (not bare `pytest`) so the editable install's
    interpreter is used. If `papyri.db` complains about schema, `rm -rf
    ~/.papyri/ingest/` and re-upload to a fresh viewer instance.
-6. **Run linters and formatters before every commit — before pushing.**
-   Waiting for CI to report a formatting or lint failure is wasteful.
-   Run all of these locally and fix any issues first:
+6. **Enable the pre-commit hook — required before your first commit.**
+   The repo ships `.pre-commit-config.yaml` that runs every linter and
+   formatter listed below automatically on `git commit`. Run this **once
+   per clone** (or at the start of every session) before you make any
+   commits:
+   ```
+   pre-commit install
+   ```
+   Without this step the hook is not wired into `.git/hooks/pre-commit`
+   and nothing stops an unformatted commit from reaching CI.
+   **Never bypass it with `--no-verify`.**
+
+   The hook covers: ruff format + lint (Python), mypy (Python),
+   Prettier + ESLint + tsc type-check (viewer and ingest).
+
+   If a hook auto-fixes files (ruff, Prettier), re-stage those files and
+   run `git commit` again — the hook passes once all files are clean.
+
+   To run the checks manually without committing:
+   ```
+   pre-commit run --all-files
+   ```
+
+   For reference, the individual commands are:
 
    **Python** (always, even for viewer-only changes):
    ```
@@ -92,7 +113,6 @@ service *could* be built later without a breaking change to the IR.
    ruff check papyri/
    mypy papyri/
    ```
-   `ruff format` rewrites files in place; re-stage any files it touches.
 
    **Viewer** (when `viewer/` files changed):
    ```
@@ -102,7 +122,6 @@ service *could* be built later without a breaking change to the IR.
    pnpm run lint                    # ESLint — fix any errors (warnings are OK)
    pnpm run check                   # TS type check — must report 0 errors
    ```
-   Re-stage any files Prettier rewrites before committing.
 
    **Ingest** (when `ingest/` files changed):
    ```

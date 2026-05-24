@@ -15,6 +15,13 @@ repos:
         pass_filenames: false
         files: ^papyri/
 
+      - id: mypy
+        name: mypy (Python)
+        language: system
+        entry: mypy papyri/
+        pass_filenames: false
+        files: ^papyri/
+
       - id: prettier-viewer
         name: prettier (viewer TS/Astro)
         language: system
@@ -22,9 +29,37 @@ repos:
         pass_filenames: false
         files: ^viewer/src/
 
+      - id: eslint-viewer
+        name: eslint (viewer TS/Astro)
+        language: system
+        entry: pnpm --dir viewer run lint
+        pass_filenames: false
+        files: ^viewer/src/
+
+      - id: tsc-viewer
+        name: tsc type-check (viewer)
+        language: system
+        entry: pnpm --dir viewer run check
+        pass_filenames: false
+        files: ^viewer/src/
+
       - id: prettier-ingest
         name: prettier (ingest TS)
         language: system
         entry: pnpm --dir ingest run format
+        pass_filenames: false
+        files: ^ingest/src/|^ingest/tests/
+
+      - id: eslint-ingest
+        name: eslint (ingest TS)
+        language: system
+        entry: pnpm --dir ingest run lint
+        pass_filenames: false
+        files: ^ingest/src/|^ingest/tests/
+
+      - id: tsc-ingest
+        name: tsc type-check (ingest)
+        language: system
+        entry: pnpm --dir ingest run check
         pass_filenames: false
         files: ^ingest/src/|^ingest/tests/

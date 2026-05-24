@@ -241,6 +241,11 @@ export async function renderNode(node: IRNode, opts: RenderOptions = {}): Promis
       return `<code class="${classes.join(" ")}">${escapeHtml(String(n.value ?? ""))}</code>`;
     }
 
+    case "ParamRef": {
+      const name = escapeHtml(String(n.name ?? ""));
+      return `<code class="param-ref" data-param="${name}">${name}</code>`;
+    }
+
     case "DefList": {
       const inner = await renderChildren(asArray(n.children), opts);
       return `<dl class="deflist">${inner}</dl>`;

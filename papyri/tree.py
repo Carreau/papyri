@@ -42,6 +42,7 @@ from .nodes import (
     ListItem,
     LocalRef,
     Paragraph,
+    ParamRef,
     RefInfo,
     Section,
     SubstitutionDef,
@@ -575,6 +576,12 @@ def py_doc_handler(value: str) -> list[Any]:
         text = text.rstrip()
         path = path.rstrip(">")
     return [CrossRef(text, LocalRef("docs", path), "docs")]
+
+
+@directive_handler("py", "param")
+def py_param_handler(value: str) -> list[Any]:
+    """Handle ``:param:`name``` — an inline reference to a sibling parameter."""
+    return [ParamRef(name=value.strip())]
 
 
 _MISSING_DIRECTIVES: list[str] = []

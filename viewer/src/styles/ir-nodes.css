@@ -127,6 +127,24 @@ dl.params dd p {
   margin: 0.25rem 0;
 }
 
+/* Inline parameter references emitted by :param:`name` in docstrings.
+   On hover the same data-param attribute is used to co-highlight the
+   matching .sig-param in the rendered signature via client-side JS. */
+code.param-ref {
+  color: var(--accent);
+  font-family: var(--mono);
+  cursor: default;
+  border-radius: 2px;
+  padding: 0.05em 0.2em;
+}
+code.param-ref.param-highlight,
+.sig-param.param-highlight .sig-param-name {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
 a.xref {
   color: var(--accent);
   text-decoration: none;

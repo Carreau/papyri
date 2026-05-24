@@ -527,6 +527,75 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   - `viewer/src/pages/[pkg]/[ver]/backref-validate.astro` — report page
   - `viewer/src/pages/[pkg]/[ver]/index.astro` — broken-backref count badge
 
+### Gen-time diagnostics
+
+- **Warnings should be promotable to errors, and most should be errors by
+  default — configurable per fully-qualified target.**
+  Today `papyri gen` emits a wide range of warnings (unresolved refs, malformed
+  docstring sections, unparseable signatures, broken doctest blocks, etc.) and
+  the run keeps going. For maintainers who want their bundle to be
+  *actually* clean, a warning is just noise that scrolls past in CI. The
+  proposal:
+
+  1. Give every diagnostic a stable *warning code* (e.g. `W-unresolved-ref`,
+     `W-bad-section`, `W-doctest-syntax`, …), surfaced in the message and in
+     the manifest's error report.
+  2. Each code has a default severity. **Most should default to `error`** —
+     a malformed docstring is a bug the maintainer wants to know about, not a
+     warning to be ignored. A small allowlist (e.g. "missing extended
+     summary") stays at `warning` or `info`.
+  3. Severity is overridable from the project's `papyri.toml`, both globally
+     and on a **per-fullqual** basis, so a maintainer can downgrade a single
+     stubborn symbol without weakening the whole project. Sketch:
+
+     ```toml
+     [tool.papyri.diagnostics]
+     # global default override (optional)
+     "W-unresolved-ref" = "error"
+
+     [tool.papyri.diagnostics.per-target]
+     "numpy.ma.MaskedArray.*" = { "W-unresolved-ref" = "warning" }
+     "scipy.special._ufuncs.*" = { "W-bad-section" = "ignore" }
+     ```
+
+     Matching is by glob on the fully-qualified name of the object whose doc
+     produced the diagnostic (module / class / function / parameter / narrative
+     doc page). Narrative pages match on their doc path.
+  4. `papyri gen` exits non-zero if any diagnostic resolved to `error` (after
+     per-target overrides). A `--no-error-on-warning` / `--max-severity`
+     escape hatch keeps the legacy "warn and continue" behaviour available for
+     incremental adoption.
+  5. The error report already embedded in the manifest gains the resolved
+     severity per entry, so the viewer can render a real "0 errors / N
+     warnings" badge per bundle and drill down by code.
+
+  *Why this matters:*
+  - Aligns papyri with the rest of the Python toolchain (ruff, mypy,
+    pytest) where the maintainer picks the strictness, not the tool.
+  - Per-fullqual overrides are the realistic adoption path for big projects
+    (numpy, scipy) where some legacy corners cannot be fixed in one pass but
+    the rest of the project should still gate on clean docs.
+  - Stable codes make the override file diff-reviewable and grep-able.
+
+  *Open questions:*
+  - Whether codes live in a single enum in `error_collector.py` or alongside
+    the site that raises them.
+  - Whether per-target overrides should also support a `[[per-target]]`
+    array-of-tables form for ordered, first-match-wins semantics (more like
+    `.gitignore`) instead of a dict.
+  - Interaction with `--no-infer`: some diagnostics only fire with inference
+    on; the default severity table should make that explicit.
+
+  *Files to create/modify (when implemented):*
+  - `papyri/error_collector.py` — diagnostic codes + severity resolution.
+  - `papyri/config.py` / `papyri/config_loader.py` — `[tool.papyri.diagnostics]`
+    schema, glob matcher.
+  - `papyri/cli/gen.py` — non-zero exit on resolved errors, `--max-severity`
+    flag.
+  - `papyri/gen.py` and `papyri/tree.py` — tag each `error_collector` call
+    site with its code.
+  - `docs/` — document the codes and the override file.
+
 ## Codebase cleanup follow-ups (audited 2026-05-01)
 
 Items below come from a full-tree review (Python / TS ingest / viewer). Each

@@ -15,8 +15,10 @@
 // GET /api/inventory
 //   Lists registered external projects with object counts.
 //
-// Auth: same Bearer token as PUT /api/bundle (PAPYRI_UPLOAD_TOKEN). Skipped
-// in local dev when the token is unset.
+// Auth: an admin action — gated by the session-cookie middleware (like
+// /api/clear and /api/reingest) plus the same Bearer-token check as PUT
+// /api/bundle. The bearer check is skipped in local dev when the token is
+// unset, so the admin panel can drive it without a token.
 
 import type { APIRoute } from "astro";
 import { parseObjectsInv, storeInventory } from "papyri-ingest";

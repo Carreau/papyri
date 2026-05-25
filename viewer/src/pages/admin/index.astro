@@ -5,6 +5,9 @@ import BaseLayout from "../../layouts/BaseLayout.astro";
 import ReingestPanel from "../../components/ReingestPanel.tsx";
 import ClearGraphstoreButton from "../../components/ClearGraphstoreButton.tsx";
 import DropRawBundlesButton from "../../components/DropRawBundlesButton.tsx";
+import ExternalInventoryPanel, {
+  type ExternalProject,
+} from "../../components/ExternalInventoryPanel.tsx";
 
 export const prerender = false;
 
@@ -17,6 +20,12 @@ for (const name of tableNames) {
   const row = await graphDb.get<{ n: number }>(`SELECT COUNT(*) AS n FROM ${name}`);
   tableStats.push({ name, rows: row?.n ?? 0 });
 }
+
+const externalProjects = await graphDb.all<ExternalProject>(
+  "SELECT p.name, p.base_url, p.version, p.fetched_at, COUNT(o.name) AS objects " +
+    "FROM external_projects p LEFT JOIN external_objects o ON o.project = p.name " +
+    "GROUP BY p.name, p.base_url, p.version, p.fetched_at ORDER BY p.name"
+);
 ---
 
 <BaseLayout title="Admin — Papyri">
@@ -73,6 +82,11 @@ for (const name of tableNames) {
         </tbody>
       </table>
       <ClearGraphstoreButton client:load rawCount={rawEntries.length} />
+    </section>
+
+    <section class="admin-section">
+      <h2>External inventories</h2>
+      <ExternalInventoryPanel client:load initial={externalProjects} />
     </section>
 
     <ReingestPanel client:load entries={rawEntries} />
@@ -176,6 +190,126 @@ for (const name of tableNames) {
     background: var(--color-error-bg, #fef2f2);
     border: 1px solid var(--color-error-border, #fca5a5);
     color: var(--color-error, #dc2626);
+  }
+
+  /* ---- ExternalInventoryPanel styles (scoped via :global, React island) ---- */
+  :global(.ext-inv) {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  :global(.ext-inv-desc) {
+    margin: 0;
+    color: var(--color-muted, #666);
+    font-size: 0.9rem;
+  }
+
+  :global(.ext-inv-form) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.75rem;
+  }
+
+  :global(.ext-inv-form label) {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+
+  :global(.ext-inv-form input) {
+    padding: 0.35rem 0.5rem;
+    border: 1px solid var(--color-border, #ccc);
+    border-radius: 4px;
+    background: var(--color-bg, #fff);
+    color: inherit;
+    font-size: 0.9rem;
+    min-width: 16rem;
+  }
+
+  :global(.ext-inv-btn) {
+    padding: 0.4rem 1rem;
+    background: var(--color-accent, #2563eb);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+
+  :global(.ext-inv-btn:disabled),
+  :global(.ext-inv-reload:disabled) {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  :global(.ext-inv-result) {
+    padding: 0.5rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+  }
+
+  :global(.ext-inv-result--ok) {
+    background: var(--color-success-bg, #f0fdf4);
+    border: 1px solid var(--color-success-border, #86efac);
+    color: var(--color-success, #16a34a);
+  }
+
+  :global(.ext-inv-result--error) {
+    background: var(--color-error-bg, #fef2f2);
+    border: 1px solid var(--color-error-border, #fca5a5);
+    color: var(--color-error, #dc2626);
+  }
+
+  :global(.ext-inv-empty) {
+    margin: 0;
+    color: var(--color-muted, #888);
+  }
+
+  :global(.ext-inv-table) {
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    width: 100%;
+  }
+
+  :global(.ext-inv-table th),
+  :global(.ext-inv-table td) {
+    text-align: left;
+    padding: 0.3rem 0.6rem;
+    border-bottom: 1px solid var(--color-border, #e5e7eb);
+  }
+
+  :global(.ext-inv-table th) {
+    color: var(--color-muted, #666);
+    font-weight: 600;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  :global(.ext-inv-url) {
+    font-family: monospace;
+    font-size: 0.8rem;
+    word-break: break-all;
+  }
+
+  :global(.ext-inv-num) {
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+
+  :global(.ext-inv-reload) {
+    padding: 0.25rem 0.7rem;
+    background: var(--color-surface, #f3f4f6);
+    color: inherit;
+    border: 1px solid var(--color-border, #ccc);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
   }
 
   /* ---- ReingestPanel styles (scoped via :global since component is React) ---- */

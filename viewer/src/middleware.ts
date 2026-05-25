@@ -5,9 +5,8 @@ import { defineMiddleware } from "astro:middleware";
 // (e.g. a future signup page) needs an explicit entry here.
 // `/api/bundle` is the upload endpoint hit by `papyri upload`; it has its
 // own bearer-token check (PAPYRI_API_TOKEN) and must stay reachable without
-// a session cookie. `/api/inventory` registers external (intersphinx)
-// inventories programmatically and is gated by the same bearer token.
-const PUBLIC_PREFIXES = ["/login", "/api/auth/", "/api/bundle", "/api/inventory"];
+// a session cookie.
+const PUBLIC_PREFIXES = ["/login", "/api/auth/", "/api/bundle"];
 
 function isPublic(pathname: string): boolean {
   return PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(p));

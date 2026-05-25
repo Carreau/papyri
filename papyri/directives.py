@@ -267,6 +267,130 @@ def rubric_handler(argument: str, options: dict[str, str], content: str) -> list
     return [Admonition(kind="rubric", children=tuple(children))]
 
 
+def attention_handler(
+    argument: str, options: dict[str, str], content: str
+) -> list[Any]:
+    return admonition_helper("attention", argument, options, content)
+
+
+def caution_handler(argument: str, options: dict[str, str], content: str) -> list[Any]:
+    return admonition_helper("caution", argument, options, content)
+
+
+def danger_handler(argument: str, options: dict[str, str], content: str) -> list[Any]:
+    return admonition_helper("danger", argument, options, content)
+
+
+def error_handler(argument: str, options: dict[str, str], content: str) -> list[Any]:
+    return admonition_helper("error", argument, options, content)
+
+
+def hint_handler(argument: str, options: dict[str, str], content: str) -> list[Any]:
+    return admonition_helper("hint", argument, options, content)
+
+
+def important_handler(
+    argument: str, options: dict[str, str], content: str
+) -> list[Any]:
+    return admonition_helper("important", argument, options, content)
+
+
+def tip_handler(argument: str, options: dict[str, str], content: str) -> list[Any]:
+    return admonition_helper("tip", argument, options, content)
+
+
+def admonition_handler(
+    argument: str, options: dict[str, str], content: str
+) -> list[Any]:
+    """Handler for the generic ``.. admonition:: Title`` directive.
+
+    Unlike the named admonitions (``.. note::``, ``.. warning::``, etc.) the
+    generic ``admonition`` carries an explicit user-supplied title as its
+    argument.  The body is an optional RST block.
+    """
+    title_text = (argument or "").strip()
+    children: list[Any] = [AdmonitionTitle([Text(title_text)])] if title_text else []
+    if content and content.strip():
+        parsed = parse(content.encode(), qa="")
+        if parsed and isinstance(parsed[0], Section):
+            children.extend(parsed[0].children)
+        else:
+            log.warning(
+                "admonition directive: body did not parse as a single Section; "
+                "rendering as plain title only"
+            )
+    return [Admonition(kind="admonition", children=tuple(children))]
+
+
+def topic_handler(argument: str, options: dict[str, str], content: str) -> list[Any]:
+    """Handler for ``.. topic:: Title`` — a self-contained mini-section.
+
+    Produces an ``Admonition(kind="topic")`` with the argument as its title
+    and the parsed body as children.
+    """
+    title_text = (argument or "").strip()
+    children: list[Any] = [AdmonitionTitle([Text(title_text)])] if title_text else []
+    if content and content.strip():
+        parsed = parse(content.encode(), qa="")
+        if parsed and isinstance(parsed[0], Section):
+            children.extend(parsed[0].children)
+    return [Admonition(kind="topic", children=tuple(children))]
+
+
+def raw_handler(argument: str, options: dict[str, str], content: str) -> list[Any]:
+    """Handler for ``.. raw::`` — always drop with a warning.
+
+    Raw HTML/LaTeX/etc. content must never reach the IR — it is a security
+    risk (XSS via raw HTML) and is meaningless outside the target output format.
+    """
+    fmt = (argument or "").strip()
+    log.warning(
+        "raw directive: dropping block (format=%r); "
+        "raw output-format content is not safe to include in the IR",
+        fmt,
+    )
+    return []
+
+
+def container_handler(
+    argument: str, options: dict[str, str], content: str
+) -> list[Any]:
+    """Handler for ``.. container::`` — unfold wrapped content.
+
+    The ``container`` directive is a structural wrapper with an optional CSS
+    class name.  Since the papyri IR has no class-name concept for block
+    nodes, we drop the wrapper and return the parsed children directly.
+    """
+    if not content or not content.strip():
+        return []
+    parsed = parse(content.encode(), qa="")
+    nodes: list[Any] = []
+    for section in parsed:
+        if hasattr(section, "children"):
+            nodes.extend(section.children)
+    return nodes
+
+
+def plot_handler(argument: str, options: dict[str, str], content: str) -> list[Any]:
+    """Handler for ``.. plot::`` (matplotlib plot directive).
+
+    Papyri does not run matplotlib at gen time, so no figure can be generated.
+    If the directive has a code body, preserve it as a ``Code`` block so the
+    example is not silently lost.  If the argument names an external script
+    file, drop with a warning (filesystem access required).
+    """
+    script_file = (argument or "").strip()
+    if script_file:
+        log.warning(
+            "plot directive: cannot embed external script %r at gen time; dropping",
+            script_file,
+        )
+        return []
+    if content and content.strip():
+        return [Code(content)]
+    return []
+
+
 def only_handler(argument: str, options: dict[str, str], content: str) -> list[Any]:
     """Handler for ``.. only::`` — always drop with a warning.
 
@@ -455,6 +579,35 @@ def make_image_handler(
         return [Figure(RefInfo.from_untrusted(module, version, "assets", asset_name))]
 
     return image_handler
+
+
+def make_figure_handler(
+    doc_path: Path | None,
+    asset_store: Callable[[str, bytes], None] | None,
+    module: str,
+    version: str,
+    doc_root: Path | None = None,
+) -> Callable[[str, dict[str, str], str], list[Any]]:
+    """Return a ``.. figure::`` directive handler bound to the given asset context.
+
+    The ``figure`` directive is like ``image`` but may carry an optional
+    caption in its body.  Path resolution is identical to ``make_image_handler``;
+    the caption (if present) is appended as a ``Paragraph`` after the image node.
+    """
+    image_handler = make_image_handler(doc_path, asset_store, module, version, doc_root)
+
+    def figure_handler(
+        argument: str, options: dict[str, str], content: str
+    ) -> list[Any]:
+        nodes = image_handler(argument, options, "")
+        if content and content.strip():
+            caption_sections = parse(content.strip().encode(), qa="")
+            for section in caption_sections:
+                if hasattr(section, "children"):
+                    nodes.extend(section.children)
+        return nodes
+
+    return figure_handler
 
 
 def make_include_handler(

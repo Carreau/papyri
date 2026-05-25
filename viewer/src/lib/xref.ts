@@ -16,7 +16,7 @@
 // resolve; we treat them as null up-front.
 
 import type { GraphDb } from "papyri-ingest";
-import { resolveRefs, refKey, type RefTuple } from "./graph.ts";
+import { resolveRefs, resolveExternalRefs, refKey, type RefTuple } from "./graph.ts";
 import { linkForLocalRef, linkForRef } from "./links.ts";
 import { collectNodes, type IRNode } from "./ir-reader.ts";
 
@@ -32,7 +32,9 @@ export interface XRefShape {
   kind?: string;
 }
 
-export type XRefResolver = (raw: unknown) => { url: string; label: string } | null;
+export type XRefResolver = (
+  raw: unknown
+) => { url: string; label: string; external?: boolean } | null;
 
 /** Walk a decoded doc and return every CrossRef ref-tuple it points at. */
 export function collectXrefs(node: unknown): RefTuple[] {
@@ -71,6 +73,11 @@ export async function buildXrefResolver(
 ): Promise<XRefResolver> {
   const refs = collectXrefs(doc);
   const resolved = await resolveRefs(graphDb, refs);
+  // Refs that don't resolve to an ingested bundle may still be linkable
+  // against an external (intersphinx) inventory — e.g. a ref to numpy when
+  // no numpy DocBundle has been uploaded.
+  const unresolved = refs.filter((r) => !resolved.has(refKey(r)));
+  const external = await resolveExternalRefs(graphDb, unresolved);
   return (raw: unknown) => {
     const n = raw as XRefShape | null;
     if (!n) return null;
@@ -91,9 +98,13 @@ export async function buildXrefResolver(
       path: ref.path,
     });
     const r = resolved.get(k);
-    if (!r) return null;
-    const url = linkForRef(r);
-    if (!url) return null;
-    return { url, label };
+    if (r) {
+      const url = linkForRef(r);
+      if (!url) return null;
+      return { url, label };
+    }
+    const ext = external.get(k);
+    if (ext) return { url: ext, label, external: true };
+    return null;
   };
 }

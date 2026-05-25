@@ -161,6 +161,14 @@ a.xref:hover {
   padding: 0 0.15em;
   border-radius: 2px;
 }
+/* Links resolved against an external (intersphinx) inventory — they leave
+   the papyri site, so flag them with a trailing arrow. */
+a.xref.external::after {
+  content: "\2197"; /* ↗ */
+  font-size: 0.8em;
+  vertical-align: super;
+  margin-left: 0.1em;
+}
 
 aside.admonition {
   border-left: 3px solid var(--accent);

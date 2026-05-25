@@ -11,7 +11,9 @@ import { highlight } from "./highlight.ts";
 import type { IRNode } from "./ir-reader.ts";
 import { linkForAsset } from "./links.ts";
 
-export type XRefResolver = (node: unknown) => { url: string; label: string } | null;
+export type XRefResolver = (
+  node: unknown
+) => { url: string; label: string; external?: boolean } | null;
 
 export interface RenderOptions {
   resolveXref?: XRefResolver;
@@ -212,6 +214,9 @@ export async function renderNode(node: IRNode, opts: RenderOptions = {}): Promis
       if (resolveXref) {
         const resolved = resolveXref(node);
         if (resolved) {
+          if (resolved.external) {
+            return `<a class="xref external" href="${escapeHtml(resolved.url)}" rel="noopener noreferrer">${escapeHtml(resolved.label)}</a>`;
+          }
           return `<a class="xref" href="${escapeHtml(resolved.url)}">${escapeHtml(resolved.label)}</a>`;
         }
       }

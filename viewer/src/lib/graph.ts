@@ -96,6 +96,42 @@ export function refKey(r: RefTuple): string {
   return `${r.pkg}|${r.ver}|${r.kind}|${r.path}`;
 }
 
+interface ExternalRow {
+  uri: string;
+}
+
+/**
+ * Resolve refs against the external (intersphinx) inventory tables — the
+ * fallback for cross-package refs that point at a project which does NOT
+ * publish a papyri bundle (numpy, the Python stdlib, …). Returns a map keyed
+ * by `refKey` → absolute external URL.
+ *
+ * Matching: `ref.pkg` is the inventory project name and `ref.path` is the
+ * gen-time `RefInfo.path` in full-qual colon form (`numpy.linalg:inv`), which
+ * we normalise to the dotted Sphinx object name (`numpy.linalg.inv`). When a
+ * name has several objects (e.g. `py:function` and `py:method`) we prefer the
+ * `py` domain, then indexed (`priority >= 0`) over hidden, then the lowest
+ * priority value.
+ */
+export async function resolveExternalRefs(
+  graphDb: GraphDb,
+  refs: RefTuple[]
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  await Promise.all(
+    refs.map(async (r) => {
+      const name = r.path.replace(/:/g, ".");
+      const row = await graphDb.get<ExternalRow>(
+        "SELECT uri FROM external_objects WHERE project=? AND name=? " +
+          "ORDER BY (domain='py') DESC, (priority>=0) DESC, priority ASC LIMIT 1",
+        [r.pkg, name]
+      );
+      if (row?.uri) out.set(refKey(r), row.uri);
+    })
+  );
+  return out;
+}
+
 /**
  * Return the documents that link *to* the given target, as
  * (pkg, version, kind, path) tuples. Sorted lexicographically and

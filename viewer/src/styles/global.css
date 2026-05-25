@@ -11,6 +11,19 @@
   --accent: #2b6cb0;
   --border: #e2e2e2;
   --admonition-bg: #ffffff;
+  /* Per-base_type admonition accents/backgrounds (light theme). */
+  --adm-note-accent: #2b6cb0;
+  --adm-note-bg: #eef4fb;
+  --adm-tip-accent: #15803d;
+  --adm-tip-bg: #eefaf1;
+  --adm-important-accent: #7c3aed;
+  --adm-important-bg: #f5f0fe;
+  --adm-warning-accent: #b45309;
+  --adm-warning-bg: #fffbeb;
+  --adm-danger-accent: #b91c1c;
+  --adm-danger-bg: #fef2f2;
+  --adm-version-accent: #64748b;
+  --adm-version-bg: #f3f4f6;
   --math-error-fg: #b33;
   --math-error-bg: #fff4f4;
   --role-bg: #eef2fa;
@@ -38,6 +51,19 @@ html[data-theme="dark"] {
   --accent: #5ea2eb;
   --border: #2b333c;
   --admonition-bg: #1a1f26;
+  /* Per-base_type admonition accents/backgrounds (dark theme). */
+  --adm-note-accent: #5ea2eb;
+  --adm-note-bg: #15212e;
+  --adm-tip-accent: #4ade80;
+  --adm-tip-bg: #0f2418;
+  --adm-important-accent: #b794f4;
+  --adm-important-bg: #1f1830;
+  --adm-warning-accent: #fbbf24;
+  --adm-warning-bg: #2a1f00;
+  --adm-danger-accent: #f87171;
+  --adm-danger-bg: #2d0f0f;
+  --adm-version-accent: #94a3b8;
+  --adm-version-bg: #1c2128;
   --math-error-fg: #ff8b8b;
   --math-error-bg: #2a1818;
   --role-bg: #1f2a3a;

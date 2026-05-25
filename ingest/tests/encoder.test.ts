@@ -123,6 +123,24 @@ describe("encode + decode round-trip", () => {
     expect(children[0]!.value).toBe("body");
   });
 
+  it("round-trips an Admonition preserving kind and base_type (field order)", () => {
+    // Guards the positional CBOR field order [kind, base_type, children]
+    // against drift from Python's Admonition declaration in papyri/nodes.py.
+    const adm: TypedNode = {
+      __type: "Admonition",
+      __tag: 4056,
+      kind: "error",
+      base_type: "danger",
+      children: [makeText("boom")],
+    };
+    const back = decode<TypedNode>(encode(adm));
+    expect(back.__type).toBe("Admonition");
+    expect(back.kind).toBe("error");
+    expect(back.base_type).toBe("danger");
+    const children = back.children as TypedNode[];
+    expect(children[0]!.value).toBe("boom");
+  });
+
   it("round-trips a RefInfo node", () => {
     const ref = makeRefInfo("numpy", "2.0", "module", "numpy.linspace");
     const bytes = encode(ref);

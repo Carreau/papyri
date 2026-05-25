@@ -17,6 +17,10 @@ export type IRSchema = Readonly<Record<string, Readonly<Record<string, IRFieldSc
 
 export const IR_SCHEMA: IRSchema = {
   Admonition: {
+    base_type: {
+      array: false,
+      types: ["string"],
+    },
     children: {
       array: true,
       types: [

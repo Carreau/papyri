@@ -677,6 +677,11 @@ directives.)
   (~283 lines) carry alternate trees (`.sidebar-flat` vs
   `.sidebar-qualnames`) and feature-specific blocks (`.bundle-index-card*`)
   that look stale. Audit and consolidate.
+- **Admonition styling.** `Admonition` nodes render as a single generic
+  `aside.admonition` (`render-node.ts`, `ir-nodes.css`) regardless of kind
+  (note / warning / tip / seealso / …). Look at
+  https://sphinx-immaterial.readthedocs.io/en/latest/admonitions.html for
+  per-kind color tokens and icons to model richer admonition styling on.
 - **Auth is intentional but minimal.** `middleware.ts` gates everything
   except `/login`, `/api/auth/`, `/api/bundle` behind a session cookie, and
   credentials come from `PAPYRI_USERNAME` / `PAPYRI_PASSWORD` env vars

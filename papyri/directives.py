@@ -4,6 +4,7 @@ Various directive handlers.
 
 import logging
 from collections.abc import Callable
+from itertools import count
 from pathlib import Path
 from typing import Any
 
@@ -371,24 +372,69 @@ def container_handler(
     return nodes
 
 
-def plot_handler(argument: str, options: dict[str, str], content: str) -> list[Any]:
-    """Handler for ``.. plot::`` (matplotlib plot directive).
+_plot_counter = count(0)
 
-    Papyri does not run matplotlib at gen time, so no figure can be generated.
-    If the directive has a code body, preserve it as a ``Code`` block so the
-    example is not silently lost.  If the argument names an external script
-    file, drop with a warning (filesystem access required).
+
+def make_plot_handler(
+    asset_store: Callable[[str, bytes], None] | None,
+    module: str,
+    version: str,
+    execute: bool = False,
+    qa: str = "plot",
+) -> Callable[[str, dict[str, str], str], list[Any]]:
+    """Return a ``.. plot::`` directive handler bound to the given execution context.
+
+    When *execute* is ``True`` and *asset_store* is available the code body is
+    run via ``BlockExecutor`` (same mechanism as doctest examples in gen.py).
+    Every matplotlib figure open after the run is saved as a bundle asset and
+    appended as a ``Figure`` node after the ``Code`` node.
+
+    When *execute* is ``False`` (or matplotlib / *asset_store* are absent) the
+    code body is returned as a bare ``Code`` node so the example is not lost.
+
+    If the directive argument names an external ``.py`` script file rather than
+    providing an inline body, a warning is emitted and nothing is returned
+    (filesystem access is not available inside the handler).
     """
-    script_file = (argument or "").strip()
-    if script_file:
-        log.warning(
-            "plot directive: cannot embed external script %r at gen time; dropping",
-            script_file,
-        )
-        return []
-    if content and content.strip():
-        return [Code(content)]
-    return []
+
+    def plot_handler(argument: str, options: dict[str, str], content: str) -> list[Any]:
+        script_file = (argument or "").strip()
+        if script_file:
+            log.warning(
+                "plot directive: cannot embed external script %r at gen time; dropping",
+                script_file,
+            )
+            return []
+        if not content or not content.strip():
+            return []
+
+        nodes: list[Any] = [Code(content)]
+
+        if execute and asset_store is not None:
+            try:
+                from .executors import BlockExecutor
+
+                executor = BlockExecutor({})
+                with executor:
+                    executor.exec(content, name=qa)
+                    fig_bytes_list = executor.get_figs()
+                for fig_bytes in fig_bytes_list:
+                    n = next(_plot_counter)
+                    figname = f"fig-plot-{n}.png"
+                    asset_store(figname, fig_bytes)
+                    nodes.append(
+                        Figure(
+                            RefInfo.from_untrusted(module, version, "assets", figname)
+                        )
+                    )
+            except Exception as exc:
+                log.warning(
+                    "plot directive: figure generation failed in %s: %s", qa, exc
+                )
+
+        return nodes
+
+    return plot_handler
 
 
 def only_handler(argument: str, options: dict[str, str], content: str) -> list[Any]:

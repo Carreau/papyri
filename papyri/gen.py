@@ -1074,6 +1074,7 @@ class Gen:
                         doc_targets=doc_targets,
                         external_targets=external_targets,
                         doc_titles=doc_titles,
+                        execute=self.config.execute_doctests,
                     )
                     dv.collect_substitutions(*data)
                     blob.arbitrary = tuple(dv.visit(s) for s in data)
@@ -1577,6 +1578,7 @@ class Gen:
                     version=self.version,
                     config=self.config.directives,
                     module=self.root,
+                    execute=self.config.execute_doctests,
                 )
                 dv.collect_substitutions(s)
                 s2 = dv.visit(s)
@@ -1952,6 +1954,7 @@ class Gen:
                     module=self.root,
                     doc_path=_doc_path,
                     asset_store=self.put_raw,
+                    execute=self.config.execute_doctests,
                 )
                 dv.collect_substitutions(
                     *arbitrary,

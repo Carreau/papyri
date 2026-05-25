@@ -37,8 +37,8 @@ from papyri.directives import (
     make_figure_handler,
     make_image_handler,
     make_include_handler,
+    make_plot_handler,
     only_handler,
-    plot_handler,
     raw_handler,
     rubric_handler,
     tip_handler,
@@ -1649,26 +1649,28 @@ def test_container_via_visitor_dispatch():
 
 
 # ---------------------------------------------------------------------------
-# plot_handler
+# make_plot_handler
 # ---------------------------------------------------------------------------
 
 
 def test_plot_handler_with_code_body_returns_code():
     from papyri.nodes import Code
 
-    out = plot_handler("", {}, "import matplotlib.pyplot as plt\nplt.plot([1, 2, 3])")
+    h = make_plot_handler(None, "pkg", "1.0", execute=False)
+    out = h("", {}, "import matplotlib.pyplot as plt\nplt.plot([1, 2, 3])")
     assert len(out) == 1
     assert isinstance(out[0], Code)
 
 
 def test_plot_handler_empty_body_returns_empty():
-    out = plot_handler("", {}, "")
-    assert out == []
+    h = make_plot_handler(None, "pkg", "1.0", execute=False)
+    assert h("", {}, "") == []
 
 
 def test_plot_handler_file_arg_drops_with_warning(caplog):
+    h = make_plot_handler(None, "pkg", "1.0", execute=False)
     with caplog.at_level("WARNING", logger="papyri"):
-        out = plot_handler("examples/myplot.py", {}, "")
+        out = h("examples/myplot.py", {}, "")
     assert out == []
     assert any("plot" in r.getMessage() for r in caplog.records)
 
@@ -1693,6 +1695,79 @@ def test_plot_via_visitor_dispatch_preserves_code():
     out = v.replace_UnprocessedDirective(ud)
     assert len(out) == 1
     assert isinstance(out[0], Code)
+
+
+def test_plot_execute_true_generates_figure():
+    """When execute=True and matplotlib is available, a Figure is appended."""
+    pytest.importorskip("matplotlib")
+    from papyri.nodes import Code, Figure
+
+    stored: dict[str, bytes] = {}
+    h = make_plot_handler(
+        asset_store=stored.__setitem__,
+        module="pkg",
+        version="1.0",
+        execute=True,
+        qa="pkg.mod",
+    )
+    code = "import matplotlib.pyplot as plt\nplt.plot([1, 2])\nplt.show()"
+    out = h("", {}, code)
+    # First node is always the Code node.
+    assert isinstance(out[0], Code)
+    # When execution works a Figure is appended and the asset stored.
+    figures = [n for n in out if isinstance(n, Figure)]
+    assert len(figures) >= 1
+    assert len(stored) >= 1
+    for figname in stored:
+        assert figname.endswith(".png")
+
+
+def test_plot_execute_false_no_figure():
+    """When execute=False no figure is generated regardless of matplotlib."""
+    pytest.importorskip("matplotlib")
+    from papyri.nodes import Code, Figure
+
+    stored: dict[str, bytes] = {}
+    h = make_plot_handler(
+        asset_store=stored.__setitem__,
+        module="pkg",
+        version="1.0",
+        execute=False,
+    )
+    code = "import matplotlib.pyplot as plt\nplt.plot([1, 2])"
+    out = h("", {}, code)
+    assert isinstance(out[0], Code)
+    assert not any(isinstance(n, Figure) for n in out)
+    assert stored == {}
+
+
+def test_plot_visitor_execute_flag_wires_through():
+    """DirectiveVisiter passes execute=True to make_plot_handler."""
+    pytest.importorskip("matplotlib")
+    from papyri.nodes import Code, Figure
+
+    stored: dict[str, bytes] = {}
+    v = DirectiveVisiter(
+        qa="pkg.mod",
+        known_refs=frozenset(),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+        asset_store=stored.__setitem__,
+        execute=True,
+    )
+    ud = UnprocessedDirective(
+        name="plot",
+        args="",
+        options={},
+        value="import matplotlib.pyplot as plt\nplt.plot([3, 1, 4])\nplt.show()",
+        children=(),
+        raw="",
+    )
+    out = v.replace_UnprocessedDirective(ud)
+    assert isinstance(out[0], Code)
+    figures = [n for n in out if isinstance(n, Figure)]
+    assert len(figures) >= 1
 
 
 # ---------------------------------------------------------------------------

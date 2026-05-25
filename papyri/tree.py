@@ -30,9 +30,9 @@ from .directives import (
     make_figure_handler,
     make_image_handler,
     make_include_handler,
+    make_plot_handler,
     note_handler,
     only_handler,
-    plot_handler,
     raw_handler,
     rubric_handler,
     seealso_handler,
@@ -664,6 +664,7 @@ class DirectiveVisiter(TreeReplacer):
         doc_targets: dict[str, str] | None = None,
         external_targets: dict[str, str] | None = None,
         doc_titles: dict[str, str] | None = None,
+        execute: bool = False,
     ):
         """
         qa: str
@@ -718,8 +719,6 @@ class DirectiveVisiter(TreeReplacer):
             "raw": raw_handler,
             # Structural wrapper — drop the container, keep the children.
             "container": container_handler,
-            # Matplotlib plot directive — preserve code body, drop file-ref form.
-            "plot": plot_handler,
         }
 
         for k, v in (config or {}).items():
@@ -787,6 +786,16 @@ class DirectiveVisiter(TreeReplacer):
         self._handlers.setdefault(
             "include",
             make_include_handler(doc_path, doc_root),
+        )
+        self._handlers.setdefault(
+            "plot",
+            make_plot_handler(
+                asset_store=asset_store,
+                module=self.module,
+                version=self.version,
+                execute=execute,
+                qa=self.qa,
+            ),
         )
 
     def collect_substitutions(self, *sections: Section) -> None:

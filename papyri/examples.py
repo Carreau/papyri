@@ -475,7 +475,7 @@ def simple_generator(n: int = 5) -> Iterator[int]:
 
 def fibonacci(limit: int) -> Iterator[int]:
     """
-    Yield Fibonacci numbers strictly below ``limit``.
+    Yield Fibonacci numbers strictly below `limit`.
 
     Like :func:`simple_generator`, this is a plain synchronous generator;
     the state lives in local variables between ``yield`` points.
@@ -510,11 +510,13 @@ def fibonacci(limit: int) -> Iterator[int]:
 
 async def async_fetch(url: str, *, timeout: float = 10.0) -> bytes:
     """
-    Pretend to fetch ``url`` and return its body.
+    Pretend to fetch `url` and return its body.
 
     A minimal ``async def`` coroutine function used to exercise papyri's
     handling of ``coroutine function`` signatures. The body does no I/O so
     the example stays side-effect free at import time.
+
+    Of course `timeout` does nothing
 
     Parameters
     ----------

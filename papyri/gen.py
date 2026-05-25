@@ -1944,6 +1944,11 @@ class Gen:
                     if _src_file and not _src_file.endswith("<string>")
                     else None
                 )
+                _param_names: frozenset[str] = (
+                    frozenset(p.name for p in doc_blob.signature.parameters)
+                    if doc_blob.signature is not None
+                    else frozenset()
+                )
                 dv = GenVisitor(
                     qa,
                     known_refs,
@@ -1955,6 +1960,7 @@ class Gen:
                     doc_path=_doc_path,
                     asset_store=self.put_raw,
                     execute=self.config.execute_doctests,
+                    param_names=_param_names,
                 )
                 dv.collect_substitutions(
                     *arbitrary,

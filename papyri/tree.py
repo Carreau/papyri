@@ -410,6 +410,7 @@ class TreeReplacer:
                 "InlineMath",
                 "InlineRole",
                 "Math",
+                "ParamRef",
                 "Options",
                 "SeeAlsoItem",
                 "SubstitutionRef",
@@ -665,6 +666,7 @@ class DirectiveVisiter(TreeReplacer):
         external_targets: dict[str, str] | None = None,
         doc_titles: dict[str, str] | None = None,
         execute: bool = False,
+        param_names: frozenset[str] | set[str] | None = None,
     ):
         """
         qa: str
@@ -764,6 +766,12 @@ class DirectiveVisiter(TreeReplacer):
         # resolve their display text against this map so the rendered bullet
         # shows the document's heading rather than the raw path.
         self.doc_titles: dict[str, str] = doc_titles if doc_titles is not None else {}
+        # Names of parameters in the enclosing callable's signature, used to
+        # auto-promote bare backtick references like `url` into ParamRef nodes
+        # so the viewer can cross-highlight prose ↔ signature.
+        self.param_names: frozenset[str] = (
+            frozenset(param_names) if param_names is not None else frozenset()
+        )
         # Keyed by RST name with pipes (e.g. '|foo|').  Populated by
         # collect_substitutions() before visiting; can be pre-seeded with
         # config-level global substitutions.
@@ -1008,6 +1016,15 @@ class DirectiveVisiter(TreeReplacer):
         return None
 
     def replace_InlineRole(self, directive: InlineRole) -> list[Any]:
+        # Bare interpreted text (no domain, no role) whose value names a
+        # parameter of the enclosing callable is promoted to a ParamRef so
+        # the viewer can cross-highlight prose ↔ signature.
+        if (
+            directive.domain is None
+            and directive.role is None
+            and directive.value in self.param_names
+        ):
+            return [ParamRef(name=directive.value)]
         domain, role = directive.domain, directive.role
         if domain is None:
             domain = "py"

@@ -518,8 +518,19 @@ _ADMONITION_KIND_TO_BASE_TYPE: dict[str, str] = {
 
 
 def admonition_base_type(kind: str) -> str:
-    """Return the finite base styling category for an admonition ``kind``."""
-    return _ADMONITION_KIND_TO_BASE_TYPE.get(kind, "note")
+    """Return the finite base styling category for an admonition ``kind``.
+
+    The result is guaranteed to be a member of ``ADMONITION_BASE_TYPES``;
+    a mapping-table entry pointing at an unknown category raises ``ValueError``
+    so a typo fails fast at gen time rather than producing an unstyleable node.
+    """
+    base_type = _ADMONITION_KIND_TO_BASE_TYPE.get(kind, "note")
+    if base_type not in ADMONITION_BASE_TYPES:
+        raise ValueError(
+            f"admonition kind {kind!r} maps to unknown base_type {base_type!r}; "
+            f"expected one of {sorted(ADMONITION_BASE_TYPES)}"
+        )
+    return base_type
 
 
 @register(4056)

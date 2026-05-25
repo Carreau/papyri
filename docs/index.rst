@@ -8,6 +8,7 @@ Papyri
 
    configuration
    crossrefs
+   specimens/index
 
 Welcome to Papyri narrative docs. 
 

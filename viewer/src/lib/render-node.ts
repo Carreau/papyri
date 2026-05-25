@@ -225,8 +225,9 @@ export async function renderNode(node: IRNode, opts: RenderOptions = {}): Promis
 
     case "Admonition": {
       const kind = escapeHtml(String(n.kind ?? "note"));
+      const baseType = escapeHtml(String(n.base_type ?? "note"));
       const inner = await renderChildren(asArray(n.children), opts);
-      return `<aside class="admonition ${kind}">${inner}</aside>`;
+      return `<aside class="admonition admonition-${baseType} ${kind}">${inner}</aside>`;
     }
 
     case "AdmonitionTitle": {

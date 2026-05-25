@@ -163,14 +163,44 @@ a.xref:hover {
 }
 
 aside.admonition {
-  border-left: 3px solid var(--accent);
-  background: var(--admonition-bg);
+  /* Per-kind styling keys off base_type (a finite set: note / tip / important
+     / warning / danger / version). Each admonition-<base_type> class below
+     sets these two tokens; the defaults cover an unstyled fallback. */
+  --adm-accent: var(--accent);
+  --adm-bg: var(--admonition-bg);
+  border-left: 3px solid var(--adm-accent);
+  background: var(--adm-bg);
   padding: 0.5rem 0.75rem;
   margin: 1rem 0;
 }
 aside.admonition .admonition-title {
   font-weight: 600;
   margin: 0 0 0.25rem;
+  color: var(--adm-accent);
+}
+aside.admonition-note {
+  --adm-accent: var(--adm-note-accent);
+  --adm-bg: var(--adm-note-bg);
+}
+aside.admonition-tip {
+  --adm-accent: var(--adm-tip-accent);
+  --adm-bg: var(--adm-tip-bg);
+}
+aside.admonition-important {
+  --adm-accent: var(--adm-important-accent);
+  --adm-bg: var(--adm-important-bg);
+}
+aside.admonition-warning {
+  --adm-accent: var(--adm-warning-accent);
+  --adm-bg: var(--adm-warning-bg);
+}
+aside.admonition-danger {
+  --adm-accent: var(--adm-danger-accent);
+  --adm-bg: var(--adm-danger-bg);
+}
+aside.admonition-version {
+  --adm-accent: var(--adm-version-accent);
+  --adm-bg: var(--adm-version-bg);
 }
 
 details.fallback {

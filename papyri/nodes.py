@@ -487,19 +487,63 @@ class AdmonitionTitle(Node):
     children: tuple[PhrasingContent | None, ...] = field(default_factory=tuple)
 
 
+# Finite set of styling categories an admonition maps to. The viewer styles
+# by `base_type` (a small, fixed vocabulary) rather than the open-ended `kind`,
+# so the renderer never has to know every kind string. Gen owns this
+# classification (see PLAN.md "gen owns all ref classification").
+ADMONITION_BASE_TYPES: frozenset[str] = frozenset(
+    {"note", "tip", "important", "warning", "danger", "version"}
+)
+
+# Map each admonition `kind` papyri emits to its base styling category.
+# Unknown kinds fall back to "note".
+_ADMONITION_KIND_TO_BASE_TYPE: dict[str, str] = {
+    "note": "note",
+    "seealso": "note",
+    "topic": "note",
+    "admonition": "note",
+    "rubric": "note",
+    "tip": "tip",
+    "hint": "tip",
+    "important": "important",
+    "warning": "warning",
+    "attention": "warning",
+    "caution": "warning",
+    "danger": "danger",
+    "error": "danger",
+    "versionadded": "version",
+    "versionchanged": "version",
+    "deprecated": "version",
+}
+
+
+def admonition_base_type(kind: str) -> str:
+    """Return the finite base styling category for an admonition ``kind``."""
+    return _ADMONITION_KIND_TO_BASE_TYPE.get(kind, "note")
+
+
 @register(4056)
 class Admonition(Node):
     """Block-level admonition (note, warning, tip, …).
 
     ``kind`` is the admonition type string (``"note"``, ``"warning"``,
     etc.).  The first child is typically an ``AdmonitionTitle``.
+
+    ``base_type`` is the finite styling category (one of
+    ``ADMONITION_BASE_TYPES``) derived from ``kind``; it is stored in the IR
+    so the renderer styles by a small fixed vocabulary without replicating
+    the kind→category map.
     """
 
     type = "admonition"
     kind: str = "note"
+    base_type: str = "note"
     children: tuple[FlowContent | AdmonitionTitle | Unimplemented | DefList, ...] = (
         field(default_factory=tuple)
     )
+
+    def _post_deserialise(self) -> None:
+        self.base_type = admonition_base_type(self.kind)
 
 
 class Comment(Node):

@@ -23,13 +23,26 @@ from typing import Any
 import pytest
 
 from papyri.directives import (
+    admonition_handler,
+    attention_handler,
+    caution_handler,
+    container_handler,
     csv_table_handler,
+    danger_handler,
+    error_handler,
+    hint_handler,
+    important_handler,
     list_table_handler,
     literalinclude_handler,
+    make_figure_handler,
     make_image_handler,
     make_include_handler,
+    make_plot_handler,
     only_handler,
+    raw_handler,
     rubric_handler,
+    tip_handler,
+    topic_handler,
 )
 from papyri.nodes import (
     Admonition,
@@ -1410,3 +1423,410 @@ def test_sphinx_only_drops_currentmodule_via_visitor():
     )
     out = v.replace_UnprocessedDirective(ud)
     assert out == []
+
+
+# ---------------------------------------------------------------------------
+# Standard RST admonitions
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "handler,kind",
+    [
+        (attention_handler, "attention"),
+        (caution_handler, "caution"),
+        (danger_handler, "danger"),
+        (error_handler, "error"),
+        (hint_handler, "hint"),
+        (important_handler, "important"),
+        (tip_handler, "tip"),
+    ],
+)
+def test_standard_admonition_handler_produces_admonition(handler, kind):
+    out = handler("", {}, "Some body text.")
+    assert len(out) == 1
+    adm = out[0]
+    assert isinstance(adm, Admonition)
+    assert adm.kind == kind
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["attention", "caution", "danger", "error", "hint", "important", "tip"],
+)
+def test_standard_admonition_registered_on_visitor(name):
+    v = _make_visitor()
+    assert name in v._handlers
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["attention", "caution", "danger", "error", "hint", "important", "tip"],
+)
+def test_standard_admonition_via_visitor_dispatch(name):
+    v = _make_visitor()
+    ud = UnprocessedDirective(
+        name=name,
+        args="",
+        options={},
+        value="Be careful.",
+        children=(),
+        raw=f".. {name}::\n\n   Be careful.",
+    )
+    out = v.replace_UnprocessedDirective(ud)
+    assert len(out) == 1
+    assert isinstance(out[0], Admonition)
+    assert out[0].kind == name
+
+
+# ---------------------------------------------------------------------------
+# Generic admonition directive
+# ---------------------------------------------------------------------------
+
+
+def test_admonition_handler_with_title():
+    out = admonition_handler("My Custom Title", {}, "Some body.")
+    assert len(out) == 1
+    adm = out[0]
+    assert isinstance(adm, Admonition)
+    assert adm.kind == "admonition"
+    from papyri.nodes import AdmonitionTitle
+
+    title = adm.children[0]
+    assert isinstance(title, AdmonitionTitle)
+    first = title.children[0]
+    assert isinstance(first, Text)
+    assert first.value == "My Custom Title"
+
+
+def test_admonition_handler_no_body():
+    out = admonition_handler("Just a Title", {}, "")
+    assert len(out) == 1
+    adm = out[0]
+    assert isinstance(adm, Admonition)
+    assert adm.kind == "admonition"
+
+
+def test_admonition_registered_on_visitor():
+    v = _make_visitor()
+    assert "admonition" in v._handlers
+
+
+def test_admonition_via_visitor_dispatch():
+    v = _make_visitor()
+    ud = UnprocessedDirective(
+        name="admonition",
+        args="Custom Warning",
+        options={},
+        value="Pay attention to this.",
+        children=(),
+        raw=".. admonition:: Custom Warning\n\n   Pay attention to this.",
+    )
+    out = v.replace_UnprocessedDirective(ud)
+    assert len(out) == 1
+    assert isinstance(out[0], Admonition)
+    assert out[0].kind == "admonition"
+
+
+# ---------------------------------------------------------------------------
+# topic_handler
+# ---------------------------------------------------------------------------
+
+
+def test_topic_handler_produces_admonition():
+    out = topic_handler("Overview", {}, "This is the overview.")
+    assert len(out) == 1
+    adm = out[0]
+    assert isinstance(adm, Admonition)
+    assert adm.kind == "topic"
+
+
+def test_topic_handler_title_in_admonition_title():
+    out = topic_handler("My Topic", {}, "Body text.")
+    adm = out[0]
+    from papyri.nodes import AdmonitionTitle
+
+    title = adm.children[0]
+    assert isinstance(title, AdmonitionTitle)
+    first = title.children[0]
+    assert isinstance(first, Text)
+    assert first.value == "My Topic"
+
+
+def test_topic_registered_on_visitor():
+    v = _make_visitor()
+    assert "topic" in v._handlers
+
+
+def test_topic_via_visitor_dispatch():
+    v = _make_visitor()
+    ud = UnprocessedDirective(
+        name="topic",
+        args="Quick Info",
+        options={},
+        value="Details here.",
+        children=(),
+        raw=".. topic:: Quick Info\n\n   Details here.",
+    )
+    out = v.replace_UnprocessedDirective(ud)
+    assert len(out) == 1
+    assert isinstance(out[0], Admonition)
+    assert out[0].kind == "topic"
+
+
+# ---------------------------------------------------------------------------
+# raw_handler
+# ---------------------------------------------------------------------------
+
+
+def test_raw_handler_drops_html_with_warning(caplog):
+    with caplog.at_level("WARNING", logger="papyri"):
+        out = raw_handler("html", {}, "<p>some html</p>")
+    assert out == []
+    assert any("raw" in r.getMessage() for r in caplog.records)
+
+
+def test_raw_handler_drops_latex_with_warning(caplog):
+    with caplog.at_level("WARNING", logger="papyri"):
+        out = raw_handler("latex", {}, r"\textbf{bold}")
+    assert out == []
+
+
+def test_raw_handler_registered_on_visitor():
+    v = _make_visitor()
+    assert "raw" in v._handlers
+
+
+def test_raw_via_visitor_dispatch_drops_content(caplog):
+    v = _make_visitor()
+    ud = UnprocessedDirective(
+        name="raw",
+        args="html",
+        options={},
+        value="<script>alert('xss')</script>",
+        children=(),
+        raw=".. raw:: html\n\n   <script>alert('xss')</script>",
+    )
+    with caplog.at_level("WARNING", logger="papyri"):
+        out = v.replace_UnprocessedDirective(ud)
+    assert out == []
+
+
+# ---------------------------------------------------------------------------
+# container_handler
+# ---------------------------------------------------------------------------
+
+
+def test_container_handler_unfolds_content():
+    out = container_handler("myclass", {}, "Content paragraph.\n")
+    assert len(out) >= 1
+    assert isinstance(out[0], Paragraph)
+
+
+def test_container_handler_empty_returns_empty():
+    assert container_handler("", {}, "") == []
+    assert container_handler("", {}, "   ") == []
+
+
+def test_container_registered_on_visitor():
+    v = _make_visitor()
+    assert "container" in v._handlers
+
+
+def test_container_via_visitor_dispatch():
+    v = _make_visitor()
+    ud = UnprocessedDirective(
+        name="container",
+        args="highlight",
+        options={},
+        value="Highlighted content.",
+        children=(),
+        raw=".. container:: highlight\n\n   Highlighted content.",
+    )
+    out = v.replace_UnprocessedDirective(ud)
+    assert len(out) >= 1
+    assert isinstance(out[0], Paragraph)
+
+
+# ---------------------------------------------------------------------------
+# make_plot_handler
+# ---------------------------------------------------------------------------
+
+
+def test_plot_handler_with_code_body_returns_code():
+    from papyri.nodes import Code
+
+    h = make_plot_handler(None, "pkg", "1.0", execute=False)
+    out = h("", {}, "import matplotlib.pyplot as plt\nplt.plot([1, 2, 3])")
+    assert len(out) == 1
+    assert isinstance(out[0], Code)
+
+
+def test_plot_handler_empty_body_returns_empty():
+    h = make_plot_handler(None, "pkg", "1.0", execute=False)
+    assert h("", {}, "") == []
+
+
+def test_plot_handler_file_arg_drops_with_warning(caplog):
+    h = make_plot_handler(None, "pkg", "1.0", execute=False)
+    with caplog.at_level("WARNING", logger="papyri"):
+        out = h("examples/myplot.py", {}, "")
+    assert out == []
+    assert any("plot" in r.getMessage() for r in caplog.records)
+
+
+def test_plot_registered_on_visitor():
+    v = _make_visitor()
+    assert "plot" in v._handlers
+
+
+def test_plot_via_visitor_dispatch_preserves_code():
+    from papyri.nodes import Code
+
+    v = _make_visitor()
+    ud = UnprocessedDirective(
+        name="plot",
+        args="",
+        options={},
+        value="import numpy as np\nnp.sin(0)",
+        children=(),
+        raw=".. plot::\n\n   import numpy as np\n   np.sin(0)",
+    )
+    out = v.replace_UnprocessedDirective(ud)
+    assert len(out) == 1
+    assert isinstance(out[0], Code)
+
+
+def test_plot_execute_true_generates_figure():
+    """When execute=True and matplotlib is available, a Figure is appended."""
+    pytest.importorskip("matplotlib")
+    from papyri.nodes import Code, Figure
+
+    stored: dict[str, bytes] = {}
+    h = make_plot_handler(
+        asset_store=stored.__setitem__,
+        module="pkg",
+        version="1.0",
+        execute=True,
+        qa="pkg.mod",
+    )
+    code = "import matplotlib.pyplot as plt\nplt.plot([1, 2])\nplt.show()"
+    out = h("", {}, code)
+    # First node is always the Code node.
+    assert isinstance(out[0], Code)
+    # When execution works a Figure is appended and the asset stored.
+    figures = [n for n in out if isinstance(n, Figure)]
+    assert len(figures) >= 1
+    assert len(stored) >= 1
+    for figname in stored:
+        assert figname.endswith(".png")
+
+
+def test_plot_execute_false_no_figure():
+    """When execute=False no figure is generated regardless of matplotlib."""
+    pytest.importorskip("matplotlib")
+    from papyri.nodes import Code, Figure
+
+    stored: dict[str, bytes] = {}
+    h = make_plot_handler(
+        asset_store=stored.__setitem__,
+        module="pkg",
+        version="1.0",
+        execute=False,
+    )
+    code = "import matplotlib.pyplot as plt\nplt.plot([1, 2])"
+    out = h("", {}, code)
+    assert isinstance(out[0], Code)
+    assert not any(isinstance(n, Figure) for n in out)
+    assert stored == {}
+
+
+def test_plot_visitor_execute_flag_wires_through():
+    """DirectiveVisiter passes execute=True to make_plot_handler."""
+    pytest.importorskip("matplotlib")
+    from papyri.nodes import Code, Figure
+
+    stored: dict[str, bytes] = {}
+    v = DirectiveVisiter(
+        qa="pkg.mod",
+        known_refs=frozenset(),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+        asset_store=stored.__setitem__,
+        execute=True,
+    )
+    ud = UnprocessedDirective(
+        name="plot",
+        args="",
+        options={},
+        value="import matplotlib.pyplot as plt\nplt.plot([3, 1, 4])\nplt.show()",
+        children=(),
+        raw="",
+    )
+    out = v.replace_UnprocessedDirective(ud)
+    assert isinstance(out[0], Code)
+    figures = [n for n in out if isinstance(n, Figure)]
+    assert len(figures) >= 1
+
+
+# ---------------------------------------------------------------------------
+# make_figure_handler
+# ---------------------------------------------------------------------------
+
+
+def test_figure_handler_external_url():
+    h = make_figure_handler(None, None, "pkg", "1.0")
+    out = h("https://example.com/img.png", {"alt": "logo"}, "")
+    assert len(out) == 1
+    assert isinstance(out[0], Image)
+
+
+def test_figure_handler_with_caption(tmp_path):
+    img_dir = tmp_path / "docs"
+    img_dir.mkdir()
+    (img_dir / "chart.png").write_bytes(b"\x89PNG fake")
+
+    stored: dict[str, bytes] = {}
+    h = make_figure_handler(img_dir, stored.__setitem__, "pkg", "1.0")
+
+    out = h("chart.png", {}, "This is the caption.\n")
+    # First node is the figure, rest is the parsed caption.
+    assert len(out) >= 1
+    assert isinstance(out[0], Figure)
+    flat = _flatten_text(out[1:])
+    assert "caption" in flat
+
+
+def test_figure_handler_no_caption(tmp_path):
+    img_dir = tmp_path / "docs"
+    img_dir.mkdir()
+    (img_dir / "chart.png").write_bytes(b"\x89PNG fake")
+
+    stored: dict[str, bytes] = {}
+    h = make_figure_handler(img_dir, stored.__setitem__, "pkg", "1.0")
+
+    out = h("chart.png", {}, "")
+    assert len(out) == 1
+    assert isinstance(out[0], Figure)
+
+
+def test_figure_registered_on_visitor():
+    v = _make_visitor()
+    assert "figure" in v._handlers
+
+
+def test_figure_via_visitor_dispatch_external_url():
+    v = _make_visitor()
+    ud = UnprocessedDirective(
+        name="figure",
+        args="https://example.com/logo.png",
+        options={"alt": "logo"},
+        value="The project logo.",
+        children=(),
+        raw=".. figure:: https://example.com/logo.png\n   :alt: logo\n\n   The project logo.",
+    )
+    out = v.replace_UnprocessedDirective(ud)
+    # Should have at least the Image node.
+    assert len(out) >= 1
+    assert isinstance(out[0], Image)

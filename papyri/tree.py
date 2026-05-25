@@ -13,18 +13,31 @@ from textwrap import indent
 from typing import Any, TypeVar, cast
 
 from .directives import (
+    admonition_handler,
+    attention_handler,
     block_math_handler,
+    caution_handler,
     code_handler,
+    container_handler,
     csv_table_handler,
+    danger_handler,
     deprecated_handler,
+    error_handler,
+    hint_handler,
+    important_handler,
     list_table_handler,
     literalinclude_handler,
+    make_figure_handler,
     make_image_handler,
     make_include_handler,
+    make_plot_handler,
     note_handler,
     only_handler,
+    raw_handler,
     rubric_handler,
     seealso_handler,
+    tip_handler,
+    topic_handler,
     versionadded_handler,
     versionchanged_handler,
     warning_handler,
@@ -651,6 +664,7 @@ class DirectiveVisiter(TreeReplacer):
         doc_targets: dict[str, str] | None = None,
         external_targets: dict[str, str] | None = None,
         doc_titles: dict[str, str] | None = None,
+        execute: bool = False,
     ):
         """
         qa: str
@@ -689,6 +703,22 @@ class DirectiveVisiter(TreeReplacer):
             "only": only_handler,
             "literalinclude": literalinclude_handler,
             "csv-table": csv_table_handler,
+            # Standard RST admonitions not yet handled above.
+            "attention": attention_handler,
+            "caution": caution_handler,
+            "danger": danger_handler,
+            "error": error_handler,
+            "hint": hint_handler,
+            "important": important_handler,
+            "tip": tip_handler,
+            # Generic admonition with explicit title.
+            "admonition": admonition_handler,
+            # Self-contained mini-section.
+            "topic": topic_handler,
+            # Raw output-format content — always drop (security risk).
+            "raw": raw_handler,
+            # Structural wrapper — drop the container, keep the children.
+            "container": container_handler,
         }
 
         for k, v in (config or {}).items():
@@ -748,8 +778,24 @@ class DirectiveVisiter(TreeReplacer):
             ),
         )
         self._handlers.setdefault(
+            "figure",
+            make_figure_handler(
+                doc_path, asset_store, self.module, self.version, doc_root
+            ),
+        )
+        self._handlers.setdefault(
             "include",
             make_include_handler(doc_path, doc_root),
+        )
+        self._handlers.setdefault(
+            "plot",
+            make_plot_handler(
+                asset_store=asset_store,
+                module=self.module,
+                version=self.version,
+                execute=execute,
+                qa=self.qa,
+            ),
         )
 
     def collect_substitutions(self, *sections: Section) -> None:

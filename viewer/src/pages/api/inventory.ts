@@ -15,14 +15,13 @@
 // GET /api/inventory
 //   Lists registered external projects with object counts.
 //
-// Auth: an admin action — gated by the session-cookie middleware (like
-// /api/clear and /api/reingest) plus the same Bearer-token check as PUT
-// /api/bundle. The bearer check is skipped in local dev when the token is
-// unset, so the admin panel can drive it without a token.
+// Auth: an admin action — authorized by the session-cookie middleware (the
+// route is not in middleware.ts's PUBLIC_PREFIXES, so only a logged-in admin
+// can reach it).
 
 import type { APIRoute } from "astro";
 import { parseObjectsInv, storeInventory } from "papyri-ingest";
-import { getBackends, getUploadToken } from "../../lib/backends.ts";
+import { getBackends } from "../../lib/backends.ts";
 import { respond } from "../../lib/api-utils.ts";
 
 export const prerender = false;
@@ -38,21 +37,7 @@ function isHttpUrl(s: string): boolean {
   }
 }
 
-async function checkAuth(request: Request): Promise<Response | null> {
-  const expectedToken = await getUploadToken();
-  if (expectedToken) {
-    const auth = request.headers.get("Authorization") ?? "";
-    if (auth !== `Bearer ${expectedToken}`) {
-      return respond({ ok: false, error: "unauthorized" }, 401, { "WWW-Authenticate": "Bearer" });
-    }
-  }
-  return null;
-}
-
 export const POST: APIRoute = async ({ request }) => {
-  const denied = await checkAuth(request);
-  if (denied) return denied;
-
   let body: { name?: unknown; base_url?: unknown; inventory_url?: unknown };
   try {
     body = await request.json();
@@ -124,10 +109,7 @@ interface ProjectRow {
   objects: number;
 }
 
-export const GET: APIRoute = async ({ request }) => {
-  const denied = await checkAuth(request);
-  if (denied) return denied;
-
+export const GET: APIRoute = async () => {
   let backends: Awaited<ReturnType<typeof getBackends>>;
   try {
     backends = await getBackends();

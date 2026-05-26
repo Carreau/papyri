@@ -7,24 +7,18 @@
 // POST /api/clear to also drop the processed side.
 //
 // Method: POST (a trigger, not idempotent PUT)
-// Auth:   same Bearer-token check as PUT /api/bundle.
+// Auth:   an admin action — authorized by the session-cookie middleware
+//         (the route is not in middleware.ts's PUBLIC_PREFIXES, so only a
+//         logged-in admin can reach it).
 // Response: JSON { ok, deletedBundles, elapsed_s } on success.
 
 import type { APIRoute } from "astro";
-import { getBackends, getUploadToken } from "../../lib/backends.ts";
+import { getBackends } from "../../lib/backends.ts";
 import { respond } from "../../lib/api-utils.ts";
 
 export const prerender = false;
 
-export const POST: APIRoute = async ({ request }) => {
-  const expectedToken = await getUploadToken();
-  if (expectedToken) {
-    const auth = request.headers.get("Authorization") ?? "";
-    if (auth !== `Bearer ${expectedToken}`) {
-      return respond({ ok: false, error: "unauthorized" }, 401, { "WWW-Authenticate": "Bearer" });
-    }
-  }
-
+export const POST: APIRoute = async () => {
   const startedAt = Date.now();
   try {
     const backends = await getBackends();

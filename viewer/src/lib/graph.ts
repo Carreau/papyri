@@ -96,6 +96,56 @@ export function refKey(r: RefTuple): string {
   return `${r.pkg}|${r.ver}|${r.kind}|${r.path}`;
 }
 
+interface ExternalRow {
+  uri: string;
+}
+
+/**
+ * Resolve refs against the external (intersphinx) inventory tables — the
+ * fallback for cross-package refs that point at a project which does NOT
+ * publish a papyri bundle (numpy, the Python stdlib, …). Returns a map keyed
+ * by `refKey` → absolute external URL.
+ *
+ * Matching is by **object name**, like real intersphinx: `ref.path` is the
+ * gen-time `RefInfo.path` in full-qual colon form (`numpy.linalg:inv`), which
+ * we normalise to the dotted Sphinx name (`numpy.linalg.inv`) and look up
+ * across *every* registered inventory.
+ *
+ * We deliberately do NOT constrain the lookup to `project = ref.pkg`. Gen sets
+ * `RefInfo.module` to the object's real top-level defining module — `pathlib`,
+ * `collections`, `json`, … for the standard library — but the whole stdlib is
+ * published as a *single* Sphinx inventory (conventionally registered here
+ * under one project name such as `python`). A project-scoped match would
+ * require registering that inventory once per stdlib top-level module; matching
+ * by name lets one `python` inventory satisfy them all.
+ *
+ * Tie-breaking when a name exists in several inventories / domains:
+ *   1. prefer the inventory whose project name equals the ref's top-level
+ *      module (`numpy` ref → `numpy` inventory), so a same-named object in an
+ *      unrelated project can't shadow the obvious one;
+ *   2. then the `py` domain;
+ *   3. then indexed (`priority >= 0`) over hidden;
+ *   4. then the lowest priority value.
+ */
+export async function resolveExternalRefs(
+  graphDb: GraphDb,
+  refs: RefTuple[]
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  await Promise.all(
+    refs.map(async (r) => {
+      const name = r.path.replace(/:/g, ".");
+      const row = await graphDb.get<ExternalRow>(
+        "SELECT uri FROM external_objects WHERE name=? " +
+          "ORDER BY (project=?) DESC, (domain='py') DESC, (priority>=0) DESC, priority ASC LIMIT 1",
+        [name, r.pkg]
+      );
+      if (row?.uri) out.set(refKey(r), row.uri);
+    })
+  );
+  return out;
+}
+
 /**
  * Return the documents that link *to* the given target, as
  * (pkg, version, kind, path) tuples. Sorted lexicographically and

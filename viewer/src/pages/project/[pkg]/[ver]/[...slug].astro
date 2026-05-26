@@ -212,6 +212,19 @@ const crumbs = qualnameAncestors(qualname).map((qa) => ({
   }
 
   {
+    view.seeAlso.length > 0 ? (
+      <section class="doc-section doc-section-see-also">
+        <h2>See also</h2>
+        <dl class="see-also">
+          {view.seeAlso.map((item) => (
+            <IrNode node={item} resolveXref={resolveXref} />
+          ))}
+        </dl>
+      </section>
+    ) : null
+  }
+
+  {
     view.arbitrary.length > 0 ? (
       <section class="doc-section doc-section-arbitrary">
         <h2>Additional content</h2>

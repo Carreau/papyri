@@ -278,6 +278,12 @@ async def example1(
     """
     first example.
 
+    in this example, `pos` and `only` are respectively `int` and `None`, that is positional only.
+
+    Here are various things that should link to cpython docs.
+
+    `print`, `os`,
+
     Examples
     --------
     >>> import matplotlib.pyplot as plt

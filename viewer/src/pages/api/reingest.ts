@@ -13,8 +13,9 @@
 //   ?pkg=<name>&ver=<v>  reingest exactly one (pkg, version)
 //   (no params)          reingest every archived bundle
 //
-// Auth: same Bearer token check as PUT /api/bundle. Omit token check in
-// local dev when PAPYRI_UPLOAD_TOKEN is not set.
+// Auth: an admin action — authorized by the session-cookie middleware (the
+// route is not in middleware.ts's PUBLIC_PREFIXES, so only a logged-in admin
+// can reach it).
 //
 // Response contract: 200 application/x-ndjson stream.
 // One JSON object per line. Final line is either:
@@ -27,20 +28,12 @@
 import type { APIRoute } from "astro";
 import { Ingester, decode, type TypedNode } from "papyri-ingest";
 import { isSafeSegment } from "../../lib/paths.ts";
-import { getBackends, getUploadToken } from "../../lib/backends.ts";
+import { getBackends } from "../../lib/backends.ts";
 import { respond } from "../../lib/api-utils.ts";
 
 export const prerender = false;
 
-export const POST: APIRoute = async ({ request, url }) => {
-  const expectedToken = await getUploadToken();
-  if (expectedToken) {
-    const auth = request.headers.get("Authorization") ?? "";
-    if (auth !== `Bearer ${expectedToken}`) {
-      return respond({ ok: false, error: "unauthorized" }, 401, { "WWW-Authenticate": "Bearer" });
-    }
-  }
-
+export const POST: APIRoute = async ({ url }) => {
   const pkg = url.searchParams.get("pkg") ?? undefined;
   const ver = url.searchParams.get("ver") ?? undefined;
 

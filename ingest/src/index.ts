@@ -31,3 +31,12 @@ export { collectForwardRefs, collectForwardRefsFromSection } from "./visitor.js"
 
 export { FsRawStore, R2RawStore } from "./raw-store.js";
 export type { RawStore } from "./raw-store.js";
+
+export {
+  parseObjectsInv,
+  registerProject,
+  resolveExternalUri,
+  storeInventory,
+  unloadProject,
+} from "./inventory.js";
+export type { InventoryObject, ParsedInventory } from "./inventory.js";

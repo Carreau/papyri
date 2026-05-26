@@ -102,6 +102,31 @@ async function ensureD1Schema(graphDb: GraphDb): Promise<void> {
         "  PRIMARY KEY (module, version)" +
         ")",
     },
+    {
+      sql:
+        "CREATE TABLE IF NOT EXISTS external_projects (" +
+        "  name TEXT PRIMARY KEY," +
+        "  base_url TEXT NOT NULL," +
+        "  version TEXT," +
+        "  fetched_at INTEGER" +
+        ")",
+    },
+    {
+      sql:
+        "CREATE TABLE IF NOT EXISTS external_objects (" +
+        "  project TEXT NOT NULL REFERENCES external_projects (name) ON DELETE CASCADE," +
+        "  name TEXT NOT NULL," +
+        "  domain TEXT NOT NULL," +
+        "  role TEXT NOT NULL," +
+        "  uri TEXT NOT NULL," +
+        "  dispname TEXT," +
+        "  priority INTEGER," +
+        "  PRIMARY KEY (project, name, domain, role)" +
+        ")",
+    },
+    {
+      sql: "CREATE INDEX IF NOT EXISTS idx_external_objects_name ON external_objects (project, name)",
+    },
   ]);
   _d1SchemaApplied = true;
 }
@@ -136,6 +161,9 @@ async function nodeBackends(): Promise<Backends> {
     "CREATE INDEX IF NOT EXISTS idx_links_dest ON links (dest)",
     "CREATE INDEX IF NOT EXISTS idx_nodes_pkg_cat_ident ON nodes (package, category, identifier)",
     "CREATE TABLE IF NOT EXISTS bundles (module TEXT NOT NULL, version TEXT NOT NULL, bundle_size_bytes INTEGER NOT NULL, ingested_at INTEGER NOT NULL, PRIMARY KEY (module, version))",
+    "CREATE TABLE IF NOT EXISTS external_projects (name TEXT PRIMARY KEY, base_url TEXT NOT NULL, version TEXT, fetched_at INTEGER)",
+    "CREATE TABLE IF NOT EXISTS external_objects (project TEXT NOT NULL REFERENCES external_projects (name) ON DELETE CASCADE, name TEXT NOT NULL, domain TEXT NOT NULL, role TEXT NOT NULL, uri TEXT NOT NULL, dispname TEXT, priority INTEGER, PRIMARY KEY (project, name, domain, role))",
+    "CREATE INDEX IF NOT EXISTS idx_external_objects_name ON external_objects (project, name)",
   ]) {
     db.prepare(sql).run();
   }

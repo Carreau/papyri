@@ -10,6 +10,9 @@
   --surface-alt: #eeeeee;
   --table-stripe: rgba(0, 0, 0, 0.025);
   --accent: #2b6cb0;
+  /* External (intersphinx) xrefs: a teal hue distinct from the blue accent so
+     outbound links to other projects' docs are recognizable at a glance. */
+  --xref-external: #0f766e;
   --border: #e2e2e2;
   --admonition-bg: #ffffff;
   /* Per-base_type admonition accents/backgrounds (light theme). */
@@ -51,6 +54,7 @@ html[data-theme="dark"] {
   --surface-alt: #242b33;
   --table-stripe: rgba(255, 255, 255, 0.03);
   --accent: #5ea2eb;
+  --xref-external: #4fd1c5;
   --border: #2b333c;
   --admonition-bg: #1a1f26;
   /* Per-base_type admonition accents/backgrounds (dark theme). */

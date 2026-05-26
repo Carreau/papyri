@@ -9,7 +9,7 @@
 //   3. Resolve and bucket backrefs from the graph store into same-package
 //      vs cross-package rows.
 
-import { sectionTitleText, type IngestedDoc, type SectionNode } from "./ir-reader.ts";
+import { sectionTitleText, type IngestedDoc, type IRNode, type SectionNode } from "./ir-reader.ts";
 import { linkForRef } from "./links.ts";
 import type { RefTuple } from "./graph.ts";
 
@@ -35,6 +35,8 @@ export interface QualnamePageView {
   sections: RenderSection[];
   arbitrary: SectionNode[];
   exampleSection: ExampleSection | null;
+  /** `SeeAlsoItem` nodes (name + descriptions); rendered as a definition list. */
+  seeAlso: IRNode[];
   internalBackrefs: BackrefRow[];
   externalBackrefs: BackrefRow[];
 }
@@ -108,6 +110,7 @@ export function buildQualnamePageView(
     sections: nonEmptySections(doc),
     arbitrary: Array.isArray(doc.arbitrary) ? doc.arbitrary : [],
     exampleSection: unwrapExampleSection(doc),
+    seeAlso: Array.isArray(doc.see_also) ? doc.see_also.filter((i): i is IRNode => i != null) : [],
     internalBackrefs: internal,
     externalBackrefs: external,
   };

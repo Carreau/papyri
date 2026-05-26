@@ -127,6 +127,22 @@ dl.params dd p {
   margin: 0.25rem 0;
 }
 
+/* numpydoc "See also" entries: target name (dt) + optional description (dd). */
+dl.see-also {
+  margin: 0;
+}
+dl.see-also dt.see-also-name {
+  margin: 0.5rem 0 0.1rem;
+  font-family: var(--mono);
+  font-size: 0.9rem;
+}
+dl.see-also dd.see-also-desc {
+  margin: 0 0 0.25rem 1.25rem;
+}
+dl.see-also dd.see-also-desc p {
+  margin: 0.25rem 0;
+}
+
 /* Inline parameter references emitted by :param:`name` in docstrings.
    On hover the same data-param attribute is used to co-highlight the
    matching .sig-param in the rendered signature via client-side JS. */
@@ -160,6 +176,44 @@ a.xref:hover {
   outline-offset: 2px;
   padding: 0 0.15em;
   border-radius: 2px;
+  /* Anchor for the debug tooltip below, and flag the span as inspectable. */
+  position: relative;
+  cursor: help;
+}
+/* Visible hover tooltip showing the underlying RefInfo (module/version/kind/
+   path) so it's clear why the ref didn't resolve. Driven by `data-debug` via
+   content:attr() because native `title` tooltips are slow/flaky. */
+.xref.unresolved:hover::after {
+  content: attr(data-debug);
+  position: absolute;
+  left: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+  width: max-content;
+  max-width: min(32rem, 80vw);
+  padding: 0.35em 0.55em;
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--warn-border);
+  border-radius: 4px;
+  font: normal 0.75rem / 1.4 var(--mono);
+  white-space: normal;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 18%);
+  pointer-events: none;
+}
+/* Links resolved against an external (intersphinx) inventory — they leave the
+   papyri site, so set them apart from internal xrefs: a distinct teal hue, a
+   dashed (rather than dotted) underline, and a trailing arrow. */
+a.xref.external {
+  color: var(--xref-external);
+  border-bottom: 1px dashed var(--xref-external);
+}
+a.xref.external::after {
+  content: "\2197"; /* ↗ */
+  color: var(--xref-external);
+  font-size: 0.8em;
+  vertical-align: super;
+  margin-left: 0.1em;
 }
 
 aside.admonition {

@@ -36,10 +36,49 @@ are visible rather than silent.
 - Method: :meth:`papyri.gen.Gen.collect_narrative_docs`
 - Function: :func:`papyri.gen.Gen`
 
-The same roles cross *packages* once both bundles are ingested — a papyri doc
-can link straight to :func:`numpy.linspace`, and the viewer resolves it
-against the ingested numpy bundle. Here that target is intentionally
-unresolved, which is exactly how a dangling cross-package link looks.
+The same roles cross *packages*: a papyri doc can link straight to
+:func:`numpy.linspace`. The viewer resolves such a reference against an
+ingested numpy *bundle* if one is present, or — failing that — against a
+registered external numpy *inventory* (see below). With neither in place the
+target renders unresolved, which is exactly how a dangling cross-package link
+looks.
+
+External API references (intersphinx)
+-------------------------------------
+
+A cross-package reference whose target is *importable at gen time* but lives
+outside any ingested bundle can still be linked, by resolving it against a
+Sphinx ``objects.inv`` inventory registered with the viewer (Admin →
+*External inventories*, or ``POST /api/inventory``). This is how a papyri
+bundle links into projects that don't ship a DocBundle — numpy, scipy, or the
+Python standard library:
+
+- Class: :class:`pathlib.Path`
+- Function: :func:`json.loads`
+- Class: :class:`datetime.datetime`
+- Class: :class:`collections.OrderedDict`
+- Module: :mod:`collections`
+- Function: :func:`functools.partial`
+- Function: :func:`re.compile`
+- Class: :class:`collections.abc.Mapping`
+
+Resolution is by **object name**, like intersphinx itself: the dotted name is
+looked up across every registered inventory, preferring one whose project name
+matches the reference's top-level module. So a single Python inventory —
+``https://docs.python.org/3/objects.inv`` registered as ``python`` — resolves
+references into *any* stdlib module above (``pathlib.Path``, ``json.loads``,
+``collections.abc.Mapping``, …), even though gen records each object's real
+top-level module (``pathlib``, ``json``, ``collections``). A resolved external
+link renders as an ``external`` xref with a trailing arrow; a name that is in
+no registered inventory stays unresolved, like any other cross-package miss.
+
+.. rubric:: Not supported
+
+- **C-accelerated stdlib objects.** A reference resolves via the object's real
+  defining module, which for C-accelerated callables is a private module:
+  ``os.getcwd`` resolves to ``posix.getcwd`` and ``os.path.join`` to
+  ``posixpath.join``, neither of which matches the public name on
+  docs.python.org. Prefer pure-Python targets (as above) for external links.
 
 External links
 --------------

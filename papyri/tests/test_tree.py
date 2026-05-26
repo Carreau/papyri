@@ -1431,23 +1431,24 @@ def test_sphinx_only_drops_currentmodule_via_visitor():
 
 
 @pytest.mark.parametrize(
-    "handler,kind",
+    "handler,kind,base_type",
     [
-        (attention_handler, "attention"),
-        (caution_handler, "caution"),
-        (danger_handler, "danger"),
-        (error_handler, "error"),
-        (hint_handler, "hint"),
-        (important_handler, "important"),
-        (tip_handler, "tip"),
+        (attention_handler, "attention", "warning"),
+        (caution_handler, "caution", "warning"),
+        (danger_handler, "danger", "danger"),
+        (error_handler, "error", "danger"),
+        (hint_handler, "hint", "tip"),
+        (important_handler, "important", "important"),
+        (tip_handler, "tip", "tip"),
     ],
 )
-def test_standard_admonition_handler_produces_admonition(handler, kind):
+def test_standard_admonition_handler_produces_admonition(handler, kind, base_type):
     out = handler("", {}, "Some body text.")
     assert len(out) == 1
     adm = out[0]
     assert isinstance(adm, Admonition)
     assert adm.kind == kind
+    assert adm.base_type == base_type
 
 
 @pytest.mark.parametrize(
@@ -1477,6 +1478,58 @@ def test_standard_admonition_via_visitor_dispatch(name):
     assert len(out) == 1
     assert isinstance(out[0], Admonition)
     assert out[0].kind == name
+
+
+# ---------------------------------------------------------------------------
+# base_type classification
+# ---------------------------------------------------------------------------
+
+
+def test_admonition_base_type_mapping_values_are_finite():
+    """Every mapping-table value must be a member of the finite enum."""
+    from papyri.nodes import (
+        _ADMONITION_KIND_TO_BASE_TYPE,
+        ADMONITION_BASE_TYPES,
+    )
+
+    assert set(_ADMONITION_KIND_TO_BASE_TYPE.values()) <= ADMONITION_BASE_TYPES
+
+
+@pytest.mark.parametrize(
+    "kind,expected",
+    [
+        ("note", "note"),
+        ("seealso", "note"),
+        ("topic", "note"),
+        ("admonition", "note"),
+        ("rubric", "note"),
+        ("tip", "tip"),
+        ("hint", "tip"),
+        ("important", "important"),
+        ("warning", "warning"),
+        ("attention", "warning"),
+        ("caution", "warning"),
+        ("danger", "danger"),
+        ("error", "danger"),
+        ("versionadded", "neutral"),
+        ("versionchanged", "neutral"),
+        ("deprecated", "neutral"),
+        ("totally-unknown-kind", "note"),
+    ],
+)
+def test_admonition_base_type_classification(kind, expected):
+    from papyri.nodes import admonition_base_type
+
+    assert admonition_base_type(kind) == expected
+
+
+def test_admonition_base_type_rejects_unknown_category(monkeypatch):
+    """A mapping-table typo (value outside the enum) fails fast."""
+    from papyri import nodes
+
+    monkeypatch.setitem(nodes._ADMONITION_KIND_TO_BASE_TYPE, "note", "warn")
+    with pytest.raises(ValueError, match="unknown base_type 'warn'"):
+        nodes.admonition_base_type("note")
 
 
 # ---------------------------------------------------------------------------

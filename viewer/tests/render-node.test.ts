@@ -107,3 +107,36 @@ describe("renderNode SeeAlsoItem", () => {
     );
   });
 });
+
+const adm = (kind: string, baseType: string): IRNode =>
+  ({
+    __type: "Admonition",
+    __tag: 4056,
+    kind,
+    base_type: baseType,
+    children: [{ __type: "Text", __tag: 4046, value: "body" }],
+  }) as unknown as IRNode;
+
+describe("renderNode Admonition", () => {
+  it("emits admonition-<base_type> alongside the raw kind class", async () => {
+    const html = await renderNode(adm("error", "danger"));
+    expect(html).toContain('class="admonition admonition-danger error"');
+    expect(html).toContain("body");
+  });
+
+  it("keeps base_type independent of kind (versionadded -> neutral)", async () => {
+    const html = await renderNode(adm("versionadded", "neutral"));
+    expect(html).toContain("admonition-neutral");
+    expect(html).toContain("versionadded");
+  });
+
+  it("falls back to note when base_type is absent", async () => {
+    const node = {
+      __type: "Admonition",
+      __tag: 4056,
+      kind: "note",
+      children: [],
+    } as unknown as IRNode;
+    expect(await renderNode(node)).toContain("admonition-note");
+  });
+});

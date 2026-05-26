@@ -28,7 +28,9 @@ leading rows are headers:
      - the maintainer
      - an ingested bundle in the viewer
 
-``:widths:`` hints at relative column widths:
+``:widths:`` is accepted for Sphinx compatibility but has **no effect** — the
+structured ``Table`` IR carries no presentation hints, so columns always
+auto-size. It is shown here only to confirm it parses without error:
 
 .. list-table::
    :header-rows: 1
@@ -83,3 +85,7 @@ Not supported
 - **Grid tables** and **simple tables** (the ASCII-art ``+---+`` and ``===``
   forms) are not parsed into a table yet — they fall back to a verbatim code
   block. Use ``list-table`` or ``csv-table`` for real tables.
+- **Presentation options** on ``list-table`` / ``csv-table`` — ``:widths:``,
+  ``:align:``, ``:stub-columns:``, ``:class:``, ``:name:`` — are parsed but
+  dropped. The ``Table`` IR is structure-only; only ``:header-rows:`` (and the
+  csv ``:header:``) affect the result.

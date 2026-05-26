@@ -31,6 +31,29 @@ function asArray(x: unknown): IRNode[] {
   return Array.isArray(x) ? (x as IRNode[]) : [];
 }
 
+/**
+ * Build debug attributes for an unresolved CrossRef so contributors can see
+ * *why* a reference failed to resolve (the underlying RefInfo: module /
+ * version / kind / path). Returns the attribute string to splice into the span
+ * (leading space included):
+ *   - `data-debug` — drives a visible CSS hover tooltip (`:hover::after` with
+ *     `content: attr(data-debug)`), since native `title` tooltips are flaky.
+ *   - `title` — native fallback for accessibility.
+ *   - `data-ref-*` — the raw fields, inspectable in devtools.
+ */
+function unresolvedRefDebug(node: Record<string, unknown>): string {
+  const ref = node.reference as Record<string, unknown> | null | undefined;
+  const refType = ref ? String(ref.__type ?? "RefInfo") : "RefInfo";
+  const fields = ["module", "version", "kind", "path"] as const;
+  const parts = fields.map((k) => `${k}=${ref?.[k] != null ? String(ref[k]) : "∅"}`);
+  const debug = `unresolved ${refType}(${parts.join(", ")})`;
+  let attrs = ` data-debug="${escapeHtml(debug)}" title="${escapeHtml(debug)}" data-ref-type="${escapeHtml(refType)}"`;
+  for (const k of fields) {
+    attrs += ` data-ref-${k}="${escapeHtml(ref?.[k] != null ? String(ref[k]) : "")}"`;
+  }
+  return attrs;
+}
+
 async function renderChildren(children: IRNode[], opts: RenderOptions): Promise<string> {
   const parts = await Promise.all(children.map((c) => renderNode(c, opts)));
   return parts.join("");
@@ -220,7 +243,7 @@ export async function renderNode(node: IRNode, opts: RenderOptions = {}): Promis
           return `<a class="xref" href="${escapeHtml(resolved.url)}">${escapeHtml(resolved.label)}</a>`;
         }
       }
-      return `<span class="xref unresolved">${escapeHtml(String(n.value ?? ""))}</span>`;
+      return `<span class="xref unresolved"${unresolvedRefDebug(n)}>${escapeHtml(String(n.value ?? ""))}</span>`;
     }
 
     case "Section": {

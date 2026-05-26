@@ -20,7 +20,7 @@
 // can reach it).
 
 import type { APIRoute } from "astro";
-import { parseObjectsInv, storeInventory } from "papyri-ingest";
+import { parseObjectsInv, registerProject, storeInventory, unloadProject } from "papyri-ingest";
 import { getBackends } from "../../lib/backends.ts";
 import { respond } from "../../lib/api-utils.ts";
 
@@ -38,7 +38,12 @@ function isHttpUrl(s: string): boolean {
 }
 
 export const POST: APIRoute = async ({ request }) => {
-  let body: { name?: unknown; base_url?: unknown; inventory_url?: unknown };
+  let body: {
+    name?: unknown;
+    base_url?: unknown;
+    inventory_url?: unknown;
+    register_only?: unknown;
+  };
   try {
     body = await request.json();
   } catch {
@@ -53,6 +58,19 @@ export const POST: APIRoute = async ({ request }) => {
   if (typeof baseUrl !== "string" || !isHttpUrl(baseUrl)) {
     return respond({ ok: false, error: "base_url must be an http(s) URL" }, 400);
   }
+
+  // Stage the (name, base_url) pair without fetching, so the admin UI can keep
+  // a reusable list and load each entry on demand instead of re-typing URLs.
+  if (body.register_only === true) {
+    try {
+      const { graphDb } = await getBackends();
+      await registerProject(graphDb, { name, baseUrl });
+    } catch (err) {
+      return respond({ ok: false, error: `register failed: ${err}` }, 500);
+    }
+    return respond({ ok: true, project: name, registered: true });
+  }
+
   const invUrl =
     typeof body.inventory_url === "string" && body.inventory_url
       ? body.inventory_url
@@ -99,6 +117,55 @@ export const POST: APIRoute = async ({ request }) => {
   }
 
   return respond({ ok: true, project: name, version: parsed.version, count });
+};
+
+// DELETE /api/inventory
+//   body: { "name": "numpy", "objects_only"?: true }
+//   Default: drops the project and all its objects. With objects_only=true,
+//   *unloads* — clears the objects but keeps the (name, base_url) row so it can
+//   be re-loaded without re-typing. Either way cross-package refs into it
+//   revert to unresolved. Same admin auth as POST/GET.
+export const DELETE: APIRoute = async ({ request }) => {
+  let body: { name?: unknown; objects_only?: unknown };
+  try {
+    body = await request.json();
+  } catch {
+    return respond({ ok: false, error: "invalid JSON body" }, 400);
+  }
+  const name = body.name;
+  if (typeof name !== "string" || !SAFE_NAME.test(name)) {
+    return respond({ ok: false, error: `invalid project name: ${JSON.stringify(name)}` }, 400);
+  }
+
+  let backends: Awaited<ReturnType<typeof getBackends>>;
+  try {
+    backends = await getBackends();
+  } catch (err) {
+    return respond({ ok: false, error: `failed to open backends: ${err}` }, 500);
+  }
+
+  if (body.objects_only === true) {
+    try {
+      await unloadProject(backends.graphDb, { name });
+    } catch (err) {
+      return respond({ ok: false, error: `unload failed: ${err}` }, 500);
+    }
+    return respond({ ok: true, project: name, unloaded: true });
+  }
+
+  try {
+    // Delete objects first, then the project row — explicit rather than relying
+    // on ON DELETE CASCADE, which needs PRAGMA foreign_keys=ON (off by default
+    // in SQLite, and not guaranteed across the D1 path).
+    await backends.graphDb.batch([
+      { sql: "DELETE FROM external_objects WHERE project=?", params: [name] },
+      { sql: "DELETE FROM external_projects WHERE name=?", params: [name] },
+    ]);
+  } catch (err) {
+    return respond({ ok: false, error: `delete failed: ${err}` }, 500);
+  }
+
+  return respond({ ok: true, project: name });
 };
 
 interface ProjectRow {

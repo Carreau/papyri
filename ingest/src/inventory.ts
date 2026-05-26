@@ -122,6 +122,40 @@ export function resolveExternalUri(baseUrl: string, uri: string): string {
 }
 
 /**
+ * Register a project (name + base URL) WITHOUT fetching its inventory, so the
+ * admin UI can stage a (project, url) pair and fetch it on demand. Upserts the
+ * `external_projects` row only; any objects already stored for the project are
+ * left untouched, and `version`/`fetched_at` of an already-loaded project are
+ * preserved (only the base URL is updated).
+ */
+export async function registerProject(
+  graphDb: GraphDb,
+  args: { name: string; baseUrl: string },
+): Promise<void> {
+  await graphDb.run(
+    "INSERT INTO external_projects(name, base_url, version, fetched_at) VALUES(?,?,NULL,NULL) " +
+      "ON CONFLICT(name) DO UPDATE SET base_url=excluded.base_url",
+    [args.name, args.baseUrl],
+  );
+}
+
+/**
+ * Unload a project's inventory: delete its objects and reset
+ * `version`/`fetched_at`, but KEEP the `external_projects` row (name + base
+ * URL) so it can be re-loaded without re-typing. The middle ground between a
+ * reload and a full drop.
+ */
+export async function unloadProject(graphDb: GraphDb, args: { name: string }): Promise<void> {
+  await graphDb.batch([
+    { sql: "DELETE FROM external_objects WHERE project=?", params: [args.name] },
+    {
+      sql: "UPDATE external_projects SET version=NULL, fetched_at=NULL WHERE name=?",
+      params: [args.name],
+    },
+  ]);
+}
+
+/**
  * Persist an inventory into the `external_projects` / `external_objects`
  * tables. Replaces any previously-stored objects for the project (drop +
  * rebuild — the inventory is a derived cache, see PLAN.md). Object URIs are

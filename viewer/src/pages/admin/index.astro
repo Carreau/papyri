@@ -26,6 +26,62 @@ const externalProjects = await graphDb.all<ExternalProject>(
     "FROM external_projects p LEFT JOIN external_objects o ON o.project = p.name " +
     "GROUP BY p.name, p.base_url, p.version, p.fetched_at ORDER BY p.name"
 );
+
+// --- External inventory explorer (debug) ---
+// Server-rendered: plain GET forms drive parameterised queries so the page
+// works on Node and Workers without a client island or extra endpoint.
+interface ExtObjRow {
+  project: string;
+  name: string;
+  domain: string;
+  role: string;
+  priority: number;
+  uri: string;
+}
+
+const objQ = (Astro.url.searchParams.get("obj_q") ?? "").trim();
+const objProject = (Astro.url.searchParams.get("obj_project") ?? "").trim();
+const probeModule = (Astro.url.searchParams.get("probe_module") ?? "").trim();
+const probePath = (Astro.url.searchParams.get("probe_path") ?? "").trim();
+
+const OBJ_LIMIT = 100;
+let objResults: ExtObjRow[] = [];
+let objTruncated = false;
+if (objQ) {
+  const where = ["name LIKE ?"];
+  const params: unknown[] = [`%${objQ}%`];
+  if (objProject) {
+    where.push("project = ?");
+    params.push(objProject);
+  }
+  objResults = await graphDb.all<ExtObjRow>(
+    `SELECT project, name, domain, role, priority, uri FROM external_objects ` +
+      `WHERE ${where.join(" AND ")} ORDER BY name, project LIMIT ${OBJ_LIMIT + 1}`,
+    params
+  );
+  objTruncated = objResults.length > OBJ_LIMIT;
+  if (objTruncated) objResults = objResults.slice(0, OBJ_LIMIT);
+}
+
+// Resolve probe — mirrors resolveExternalRefs() in lib/graph.ts exactly so it
+// reports what the renderer would actually do, including the `:` → `.`
+// normalisation and the project-name-as-module-preference tie-break.
+let probeName: string | null = null;
+let probeWinner: ExtObjRow | null = null;
+let probeAll: ExtObjRow[] = [];
+if (probePath) {
+  probeName = probePath.replace(/:/g, ".");
+  probeWinner =
+    (await graphDb.get<ExtObjRow>(
+      "SELECT project, name, domain, role, priority, uri FROM external_objects WHERE name=? " +
+        "ORDER BY (project=?) DESC, (domain='py') DESC, (priority>=0) DESC, priority ASC LIMIT 1",
+      [probeName, probeModule]
+    )) ?? null;
+  probeAll = await graphDb.all<ExtObjRow>(
+    "SELECT project, name, domain, role, priority, uri FROM external_objects WHERE name=? ORDER BY project",
+    [probeName]
+  );
+}
 ---
 
 <BaseLayout title="Admin — Papyri">
@@ -89,6 +145,155 @@ const externalProjects = await graphDb.all<ExternalProject>(
       <ExternalInventoryPanel client:load initial={externalProjects} />
     </section>
 
+    <section class="admin-section">
+      <h2>External inventory explorer <span class="admin-debug-tag">debug</span></h2>
+      <p class="ext-dbg-desc">
+        Inspect the parsed intersphinx tables and test how a cross-package reference resolves. The
+        probe mirrors the render-time resolver in <code>resolveExternalRefs()</code> exactly — including
+        the <code>:</code>→<code>.</code> name normalisation and the project-name-as-module tie-break.
+      </p>
+
+      <h3>Resolve probe</h3>
+      <form class="ext-dbg-form" method="get">
+        <label>
+          Top-level module (<code>RefInfo.module</code>)
+          <input type="text" name="probe_module" value={probeModule} placeholder="collections" />
+        </label>
+        <label>
+          Path (<code>RefInfo.path</code>, colon form)
+          <input
+            type="text"
+            name="probe_path"
+            value={probePath}
+            placeholder="collections.abc:Mapping"
+          />
+        </label>
+        <input type="hidden" name="obj_q" value={objQ} />
+        <input type="hidden" name="obj_project" value={objProject} />
+        <button class="ext-inv-btn" type="submit">Resolve</button>
+      </form>
+      {
+        probePath && (
+          <div class="ext-dbg-probe">
+            <p>
+              Normalised name: <code>{probeName}</code> · module preference:{" "}
+              <code>{probeModule || "—"}</code>
+            </p>
+            {probeWinner ? (
+              <p class="ext-dbg-hit">
+                ✓ resolves via project <code>{probeWinner.project}</code> →{" "}
+                <a class="ext-inv-url" href={probeWinner.uri}>
+                  {probeWinner.uri}
+                </a>
+              </p>
+            ) : (
+              <p class="ext-dbg-miss">✗ no match — this reference renders unresolved.</p>
+            )}
+            {probeAll.length > 0 ? (
+              <>
+                <p class="ext-dbg-sub">
+                  Inventories carrying <code>{probeName}</code>:
+                </p>
+                <table class="ext-inv-table">
+                  <thead>
+                    <tr>
+                      <th>Project</th>
+                      <th>Domain</th>
+                      <th>Role</th>
+                      <th>Priority</th>
+                      <th>URI</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {probeAll.map((o) => (
+                      <tr>
+                        <td>
+                          <code>{o.project}</code>
+                        </td>
+                        <td>{o.domain}</td>
+                        <td>{o.role}</td>
+                        <td class="ext-inv-num">{o.priority}</td>
+                        <td>
+                          <a class="ext-inv-url" href={o.uri}>
+                            {o.uri}
+                          </a>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            ) : (
+              <p class="ext-dbg-sub">
+                The name <code>{probeName}</code> is not in any registered inventory.
+              </p>
+            )}
+          </div>
+        )
+      }
+
+      <h3>Object search</h3>
+      <form class="ext-dbg-form" method="get">
+        <label>
+          Name contains
+          <input type="text" name="obj_q" value={objQ} placeholder="Mapping" />
+        </label>
+        <label>
+          Project (optional)
+          <input type="text" name="obj_project" value={objProject} placeholder="python" />
+        </label>
+        <input type="hidden" name="probe_module" value={probeModule} />
+        <input type="hidden" name="probe_path" value={probePath} />
+        <button class="ext-inv-btn" type="submit">Search</button>
+      </form>
+      {
+        objQ &&
+          (objResults.length === 0 ? (
+            <p class="ext-inv-empty">No objects match.</p>
+          ) : (
+            <>
+              <p class="ext-dbg-sub">
+                {objResults.length}
+                {objTruncated ? "+" : ""} object{objResults.length !== 1 ? "s" : ""}
+                {objTruncated ? ` (showing first ${OBJ_LIMIT})` : ""}.
+              </p>
+              <table class="ext-inv-table">
+                <thead>
+                  <tr>
+                    <th>Project</th>
+                    <th>Name</th>
+                    <th>Domain</th>
+                    <th>Role</th>
+                    <th>Priority</th>
+                    <th>URI</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {objResults.map((o) => (
+                    <tr>
+                      <td>
+                        <code>{o.project}</code>
+                      </td>
+                      <td>
+                        <code>{o.name}</code>
+                      </td>
+                      <td>{o.domain}</td>
+                      <td>{o.role}</td>
+                      <td class="ext-inv-num">{o.priority}</td>
+                      <td>
+                        <a class="ext-inv-url" href={o.uri}>
+                          {o.uri}
+                        </a>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          ))
+      }
+    </section>
+
     <ReingestPanel client:load entries={rawEntries} />
   </div>
 </BaseLayout>
@@ -106,6 +311,78 @@ const externalProjects = await graphDb.all<ExternalProject>(
 
   .admin-empty {
     color: var(--color-muted, #888);
+  }
+
+  /* ---- External inventory explorer (debug) ---- */
+  .admin-debug-tag {
+    font-size: 0.65em;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    vertical-align: middle;
+    padding: 0.1em 0.45em;
+    border-radius: 4px;
+    background: var(--color-warn-bg, #fffbeb);
+    border: 1px solid var(--color-warn-border, #fcd34d);
+    color: var(--color-warn, #b45309);
+  }
+
+  .admin-section h3 {
+    margin: 1.25rem 0 0.4rem;
+    font-size: 0.95rem;
+  }
+
+  .ext-dbg-desc {
+    margin: 0 0 0.5rem;
+    color: var(--color-muted, #666);
+    font-size: 0.9rem;
+  }
+
+  .ext-dbg-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .ext-dbg-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+
+  .ext-dbg-form input[type="text"] {
+    padding: 0.35rem 0.5rem;
+    border: 1px solid var(--color-border, #ccc);
+    border-radius: 4px;
+    background: var(--color-bg, #fff);
+    color: inherit;
+    font-size: 0.9rem;
+    min-width: 16rem;
+  }
+
+  .ext-dbg-probe {
+    margin: 0.5rem 0 0.75rem;
+    font-size: 0.9rem;
+  }
+
+  .ext-dbg-hit {
+    color: var(--color-success, #16a34a);
+    font-weight: 600;
+  }
+
+  .ext-dbg-miss {
+    color: var(--color-error, #dc2626);
+    font-weight: 600;
+  }
+
+  .ext-dbg-sub {
+    margin: 0.5rem 0 0.3rem;
+    color: var(--color-muted, #666);
+    font-size: 0.85rem;
   }
 
   .admin-archive-count {
@@ -310,6 +587,38 @@ const externalProjects = await graphDb.all<ExternalProject>(
     border-radius: 4px;
     cursor: pointer;
     font-size: 0.8rem;
+  }
+
+  :global(.ext-inv-actions) {
+    display: flex;
+    gap: 0.4rem;
+    white-space: nowrap;
+  }
+
+  :global(.ext-inv-unload) {
+    padding: 0.25rem 0.7rem;
+    background: var(--color-surface, #f3f4f6);
+    color: var(--color-warn, #b45309);
+    border: 1px solid var(--color-warn-border, #fcd34d);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+  }
+
+  :global(.ext-inv-drop) {
+    padding: 0.25rem 0.7rem;
+    background: var(--color-surface, #f3f4f6);
+    color: var(--color-error, #dc2626);
+    border: 1px solid var(--color-error-border, #fca5a5);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+  }
+
+  :global(.ext-inv-unload:disabled),
+  :global(.ext-inv-drop:disabled) {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   /* ---- ReingestPanel styles (scoped via :global since component is React) ---- */

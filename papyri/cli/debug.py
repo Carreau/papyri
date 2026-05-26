@@ -10,6 +10,16 @@ import typer
 if TYPE_CHECKING:
     from rich.console import Console
 
+    from papyri.bundle import Bundle
+    from papyri.node_base import Node
+
+# Maps an object-path kind prefix to the Bundle field holding that kind.
+_BUNDLE_KIND_FIELDS = {
+    "module": "api",
+    "docs": "narrative",
+    "examples": "examples",
+}
+
 
 def _resolve_debug_path(raw: str, data_dir: Path) -> Path | None:
     """
@@ -67,6 +77,43 @@ def _print_data_context(rel: Path, console: Console | None = None) -> None:
         _con.print(f"  id      : [cyan]{identifier}[/cyan]")
 
 
+def _select_bundle_object(bundle: Bundle, object_path: str) -> Node:
+    """Return the IR node addressed by *object_path* inside *bundle*.
+
+    The path may carry a kind prefix (``module:``, ``docs:``, ``examples:``)
+    selecting which of the bundle's collections to look in; a bare name is
+    searched across ``api``, ``narrative`` and ``examples`` in that order.
+
+    Raises ``KeyError`` with a human-readable message (listing the candidate
+    keys) when no object matches.
+    """
+    if ":" in object_path:
+        prefix, rest = object_path.split(":", 1)
+        if prefix in _BUNDLE_KIND_FIELDS:
+            collection: dict[str, Node] = getattr(bundle, _BUNDLE_KIND_FIELDS[prefix])
+            if rest in collection:
+                return collection[rest]
+            available = ", ".join(sorted(collection)) or "(none)"
+            raise KeyError(
+                f"no {prefix!r} object named {rest!r} in bundle; available: {available}"
+            )
+        # Not a known kind prefix — the colon belongs to the qualname itself.
+
+    for field in ("api", "narrative", "examples"):
+        collection = getattr(bundle, field)
+        if object_path in collection:
+            return collection[object_path]
+
+    if object_path in bundle.assets:
+        raise KeyError(
+            f"{object_path!r} is a binary asset, not a JSON-serialisable IR node"
+        )
+
+    everything = sorted({*bundle.api, *bundle.narrative, *bundle.examples})
+    available = ", ".join(everything) or "(none)"
+    raise KeyError(f"no object named {object_path!r} in bundle; available: {available}")
+
+
 def debug(
     path: Annotated[
         str,
@@ -80,6 +127,18 @@ def debug(
             )
         ),
     ],
+    object_path: Annotated[
+        str | None,
+        typer.Argument(
+            help=(
+                "Optional: name of a single object inside a .papyri artifact to "
+                "print as JSON on stdout (for piping into jq and friends). "
+                "May carry a kind prefix: 'module:numpy.linspace', 'docs:intro', "
+                "'examples:foo'. A bare name searches api, narrative, then examples. "
+                "All human-readable context is suppressed so stdout is pure JSON."
+            ),
+        ),
+    ] = None,
 ) -> None:
     """
     Print the contents of a CBOR file in human-readable form.
@@ -101,6 +160,12 @@ def debug(
     A ``.papyri`` artifact (output of ``papyri pack``) is also accepted:
     the artifact is gunzipped + decoded to a ``Bundle`` Node and pretty-
     printed in place of the file-tree-walk path.
+
+    Pass a second ``object_path`` argument to print a single object from a
+    ``.papyri`` artifact as JSON on stdout, with no other output, so it can be
+    piped into tools like ``jq``::
+
+        papyri debug numpy.papyri module:numpy.linspace | jq .signature
     """
     import cbor2
     from rich.console import Console
@@ -125,6 +190,17 @@ def debug(
         except Exception as e:
             typer.echo(f"Failed to decode artifact {resolved}: {e}", err=True)
             raise typer.Exit(1) from None
+
+        if object_path is not None:
+            try:
+                obj = _select_bundle_object(bundle, object_path)
+            except KeyError as e:
+                typer.echo(str(e.args[0]), err=True)
+                raise typer.Exit(1) from None
+            # Pure JSON on stdout — nothing else — so the output pipes cleanly.
+            typer.echo(obj.to_json().decode())
+            return
+
         console.print(f"[bold].papyri artifact[/bold] {resolved}")
         console.print(
             f"  module          : [cyan]{bundle.module}[/cyan]"
@@ -138,6 +214,14 @@ def debug(
         console.print(f"  assets          : {len(bundle.assets)}")
         console.print(f"  toc roots       : {len(bundle.toc)}")
         return
+
+    if object_path is not None:
+        typer.echo(
+            "object-path selection is only supported for .papyri artifacts; "
+            f"{resolved.name} is already a single object — omit the object path.",
+            err=True,
+        )
+        raise typer.Exit(1)
 
     import json as _json
 

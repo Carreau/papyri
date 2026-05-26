@@ -52,3 +52,58 @@ describe("renderNode CrossRef", () => {
     expect(html).toContain('data-ref-module=""');
   });
 });
+
+describe("renderNode SeeAlsoItem", () => {
+  it("renders name + description, resolving refs inside the description", async () => {
+    const item = {
+      __type: "SeeAlsoItem",
+      name: {
+        __type: "CrossRef",
+        value: "higher_order",
+        reference: { __type: "LocalRef", kind: "module", path: "papyri.examples:higher_order" },
+      },
+      descriptions: [
+        {
+          __type: "Paragraph",
+          children: [
+            { __type: "Text", value: "Consume the output via a " },
+            {
+              __type: "CrossRef",
+              value: "Callable",
+              reference: {
+                __type: "RefInfo",
+                module: "collections",
+                version: "*",
+                kind: "api",
+                path: "collections.abc:Callable",
+              },
+            },
+            { __type: "Text", value: "." },
+          ],
+        },
+      ],
+      type: null,
+    } as unknown as IRNode;
+
+    const html = await renderNode(item, {
+      resolveXref: (raw) => {
+        const n = raw as { reference?: { path?: string } };
+        if (n.reference?.path === "collections.abc:Callable")
+          return {
+            url: "https://docs.python.org/3/library/collections.abc.html#collections.abc.Callable",
+            label: "Callable",
+            external: true,
+          };
+        return null;
+      },
+    });
+
+    expect(html).toContain('<dt class="see-also-name">');
+    expect(html).toContain('<dd class="see-also-desc">');
+    // The ref inside the description resolved to the external python inventory.
+    expect(html).toContain('class="xref external"');
+    expect(html).toContain(
+      'href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Callable"'
+    );
+  });
+});

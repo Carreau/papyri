@@ -127,6 +127,22 @@ dl.params dd p {
   margin: 0.25rem 0;
 }
 
+/* numpydoc "See also" entries: target name (dt) + optional description (dd). */
+dl.see-also {
+  margin: 0;
+}
+dl.see-also dt.see-also-name {
+  margin: 0.5rem 0 0.1rem;
+  font-family: var(--mono);
+  font-size: 0.9rem;
+}
+dl.see-also dd.see-also-desc {
+  margin: 0 0 0.25rem 1.25rem;
+}
+dl.see-also dd.see-also-desc p {
+  margin: 0.25rem 0;
+}
+
 /* Inline parameter references emitted by :param:`name` in docstrings.
    On hover the same data-param attribute is used to co-highlight the
    matching .sig-param in the rendered signature via client-side JS. */

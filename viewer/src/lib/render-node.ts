@@ -246,6 +246,16 @@ export async function renderNode(node: IRNode, opts: RenderOptions = {}): Promis
       return `<span class="xref unresolved"${unresolvedRefDebug(n)}>${escapeHtml(String(n.value ?? ""))}</span>`;
     }
 
+    case "SeeAlsoItem": {
+      // numpydoc "See Also" entry: a target (CrossRef) + an optional
+      // description. Rendered as a <dt>/<dd> pair inside a <dl> (see the
+      // qualname page). Both go through resolveXref so refs in the description
+      // — e.g. a :class:`~collections.abc.Callable` — resolve too.
+      const name = n.name ? await renderNode(n.name as IRNode, opts) : "";
+      const desc = await renderChildren(asArray(n.descriptions), opts);
+      return `<dt class="see-also-name">${name}</dt><dd class="see-also-desc">${desc}</dd>`;
+    }
+
     case "Section": {
       const inner = await renderChildren(asArray(n.children), opts);
       return `<div>${inner}</div>`;

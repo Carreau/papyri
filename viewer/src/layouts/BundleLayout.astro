@@ -9,7 +9,7 @@ import VersionBanner from "../components/VersionBanner.astro";
 import { loadBundleNav } from "../lib/nav.ts";
 import { resolveVersion } from "../lib/ir-reader.ts";
 import { getBackends } from "../lib/backends.ts";
-import { getVersionStatus } from "../lib/version-utils.ts";
+import { getVersionStatus, equivalentLatestHref } from "../lib/version-utils.ts";
 import "../styles/global.css";
 
 interface Props {
@@ -51,6 +51,18 @@ const [nav, versionStatus] = await Promise.all([
   loadBundleNav(blobStore, pkg, actualVer, ver),
   getVersionStatus(graphDb, pkg, actualVer),
 ]);
+
+// When browsing an older/dev/pre version, point "Go to latest" at the same
+// page in the latest version (falling back to the bundle root inside the
+// banner when there is no equivalent page).
+let latestHref: string | null = null;
+if (versionStatus.kind !== "latest" && versionStatus.latestVersion) {
+  latestHref = await equivalentLatestHref(blobStore, pkg, versionStatus.latestVersion, {
+    qualname: activeQualname,
+    docPath: activeDocPath,
+    examplePath: activeExamplePath,
+  });
+}
 ---
 
 <html lang="en">
@@ -107,7 +119,7 @@ const [nav, versionStatus] = await Promise.all([
       <main class="bundle-main">
         {
           versionStatus.kind !== "latest" && (
-            <VersionBanner pkg={pkg} ver={ver} status={versionStatus} />
+            <VersionBanner pkg={pkg} ver={ver} status={versionStatus} latestHref={latestHref} />
           )
         }
         {

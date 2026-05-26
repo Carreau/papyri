@@ -1,5 +1,6 @@
 import { compareVersionsDesc, listIngestedPackages, type IngestedPackage } from "./ir-reader.ts";
-import type { GraphDb } from "papyri-ingest";
+import { linkForDoc, linkForExample, linkForQualname } from "./links.ts";
+import type { BlobStore, GraphDb } from "papyri-ingest";
 
 export type VersionStatus =
   | { kind: "latest" }
@@ -53,4 +54,58 @@ export async function getVersionStatus(
   stableVersions.sort(compareVersionsDesc);
   if (stableVersions[0] === ver) return { kind: "latest" };
   return { kind: "old", latestVersion: stableVersions[0]! };
+}
+
+/** The page the viewer is currently rendering, identified by IR address. */
+export interface ActivePage {
+  qualname?: string;
+  docPath?: string;
+  examplePath?: string;
+}
+
+/**
+ * URL of the *same* page in `latestVersion`, so the version banner can send
+ * the reader to the equivalent object/doc/example rather than the bundle
+ * landing page. Returns null when there is no equivalent — no active page
+ * (bundle index, search, …), or the object/doc/example was removed in the
+ * newer version — and callers should fall back to the bundle root.
+ */
+export async function equivalentLatestHref(
+  blobStore: BlobStore,
+  pkg: string,
+  latestVersion: string,
+  page: ActivePage
+): Promise<string | null> {
+  if (page.qualname) {
+    const q = page.qualname;
+    // Mirror loadModule: the blob may be written with or without a .cbor suffix.
+    const found =
+      (await blobStore.has({ module: pkg, version: latestVersion, kind: "module", path: q })) ||
+      (await blobStore.has({
+        module: pkg,
+        version: latestVersion,
+        kind: "module",
+        path: `${q}.cbor`,
+      }));
+    return found ? linkForQualname(pkg, latestVersion, q) : null;
+  }
+  if (page.docPath) {
+    const found = await blobStore.has({
+      module: pkg,
+      version: latestVersion,
+      kind: "docs",
+      path: page.docPath,
+    });
+    return found ? linkForDoc(pkg, latestVersion, page.docPath) : null;
+  }
+  if (page.examplePath) {
+    const found = await blobStore.has({
+      module: pkg,
+      version: latestVersion,
+      kind: "examples",
+      path: page.examplePath,
+    });
+    return found ? linkForExample(pkg, latestVersion, page.examplePath) : null;
+  }
+  return null;
 }

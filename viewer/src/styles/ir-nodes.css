@@ -164,43 +164,67 @@ a.xref:hover {
 
 aside.admonition {
   /* Per-kind styling keys off base_type (a finite set: note / tip / important
-     / warning / danger / version). Each admonition-<base_type> class below
-     sets these two tokens; the defaults cover an unstyled fallback. */
+     / warning / danger / neutral). Each admonition-<base_type> class below
+     sets the accent, the tinted title-bar background, and the title icon.
+     The body itself stays the neutral surface so only the title bar carries
+     the category colour; the defaults cover an unstyled fallback. */
   --adm-accent: var(--accent);
-  --adm-bg: var(--admonition-bg);
+  --adm-title-bg: var(--admonition-bg);
+  --adm-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cline x1='12' y1='16' x2='12' y2='12'/%3E%3Cline x1='12' y1='8' x2='12.01' y2='8'/%3E%3C/svg%3E");
   border-left: 3px solid var(--adm-accent);
-  background: var(--adm-bg);
-  padding: 0.5rem 0.75rem;
+  background: var(--admonition-bg);
+  padding: 0 0.75rem 0.5rem;
   margin: 1rem 0;
 }
 aside.admonition .admonition-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
   font-weight: 600;
-  margin: 0 0 0.25rem;
   color: var(--adm-accent);
+  /* Bleed the tinted title bar out to the aside's padding edges so it reads
+     as a header band sitting above the neutral body. */
+  margin: 0 -0.75rem 0.5rem;
+  padding: 0.3rem 0.75rem;
+  background: var(--adm-title-bg);
+}
+aside.admonition .admonition-title::before {
+  content: "";
+  flex: none;
+  width: 1em;
+  height: 1em;
+  background-color: currentColor;
+  -webkit-mask: var(--adm-icon) center / contain no-repeat;
+  mask: var(--adm-icon) center / contain no-repeat;
 }
 aside.admonition-note {
   --adm-accent: var(--adm-note-accent);
-  --adm-bg: var(--adm-note-bg);
+  --adm-title-bg: var(--adm-note-bg);
 }
 aside.admonition-tip {
   --adm-accent: var(--adm-tip-accent);
-  --adm-bg: var(--adm-tip-bg);
+  --adm-title-bg: var(--adm-tip-bg);
+  --adm-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolygon points='13 2 3 14 12 14 11 22 21 10 12 10 13 2'/%3E%3C/svg%3E");
 }
 aside.admonition-important {
   --adm-accent: var(--adm-important-accent);
-  --adm-bg: var(--adm-important-bg);
+  --adm-title-bg: var(--adm-important-bg);
+  --adm-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolygon points='12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2'/%3E%3C/svg%3E");
 }
 aside.admonition-warning {
   --adm-accent: var(--adm-warning-accent);
-  --adm-bg: var(--adm-warning-bg);
+  --adm-title-bg: var(--adm-warning-bg);
+  --adm-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z'/%3E%3Cline x1='12' y1='9' x2='12' y2='13'/%3E%3Cline x1='12' y1='17' x2='12.01' y2='17'/%3E%3C/svg%3E");
 }
 aside.admonition-danger {
   --adm-accent: var(--adm-danger-accent);
-  --adm-bg: var(--adm-danger-bg);
+  --adm-title-bg: var(--adm-danger-bg);
+  --adm-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolygon points='7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2'/%3E%3Cline x1='12' y1='8' x2='12' y2='12'/%3E%3Cline x1='12' y1='16' x2='12.01' y2='16'/%3E%3C/svg%3E");
 }
-aside.admonition-version {
-  --adm-accent: var(--adm-version-accent);
-  --adm-bg: var(--adm-version-bg);
+aside.admonition-neutral {
+  --adm-accent: var(--adm-neutral-accent);
+  --adm-title-bg: var(--adm-neutral-bg);
+  --adm-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z'/%3E%3Cline x1='7' y1='7' x2='7.01' y2='7'/%3E%3C/svg%3E");
 }
 
 details.fallback {
@@ -287,6 +311,11 @@ table.ir-table td {
 table.ir-table thead th {
   background: var(--surface);
   font-weight: 600;
+}
+/* Discreet zebra striping: a barely-there tint on alternate body rows so dense
+   tables stay scannable without a heavy grid. */
+table.ir-table tbody tr:nth-child(even) td {
+  background: var(--table-stripe);
 }
 table.ir-table td > p:first-child,
 table.ir-table th > p:first-child {

@@ -18,9 +18,9 @@ describe("renderNode Admonition", () => {
     expect(html).toContain("body");
   });
 
-  it("keeps base_type independent of kind (versionadded -> version)", async () => {
-    const html = await renderNode(adm("versionadded", "version"));
-    expect(html).toContain("admonition-version");
+  it("keeps base_type independent of kind (versionadded -> neutral)", async () => {
+    const html = await renderNode(adm("versionadded", "neutral"));
+    expect(html).toContain("admonition-neutral");
     expect(html).toContain("versionadded");
   });
 

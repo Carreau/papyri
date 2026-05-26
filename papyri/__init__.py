@@ -64,6 +64,7 @@ from .cli.diff import diff
 from .cli.find import find
 from .cli.gen import gen
 from .cli.pack import pack
+from .cli.unpack import unpack
 from .cli.upload import upload
 
 __version__ = "0.0.10"
@@ -121,6 +122,7 @@ for _cmd in (
     about,
     gen,
     pack,
+    unpack,
     bootstrap,
     find,
     describe,

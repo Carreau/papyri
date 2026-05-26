@@ -121,6 +121,8 @@ const crumbs = qualnameAncestors(qualname).map((qa) => ({
   actualVer={actualVer}
   title={`${qualname} — Papyri viewer`}
   activeQualname={qualname}
+  rawKind="module"
+  rawPath={qualname}
 >
   <p class="crumb">
     <a href="/">bundles</a> / <a href={`/project/${pkg}/${ver}/`}>{pkg} {ver}</a>

@@ -75,6 +75,8 @@ function sectionHasTitle(s: SectionNode): boolean {
   actualVer={actualVer}
   title={`${view.pageTitle} — ${pkg} ${ver}`}
   activeDocPath={docPath}
+  rawKind="docs"
+  rawPath={docPath}
   hasToc={view.tocEntries.length >= 2}
 >
   <p class="crumb">

@@ -314,6 +314,14 @@ import IRStatsPanel from "../../components/IRStatsPanel.tsx";
     animation: irstats-scan-slide 1.2s ease-in-out infinite;
   }
 
+  /* Determinate: width is driven by bundle progress, no sliding animation. */
+  :global(.irstats-scan-bar-fill--determinate) {
+    position: absolute;
+    left: 0;
+    animation: none;
+    transition: width 0.25s ease-out;
+  }
+
   @keyframes irstats-scan-slide {
     0% {
       left: -35%;

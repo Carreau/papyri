@@ -41,6 +41,7 @@ interface IRStatsResponse {
 /** Live progress reported by the NDJSON stream while the scan runs. */
 interface ScanProgress {
   bundlesScanned: number;
+  bundlesTotal: number;
   documentsScanned: number;
   current: string;
 }
@@ -281,6 +282,7 @@ export default function IRStatsPanel() {
             const ev = JSON.parse(line) as {
               event: string;
               bundlesScanned?: number;
+              bundlesTotal?: number;
               documentsScanned?: number;
               current?: string;
               result?: IRStatsResponse;
@@ -290,6 +292,7 @@ export default function IRStatsPanel() {
             if (ev.event === "progress") {
               setProgress({
                 bundlesScanned: ev.bundlesScanned ?? 0,
+                bundlesTotal: ev.bundlesTotal ?? 0,
                 documentsScanned: ev.documentsScanned ?? 0,
                 current: ev.current ?? "",
               });
@@ -382,15 +385,42 @@ export default function IRStatsPanel() {
   }
 
   if (!data) {
+    // Once the first progress event lands we know the bundle total (queried
+    // up front), so the bar can be determinate; until then it animates.
+    const total = progress?.bundlesTotal ?? 0;
+    const scanned = progress?.bundlesScanned ?? 0;
+    const determinate = total > 0;
+    const pct = determinate ? Math.min(100, Math.round((scanned / total) * 100)) : 0;
     return (
       <div className="irstats-loading">
-        <div className="irstats-scan-bar" role="progressbar" aria-label="Scanning bundles">
-          <div className="irstats-scan-bar-fill" />
+        <div
+          className="irstats-scan-bar"
+          role="progressbar"
+          aria-label="Scanning bundles"
+          aria-valuemin={determinate ? 0 : undefined}
+          aria-valuemax={determinate ? total : undefined}
+          aria-valuenow={determinate ? scanned : undefined}
+        >
+          <div
+            className={
+              "irstats-scan-bar-fill" + (determinate ? " irstats-scan-bar-fill--determinate" : "")
+            }
+            style={determinate ? { width: `${pct}%` } : undefined}
+          />
         </div>
         {progress ? (
           <p>
-            Scanning… {fmtN(progress.bundlesScanned)} bundle
-            {progress.bundlesScanned !== 1 ? "s" : ""}, {fmtN(progress.documentsScanned)} document
+            Scanning…{" "}
+            {determinate ? (
+              <>
+                bundle {fmtN(scanned)} / {fmtN(total)}
+              </>
+            ) : (
+              <>
+                {fmtN(scanned)} bundle{scanned !== 1 ? "s" : ""}
+              </>
+            )}
+            , {fmtN(progress.documentsScanned)} document
             {progress.documentsScanned !== 1 ? "s" : ""} so far
             {progress.current ? (
               <>

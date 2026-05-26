@@ -16,7 +16,7 @@
 //
 // Response contract: 200 application/x-ndjson stream — one JSON object per
 // line, so the client can show progress during a slow corpus-wide walk.
-//   {"event":"progress","bundlesScanned":n,"documentsScanned":m,"current":"pkg ver"}
+//   {"event":"progress","bundlesScanned":n,"bundlesTotal":N,"documentsScanned":m,"current":"pkg ver"}
 //   …
 //   {"event":"done","result":<IRStatsResponse>}   final line on success
 //   {"event":"error","error":...}                 final line on failure
@@ -245,6 +245,18 @@ export const GET: APIRoute = async () => {
     try {
       const { blobStore, graphDb } = backends;
 
+      // walkAllBundles iterates exactly the rows of `SELECT module, version
+      // FROM bundles`, so COUNT(*) is the true denominator for progress.
+      const bundleRows = await graphDb.all<{ n: number }>("SELECT COUNT(*) AS n FROM bundles");
+      const bundlesTotal = bundleRows[0]?.n ?? 0;
+      void send({
+        event: "progress",
+        bundlesScanned: 0,
+        bundlesTotal,
+        documentsScanned: 0,
+        current: "",
+      });
+
       await walkAllBundles(blobStore, graphDb, (doc, page) => {
         // PageRef labels from walkAllBundles are "pkg ver — innerLabel"; the
         // prefix before the em dash identifies the bundle.
@@ -255,6 +267,7 @@ export const GET: APIRoute = async () => {
           void send({
             event: "progress",
             bundlesScanned,
+            bundlesTotal,
             documentsScanned,
             current: currentBundle,
           });
@@ -265,6 +278,7 @@ export const GET: APIRoute = async () => {
           void send({
             event: "progress",
             bundlesScanned,
+            bundlesTotal,
             documentsScanned,
             current: currentBundle,
           });
@@ -295,7 +309,9 @@ export const GET: APIRoute = async () => {
         nodeCounts: nodeCountsObj,
         fieldTypes: fieldTypesObj,
         emptyArrayLocations: emptyArrayLocationsObj,
-        bundlesScanned,
+        // The walk visits every bundle row; report the true total (a bundle
+        // with zero documents never increments the live `bundlesScanned`).
+        bundlesScanned: bundlesTotal,
         documentsScanned,
         scanMs: performance.now() - t0,
       };

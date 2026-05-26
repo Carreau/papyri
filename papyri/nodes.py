@@ -492,11 +492,12 @@ class AdmonitionTitle(Node):
 # so the renderer never has to know every kind string. Gen owns this
 # classification (see PLAN.md "gen owns all ref classification").
 ADMONITION_BASE_TYPES: frozenset[str] = frozenset(
-    {"note", "tip", "important", "warning", "danger", "version"}
+    {"note", "tip", "important", "warning", "danger", "neutral"}
 )
 
-# Map each admonition `kind` papyri emits to its base styling category.
-# Unknown kinds fall back to "note".
+# Map each admonition `kind` papyri emits to its base styling category. The
+# version-change kinds map to "neutral" — they read as informational notices
+# rather than a distinct severity. Unknown kinds fall back to "note".
 _ADMONITION_KIND_TO_BASE_TYPE: dict[str, str] = {
     "note": "note",
     "seealso": "note",
@@ -511,9 +512,9 @@ _ADMONITION_KIND_TO_BASE_TYPE: dict[str, str] = {
     "caution": "warning",
     "danger": "danger",
     "error": "danger",
-    "versionadded": "version",
-    "versionchanged": "version",
-    "deprecated": "version",
+    "versionadded": "neutral",
+    "versionchanged": "neutral",
+    "deprecated": "neutral",
 }
 
 

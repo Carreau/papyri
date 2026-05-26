@@ -40,8 +40,6 @@ the source semantic and round-trip cleanly:
 - :command:`papyri upload` — a shell command (``:command:``).
 - :program:`papyri` — a program name (``:program:``).
 - :samp:`gen {config}.toml` — a literal with a placeholder (``:samp:``).
-- H\ :sub:`2`\ O uses subscript (``:sub:``), and x\ :sup:`2` uses superscript
-  (``:sup:``).
 - :kbd:`Esc` then :kbd:`:wq` — keystrokes chained in prose.
 
 C-domain roles such as ``:c:func:`` and ``:c:type:`` also render as inline
@@ -71,3 +69,7 @@ Not supported
   node.
 - There is no inline role for arbitrary HTML or raw output — the ``raw``
   directive is dropped for security, and there is no inline equivalent.
+- **Subscript / superscript** (``:sub:`` / ``:sup:``): accepted without error
+  but rendered as verbatim inline code, not raised/lowered text. There is no
+  true sub/superscript node, so ``H\ :sub:`2`\ O`` reads as ``H 2 O`` in
+  monospace rather than H₂O.

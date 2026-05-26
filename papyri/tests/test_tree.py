@@ -1511,9 +1511,9 @@ def test_admonition_base_type_mapping_values_are_finite():
         ("caution", "warning"),
         ("danger", "danger"),
         ("error", "danger"),
-        ("versionadded", "version"),
-        ("versionchanged", "version"),
-        ("deprecated", "version"),
+        ("versionadded", "neutral"),
+        ("versionchanged", "neutral"),
+        ("deprecated", "neutral"),
         ("totally-unknown-kind", "note"),
     ],
 )

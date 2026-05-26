@@ -5,7 +5,43 @@ Admonitions
 
 Admonitions are call-out boxes. papyri recognises the full set of standard RST
 admonition kinds, the version-change directives, and a few Sphinx extras. Each
-carries a ``kind`` the viewer can style independently.
+carries an open-ended ``kind`` *and* a finite ``base_type`` styling category,
+computed at gen time, that the viewer keys its colours off.
+
+Base styling categories
+-----------------------
+
+The viewer never styles the ~16 open-ended ``kind`` strings directly. Gen
+collapses each ``kind`` into one of six ``base_type`` categories and the
+renderer emits an ``admonition-<base_type>`` class, so the stylesheet themes a
+small fixed vocabulary. The body stays a neutral surface; only the title bar
+carries the category colour and a category icon. One representative of each
+category follows — eyeball them to check the accent, title tint, and icon:
+
+.. note::
+   **note** — the default category. Kinds ``note``, ``seealso``, ``topic``,
+   the generic ``admonition``, and ``rubric`` all map here.
+
+.. tip::
+   **tip** — encouraging, low-stakes guidance. Kinds ``tip`` and ``hint`` map
+   here.
+
+.. important::
+   **important** — something the reader must not skip. Only ``important`` maps
+   here.
+
+.. warning::
+   **warning** — proceed with care. Kinds ``warning``, ``attention``, and
+   ``caution`` map here.
+
+.. danger::
+   **danger** — the strongest call-out. Kinds ``danger`` and ``error`` map
+   here.
+
+.. versionadded:: 0.1.0
+   **neutral** — low-key informational notices with no severity. The
+   version-change directives ``versionadded``, ``versionchanged``, and
+   ``deprecated`` map here.
 
 Standard admonitions
 --------------------

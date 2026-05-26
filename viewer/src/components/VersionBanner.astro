@@ -8,9 +8,15 @@ interface Props {
   pkg: string;
   ver: string;
   status: VersionStatus;
+  /**
+   * Equivalent of the current page in the latest version. When provided, the
+   * "Go to latest" link targets it instead of the bundle landing page. Null
+   * (the default) means no equivalent page exists, so we fall back to root.
+   */
+  latestHref?: string | null;
 }
 
-const { pkg, ver, status } = Astro.props;
+const { pkg, ver, status, latestHref: latestHrefProp } = Astro.props;
 
 let message: string;
 let latestVersion: string | null = null;
@@ -28,7 +34,7 @@ if (status.kind === "old") {
   message = `You are viewing version ${ver}.`;
 }
 
-const latestHref = latestVersion ? `/project/${pkg}/${latestVersion}/` : null;
+const latestHref = latestVersion ? (latestHrefProp ?? `/project/${pkg}/${latestVersion}/`) : null;
 const bannerId = `version-banner-${pkg}-${ver}`;
 ---
 

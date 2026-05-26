@@ -133,8 +133,6 @@ interface TocTreeNode extends TypedNode {
   children: TocTreeNode[];
   title: string | null;
   ref: LocalRefNode | null;
-  open: boolean;
-  current: boolean;
 }
 
 function tocRefHref(

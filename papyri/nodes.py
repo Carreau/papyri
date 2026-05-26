@@ -987,16 +987,12 @@ class TocTree(Node):
     """One node in the table-of-contents tree.
 
     ``ref`` points to the document this entry links to.  ``children``
-    holds sub-entries.  ``open`` and ``current`` are render hints for
-    the sidebar: ``open`` means the subtree should be expanded,
-    ``current`` marks the active page.
+    holds sub-entries.
     """
 
     children: tuple[TocTree, ...]
     title: str
     ref: LocalRef
-    open: bool = False
-    current: bool = False
 
 
 @debug(4034)

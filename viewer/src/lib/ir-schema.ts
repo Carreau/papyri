@@ -804,14 +804,6 @@ export const IR_SCHEMA: IRSchema = {
       array: true,
       types: ["TocTree", "[]"],
     },
-    current: {
-      array: false,
-      types: ["boolean"],
-    },
-    open: {
-      array: false,
-      types: ["boolean"],
-    },
     ref: {
       array: false,
       types: ["LocalRef"],

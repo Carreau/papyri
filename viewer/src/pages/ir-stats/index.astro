@@ -237,4 +237,89 @@ import IRStatsPanel from "../../components/IRStatsPanel.tsx";
   :global(.irstats-counts-row--zero) {
     opacity: 0.4;
   }
+
+  /* clickable empty-list pill + page list */
+  :global(.irstats-values-wrap) {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  :global(button.irstats-pill) {
+    border: 0;
+    cursor: pointer;
+    font: inherit;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+  }
+
+  :global(.irstats-pill--clickable) {
+    background: color-mix(in oklab, var(--accent) 12%, var(--surface-alt));
+  }
+
+  :global(.irstats-pill--clickable:hover) {
+    background: color-mix(in oklab, var(--accent) 22%, var(--surface-alt));
+  }
+
+  :global(.irstats-pill-toggle) {
+    font-size: 0.66rem;
+    color: var(--fg-muted);
+  }
+
+  :global(.irstats-loc) {
+    margin: 0;
+    padding: 0.4rem 0.6rem;
+    border-left: 2px solid var(--accent);
+    background: var(--surface-alt);
+    border-radius: 0 4px 4px 0;
+  }
+
+  :global(.irstats-loc-caption) {
+    margin: 0 0 0.3rem;
+    font-size: 0.78rem;
+    color: var(--fg-muted);
+  }
+
+  :global(.irstats-loc-list) {
+    margin: 0;
+    padding-left: 1.1rem;
+    font-size: 0.82rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+
+  :global(.irstats-loc-list code) {
+    font-size: 0.78rem;
+  }
+
+  /* indeterminate scan progress bar */
+  :global(.irstats-scan-bar) {
+    position: relative;
+    height: 4px;
+    width: 100%;
+    max-width: 360px;
+    margin-bottom: 0.6rem;
+    overflow: hidden;
+    border-radius: 2px;
+    background: var(--surface-alt);
+  }
+
+  :global(.irstats-scan-bar-fill) {
+    position: absolute;
+    height: 100%;
+    width: 35%;
+    border-radius: 2px;
+    background: var(--accent);
+    animation: irstats-scan-slide 1.2s ease-in-out infinite;
+  }
+
+  @keyframes irstats-scan-slide {
+    0% {
+      left: -35%;
+    }
+    100% {
+      left: 100%;
+    }
+  }
 </style>

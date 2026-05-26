@@ -255,3 +255,105 @@ def load_artifact(data: bytes) -> Bundle:
             f"artifact did not decode to a Bundle (got {type(obj).__name__})"
         )
     return obj
+
+
+def _manifest_dict(bundle: Bundle) -> dict[str, Any]:
+    """Reconstruct the ``papyri.json`` manifest from a ``Bundle``.
+
+    Inverse of ``_read_meta``: required keys are always present, optional
+    fields are only emitted when non-empty, and ``extra`` scalar keys are
+    merged back at the top level so the staging directory round-trips.
+    """
+    meta: dict[str, Any] = {"module": bundle.module, "version": bundle.version}
+    if bundle.summary:
+        meta["summary"] = bundle.summary
+    if bundle.github_slug:
+        meta["github_slug"] = bundle.github_slug
+    if bundle.tag:
+        meta["tag"] = bundle.tag
+    if bundle.logo:
+        meta["logo"] = bundle.logo
+    if bundle.aliases:
+        meta["aliases"] = dict(bundle.aliases)
+    meta.update(bundle.extra)
+    return meta
+
+
+def explode_bundle_to_dir(
+    bundle: Bundle, path: Path, log: Callable[[str], None] | None = None
+) -> None:
+    """Write a ``Bundle`` out as a JSON DocBundle staging directory.
+
+    Inverse of ``read_bundle_dir``: produces the same human-readable layout
+    that ``papyri gen`` writes (``papyri.json``, ``toc.json``, ``module/``,
+    ``docs/``, ``examples/``, ``assets/``). ``path`` must not already exist.
+    """
+    if path.exists():
+        raise BundleError(f"{path} already exists")
+    path.mkdir(parents=True)
+
+    if log:
+        log(f"  writing module/   ({len(bundle.api)} item{_plural(len(bundle.api))}) …")
+    module_dir = path / "module"
+    module_dir.mkdir()
+    for qa, doc in bundle.api.items():
+        (module_dir / f"{qa}.json").write_bytes(doc.to_json())
+
+    if bundle.narrative:
+        if log:
+            n = len(bundle.narrative)
+            log(f"  writing docs/     ({n} item{_plural(n)}) …")
+        docs_dir = path / "docs"
+        docs_dir.mkdir()
+        for name, doc in bundle.narrative.items():
+            (docs_dir / name).write_bytes(doc.to_json())
+
+    if bundle.examples:
+        if log:
+            n = len(bundle.examples)
+            log(f"  writing examples/ ({n} item{_plural(n)}) …")
+        examples_dir = path / "examples"
+        examples_dir.mkdir()
+        for name, section in bundle.examples.items():
+            (examples_dir / name).write_bytes(section.to_json())
+
+    if bundle.assets:
+        if log:
+            n = len(bundle.assets)
+            log(f"  writing assets/   ({n} item{_plural(n)}) …")
+        assets_dir = path / "assets"
+        assets_dir.mkdir()
+        for name, data in bundle.assets.items():
+            (assets_dir / name).write_bytes(data)
+
+    if bundle.toc:
+        if log:
+            log("  writing toc.json …")
+        (path / "toc.json").write_bytes(
+            json.dumps(
+                [t.to_dict() for t in bundle.toc], indent=2, sort_keys=True
+            ).encode()
+        )
+
+    if log:
+        log("  writing papyri.json …")
+    (path / "papyri.json").write_text(
+        json.dumps(_manifest_dict(bundle), indent=2, sort_keys=True)
+    )
+
+
+def explode_artifact_to_dir(
+    artifact: Path, dest_parent: Path, log: Callable[[str], None] | None = None
+) -> Path:
+    """Load a ``.papyri`` artifact and explode it into a JSON DocBundle dir.
+
+    The bundle directory is named ``<module>_<version>`` (matching the
+    ``papyri gen`` convention) and created under ``dest_parent``. Returns the
+    path to the created directory. Fails if that directory already exists.
+    """
+    if log:
+        log(f"  loading {artifact.name} …")
+    bundle = load_artifact(artifact.read_bytes())
+    out_dir = dest_parent / f"{bundle.module}_{bundle.version}"
+    explode_bundle_to_dir(bundle, out_dir, log=log)
+    return out_dir

@@ -15,6 +15,8 @@ from papyri.bundle import IR_SCHEMA_VERSION, PACK_FORMAT_VERSION, Bundle
 from papyri.node_base import TAG_MAP
 from papyri.pack import (
     BundleError,
+    explode_artifact_to_dir,
+    explode_bundle_to_dir,
     load_artifact,
     make_artifact,
     make_artifact_from_dir,
@@ -352,6 +354,108 @@ def test_read_bundle_dir_collects_assets(tmp_path: Any) -> None:
     (bundle_dir / "assets" / "fig2.svg").write_bytes(b"data2")
     bundle = read_bundle_dir(bundle_dir)
     assert bundle.assets == {"fig1.png": b"data1", "fig2.svg": b"data2"}
+
+
+# ---------------------------------------------------------------------------
+# Unpack — explode a .papyri artifact back into a JSON DocBundle directory.
+# ---------------------------------------------------------------------------
+
+
+def test_explode_bundle_to_dir_round_trips(tmp_path: Any) -> None:
+    """A Bundle exploded to disk re-reads as an identical Bundle."""
+    from papyri.nodes import LocalRef, TocTree
+
+    bundle = _make_bundle_node(
+        module="numpy",
+        version="2.4.4",
+        summary="Array math.",
+        github_slug="numpy/numpy",
+        tag="v{{version}}",
+        logo="logo.png",
+        aliases={"np": "numpy"},
+        extra={"pypi": "numpy"},
+        assets={"logo.png": b"\x89PNG\r\n"},
+        toc=[TocTree(children=(), title="Root", ref=LocalRef("docs", "index"))],
+    )
+    out = tmp_path / "numpy_2.4.4"
+    explode_bundle_to_dir(bundle, out)
+    assert read_bundle_dir(out) == bundle
+
+
+def test_explode_bundle_to_dir_refuses_existing(tmp_path: Any) -> None:
+    bundle = _make_bundle_node()
+    out = tmp_path / "mypkg_1.0"
+    out.mkdir()
+    with pytest.raises(BundleError) as excinfo:
+        explode_bundle_to_dir(bundle, out)
+    assert "already exists" in excinfo.value.problems[0]
+
+
+def test_explode_bundle_to_dir_omits_empty_optional_dirs(tmp_path: Any) -> None:
+    """Empty narrative/examples/assets/toc produce no directory or file."""
+    bundle = _make_bundle_node()
+    out = tmp_path / "mypkg_1.0"
+    explode_bundle_to_dir(bundle, out)
+    assert (out / "papyri.json").is_file()
+    assert (out / "module").is_dir()
+    assert not (out / "docs").exists()
+    assert not (out / "examples").exists()
+    assert not (out / "assets").exists()
+    assert not (out / "toc.json").exists()
+
+
+def test_explode_artifact_to_dir_names_dir_and_round_trips(tmp_path: Any) -> None:
+    """explode_artifact_to_dir derives '<module>_<version>' and round-trips."""
+    bundle = _make_bundle_node(module="mypkg", version="1.0")
+    artifact = tmp_path / "mypkg-1.0.papyri"
+    artifact.write_bytes(make_artifact(bundle))
+    out = explode_artifact_to_dir(artifact, tmp_path)
+    assert out == tmp_path / "mypkg_1.0"
+    assert read_bundle_dir(out) == bundle
+
+
+def test_pack_unpack_round_trip_via_dir(tmp_path: Any) -> None:
+    """gen-style dir → pack → unpack reproduces the original directory's Bundle."""
+    bundle_dir = _make_minimal_bundle_dir(tmp_path / "src" / "mypkg_1.0")
+    (bundle_dir / "assets").mkdir()
+    (bundle_dir / "assets" / "logo.png").write_bytes(b"\x89PNG")
+    artifact_bytes, original = make_artifact_from_dir(bundle_dir)
+    artifact = tmp_path / "mypkg-1.0.papyri"
+    artifact.write_bytes(artifact_bytes)
+    out = explode_artifact_to_dir(artifact, tmp_path / "dest")
+    assert read_bundle_dir(out) == original
+
+
+def test_unpack_cli(tmp_path: Any) -> None:
+    import typer
+    from typer.testing import CliRunner
+
+    from papyri.cli.unpack import unpack as unpack_cli
+
+    bundle = _make_bundle_node(module="pkg", version="3.0")
+    artifact = tmp_path / "pkg-3.0.papyri"
+    artifact.write_bytes(make_artifact(bundle))
+
+    app = typer.Typer()
+    app.command()(unpack_cli)
+    result = CliRunner().invoke(app, [str(artifact), "-o", str(tmp_path / "out")])
+
+    assert result.exit_code == 0, result.output
+    assert read_bundle_dir(tmp_path / "out" / "pkg_3.0") == bundle
+
+
+def test_unpack_cli_rejects_missing_file(tmp_path: Any) -> None:
+    import typer
+    from typer.testing import CliRunner
+
+    from papyri.cli.unpack import unpack as unpack_cli
+
+    app = typer.Typer()
+    app.command()(unpack_cli)
+    result = CliRunner().invoke(app, [str(tmp_path / "nope.papyri")])
+
+    assert result.exit_code == 1
+    assert "is not a file" in result.output
 
 
 # ---------------------------------------------------------------------------

@@ -944,6 +944,13 @@ class DirectiveVisiter(TreeReplacer):
             return []
 
         acc = [ListItem(False, [Paragraph([line])]) for line in lls]
+        # Every entry was filtered out (empty/blank content, only comments or
+        # ``self``, or a ``:glob:`` toctree of pure wildcards). Emit nothing
+        # rather than an empty ``<ul>`` — it renders invisibly but litters the
+        # IR with empty BulletList nodes. The toc metadata is already recorded
+        # above, so navigation is unaffected (same contract as ``hidden``).
+        if not acc:
+            return []
         return [BulletList(ordered=False, start=1, spread=False, children=acc)]
 
     def replace_UnprocessedDirective(

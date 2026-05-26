@@ -5,7 +5,7 @@ transformation that are easy to pin and have historically regressed.
 Covered surfaces:
 - ``py_doc_handler`` (:doc: role → LocalRef("docs", path))
 - ``DelayedResolver`` (target/reference unification)
-- ``_toctree_handler`` (blank lines, comments, glob, hidden, malformed entries, LocalRef links)
+- ``_toctree_handler`` (blank lines, comments, glob, hidden, malformed entries, LocalRef links, all-filtered/empty → no empty BulletList)
 - ``_SPHINX_ONLY_DIRECTIVES`` (silent drop via warning)
 - ``:ref:`` role resolution via doc_targets map
 - ``rubric_handler`` (unnumbered section heading → Admonition(kind="rubric"))
@@ -479,11 +479,27 @@ def test_toctree_includehidden_option_is_accepted() -> None:
     assert len(out[0].children) == 1
 
 
-def test_toctree_empty_content_returns_empty_bullet_list() -> None:
+def test_toctree_empty_content_emits_nothing() -> None:
+    # A non-hidden toctree with no content must not emit an empty BulletList:
+    # an empty <ul> renders invisibly but pollutes the IR (see numpy's
+    # reference:routines.other "Miscellaneous routines" section).
     v = _make_visitor()
     out = v._toctree_handler(argument=None, options={}, content="")
-    assert len(out) == 1
-    assert len(out[0].children) == 0
+    assert out == []
+
+
+def test_toctree_all_entries_filtered_emits_nothing() -> None:
+    # Same guard for non-empty content whose every line is dropped: blank
+    # lines, comments and ``self``, or a ``:glob:`` toctree of pure wildcards.
+    v = _make_visitor()
+    cases: list[tuple[str, dict[str, object]]] = [
+        ("\n   \n", {}),
+        (".. only a comment\nself", {}),
+        ("*\napi/*", {"glob": True}),
+    ]
+    for content, options in cases:
+        out = v._toctree_handler(argument=None, options=options, content=content)
+        assert out == [], (content, options, out)
 
 
 def test_toctree_empty_content_hidden_returns_empty_list() -> None:

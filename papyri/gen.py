@@ -26,7 +26,6 @@ from collections import defaultdict, deque
 from collections.abc import Callable
 from functools import lru_cache
 from hashlib import sha256
-from itertools import count
 from pathlib import Path
 from types import FunctionType, ModuleType, TracebackType
 from typing import (
@@ -610,7 +609,6 @@ class PapyriDocTestRunner(doctest.DocTestRunner):
     def __init__(
         self, *args: Any, gen: Any, obj: Any, qa: str, config: Any, **kwargs: Any
     ) -> None:
-        self._count = count(0)
         self.gen = gen
         self.obj = obj
         self.qa = qa
@@ -639,14 +637,15 @@ class PapyriDocTestRunner(doctest.DocTestRunner):
         tok_entries = [GenToken(*x) for x in _add_classes(entries)]
         return tok_entries
 
-    def _next_figure_name(self) -> str:
+    def _figure_name(self, data: bytes) -> str:
         """
-        File system can be case insensitive, we are not.
+        Content-addressed asset filename. Identical figure bytes — across
+        examples, qualnames, or rebuilds — collapse to the same key, so the
+        blob store dedupes naturally and the version diff doesn't churn on
+        non-deterministic matplotlib output. The qualname is dropped from
+        the name on purpose: it would only desync from content.
         """
-        i = next(self._count)
-        pat = f"fig-{self.qa}-{i}"
-        sha = sha256(pat.encode()).hexdigest()[:8]
-        return f"{pat}-{sha}.png"
+        return f"fig-{sha256(data).hexdigest()[:16]}.png"
 
     def report_start(self, out: Any, test: Any, example: Any) -> None:
         pass
@@ -665,11 +664,10 @@ class PapyriDocTestRunner(doctest.DocTestRunner):
         figs = []
         if fig_managers and (("plt.show" in example.source) or not wait_for_show):
             for fig in fig_managers:
-                figname = self._next_figure_name()
                 buf = io.BytesIO()
                 fig.canvas.figure.savefig(buf, dpi=300)  # , bbox_inches="tight"
-                buf.seek(0)
-                figs.append((figname, buf.read()))
+                data = buf.getvalue()
+                figs.append((self._figure_name(data), data))
             plt.close("all")
 
         for figname, _ in figs:
@@ -1525,8 +1523,8 @@ class Gen:
                         try:
                             executor.exec(script, name=str(example))
                             figs = [
-                                (f"ex-{example.name}-{i}.png", f)
-                                for i, f in enumerate(executor.get_figs())
+                                (f"fig-{sha256(f).hexdigest()[:16]}.png", f)
+                                for f in executor.get_figs()
                             ]
                             ce_status = "execed"
                         except Exception as e:

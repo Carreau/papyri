@@ -91,7 +91,7 @@ export const FIELD_ORDER: Readonly<Record<number, { name: string; fields: readon
   4017: { name: "UnimplementedInline", fields: ["children"] },
   4018: { name: "Unimplemented", fields: ["placeholder", "value"] },
   4019: { name: "ThematicBreak", fields: [] },
-  4021: { name: "TocTree", fields: ["children", "title", "ref", "open", "current"] },
+  4021: { name: "TocTree", fields: ["children", "title", "ref"] },
   4022: { name: "LocalRef", fields: ["kind", "path"] },
   4024: { name: "Figure", fields: ["value"] },
   4026: { name: "Parameters", fields: ["children"] },

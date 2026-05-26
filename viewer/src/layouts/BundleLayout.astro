@@ -22,6 +22,11 @@ interface Props {
   hasToc?: boolean;
   /** Resolved actual version for blob reads when `ver` is "latest". */
   actualVer?: string;
+  /** Blob kind + path backing this page; when both set, a "Raw JSON" link
+   * to the decoded IR is shown. Only the single-blob pages (module / docs /
+   * examples) pass these. */
+  rawKind?: "module" | "docs" | "examples";
+  rawPath?: string;
 }
 
 const {
@@ -33,7 +38,13 @@ const {
   activeExamplePath,
   hasToc,
   actualVer: propActualVer,
+  rawKind,
+  rawPath,
 } = Astro.props;
+const rawJsonHref =
+  rawKind && rawPath
+    ? `/api/${pkg}/${ver}/raw.json?kind=${rawKind}&path=${encodeURIComponent(rawPath)}`
+    : null;
 const { blobStore, graphDb } = await getBackends();
 const actualVer = propActualVer ?? (await resolveVersion(graphDb, pkg, ver)) ?? ver;
 const [nav, versionStatus] = await Promise.all([
@@ -99,6 +110,13 @@ const [nav, versionStatus] = await Promise.all([
             <VersionBanner pkg={pkg} ver={ver} status={versionStatus} />
           )
         }
+        {
+          rawJsonHref && (
+            <a class="raw-json-link" href={rawJsonHref} target="_blank" rel="noopener">
+              {"{ }"} Raw JSON
+            </a>
+          )
+        }
         <slot />
       </main>
       {
@@ -111,3 +129,21 @@ const [nav, versionStatus] = await Promise.all([
     </div>
   </body>
 </html>
+
+<style>
+  .raw-json-link {
+    float: right;
+    margin-left: 1rem;
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    color: var(--fg-muted);
+    text-decoration: none;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.1rem 0.5rem;
+  }
+  .raw-json-link:hover {
+    color: var(--accent);
+    border-color: currentColor;
+  }
+</style>

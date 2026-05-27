@@ -1,10 +1,8 @@
 // Async readers over the ingest store, backed by `BlobStore`.
 //
-// The store layout is `<pkg>/<ver>/<kind>/<path>` — under both the Node
-// `FsBlobStore` (~/.papyri/ingest) and the Workers `R2BlobStore` (the
-// papyri-viewer-blobs bucket). This file holds the high-level reader
-// helpers used by every page; backend selection happens in
-// `viewer/src/lib/backends.ts`.
+// The store layout is `<pkg>/<ver>/<kind>/<path>` (mirrored on disk under
+// `~/.papyri/ingest`). This file holds the high-level reader helpers used by
+// every page; backend selection happens in `viewer/src/lib/backends.ts`.
 //
 // The on-disk encoding is CBOR with papyri's tag-numbered IR. We delegate
 // decoding to `papyri-ingest`'s `decode()`, which uses a private cbor-x

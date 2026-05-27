@@ -2,7 +2,7 @@
 //
 // Substring match against every ingested bundle's qualname list.
 // Deliberately simple — no ranking, no fuzzy. Swappable for a real index
-// (fts5 / D1 fts) once we know the query load.
+// (fts5) once we know the query load.
 //
 // All qualnames are fetched from the SQL graph DB in a single query so the
 // handler doesn't fan out to one BlobStore list call per bundle.

@@ -40,10 +40,7 @@ export function keyStr(k: Key): string {
 // ---------------------------------------------------------------------------
 // Schema
 //
-// Single source of truth: `ingest/migrations/*.sql`. The Cloudflare D1
-// path applies the same files via `wrangler d1 migrations apply`
-// (`viewer/wrangler.toml` points `migrations_dir = "../ingest/migrations"`).
-//
+// Single source of truth: `ingest/migrations/*.sql`.
 // The `papyri-ingest` CLI runs from `dist/cli.js` → `dist/graphstore.js`.
 // `import.meta.url` points at the actual file on disk, so the lazy disk
 // loader below resolves `../migrations/*.sql` correctly.

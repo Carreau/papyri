@@ -8,10 +8,8 @@ import { linkForDoc, linkForExample, linkForLocalRef, linkForRef } from "./links
 // Per-bundle view-model. Pages under [pkg]/[ver]/** call `loadBundleNav` to
 // get everything the sidebar + bundle identity block need in one shot.
 //
-// The store layout is `<pkg>/<ver>/{meta,docs,examples,module,assets}/...`
-// — the same shape under both the Node FsBlobStore and the Workers
-// R2BlobStore. No fs paths leak out; every read goes through the
-// `BlobStore` passed in.
+// The store layout is `<pkg>/<ver>/{meta,docs,examples,module,assets}/...`.
+// No fs paths leak out; every read goes through the `BlobStore` passed in.
 // ---------------------------------------------------------------------------
 
 export interface BundleMeta {

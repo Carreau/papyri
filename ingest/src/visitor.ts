@@ -4,11 +4,11 @@
  * collectForwardRefs() mirrors Python's IngestedDoc.all_forward_refs():
  * it walks a decoded IR tree and returns every RefInfo node (excluding
  * kind="local") and every Figure node, expressed as Key tuples suitable
- * for the GraphStore.
+ * for the graph store.
  */
 
 import type { IRNode, TypedNode } from "./encoder.js";
-import type { Key } from "./graphstore.js";
+import type { Key } from "./keys.js";
 
 type AnyValue = unknown;
 

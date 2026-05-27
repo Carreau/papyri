@@ -10,7 +10,7 @@
  */
 import { mkdir, writeFile, readFile, stat, readdir, rm } from "node:fs/promises";
 import { join, dirname, sep } from "node:path";
-import type { Key } from "./graphstore.js";
+import type { Key } from "./keys.js";
 
 /** Flat path used as both fs path-suffix and R2 object key. */
 export function keyToPath(key: Key): string {

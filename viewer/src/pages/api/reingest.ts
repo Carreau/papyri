@@ -29,7 +29,7 @@ import type { APIRoute } from "astro";
 import { Ingester, decode, type TypedNode } from "papyri-ingest";
 import { isSafeSegment } from "../../lib/paths.ts";
 import { getBackends } from "../../lib/backends.ts";
-import { respond } from "../../lib/api-utils.ts";
+import { respond, sha256Hex } from "../../lib/api-utils.ts";
 
 export const prerender = false;
 
@@ -143,7 +143,8 @@ export const POST: APIRoute = async ({ url }) => {
                 done,
                 total,
               });
-            }
+            },
+            await sha256Hex(compressedBytes)
           );
           doneCount++;
           await sendWithTiming({

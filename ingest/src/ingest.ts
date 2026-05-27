@@ -1,10 +1,10 @@
 /**
  * Ingester — TypeScript equivalent of papyri/crosslink.py's Ingester class.
  *
- * Accepts either a `papyri gen` bundle directory (`ingest(dirPath)`) or a
- * decoded `Bundle` Node from a `.papyri` artifact (`ingestBundle(node)`),
- * and writes its contents into the cross-link graph store via the
- * `BlobStore` + `GraphDb` abstractions.
+ * Accepts a decoded `Bundle` Node from a `.papyri` artifact
+ * (`ingestBundle(node)`) and writes its contents into the cross-link graph
+ * store via the `BlobStore` + `GraphDb` abstractions. The packed `.papyri`
+ * artifact is the only ingest input — there is no directory-based path.
  *
  * The default backend is Node fs + better-sqlite3, built from `ingestDir`.
  * Pre-built backends can be injected via the `backends` option.
@@ -20,16 +20,15 @@
  */
 
 import { readdirSync, readFileSync, existsSync, mkdirSync } from "node:fs";
-import { join, basename, extname, dirname } from "node:path";
+import { join, extname, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { encode as cborEncode } from "cbor-x";
 import { blake2b } from "@noble/hashes/blake2b.js";
 import Database from "better-sqlite3";
-import { decode, encode, generatedDocToIngested } from "./encoder.js";
+import { encode, generatedDocToIngested } from "./encoder.js";
 import type { TypedNode } from "./encoder.js";
 import { assertBundle } from "./bundle.js";
-import type { Key } from "./graphstore.js";
-import { keyStr } from "./graphstore.js";
+import { keyStr, type Key } from "./keys.js";
 import { collectForwardRefs, collectForwardRefsFromSection } from "./visitor.js";
 import { FsBlobStore, type BlobStore } from "./blob-store.js";
 import { SqliteGraphDb, type GraphDb, type BatchStmt } from "./graph-db.js";
@@ -136,19 +135,6 @@ function openNodeBackends(ingestDir: string): { blobStore: BlobStore; graphDb: G
 }
 
 // ---------------------------------------------------------------------------
-// Bundle metadata (papyri.json) — directory-based path
-// ---------------------------------------------------------------------------
-
-interface PapyriMeta {
-  module: string;
-  version: string;
-  logo?: string | null;
-  tag?: string;
-  aliases?: Record<string, string>;
-  [key: string]: unknown;
-}
-
-// ---------------------------------------------------------------------------
 // Ingester
 // ---------------------------------------------------------------------------
 
@@ -164,8 +150,6 @@ interface PapyriMeta {
 export type ProgressCallback = (phase: string, done: number, total: number) => void | Promise<void>;
 
 export interface IngestOptions {
-  /** Mirror Python's --check: skip qualnames that don't pass normalise_ref. */
-  check?: boolean;
   /**
    * Custom Node ingest directory (defaults to ~/.papyri/ingest). Ignored
    * when `backends` is set.
@@ -181,12 +165,6 @@ function defaultIngestDir(): string {
   const override = process.env["PAPYRI_INGEST_DIR"];
   if (override) return override;
   return join(process.env["HOME"] ?? "/root", ".papyri", "ingest");
-}
-
-function isValidQa(qa: string): boolean {
-  if (!qa) return false;
-  if (/^\d/.test(qa)) return false;
-  return /^[A-Za-z_][A-Za-z0-9_.:<>]*$/.test(qa);
 }
 
 export class Ingester {
@@ -210,50 +188,16 @@ export class Ingester {
   // -------------------------------------------------------------------------
 
   /**
-   * Ingest a `papyri gen` bundle directory. Synchronous fs reads under the
-   * hood — Node-only path. The viewer's Workers build uses `ingestBundle`
-   * instead.
-   */
-  async ingest(bundlePath: string, opts: IngestOptions = {}): Promise<void> {
-    const check = opts.check ?? false;
-
-    const metaPath = join(bundlePath, "papyri.json");
-    if (!existsSync(metaPath)) {
-      throw new Error(`papyri.json not found in ${bundlePath}`);
-    }
-    const meta = JSON.parse(readFileSync(metaPath, "utf8")) as PapyriMeta;
-    const { module: root, version } = meta;
-    const aliases: Record<string, string> = meta.aliases ?? {};
-
-    const metaForStore: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(meta)) {
-      if (k !== "aliases") metaForStore[k] = v;
-    }
-
-    console.log(`Ingesting ${basename(bundlePath)} (${root} ${version})...`);
-
-    await this._ingestExamplesDir(bundlePath, root, version);
-    await this._ingestAssetsDir(bundlePath, root, version, aliases);
-    const storedLogoName = await this._ingestLogoDir(bundlePath, root, version, meta.logo ?? null);
-    if (storedLogoName !== null) metaForStore["logo"] = storedLogoName;
-
-    await this._ingestNarrativeDir(bundlePath, root, version);
-    await this._ingestApiDir(bundlePath, root, version, check);
-
-    await this.blobStore.putMeta(root, version, cborEncode(metaForStore) as Uint8Array);
-
-    console.log(`Done ingesting ${basename(bundlePath)}.`);
-  }
-
-  /**
-   * Ingest a decoded `Bundle` Node directly — no filesystem round-trip.
-   * Used by the viewer's PUT /api/bundle handler under both Node and
-   * Cloudflare Workers.
+   * Ingest a decoded `Bundle` Node — the sole ingest entry point. The Bundle
+   * comes from a `.papyri` artifact (gunzip + cbor-decode); both the viewer's
+   * PUT /api/bundle handler and the standalone CLI feed it here, under Node
+   * and Cloudflare Workers alike.
    */
   async ingestBundle(
     node: unknown,
     bundleSizeBytes?: number,
     onProgress?: ProgressCallback,
+    contentHash?: string,
   ): Promise<{ pkg: string; version: string }> {
     assertBundle(node);
     const bundle = node;
@@ -451,10 +395,12 @@ export class Ingester {
     if (bundleSizeBytes !== undefined) {
       const now = Math.floor(Date.now() / 1000);
       await this.graphDb.run(
-        "INSERT INTO bundles(module, version, bundle_size_bytes, ingested_at) VALUES (?, ?, ?, ?)" +
+        "INSERT INTO bundles(module, version, bundle_size_bytes, ingested_at, content_hash)" +
+          " VALUES (?, ?, ?, ?, ?)" +
           " ON CONFLICT(module, version) DO UPDATE SET" +
-          " bundle_size_bytes=excluded.bundle_size_bytes, ingested_at=excluded.ingested_at",
-        [root, version, bundleSizeBytes, now],
+          " bundle_size_bytes=excluded.bundle_size_bytes, ingested_at=excluded.ingested_at," +
+          " content_hash=excluded.content_hash",
+        [root, version, bundleSizeBytes, now, contentHash ?? null],
       );
     }
 
@@ -614,280 +560,6 @@ export class Ingester {
       }
     };
     await Promise.all(Array.from({ length: Math.min(BLOB_CONCURRENCY, total) }, worker));
-  }
-
-  // -------------------------------------------------------------------------
-  // Core write — used by the directory-based ingest() path only.
-  //
-  // Atomicity: the whole `batch` runs inside one SQLite transaction so all
-  // nodes + links for one `_put` land together or not at all.
-  //
-  // Source/dest ids are resolved inline via subqueries
-  // (`SELECT id FROM nodes WHERE …`) so each link insert is self-contained
-  // without intermediate reads.
-  // -------------------------------------------------------------------------
-
-  private async _put(
-    key: Key,
-    bytes: Uint8Array,
-    refs: Key[],
-    digestInput?: Uint8Array,
-    freshIngest: boolean = false,
-  ): Promise<void> {
-    // `freshIngest`: caller has confirmed there are no prior writes for
-    // this (pkg, version). Skip both round-trips to find oldRefs — there
-    // can't be any. Cuts subrequests-per-_put from 3 to 2 (and removes
-    // a serialised network hop, which matters far more for wall time).
-    // INSERT OR IGNORE in the batch below keeps the second-attempt case
-    // safe if a fresh-flagged ingest is somehow retried.
-    let oldRefs = new Set<string>();
-    if (!freshIngest && key.kind !== "assets" && (await this.blobStore.has(key))) {
-      oldRefs = new Set((await this._getForwardRefs(key)).map(keyStr));
-    }
-
-    await this.blobStore.put(key, bytes);
-    // The digest is what powers the version-diff "changed" bucket. Callers
-    // that want the digest to ignore volatile fields (e.g. `item_line` on
-    // IngestedDoc) hand in a normalised re-encoding via `digestInput`;
-    // otherwise we hash the stored bytes directly.
-    const digest = blake2b(digestInput ?? bytes, { dkLen: DIGEST_SIZE });
-
-    const newRefSet = new Set(refs.map(keyStr));
-    const addedRefs = refs.filter((r) => !oldRefs.has(keyStr(r)));
-    const removedRefStrs = [...oldRefs].filter((s) => !newRefSet.has(s));
-
-    const insNode =
-      "INSERT OR IGNORE INTO nodes(package, version, category, identifier) VALUES (?, ?, ?, ?)";
-    const updBlob =
-      "UPDATE nodes SET has_blob=1, digest=? WHERE package=? AND version=? AND category=? AND identifier=?";
-    const insLink =
-      "INSERT OR IGNORE INTO links(source, dest) VALUES (" +
-      "(SELECT id FROM nodes WHERE package=? AND version=? AND category=? AND identifier=?), " +
-      "(SELECT id FROM nodes WHERE package=? AND version=? AND category=? AND identifier=?)" +
-      ")";
-    const delLink =
-      "DELETE FROM links WHERE source = " +
-      "(SELECT id FROM nodes WHERE package=? AND version=? AND category=? AND identifier=?) " +
-      "AND dest = " +
-      "(SELECT id FROM nodes WHERE package=? AND version=? AND category=? AND identifier=?)";
-
-    const stmts: BatchStmt[] = [
-      { sql: insNode, params: [key.module, key.version, key.kind, key.path] },
-      { sql: updBlob, params: [digest, key.module, key.version, key.kind, key.path] },
-      ...addedRefs.map((r) => ({
-        sql: insNode,
-        params: [r.module, r.version, r.kind, r.path],
-      })),
-      ...addedRefs.map((r) => ({
-        sql: insLink,
-        params: [key.module, key.version, key.kind, key.path, r.module, r.version, r.kind, r.path],
-      })),
-    ];
-    for (const s of removedRefStrs) {
-      const [m, v, k, p] = s.split("/");
-      stmts.push({
-        sql: delLink,
-        params: [key.module, key.version, key.kind, key.path, m ?? "", v ?? "", k ?? "", p ?? ""],
-      });
-    }
-
-    await this.graphDb.batch(stmts);
-  }
-
-  private async _getForwardRefs(key: Key): Promise<Key[]> {
-    const rows = await this.graphDb.all<{
-      package: string;
-      version: string;
-      category: string;
-      identifier: string;
-    }>(
-      "SELECT n_dest.package, n_dest.version, n_dest.category, n_dest.identifier " +
-        "FROM links " +
-        "JOIN nodes AS n_src ON links.source = n_src.id " +
-        "JOIN nodes AS n_dest ON links.dest = n_dest.id " +
-        "WHERE n_src.package=? AND n_src.version=? AND n_src.category=? AND n_src.identifier=?",
-      [key.module, key.version, key.kind, key.path],
-    );
-    return rows.map((r) => ({
-      module: r.package,
-      version: r.version,
-      kind: r.category,
-      path: r.identifier,
-    }));
-  }
-
-  // -------------------------------------------------------------------------
-  // Per-section helpers (directory-based ingest path)
-  // -------------------------------------------------------------------------
-
-  private async _ingestExamplesDir(
-    bundlePath: string,
-    root: string,
-    version: string,
-  ): Promise<void> {
-    const examplesDir = join(bundlePath, "examples");
-    if (!existsSync(examplesDir)) return;
-
-    const files = readdirSync(examplesDir, { withFileTypes: true }).filter((e) => e.isFile());
-    let count = 0;
-    for (const f of files) {
-      const raw = readFileSync(join(examplesDir, f.name));
-      const section = decode<TypedNode>(raw);
-      const refs = collectForwardRefsFromSection(section);
-      await this._put(
-        { module: root, version, kind: "examples", path: f.name },
-        encode(section),
-        refs,
-        encode(stripVolatileFields(section)),
-      );
-      count++;
-    }
-    if (count > 0) console.log(`  examples: ${count} files`);
-  }
-
-  private async _ingestAssetsDir(
-    bundlePath: string,
-    root: string,
-    version: string,
-    aliases: Record<string, string>,
-  ): Promise<void> {
-    const assetsDir = join(bundlePath, "assets");
-    if (existsSync(assetsDir)) {
-      const files = readdirSync(assetsDir, { withFileTypes: true }).filter((e) => e.isFile());
-      let count = 0;
-      for (const f of files) {
-        const raw = new Uint8Array(readFileSync(join(assetsDir, f.name)));
-        await this._put({ module: root, version, kind: "assets", path: f.name }, raw, []);
-        count++;
-      }
-      if (count > 0) console.log(`  assets: ${count} files`);
-    }
-
-    await this._put(
-      { module: root, version, kind: "meta", path: "aliases.cbor" },
-      cborEncode(aliases) as Uint8Array,
-      [],
-    );
-  }
-
-  private async _ingestLogoDir(
-    bundlePath: string,
-    root: string,
-    version: string,
-    logoName: string | null,
-  ): Promise<string | null> {
-    if (!logoName) return null;
-    const src = join(bundlePath, "assets", logoName);
-    if (!existsSync(src)) return null;
-    const ext = extname(logoName);
-    const destName = ext ? `logo${ext}` : "logo";
-    const raw = new Uint8Array(readFileSync(src));
-    await this._put({ module: root, version, kind: "meta", path: destName }, raw, []);
-    return destName;
-  }
-
-  private async _ingestNarrativeDir(
-    bundlePath: string,
-    root: string,
-    version: string,
-  ): Promise<void> {
-    const docsDir = join(bundlePath, "docs");
-    if (existsSync(docsDir)) {
-      const files = readdirSync(docsDir, { withFileTypes: true }).filter((e) => e.isFile());
-      let count = 0;
-      for (const f of files) {
-        const raw = readFileSync(join(docsDir, f.name));
-        let genDoc: TypedNode;
-        try {
-          genDoc = decode<TypedNode>(raw);
-        } catch (e) {
-          console.warn(`  docs: skipping ${f.name} (decode error: ${e})`);
-          continue;
-        }
-        if (genDoc.__type !== "GeneratedDoc") {
-          console.warn(`  docs: skipping ${f.name} (unexpected type ${genDoc.__type})`);
-          continue;
-        }
-        const qa = f.name;
-        const ingestedDoc = generatedDocToIngested(genDoc, qa);
-        const refs = collectForwardRefs(ingestedDoc);
-        await this._put(
-          { module: root, version, kind: "docs", path: qa },
-          encode(ingestedDoc),
-          refs,
-          encode(stripVolatileFields(ingestedDoc)),
-        );
-        count++;
-      }
-      if (count > 0) console.log(`  docs: ${count} pages`);
-    }
-
-    const tocPath = join(bundlePath, "toc.cbor");
-    if (existsSync(tocPath)) {
-      const tocRaw = new Uint8Array(readFileSync(tocPath));
-      await this._put({ module: root, version, kind: "meta", path: "toc.cbor" }, tocRaw, []);
-    }
-  }
-
-  private async _ingestApiDir(
-    bundlePath: string,
-    root: string,
-    version: string,
-    check: boolean,
-  ): Promise<void> {
-    const moduleDir = join(bundlePath, "module");
-    if (!existsSync(moduleDir)) return;
-
-    const files = readdirSync(moduleDir, { withFileTypes: true }).filter(
-      (e) => e.isFile() && (e.name.endsWith(".cbor") || !e.name.includes(".")),
-    );
-
-    const docs: { qa: string; ingestedDoc: TypedNode }[] = [];
-    let skipped = 0;
-
-    for (const f of files) {
-      const qa = f.name.endsWith(".cbor") ? f.name.slice(0, -5) : f.name;
-      if (check && !isValidQa(qa)) {
-        skipped++;
-        continue;
-      }
-      const modRoot = qa.split(/[.:]/, 1)[0];
-      if (modRoot !== root) {
-        console.warn(`  module: skipping ${qa} (root ${modRoot} != bundle root ${root})`);
-        continue;
-      }
-      const raw = readFileSync(join(moduleDir, f.name));
-      let genDoc: TypedNode;
-      try {
-        genDoc = decode<TypedNode>(raw);
-      } catch (e) {
-        console.warn(`  module: skipping ${qa} (decode error: ${e})`);
-        continue;
-      }
-      if (genDoc.__type !== "GeneratedDoc") {
-        console.warn(`  module: skipping ${qa} (unexpected type ${genDoc.__type})`);
-        continue;
-      }
-      const ingestedDoc = generatedDocToIngested(genDoc, qa);
-      docs.push({ qa, ingestedDoc });
-    }
-
-    let count = 0;
-    for (const { qa, ingestedDoc } of docs) {
-      const refs = collectForwardRefs(ingestedDoc);
-      const keyQa = qa.includes(":") ? qa.split(":")[0]! : qa;
-      const keyMod = keyQa.split(".")[0] ?? root;
-      await this._put(
-        { module: keyMod, version, kind: "module", path: qa },
-        encode(ingestedDoc),
-        refs,
-        encode(stripVolatileFields(ingestedDoc)),
-      );
-      count++;
-    }
-
-    if (skipped > 0) console.log(`  module: skipped ${skipped} (normalise_ref check)`);
-    if (count > 0) console.log(`  module: ${count} pages`);
   }
 }
 

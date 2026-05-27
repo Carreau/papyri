@@ -1,14 +1,14 @@
 /**
  * papyri-ingest — public library API
  *
- * Core exports for programmatic use. The CLI entry is src/cli.ts.
+ * Core exports for programmatic use. Consumed by the viewer's
+ * PUT /api/bundle ingest endpoint.
  */
 
 export { Ingester } from "./ingest.js";
 export type { IngestOptions, ProgressCallback } from "./ingest.js";
 
-export { GraphStore } from "./graphstore.js";
-export type { Key } from "./graphstore.js";
+export type { Key } from "./keys.js";
 
 export { FsBlobStore, keyToPath } from "./blob-store.js";
 export type { BlobStore } from "./blob-store.js";
@@ -19,7 +19,7 @@ export type { GraphDb, BatchStmt, GraphRow } from "./graph-db.js";
 export { decode, encode, generatedDocToIngested, FIELD_ORDER } from "./encoder.js";
 export type { IRNode, TypedNode, UnknownNode } from "./encoder.js";
 
-export { assertBundle, explodeBundleToDir } from "./bundle.js";
+export { assertBundle } from "./bundle.js";
 
 export { collectForwardRefs, collectForwardRefsFromSection } from "./visitor.js";
 

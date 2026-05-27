@@ -189,12 +189,11 @@ ingest/                   TypeScript papyri-ingest package
     ingest.ts             Ingester class — writes bundle into blob+graph
     encoder.ts            CBOR decode/encode, IR node types
     visitor.ts            Forward-ref collector (walks IR nodes)
-    bundle.ts             Bundle validation + directory exploder
-    graphstore.ts         GraphStore (legacy; used by CLI)
+    bundle.ts             Bundle Node validation (assertBundle)
+    keys.ts               Key tuple (module/version/kind/path) + keyStr
     graph-db.ts           GraphDb interface + SqliteGraphDb/D1GraphDb
     blob-store.ts         BlobStore interface + FsBlobStore/R2BlobStore
     raw-store.ts          RawStore interface + FsRawStore/R2RawStore
-    cli.ts                papyri-ingest CLI (standalone use)
   migrations/             SQL schema applied to both SQLite and D1
 
 viewer/                   TypeScript Astro web renderer

@@ -40,21 +40,64 @@ import type { APIRoute } from "astro";
 import { Ingester, decode, type TypedNode } from "papyri-ingest";
 import { isSafeSegment } from "../../lib/paths.ts";
 import { getBackends, getUploadToken } from "../../lib/backends.ts";
-import { respond } from "../../lib/api-utils.ts";
+import { respond, sha256Hex } from "../../lib/api-utils.ts";
 
 export const prerender = false;
+
+// Shared bearer-token gate for both PUT (upload) and GET (existence check).
+// When PAPYRI_UPLOAD_TOKEN is unset the check is skipped — intentional for
+// local development. Returns a 401 Response when the token is required and
+// missing/wrong, or null when the request may proceed.
+async function checkAuth(request: Request): Promise<Response | null> {
+  const expectedToken = await getUploadToken();
+  if (!expectedToken) return null;
+  const auth = request.headers.get("Authorization") ?? "";
+  if (auth !== `Bearer ${expectedToken}`) {
+    return respond({ ok: false, error: "unauthorized" }, 401, { "WWW-Authenticate": "Bearer" });
+  }
+  return null;
+}
+
+// Existence check for `papyri upload`'s dedup step. The client computes the
+// SHA-256 of the .papyri artifact it is about to send and asks whether the
+// server already holds that exact content for (module, version). When it
+// does, the client skips the upload entirely. Failing open (any error → the
+// client uploads anyway) is the responsibility of the client.
+export const GET: APIRoute = async ({ request, url }) => {
+  const authFail = await checkAuth(request);
+  if (authFail) return authFail;
+
+  const module = url.searchParams.get("module");
+  const version = url.searchParams.get("version");
+  const hash = url.searchParams.get("hash");
+  if (!module || !version) {
+    return respond({ ok: false, error: "module and version query params required" }, 400);
+  }
+
+  let backends: Awaited<ReturnType<typeof getBackends>>;
+  try {
+    backends = await getBackends();
+  } catch (err) {
+    return respond({ ok: false, error: `failed to open ingest backend: ${err}` }, 500);
+  }
+
+  const row = await backends.graphDb.get<{ content_hash: string | null }>(
+    "SELECT content_hash FROM bundles WHERE module = ? AND version = ?",
+    [module, version]
+  );
+  const storedHash = row?.content_hash ?? null;
+  // With a hash supplied, "exists" means identical content already ingested.
+  // Without one, it degrades to "is this (module, version) present at all".
+  const exists = hash ? storedHash !== null && storedHash === hash : row !== null;
+  return respond({ ok: true, module, version, stored_hash: storedHash, exists });
+};
 
 export const PUT: APIRoute = async ({ request }) => {
   // Token auth: if PAPYRI_UPLOAD_TOKEN is configured, every PUT must carry
   // "Authorization: Bearer <token>".  When the env var is absent the check is
   // skipped entirely — that's intentional for local development.
-  const expectedToken = await getUploadToken();
-  if (expectedToken) {
-    const auth = request.headers.get("Authorization") ?? "";
-    if (auth !== `Bearer ${expectedToken}`) {
-      return respond({ ok: false, error: "unauthorized" }, 401, { "WWW-Authenticate": "Bearer" });
-    }
-  }
+  const authFail = await checkAuth(request);
+  if (authFail) return authFail;
 
   if (!request.body) {
     return respond({ ok: false, error: "request body required (.papyri artifact)" }, 400);
@@ -158,12 +201,17 @@ export const PUT: APIRoute = async ({ request }) => {
           message: `raw archive write failed: ${archiveErr}`,
         });
       }
+      // Content hash of the artifact as received — stored in the bundles row
+      // so a later `papyri upload` of identical bytes can be skipped via the
+      // GET existence check above.
+      const contentHash = await sha256Hex(compressedBytes);
       const result = await ingester.ingestBundle(
         bundle,
         bundleSizeBytes,
         async (phase, done, total) => {
           await sendWithTiming({ event: "progress", phase, done, total });
-        }
+        },
+        contentHash
       );
       await sendWithTiming({ event: "done", pkg: result.pkg, version: result.version });
     } catch (err) {

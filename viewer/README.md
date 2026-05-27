@@ -98,9 +98,8 @@ prerender = false;` are rendered at runtime.
 
 ## Uploading a bundle
 
-The `PUT /api/bundle` endpoint receives a raw `papyri gen` bundle, runs
-the full ingest pipeline (the same code path as the `papyri-ingest`
-CLI), and updates the cross-link graph — so cross-refs and back-refs
+The `PUT /api/bundle` endpoint receives a packed `.papyri` artifact, runs
+the full ingest pipeline, and updates the cross-link graph — so cross-refs and back-refs
 work immediately without restarting the server. This is the canonical
 ingest entry point; the Python side ships bundles to it via
 `papyri upload`.
@@ -147,7 +146,7 @@ viewer (`http://localhost:4321/api/bundle`); point it elsewhere with
   `PAPYRI_INGEST_DIR`. The `Ingester` writes blobs and graph entries
   directly into `<PAPYRI_INGEST_DIR>/<pkg>/<version>/`; the staging
   copy is removed afterwards.
-- Ingestion runs the same code as the `papyri-ingest` CLI (sibling
+- Ingestion runs the `papyri-ingest` library's `Ingester` (sibling
   workspace package). It is synchronous and blocks the event loop for
   the duration of a single upload.
 - No authentication is applied. Run behind a trusted network or

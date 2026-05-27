@@ -190,8 +190,7 @@ export class Ingester {
   /**
    * Ingest a decoded `Bundle` Node — the sole ingest entry point. The Bundle
    * comes from a `.papyri` artifact (gunzip + cbor-decode); both the viewer's
-   * PUT /api/bundle handler and the standalone CLI feed it here, under Node
-   * and Cloudflare Workers alike.
+   * PUT /api/bundle handler and the standalone CLI feed it here.
    */
   async ingestBundle(
     node: unknown,
@@ -367,7 +366,7 @@ export class Ingester {
       await emit("module", apiCount, apiTotal);
     }
 
-    // --- Phase 3: flush — concurrent R2 puts + chunked D1 mega-batch ---
+    // --- Phase 3: flush — concurrent blob puts + chunked graph mega-batch ---
     // All nodeStmts precede linkStmts so subquery-based insLink always
     // finds the dest node row already present in the batch.
     const tFlush = Date.now();
@@ -530,7 +529,7 @@ export class Ingester {
     return { nodeStmts, linkStmts };
   }
 
-  /** Run all D1 graph writes in DB_CHUNK_SIZE-statement slices. */
+  /** Run all graph writes in DB_CHUNK_SIZE-statement slices. */
   private async _flushGraphStmts(stmts: BatchStmt[], log?: (msg: string) => void): Promise<void> {
     const total = stmts.length;
     for (let i = 0; i < total; i += DB_CHUNK_SIZE) {

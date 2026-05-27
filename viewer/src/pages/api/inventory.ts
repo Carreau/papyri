@@ -156,7 +156,7 @@ export const DELETE: APIRoute = async ({ request }) => {
   try {
     // Delete objects first, then the project row — explicit rather than relying
     // on ON DELETE CASCADE, which needs PRAGMA foreign_keys=ON (off by default
-    // in SQLite, and not guaranteed across the D1 path).
+    // in SQLite).
     await backends.graphDb.batch([
       { sql: "DELETE FROM external_objects WHERE project=?", params: [name] },
       { sql: "DELETE FROM external_projects WHERE name=?", params: [name] },

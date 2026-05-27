@@ -51,8 +51,8 @@ export interface BundleNav {
 }
 
 // Per-process memo. Keyed by `<pkg>/<ver>` — the BlobStore singleton is
-// stable per request, so caching by bundle id is correct. A fresh worker
-// isolate / Node process gets a clean map.
+// stable per request, so caching by bundle id is correct. A fresh Node
+// process gets a clean map.
 const _navCache = new Map<string, Promise<BundleNav>>();
 
 async function readMetaCbor(blobStore: BlobStore, pkg: string, ver: string): Promise<BundleMeta> {

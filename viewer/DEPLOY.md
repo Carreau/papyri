@@ -1,63 +1,48 @@
-# Deploying the viewer (static site)
+# Deploying the viewer
 
-`pnpm build` produces a fully self-contained static site under
-`viewer/dist/client/`. That directory contains nothing but HTML, CSS, JS, and
-assets — it can be served from **any static host** (GitHub Pages, Cloudflare
-Pages, Netlify, Vercel, Fly.io static volumes, a bare Nginx/Caddy box, an S3
-bucket with static website hosting, etc.).
+The viewer runs as a long-running **Node.js process** under
+`@astrojs/node` (`output: "server"`). `pnpm build` emits a standalone
+server at `viewer/dist/server/entry.mjs` plus prerendered static assets
+under `viewer/dist/client/`. Deploy target: a VPS (or any host that can
+run a Node process behind a reverse proxy).
 
-> **Note on SSR.** `astro.config.mjs` now attaches `@astrojs/node` so
-> individual routes can opt into server rendering
-> (`export const prerender = false`). `pnpm build` therefore produces two
-> output trees: `dist/client/` (static HTML + assets) and `dist/server/` (a
-> standalone Node entry). The static-host deploys below upload
-> `dist/client/` only — the SSR endpoints under `/api/*` are not
-> reachable from those deploys and are exercised via `pnpm serve`
-> locally. Once we commit to a hosting platform, `@astrojs/node` is
-> swapped for the matching adapter (`@astrojs/cloudflare`,
-> `@astrojs/netlify`, `@astrojs/vercel`, etc.).
+```sh
+cd viewer
+pnpm install --frozen-lockfile
+pnpm build
+node ./dist/server/entry.mjs   # or: pnpm serve
+```
+
+The server listens on port `4321` by default. Put a reverse proxy
+(Nginx / Caddy) in front of it for TLS and host routing, and set
+`PAPYRI_SITE` to the external origin (see below).
+
+> **Static-only deploys.** `dist/client/` is a self-contained static
+> tree (HTML, CSS, JS, assets) and can be served from any static host.
+> The `prerender = false` routes under `/api/*` are not reachable from a
+> static-only deploy — they require the Node server. The viewer is built
+> for the long-running Node process; static export is a degraded mode.
 
 ## Authentication
 
-`PUT /api/bundle` is the **only endpoint that mutates state** (D1 graph and R2
-blobs).  All other routes are read-only.  A simple bearer-token guard protects
-it; the check is opt-in so local development needs no configuration.
+`PUT /api/bundle` is the **only endpoint that mutates state** (the graph
+DB and blob store). All other routes are read-only. A simple
+bearer-token guard protects it; the check is opt-in so local development
+needs no configuration.
 
 ### How it works
 
-The viewer reads `PAPYRI_UPLOAD_TOKEN` from the environment at request time.
+The viewer reads `PAPYRI_UPLOAD_TOKEN` from the environment at request
+time.
 
 - **Token present**: every `PUT /api/bundle` must carry
-  `Authorization: Bearer <token>`.  Any other value — or a missing header —
+  `Authorization: Bearer <token>`. Any other value — or a missing header —
   gets a `401 Unauthorized` response.
-- **Token absent**: the check is skipped entirely.  No auth is required.
+- **Token absent**: the check is skipped entirely. No auth is required.
   This is the safe default for local `pnpm dev` / `pnpm serve` sessions.
 
-### Cloudflare Workers deployment
-
-Store the token as a [Wrangler secret](https://developers.cloudflare.com/workers/configuration/secrets/)
-so it is never committed to the repository:
-
-```sh
-# One-time setup — Wrangler prompts for the value interactively.
-wrangler secret put PAPYRI_UPLOAD_TOKEN
-```
-
-Rotate by running the same command again.  Delete with
-`wrangler secret delete PAPYRI_UPLOAD_TOKEN`.
-
-### Local `wrangler dev` (miniflare)
-
-Create `viewer/.dev.vars` (already gitignored by Cloudflare's default
-`.gitignore`; add it to yours if needed):
-
-```
-PAPYRI_UPLOAD_TOKEN=your-secret-here
-```
-
-### Node dev server (`pnpm serve`)
-
-Set the environment variable before starting the server:
+On the server, set the variable before starting the process (e.g. via
+the service manager's environment file, a `systemd` unit, or the shell):
 
 ```sh
 export PAPYRI_UPLOAD_TOKEN=your-secret-here
@@ -71,264 +56,53 @@ Pass the same token to the client via environment variable or flag:
 ```sh
 # Recommended: set once in the shell / CI secret store.
 export PAPYRI_UPLOAD_TOKEN=your-secret-here
-export PAPYRI_UPLOAD_URL=https://your-worker.example.com/api/bundle
+export PAPYRI_UPLOAD_URL=https://docs.example.com/api/bundle
 
 papyri upload ~/.papyri/data/numpy_2.3.5/
 
 # Or pass inline (takes precedence over env var):
 papyri upload --token your-secret-here \
-              --url https://your-worker.example.com/api/bundle \
+              --url https://docs.example.com/api/bundle \
               ~/.papyri/data/numpy_2.3.5/
 ```
 
 In CI, store the token as a repository secret and inject it as
 `PAPYRI_UPLOAD_TOKEN` in the workflow environment.
 
-## Architecture
-
-```
-  GitHub Actions
-  ├─ papyri gen examples/papyri.toml          → ~/.papyri/data/<pkg>_<ver>/
-  ├─ papyri ingest ~/.papyri/data/...         → ~/.papyri/ingest/papyri.db
-  ├─ pnpm build (Astro SSG + unused SSR)      → viewer/dist/{client,server}/
-  └─ upload viewer/dist/client                → static host
-```
-
-At build time Astro walks the graph DB and the ingest tree, pre-renders
-every qualname page, inlines KaTeX math, highlights code with Shiki,
-and emits one `index.html` per URL. The static host then serves those
-files from cache — no origin, no cold starts, no per-request DB access.
-
 ## Storage model
 
-| Artifact                                 | Where it lives at build time    | Where it lives at runtime               |
-| ---------------------------------------- | ------------------------------- | --------------------------------------- |
-| Per-bundle IR (JSON + CBOR blobs)        | `~/.papyri/data/<pkg>_<ver>/`   | Consumed at build; not shipped          |
-| Ingest store (decoded CBOR per qualname) | `~/.papyri/ingest/<pkg>/<ver>/` | Consumed at build; not shipped          |
-| Graph DB (`papyri.db`, SQLite)           | `~/.papyri/ingest/papyri.db`    | Consumed at build; not shipped          |
-| Rendered HTML + assets                   | `viewer/dist/client/`           | Static host edge (immutable per deploy) |
-| Example assets (plots, captured HTML)    | `viewer/dist/client/assets/...` | Static host edge                        |
-| SSR server bundle                        | `viewer/dist/server/`           | **Not uploaded.** Built for local use.  |
+The viewer's state lives on the server's local filesystem and a SQLite
+database, both under `~/.papyri/ingest/` (override with
+`PAPYRI_INGEST_DIR` / `PAPYRI_INGEST_DB`):
 
-All papyri-side state is a **build input**, not a runtime dependency.
+| Artifact                               | Where it lives                       |
+| -------------------------------------- | ------------------------------------ |
+| Per-bundle IR (decoded CBOR blobs)     | `<PAPYRI_INGEST_DIR>/<pkg>/<ver>/`   |
+| Raw bundle archive (`.papyri.gz`)      | `<PAPYRI_INGEST_DIR>/_raw/<pkg>/`    |
+| Graph DB (`papyri.db`, SQLite)         | `<PAPYRI_INGEST_DIR>/papyri.db`      |
+| Rendered HTML + static assets          | `viewer/dist/client/`                |
 
-## Scaling the content set
+The raw `.papyri.gz` archive is the only authoritative IR; everything in
+the blob store and graph DB is a derived cache, rebuildable from the raw
+archive via `POST /api/reingest`.
 
-The proposed workflow ships papyri's own docs by running `papyri gen
-examples/papyri.toml` and ingesting the result. To publish additional
-libraries, either:
+## Origin / reverse-proxy configuration
 
-- add more TOMLs to the `Generate + ingest bundles` step, or
-- generate bundles in a separate job, upload them as artifacts, and
-  download + ingest them from the deploy job.
+When the viewer sits behind a reverse proxy whose external hostname
+differs from the container's internal host, set `PAPYRI_SITE` to the
+canonical external origin (e.g. `https://docs.example.com`). Astro uses
+it for canonical URL generation. (CSRF origin checks are disabled —
+mutating endpoints carry their own bearer-token / session-cookie checks;
+see `astro.config.mjs`.)
 
-Watch asset counts and build time as the content set grows. Most static
-hosts impose per-file or total-size limits; papyri emits one HTML per
-qualname plus assets, which adds up fast for large libraries. If limits
-are hit, options include pruning to module-level pages with client-side
-qualname rendering, or moving to an SSR-on-serverless path.
+## Populating content
 
-## If we ever outgrow SSG
-
-`viewer/PLAN.md` already flags the `ir-reader` / `graph` modules as the
-designated shock absorbers. The SSR migration path depends on the chosen host:
-
-- **Cloudflare Workers**: in progress as **M9** in
-  [`PLAN.md`](PLAN.md). The single populator of D1 + R2 is the
-  Workers-side `PUT /api/bundle` handler (M9.3) — there is no parallel
-  seeder, and the soon-to-be-removed `papyri ingest` tree is not an
-  input. M9.0 (bindings + D1 schema migration) and M9.1 (CF adapter +
-  worker entrypoint) have landed: `pnpm build:cf && pnpm wrangler:dev`
-  boots a worker against an empty D1+R2 with both bindings wired
-  (`/api/health.json` confirms). Storage-touching routes still 500
-  under `wrangler dev` until the async storage layer (M9.2) and the
-  Workers bundle PUT (M9.3) ship.
-- **Netlify / Vercel Edge Functions**: similar pattern — managed Postgres or
-  Turso instead of D1, object storage instead of R2, matching Astro adapter.
-- **Node server (Fly.io, Railway, VPS)**: keep `better-sqlite3` and the SQLite
-  file; swap `@astrojs/node` from `mode: "middleware"` to `mode: "standalone"`;
-  serve with a reverse proxy. Simplest migration, no vendor lock-in.
-
-The choice should be driven by concrete cost / latency / ops data once we have
-a real content set — no commitment needed today.
-
-## Proposed GitHub Pages workflow
-
-A minimal deployment that uses the built-in `github-pages` action — no
-third-party tokens needed. Save as
-`.github/workflows/pages.yml` when ready to turn on.
-
-```yaml
-name: Deploy viewer to GitHub Pages
-
-on:
-  push:
-    branches: [main]
-  workflow_dispatch:
-
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages
-  cancel-in-progress: true
-
-jobs:
-  build-and-deploy:
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python 3.14
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.14"
-          cache: pip
-
-      - name: Install papyri
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e .
-
-      - name: Generate + ingest bundles
-        run: |
-          papyri gen examples/papyri.toml --no-infer
-          for d in ~/.papyri/data/*/; do
-            papyri ingest "$d"
-          done
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-          cache-dependency-path: viewer/pnpm-lock.yaml
-
-      - name: Install viewer deps
-        working-directory: viewer
-        run: pnpm install --frozen-lockfile
-
-      - name: Build static site
-        working-directory: viewer
-        run: pnpm build
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: viewer/dist/client
-
-      - name: Deploy to GitHub Pages
-        id: deploy
-        uses: actions/deploy-pages@v4
+```sh
+papyri gen examples/papyri.toml --no-infer      # → ~/.papyri/data/<pkg>_<ver>/
+papyri upload ~/.papyri/data/<pkg>_<ver>/        # → PUT /api/bundle, ingested server-side
 ```
 
-Enable _Settings → Pages → Source → GitHub Actions_ in the repo before
-the first run.
-
-## Alternative: Cloudflare Pages
-
-If Cloudflare Pages is preferred (global edge CDN, preview deploys per PR),
-save as `.github/workflows/cloudflare-pages.yml`.
-
-### One-time Cloudflare setup
-
-1. In the Cloudflare dashboard, create a Pages project. Pick
-   **"Direct Upload"** (not the Git integration — we drive deploys from
-   GitHub Actions). Name it something stable, e.g. `papyri-viewer`.
-2. Create an API token with the `Pages:Edit` permission scoped to the
-   account. Copy the token.
-3. Note the **Account ID** from the dashboard sidebar.
-
-### GitHub secrets
-
-Add three repo-level secrets under _Settings → Secrets and variables →
-Actions_:
-
-| Secret                     | Value                                   |
-| -------------------------- | --------------------------------------- |
-| `CLOUDFLARE_API_TOKEN`     | The Pages:Edit token from step 2        |
-| `CLOUDFLARE_ACCOUNT_ID`    | Your Cloudflare account ID              |
-| `CLOUDFLARE_PAGES_PROJECT` | The project name (e.g. `papyri-viewer`) |
-
-### Workflow YAML
-
-```yaml
-name: Deploy viewer to Cloudflare Pages
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-  workflow_dispatch:
-
-permissions:
-  contents: read
-  pull-requests: write
-  deployments: write
-
-concurrency:
-  group: cloudflare-pages-${{ github.ref }}
-  cancel-in-progress: true
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python 3.14
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.14"
-          cache: pip
-
-      - name: Install papyri
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e .
-
-      - name: Generate + ingest bundles
-        run: |
-          papyri gen examples/papyri.toml --no-infer
-          for d in ~/.papyri/data/*/; do
-            papyri ingest "$d"
-          done
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-          cache-dependency-path: viewer/pnpm-lock.yaml
-
-      - name: Install viewer deps
-        working-directory: viewer
-        run: pnpm install --frozen-lockfile
-
-      - name: Build static site
-        working-directory: viewer
-        run: pnpm build
-
-      - name: Deploy to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: >-
-            pages deploy viewer/dist/client
-            --project-name=${{ secrets.CLOUDFLARE_PAGES_PROJECT }}
-            --branch=${{ github.head_ref || github.ref_name }}
-```
+`PUT /api/bundle` runs the full TypeScript ingest pipeline in-process and
+updates the cross-link graph, so cross-refs and back-refs work
+immediately without restarting the server. To re-derive the store from
+the raw archives (e.g. after an IR change), call `POST /api/reingest`.

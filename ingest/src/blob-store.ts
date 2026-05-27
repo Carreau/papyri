@@ -12,7 +12,7 @@ import { mkdir, writeFile, readFile, stat, readdir, rm } from "node:fs/promises"
 import { join, dirname, sep } from "node:path";
 import type { Key } from "./keys.js";
 
-/** Flat path used as both fs path-suffix and R2 object key. */
+/** Flat path used as the blob key (an fs path-suffix, or an object-store key). */
 export function keyToPath(key: Key): string {
   return `${key.module}/${key.version}/${key.kind}/${key.path}`;
 }
@@ -22,8 +22,8 @@ export interface BlobStore {
   get(key: Key): Promise<Uint8Array | null>;
   has(key: Key): Promise<boolean>;
   /**
-   * List every key under *prefix*, recursive (matching R2's default
-   * semantics — fs walks recursively to match). Returned strings are full
+   * List every key under *prefix*, recursive (fs walks recursively).
+   * Returned strings are full
    * keys including the prefix; sorted lexicographically. Empty array if
    * the prefix is absent.
    *

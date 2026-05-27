@@ -83,7 +83,14 @@ the raw archive, not via reading the graphstore back.
 
 ## Open work
 
-### Viewer — M9 (Cloudflare Workers)
+### Viewer — hosting
+
+The viewer is deployed as a long-running Node.js server on a VPS. An
+earlier Cloudflare Workers (R2 + D1) target was abandoned because ingest
+latency on Workers/R2/D1 was far too high (per-object subrequest fan-out
+against the Workers cap; see `viewer/PLAN.md`). The storage abstractions
+(`BlobStore` / `GraphDb` / `RawStore`) are kept so a backend swap stays
+possible, but only the filesystem + SQLite implementations exist.
 
 Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
 
@@ -122,8 +129,8 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
     be small, so the *total* row count scanned might still be lower.
   - **Cache friendliness.** Per-bundle tables are append-only during a
     single ingest; the global `links` table is write-amplified across
-    every concurrent upload. The per-bundle shape probably wins on the
-    hosted service (D1) where write contention matters.
+    every concurrent upload. The per-bundle shape probably wins where
+    write contention matters.
   - **Re-ingest semantics.** Today removing a bundle means deleting from
     `nodes` (and `links` cascades). Per-bundle tables make
     `POST /api/reingest` and bundle eviction trivially atomic per bundle
@@ -136,8 +143,9 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   - **Schema-per-bundle vs. partition column.** "Per-bundle table" can
     mean a literal `refs_<pkg>_<ver>` table (clean partitioning, ugly
     DDL churn) or one `refs` table partitioned by `(from_pkg,
-    from_ver)` with a covering index. D1 doesn't love DDL churn; one
-    table with a partition column is probably the realistic shape.
+    from_ver)` with a covering index. Per-bundle DDL churn is best
+    avoided; one table with a partition column is probably the realistic
+    shape.
   - **Interaction with the "graphstore is a derived cache" invariant.**
     This is purely a denormalization choice — no IR contract changes,
     no raw-archive impact — so it's exactly the kind of change the
@@ -312,12 +320,12 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   unicode) are warned and dropped; support can be added per demand.
 - **Separate domains/processes for upload, admin, and user surfaces.**
   In a hosted deployment the upload endpoint (`POST /api/bundle`), any admin
-  panel, and any per-user management UI should run as isolated processes (or
-  Workers routes) on separate subdomains. Keeping them isolated limits blast
+  panel, and any per-user management UI should run as isolated processes on
+  separate subdomains. Keeping them isolated limits blast
   radius: a vulnerability in the upload path cannot reach admin state, and
   per-user surfaces cannot touch other users' bundles. Design URL structure
   and routing with this separation in mind so the hosted service is not baked
-  into a monolithic app. Track this when the M9 / hosting design firms up.
+  into a monolithic app. Track this when the hosting design firms up.
 
 - **Track raw upload timestamps independently of bundle metadata.**
   The `_raw/<pkg>/<ver>.papyri.gz` archive should record when a bundle was
@@ -709,10 +717,10 @@ directives.)
 
 ### Viewer (`viewer/`)
 
-- **Precompute bundle indices at ingest time.** PLAN's M9.2 already notes the
+- **Precompute bundle indices at ingest time.** `viewer/PLAN.md` notes the
   `~25s /images/` scan; once `walkBundle` exists, move the work into the
   ingest pipeline as a `nodes_by_type` table so endpoints query rather than
-  scan. Both the local SQLite and D1 backends benefit equally. Per the
+  scan. Per the
   "Storage invariant" section, these tables are free to hold whatever shape
   the endpoint wants — they need not mirror IR node structure, since
   re-ingest can rebuild them from the raw archive.
@@ -740,7 +748,7 @@ directives.)
 
   Credentials come from `PAPYRI_USERNAME` / `PAPYRI_PASSWORD` env vars
   (see `api/auth/login.ts`). The hardcoded-single-user model is not the
-  long-term answer for a multi-tenant hosted service. Track when M9 / hosting
+  long-term answer for a multi-tenant hosted service. Track when the hosting
   design firms up.
 
 ### Cross-cutting

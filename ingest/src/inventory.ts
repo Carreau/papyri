@@ -19,7 +19,7 @@
  * project to a real external href at render time.
  *
  * Decompression goes through the Web `DecompressionStream("deflate")` (zlib
- * format) so the code runs unchanged on Node and on Cloudflare Workers.
+ * format), a portable Web API with no backend-specific dependency.
  */
 import type { GraphDb } from "./graph-db.js";
 

@@ -289,11 +289,22 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   enforced at gen time so the bundle is self-consistent before upload.
 - **`mod_root == root` assertion could move to gen.** Gen already knows both
   values; moving the check surfaces mistakes earlier.
+- **External (intersphinx) linking — landed.** The viewer can now resolve a
+  cross-package `RefInfo` that points at a non-papyri project (numpy, the
+  stdlib, …) to a real external URL. An admin registers a project by pointing
+  `POST /api/inventory` at its Sphinx `objects.inv`; the parser lives in
+  `ingest/src/inventory.ts`, the rows are stored via the
+  `0001_external_inventory.sql` migration, and `resolveExternalRefs`
+  (`viewer/src/lib/xref.ts`) consults them at render time for refs the local
+  graph can't resolve. Admin UI: `ExternalInventoryPanel.tsx`. This covers a
+  broad slice of the "link to projects that don't publish a DocBundle" need.
 - **Builtin ref resolution belongs at gen time.** Ship a Python-builtins
   bundle shim — a minimal DocBundle that registers every builtin as a proper
   `RefInfo`. `papyri gen` emits references to builtins as ordinary cross-refs;
   ingest resolves them against the shim exactly like any other package. No
-  special-casing in the ingest resolver.
+  special-casing in the ingest resolver. (Note: the intersphinx inventory above
+  already handles stdlib links via the CPython `objects.inv`; the shim is the
+  gen-time alternative for builtins specifically.)
 - **Core invariant: gen owns all ref classification; ingest only links.**
   This invariant applies to the IR in the raw archive, not to the
   graphstore's internal representation (see "Storage invariant" above) —
@@ -473,9 +484,13 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   - Render-time only; defer CLI/background validation tooling.
 
   *Files to create/modify (when implemented):*
-  - `viewer/src/components/CrossRef.tsx` — add unresolved styling
-  - `viewer/src/styles/ir-nodes.css` — `.unresolved-ref` styles
-  - `viewer/src/pages/[pkg]/[ver]/validate.astro` — report page
+  - CrossRef rendering lives in `viewer/src/lib/render-node.ts` (string
+    helpers), not a `CrossRef.tsx` component — add the unresolved styling there.
+  - `viewer/src/styles/ir-nodes.css` — the `.xref.unresolved` class already
+    exists (`ir-nodes.css:172,186`); wire `render-node.ts` to emit it when
+    `.exists === false`.
+  - `viewer/src/pages/[pkg]/[ver]/validate.astro` — report page (does not exist
+    yet).
 
 - **Bundle staging area** (captured 2026-05-20).
   Support uploading a bundle into a *staging* zone that is isolated from the
@@ -667,27 +682,37 @@ file are cross-referenced rather than duplicated.
 
 ### Python (`papyri/`)
 
-- **LRU-cache `ts.parse()` results** (`gen.py:534/555/979/1349/1610`). The
-  parser is invoked many times per gen run; even if duplication is rare, an
-  LRU around `ts.parse()` is cheap insurance and removes a per-call cost. Note
-  the contrasting case in `tree.py:54` where `@lru_cache` was *removed*
-  because mutated nodes broke equality — `ts.parse()` operates on raw strings
-  and produces fresh trees, so it does not have that hazard.
-- **Decompose `Gen.collect_api_docs`** (`gen.py:1667–1978`, ~280 lines).
+- **LRU-cache `ts.parse()` results** (`ts.py:1132`; callers in `gen.py` around
+  lines 557/578/1012/1441/1704). The parser is invoked many times per gen run;
+  even if duplication is rare, an LRU around `ts.parse()` is cheap insurance and
+  removes a per-call cost. Note the contrasting case in `tree.py` where
+  `@lru_cache` was *removed* because mutated nodes broke equality — `ts.parse()`
+  operates on raw strings and produces fresh trees, so it does not have that
+  hazard.
+- **Decompose `Gen.collect_api_docs`** (`gen.py:1763`, ~315 lines).
   Split into module-walk / doc-extract / IR-emit so each step is testable in
   isolation.
-- **Directive handler registry redesign** (`tree.py:597–821`). Replace the
-  `"_" + name + "_handler"` string-key convention with an explicit registry
-  dict. The current scheme cannot express directive names containing
-  hyphens (e.g. `code-block`) without ad-hoc wiring. Combine with the
-  "no global state" / `DirectiveContext` work already listed above.
+- **Directive handler registry redesign** — *partially done.* An explicit
+  registry dict now exists (`tree.py:690` `self._handlers`, keyed by the exact
+  directive name so hyphenated names like `code-block` work). But the legacy
+  `"_" + name + "_handler"` getattr convention is still the *first* dispatch
+  path (`tree.py:958`, falling back to `self._handlers.get(...)` at line 960),
+  and `_autosummary_handler` / `_toctree_handler` still rely on it. Finish the
+  job by removing the getattr dispatch so the dict is the only mechanism.
+  Combine with the "no global state" / `DirectiveContext` work above.
 - **Replace assertion-based arg validation in `Node.__init__`**
-  (`node_base.py:31`). Use `TypeError`/`ValueError` so behaviour does not
-  change under `python -O`.
-- **Document the two serialization paths.** `node_serializer.py` (CBOR-side,
-  internally tagged) and `serde.py` (generic dataclass round-trip, JSON or
-  CBOR) coexist and are not duplicates. Add a short module-level comment in
-  each pointing at the other so contributors know which to extend.
+  (`node_base.py:53`). Use `TypeError`/`ValueError` so behaviour does not
+  change under `python -O`. (While here: `_invalidate` at `node_base.py:199`
+  builds its error path as `f"{k}.{sub}." + sub`, interpolating `sub` twice —
+  inconsistent with the dict/list branches that use `ii`; looks like a bug.)
+- **Fix stale `papyri ingest` reference.** `describe.py:85` tells the user
+  "Have you run `papyri ingest` yet?" — but there is no `papyri ingest` CLI
+  (it was removed; CLAUDE.md forbids re-adding it). Point the message at
+  `papyri upload` / the viewer's ingest endpoint instead.
+
+(Resolved and removed: "Document the two serialization paths" — both
+`node_serializer.py` and `serde.py` now carry module-level docstrings that
+cross-reference each other.)
 
 (Already tracked above and not repeated here: `_GITHUB_SLUG` global,
 `DirectiveContext` injection, graphstore write-side audit, missing
@@ -695,39 +720,41 @@ directives.)
 
 ### TypeScript ingest (`ingest/`)
 
-- **Extract shared schema bootstrap.** `migrationsDir`, `loadSchemaFromDisk`,
-  `splitStatements`, and the `PRAGMAS` constant are duplicated between
-  `ingest/src/ingest.ts:86–107` and `viewer/src/lib/graphstore.ts:60–91`.
-  Move into a shared module (most natural home: a new export from the
-  `papyri-ingest` package consumed by the viewer).
-- **Deduplicate ref resolution.** `_getForwardRefs` (`ingest.ts:455–475`)
-  duplicates `getForwardRefs` / `getBackRefs` (`viewer/src/lib/graphstore.ts:277–322`).
-  Parameterize direction and share the row-mapping helper.
-- **Type-safe key parsing.** `visitor.ts:78/90/122` and
-  `viewer/src/lib/graphstore.ts:215` use `split("/")` with silent `?? ""`
-  fallbacks. Add a `parseKeyStr(s) → Key` helper alongside `keyStr` so any
-  key containing `/` fails loudly instead of silently truncating.
-- **Unify forward-ref collection.** `collectForwardRefs` and
-  `collectForwardRefsFromSection` in `visitor.ts:45–131` walk the same node
-  types with slight differences. Parameterize the input subtrees so the
-  walker is shared; today the `Figure`-handling branch only exists in one of
-  the two.
-- **Async fs in `ingest()`.** `ingest.ts:487–489` uses `readFileSync` inside
-  an async pipeline; switch to `fs/promises` to avoid blocking the loop.
+(Resolved and removed: "Extract shared schema bootstrap" and "Deduplicate ref
+resolution" are moot — `viewer/src/lib/graphstore.ts` no longer exists. Schema
+bootstrap lives only in `ingest/src/ingest.ts`, and forward/back-ref queries
+moved to `viewer/src/lib/graph.ts`; `_getForwardRefs` is gone with the
+directory-ingest path. "Async fs in `ingest()`" is also resolved — the
+directory `ingest()` pipeline was deleted; the surviving `readFileSync` is only
+in the one-time synchronous `loadSchemaFromDisk` DB-init path.)
+
+- **Type-safe key parsing.** `visitor.ts` still hand-builds key strings
+  (`${module}/${version}/${kind}/${path}`) with silent `?? ""` fallbacks
+  (`visitor.ts:73–96, 117–127`) instead of reusing `keyStr` (`keys.ts:16`), and
+  there is no inverse. Reuse `keyStr` and add a `parseKeyStr(s) → Key` helper so
+  any key containing `/` fails loudly instead of silently truncating.
+- **Unify forward-ref collection.** `collectForwardRefs` (`visitor.ts:45`) and
+  `collectForwardRefsFromSection` (`visitor.ts:105`) walk the same node types
+  with slight differences. Parameterize the input subtrees so the walker is
+  shared; today the `Figure`-handling branch only exists in `collectForwardRefs`.
 
 ### Viewer (`viewer/`)
 
-- **Precompute bundle indices at ingest time.** `viewer/PLAN.md` notes the
-  `~25s /images/` scan; once `walkBundle` exists, move the work into the
+- **Precompute bundle indices at ingest time.** The shared `walkBundle` /
+  `walkAllBundles` helper now exists (`viewer/src/lib/bundle-walk.ts`) and is
+  used by `image-index.ts` and the node-browser endpoint, but the `~25s
+  /images/` scan is still a live scan. The remaining work: move it into the
   ingest pipeline as a `nodes_by_type` table so endpoints query rather than
-  scan. Per the
-  "Storage invariant" section, these tables are free to hold whatever shape
-  the endpoint wants — they need not mirror IR node structure, since
-  re-ingest can rebuild them from the raw archive.
-- **CSS dead-code audit.** `global.css` (~1113 lines) + `ir-nodes.css`
-  (~283 lines) carry alternate trees (`.sidebar-flat` vs
-  `.sidebar-qualnames`) and feature-specific blocks (`.bundle-index-card*`)
-  that look stale. Audit and consolidate.
+  scan. Per the "Storage invariant" section, these tables are free to hold
+  whatever shape the endpoint wants — they need not mirror IR node structure,
+  since re-ingest can rebuild them from the raw archive.
+- **CSS dead-code audit.** `global.css` has grown to ~1563 lines and
+  `ir-nodes.css` to ~536. The previously-flagged selectors (`.sidebar-flat` /
+  `.sidebar-qualnames`, `.bundle-index-card*`) turned out to be live — all are
+  still referenced by `BundleSidebar.astro` and the bundle index page, so they
+  are NOT dead. A general audit/consolidation pass on the grown stylesheets may
+  still be worthwhile, but start from a fresh unused-selector check rather than
+  the old (now-stale) list.
 - **Admonition styling.** `Admonition` nodes render as a single generic
   `aside.admonition` (`render-node.ts`, `ir-nodes.css`) regardless of kind
   (note / warning / tip / seealso / …). Look at

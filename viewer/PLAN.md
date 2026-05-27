@@ -52,31 +52,17 @@ Splitting into a separate repo remains an option once the IR schema stabilizes.
 
 ### Open follow-ups
 
-- **Unify bundle-walk logic + fix perf.** `lib/image-index.ts` and
-  `pages/api/[pkg]/[ver]/nodes.json.ts` both walk every module + doc +
-  example, load each blob, and run a per-node visitor; the structure is
-  duplicated and currently very slow (observed ~25s for `/images/` on a
-  large scipy bundle). Extract a shared `walkBundle(ctx, visit)` helper,
-  then think hard about perf: precompute and cache an index at ingest
-  time (e.g. an "images" / "nodes-by-type" table in the graph store) so
-  these pages do an indexed lookup instead of a full bundle scan; if a
-  scan is still needed, parallelize blob loads and avoid re-decoding
-  CBOR per request. Server-side timing logs were added on both endpoints
-  to make the regression visible.
-
-- **Fix node-search dedup + Image type.** Two related bugs in
-  `pages/api/[pkg]/[ver]/nodes.json.ts`:
-  1. Searching for `Figure` collapses to a single entry that claims to
-     appear on every page — the dedup key (`displayValueFor` →
-     `JSON.stringify(node).slice(0, 120)`) doesn't actually capture the
-     figure's distinguishing inner content, so distinct figures hash to
-     the same key. Need a type-aware key (e.g. hash the figure's `src`
-     / caption / children) instead of a truncated JSON prefix.
-  2. Searching for `Image` returns zero results even though images
-     clearly exist in bundles. Likely either the IR type name doesn't
-     match what `typeFromSlug("image")` returns, or `collectNodes`
-     isn't traversing into the container that holds Image nodes.
-     Cross-check against `lib/image-index.ts`, which does find them.
+- **Bundle-walk shared helper — landed; ingest-time index still open.** The
+  duplicated walk in `lib/image-index.ts` and
+  `pages/api/[pkg]/[ver]/nodes.json.ts` is now consolidated in
+  `lib/bundle-walk.ts` (`walkBundle` / `walkAllBundles`), and the node-search
+  dedup + Image-type bugs are fixed (dedup is keyed by `type\0content` with
+  page-merge in `nodes.json.ts`). What remains is the perf optimisation:
+  precompute a `nodes_by_type` table at ingest time so `/images/` and the node
+  browser do an indexed lookup instead of a full bundle scan (the ~25s scan).
+  Per the "Storage invariant" in the top-level `PLAN.md`, that table is free to
+  hold whatever shape the endpoints want. `bundle-walk.ts` is the place to hang
+  the optimisation once it lands.
 
 ## Tech choices
 

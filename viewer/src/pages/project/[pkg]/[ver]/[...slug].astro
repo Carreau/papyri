@@ -39,8 +39,7 @@ try {
   return new Response(`Module ${qualname} not found`, { status: 404 });
 }
 
-// Three independent async operations: graph backrefs, xref resolution, and
-// sidebar nav. None depends on the others, so run them concurrently.
+// Three independent async operations: graph backrefs, xref resolution, sidebar nav.
 const [backrefs, resolveXref, nav] = await Promise.all([
   getBackrefs(graphDb, { pkg, ver: actualVer, kind: "module", path: qualname }),
   buildXrefResolver(graphDb, doc, pkg, actualVer),

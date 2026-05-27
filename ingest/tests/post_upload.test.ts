@@ -18,9 +18,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
+import Database from "better-sqlite3";
 import { decode } from "../src/encoder.ts";
-import { GraphStore } from "../src/graphstore.ts";
-import type { Key } from "../src/graphstore.ts";
+import { SqliteGraphDb } from "../src/graph-db.ts";
+import { FsBlobStore } from "../src/blob-store.ts";
+import type { Key } from "../src/keys.ts";
 
 // ---------------------------------------------------------------------------
 // Store location
@@ -60,9 +62,25 @@ function containsSubtree(tree: unknown, pattern: unknown): boolean {
   return tree === pattern;
 }
 
-/** Return the first key matching a glob, or null if not found. */
-function glob1(store: GraphStore, module: string, kind: string, path: string): Key | null {
-  return store.glob({ module, kind, path })[0] ?? null;
+/** Return the first blob-backed key matching (module, kind, path), or null. */
+async function glob1(
+  graphDb: SqliteGraphDb,
+  module: string,
+  kind: string,
+  path: string,
+): Promise<Key | null> {
+  const row = await graphDb.get<{
+    package: string;
+    version: string;
+    category: string;
+    identifier: string;
+  }>(
+    "SELECT package, version, category, identifier FROM nodes" +
+      " WHERE package=? AND category=? AND identifier=? AND has_blob=1 LIMIT 1",
+    [module, kind, path],
+  );
+  if (!row) return null;
+  return { module: row.package, version: row.version, kind: row.category, path: row.identifier };
 }
 
 // ---------------------------------------------------------------------------
@@ -70,14 +88,16 @@ function glob1(store: GraphStore, module: string, kind: string, path: string): K
 // ---------------------------------------------------------------------------
 
 describe.skipIf(!existsSync(dbPath))("post-upload ingest verification", () => {
-  let store: GraphStore;
+  let graphDb: SqliteGraphDb;
+  let blobStore: FsBlobStore;
 
   beforeAll(() => {
-    store = new GraphStore(ingestDir);
+    graphDb = new SqliteGraphDb(new Database(dbPath));
+    blobStore = new FsBlobStore(ingestDir);
   });
 
-  afterAll(() => {
-    store.close();
+  afterAll(async () => {
+    await graphDb.close();
   });
 
   // -------------------------------------------------------------------------
@@ -93,8 +113,8 @@ describe.skipIf(!existsSync(dbPath))("post-upload ingest verification", () => {
   // back-ref test belongs here.
   // -------------------------------------------------------------------------
 
-  it("numpy:linspace exists in the store after numpy is ingested", () => {
-    const key = glob1(store, "numpy", "module", "numpy:linspace");
+  it("numpy:linspace exists in the store after numpy is ingested", async () => {
+    const key = await glob1(graphDb, "numpy", "module", "numpy:linspace");
     if (!key) return; // numpy bundle not ingested — skip gracefully
     expect(key).toBeTruthy();
   });
@@ -103,34 +123,40 @@ describe.skipIf(!existsSync(dbPath))("post-upload ingest verification", () => {
   // Content-structure tests (ported from postingest/*.json fixtures)
   // -------------------------------------------------------------------------
 
-  it("papyri.examples:example1 carries a coroutine-function SignatureNode", () => {
+  it("papyri.examples:example1 carries a coroutine-function SignatureNode", async () => {
     // Fixture: example1_signature.json
     // papyri.examples:example1 is an async coroutine and must carry a
     // coroutine-function signature node.
-    const key = glob1(store, "papyri", "module", "papyri.examples:example1");
+    const key = await glob1(graphDb, "papyri", "module", "papyri.examples:example1");
     if (!key) return;
 
-    const doc = decode(store.get(key));
+    const bytes = await blobStore.get(key);
+    expect(bytes).not.toBeNull();
+    const doc = decode(bytes!);
     expect(containsSubtree(doc, { __type: "SignatureNode", kind: "coroutine function" })).toBe(
       true,
     );
   });
 
-  it("papyri.examples module docstring contains at least one Paragraph node", () => {
+  it("papyri.examples module docstring contains at least one Paragraph node", async () => {
     // Fixture: examples_module_has_paragraph.json
-    const key = glob1(store, "papyri", "module", "papyri.examples");
+    const key = await glob1(graphDb, "papyri", "module", "papyri.examples");
     if (!key) return;
 
-    const doc = decode(store.get(key));
+    const bytes = await blobStore.get(key);
+    expect(bytes).not.toBeNull();
+    const doc = decode(bytes!);
     expect(containsSubtree(doc, { __type: "Paragraph" })).toBe(true);
   });
 
-  it("numpy:linspace has a SignatureNode named linspace", () => {
+  it("numpy:linspace has a SignatureNode named linspace", async () => {
     // Fixture: numpy_linspace_has_signature.json
-    const key = glob1(store, "numpy", "module", "numpy:linspace");
+    const key = await glob1(graphDb, "numpy", "module", "numpy:linspace");
     if (!key) return;
 
-    const doc = decode(store.get(key));
+    const bytes = await blobStore.get(key);
+    expect(bytes).not.toBeNull();
+    const doc = decode(bytes!);
     expect(containsSubtree(doc, { __type: "SignatureNode", target_name: "linspace" })).toBe(true);
   });
 });

@@ -1,11 +1,8 @@
 {
   "name": "papyri-ingest",
   "version": "0.0.1",
-  "description": "TypeScript library and CLI for ingesting papyri gen bundles into the cross-link graph store.",
+  "description": "TypeScript library for ingesting papyri bundles into the cross-link graph store.",
   "type": "module",
-  "bin": {
-    "papyri-ingest": "./dist/cli.js"
-  },
   "exports": {
     ".": {
       "types": "./src/index.ts",

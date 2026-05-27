@@ -24,7 +24,7 @@ from .node_base import Node, register
 from .nodes import Section, TocTree
 
 PACK_FORMAT_VERSION = 1
-IR_SCHEMA_VERSION = "1"
+IR_SCHEMA_VERSION = 1
 
 
 @dataclass
@@ -50,7 +50,7 @@ class BundleManifest:
 @register(4070)
 class Bundle(Node):
     pack_format_version: int
-    ir_schema_version: str
+    ir_schema_version: int
     module: str
     version: str
     summary: str

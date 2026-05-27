@@ -87,6 +87,35 @@ def _resolve_upload_params(
     return effective_url, effective_token
 
 
+def _bundle_already_uploaded(
+    url: str, pkg: str, version: str, bundle_hash: str, token: str | None
+) -> bool:
+    """Ask the viewer whether it already holds this exact bundle.
+
+    Sends ``GET <url>?module=&version=&hash=`` and returns the server's
+    ``exists`` flag. Fails open: any network/parse error (or an older viewer
+    that doesn't implement the check) returns ``False`` so the caller uploads
+    anyway — the dedup check must never block a legitimate upload.
+    """
+    query = urllib.parse.urlencode(
+        {"module": pkg, "version": version, "hash": bundle_hash}
+    )
+    parsed = urllib.parse.urlsplit(url)
+    check_url = urllib.parse.urlunsplit(
+        (parsed.scheme, parsed.netloc, parsed.path, query, "")
+    )
+    headers = {"User-Agent": f"papyri-upload/{_PAPYRI_VERSION}"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    req = urllib.request.Request(check_url, method="GET", headers=headers)
+    try:
+        with urllib.request.urlopen(req) as resp:
+            body = json.loads(resp.read())
+        return bool(body.get("exists"))
+    except Exception:
+        return False
+
+
 def upload(
     paths: Annotated[
         list[Path],
@@ -145,6 +174,18 @@ def upload(
             help="Show per-step packing progress when building a bundle on the fly.",
         ),
     ] = False,
+    force: Annotated[
+        bool,
+        typer.Option(
+            "--force",
+            "-f",
+            help=(
+                "Upload even when the viewer already holds an identical bundle. "
+                "By default a SHA-256 of the artifact is checked against the "
+                "server first and matching bundles are skipped."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """
     Send each ``.papyri`` artifact (or pack a DocBundle directory on the
@@ -186,7 +227,13 @@ def upload(
 
     **URL resolution order**: ``--url`` flag > ``--to`` target > ``$PAPYRI_UPLOAD_URL``
     env var > ``http://localhost:4321/api/bundle``.
+
+    Deduplication: before each upload the SHA-256 of the artifact is checked
+    against the viewer (a ``GET`` to the same endpoint).  When the server
+    already holds an identical bundle for that ``(module, version)`` the
+    upload is skipped.  Pass ``--force`` to upload regardless.
     """
+    import hashlib
     import time
 
     from papyri.pack import BundleError, load_artifact, make_artifact_from_dir
@@ -237,6 +284,20 @@ def upload(
         except Exception as exc:
             typer.echo(f"{prefix} error: failed to load {path}: {exc}", err=True)
             ok = False
+            continue
+
+        # Dedup: the artifact is byte-reproducible, so its SHA-256 identifies
+        # the exact content. Ask the viewer whether it already holds this hash
+        # for (pkg, version) and skip the upload when it does. --force bypasses.
+        bundle_hash = hashlib.sha256(data).hexdigest()
+        if not force and _bundle_already_uploaded(
+            effective_url, pkg, version, bundle_hash, effective_token
+        ):
+            typer.echo(
+                f"{prefix} skipping {pkg} {version}: already uploaded "
+                f"(sha256 {bundle_hash[:12]}…)",
+                err=True,
+            )
             continue
 
         size_mb = len(data) / (1024 * 1024)

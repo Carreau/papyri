@@ -12,16 +12,84 @@ from __future__ import annotations
 import gzip
 import io
 import json
-from collections.abc import Callable
+import re
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
 from .bundle import IR_SCHEMA_VERSION, PACK_FORMAT_VERSION, Bundle, BundleManifest
 from .node_base import Node
-from .nodes import encoder
+from .nodes import Image, Link, encoder
+from .serde import get_type_hints
 
 _ALLOWED_TOPLEVEL = {"papyri.json", "toc.json", "module", "docs", "examples", "assets"}
 _OPTIONAL_DIRS = ("docs", "examples", "assets")
+
+
+def _safe_child(base: Path, name: str) -> Path:
+    """Resolve ``base / name`` and refuse any result that escapes ``base``.
+
+    ``name`` comes from decoded (untrusted) artifact keys; a value like
+    ``../../etc/x`` or an absolute path would otherwise let a crafted
+    ``.papyri`` file write outside the target directory on ``papyri unpack``.
+    """
+    base_resolved = base.resolve()
+    child = (base / name).resolve()
+    if not child.is_relative_to(base_resolved):
+        raise BundleError(f"unsafe path in bundle: {name!r}")
+    return child
+
+
+_SAFE_URL_SCHEMES = frozenset({"http", "https", "mailto"})
+_URL_SCHEME_RE = re.compile(r"^([a-z][a-z0-9+.-]*):", re.IGNORECASE)
+
+
+def _is_safe_url(url: str) -> bool:
+    """Mirror of ingest's ``isSafeUrl``: only http/https/mailto + relative URLs.
+
+    Disallows ``javascript:``/``data:``/… which would become an XSS vector
+    once a Link/Image reaches a renderer. Control chars and whitespace are
+    stripped first so ``java\\tscript:`` cannot smuggle a scheme past the test.
+    """
+    stripped = "".join(c for c in url if ord(c) > 0x20 and not (0x7F <= ord(c) <= 0x9F))
+    m = _URL_SCHEME_RE.match(stripped)
+    if m is None:
+        return True
+    return m.group(1).lower() in _SAFE_URL_SCHEMES
+
+
+def _iter_nodes(obj: Any) -> Iterator[Node]:
+    """Yield every Node reachable from *obj*, depth-first."""
+    if isinstance(obj, Node):
+        yield obj
+        for attr in get_type_hints(type(obj)):  # type: ignore[arg-type]
+            yield from _iter_nodes(getattr(obj, attr))
+    elif isinstance(obj, (list, tuple)):
+        for item in obj:
+            yield from _iter_nodes(item)
+    elif isinstance(obj, dict):
+        for v in obj.values():
+            yield from _iter_nodes(v)
+
+
+def _assert_safe_urls(bundle: Bundle) -> None:
+    """Refuse to pack a bundle whose Link/Image nodes use a disallowed scheme.
+
+    Defense-in-depth alongside the ingest-time check and the renderer's own
+    sanitisation — pack runs in the maintainer's build, so neither downstream
+    layer can assume the bundle was vetted here.
+    """
+    unsafe = [
+        n.url
+        for n in _iter_nodes([bundle.api, bundle.narrative, bundle.examples])
+        if isinstance(n, (Link, Image)) and not _is_safe_url(n.url)
+    ]
+    if unsafe:
+        sample = ", ".join(unsafe[:3])
+        raise BundleError(
+            f"{len(unsafe)} link/image URL(s) use a disallowed scheme "
+            f"(only http, https, mailto and relative URLs are allowed): {sample}"
+        )
 
 
 def _count_files(d: Path) -> int:
@@ -223,6 +291,7 @@ def read_bundle_dir(path: Path, log: Callable[[str], None] | None = None) -> Bun
 
 def make_artifact(bundle: Bundle, log: Callable[[str], None] | None = None) -> bytes:
     """Encode a ``Bundle`` to canonical-CBOR + gzip bytes (deterministic)."""
+    _assert_safe_urls(bundle)
     if log:
         log("  encoding CBOR …")
     cbor_bytes = encoder.encode(bundle)
@@ -297,7 +366,7 @@ def explode_bundle_to_dir(
     module_dir = path / "module"
     module_dir.mkdir()
     for qa, doc in bundle.api.items():
-        (module_dir / f"{qa}.json").write_bytes(doc.to_json())
+        _safe_child(module_dir, f"{qa}.json").write_bytes(doc.to_json())
 
     if bundle.narrative:
         if log:
@@ -306,7 +375,7 @@ def explode_bundle_to_dir(
         docs_dir = path / "docs"
         docs_dir.mkdir()
         for name, doc in bundle.narrative.items():
-            (docs_dir / name).write_bytes(doc.to_json())
+            _safe_child(docs_dir, name).write_bytes(doc.to_json())
 
     if bundle.examples:
         if log:
@@ -315,7 +384,7 @@ def explode_bundle_to_dir(
         examples_dir = path / "examples"
         examples_dir.mkdir()
         for name, section in bundle.examples.items():
-            (examples_dir / name).write_bytes(section.to_json())
+            _safe_child(examples_dir, name).write_bytes(section.to_json())
 
     if bundle.assets:
         if log:
@@ -324,7 +393,7 @@ def explode_bundle_to_dir(
         assets_dir = path / "assets"
         assets_dir.mkdir()
         for name, data in bundle.assets.items():
-            (assets_dir / name).write_bytes(data)
+            _safe_child(assets_dir, name).write_bytes(data)
 
     if bundle.toc:
         if log:
@@ -354,6 +423,6 @@ def explode_artifact_to_dir(
     if log:
         log(f"  loading {artifact.name} …")
     bundle = load_artifact(artifact.read_bytes())
-    out_dir = dest_parent / f"{bundle.module}_{bundle.version}"
+    out_dir = _safe_child(dest_parent, f"{bundle.module}_{bundle.version}")
     explode_bundle_to_dir(bundle, out_dir, log=log)
     return out_dir

@@ -8,6 +8,7 @@
  * `BundleNode` before ingest runs.
  */
 import type { TypedNode } from "./encoder.js";
+import { isSafeUrl } from "./url-safety.js";
 
 interface BundleNode extends TypedNode {
   __type: "Bundle";
@@ -37,6 +38,47 @@ export function assertBundle(node: unknown): asserts node is BundleNode {
       `expected a Bundle Node (tag 4070, type "Bundle"), got ${
         typeof n.__type === "string" ? n.__type : "untyped"
       } (tag ${typeof n.__tag === "number" ? n.__tag : "?"})`,
+    );
+  }
+}
+
+const URL_BEARING_TYPES = new Set(["Link", "Image"]);
+
+function collectUnsafeUrls(val: unknown, out: string[]): void {
+  if (!val || typeof val !== "object") return;
+  if (Array.isArray(val)) {
+    for (const item of val) collectUnsafeUrls(item, out);
+    return;
+  }
+  const node = val as Record<string, unknown>;
+  if (
+    typeof node.__type === "string" &&
+    URL_BEARING_TYPES.has(node.__type) &&
+    typeof node.url === "string" &&
+    !isSafeUrl(node.url)
+  ) {
+    out.push(node.url);
+  }
+  for (const v of Object.values(node)) collectUnsafeUrls(v, out);
+}
+
+/**
+ * Reject a bundle whose Link/Image nodes carry a disallowed URL scheme
+ * (`javascript:`, `data:`, …). The renderer sanitises these defensively too,
+ * but a malicious or buggy bundle should never enter the store in the first
+ * place. Walks the IR-bearing sections only (api / narrative / examples);
+ * `assets` holds opaque bytes and is skipped.
+ */
+export function assertSafeUrls(bundle: BundleNode): void {
+  const unsafe: string[] = [];
+  collectUnsafeUrls(bundle.api, unsafe);
+  collectUnsafeUrls(bundle.narrative, unsafe);
+  collectUnsafeUrls(bundle.examples, unsafe);
+  if (unsafe.length > 0) {
+    const sample = unsafe.slice(0, 3).join(", ");
+    throw new Error(
+      `bundle contains ${unsafe.length} link/image URL(s) with a disallowed scheme ` +
+        `(only http, https, mailto and relative URLs are allowed): ${sample}`,
     );
   }
 }

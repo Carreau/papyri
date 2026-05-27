@@ -10,6 +10,7 @@ import { renderMath } from "./math.ts";
 import { highlight } from "./highlight.ts";
 import type { IRNode } from "./ir-reader.ts";
 import { linkForAsset } from "./links.ts";
+import { isSafeUrl } from "papyri-ingest/url-safety";
 
 export type XRefResolver = (
   node: unknown
@@ -135,9 +136,13 @@ export async function renderNode(node: IRNode, opts: RenderOptions = {}): Promis
 
     case "Link": {
       const inner = await renderChildren(asArray(n.children), opts);
-      const href = escapeHtml(String(n.url ?? ""));
+      const rawUrl = String(n.url ?? "");
+      // Drop disallowed schemes (javascript:, data:, …) so they never reach
+      // href; an unsafe URL collapses to an inert empty value.
+      const safeUrl = isSafeUrl(rawUrl) ? rawUrl : "";
+      const href = escapeHtml(safeUrl);
       const title = n.title ? ` title="${escapeHtml(String(n.title))}"` : "";
-      const isExternal = /^https?:\/\//.test(String(n.url ?? ""));
+      const isExternal = /^https?:\/\//.test(safeUrl);
       if (isExternal) {
         return `<a class="ext-link" href="${href}"${title} target="_blank" rel="noreferrer noopener">${inner}</a>`;
       }
@@ -308,7 +313,8 @@ export async function renderNode(node: IRNode, opts: RenderOptions = {}): Promis
     }
 
     case "Image": {
-      const src = escapeHtml(String(n.url ?? ""));
+      const rawUrl = String(n.url ?? "");
+      const src = escapeHtml(isSafeUrl(rawUrl) ? rawUrl : "");
       const alt = escapeHtml(String(n.alt ?? ""));
       return `<img src="${src}" alt="${alt}" />`;
     }

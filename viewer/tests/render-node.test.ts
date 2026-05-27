@@ -140,3 +140,32 @@ describe("renderNode Admonition", () => {
     expect(await renderNode(node)).toContain("admonition-note");
   });
 });
+
+describe("renderNode URL sanitisation", () => {
+  const link = (url: string): IRNode =>
+    ({
+      __type: "Link",
+      url,
+      title: "",
+      children: [{ __type: "Text", value: "x" }],
+    }) as unknown as IRNode;
+  const image = (url: string): IRNode => ({ __type: "Image", url, alt: "a" }) as unknown as IRNode;
+
+  it("blanks a javascript: href on a Link", async () => {
+    const html = await renderNode(link("javascript:alert(1)"));
+    expect(html).not.toContain("javascript:");
+    expect(html).toContain('href=""');
+  });
+
+  it("blanks a data: src on an Image", async () => {
+    const html = await renderNode(image("data:text/html,<script>x</script>"));
+    expect(html).not.toContain("data:");
+    expect(html).toContain('src=""');
+  });
+
+  it("preserves safe http(s) and relative URLs", async () => {
+    expect(await renderNode(link("https://example.com"))).toContain('href="https://example.com"');
+    expect(await renderNode(link("../docs/page"))).toContain('href="../docs/page"');
+    expect(await renderNode(image("../assets/fig.png"))).toContain('src="../assets/fig.png"');
+  });
+});

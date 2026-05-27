@@ -11,6 +11,7 @@
 import { mkdir, writeFile, readFile, stat, readdir, rm } from "node:fs/promises";
 import { join, dirname, sep } from "node:path";
 import type { Key } from "./keys.js";
+import { safeJoin } from "./fs-safe.js";
 
 /** Flat path used as the blob key (an fs path-suffix, or an object-store key). */
 export function keyToPath(key: Key): string {
@@ -52,7 +53,7 @@ export class FsBlobStore implements BlobStore {
   constructor(private readonly root: string) {}
 
   private fullPath(key: Key): string {
-    return join(this.root, key.module, key.version, key.kind, key.path);
+    return safeJoin(this.root, key.module, key.version, key.kind, key.path);
   }
 
   async put(key: Key, bytes: Uint8Array): Promise<void> {
@@ -81,14 +82,14 @@ export class FsBlobStore implements BlobStore {
   }
 
   async putMeta(module: string, version: string, bytes: Uint8Array): Promise<void> {
-    const p = join(this.root, module, version, "meta.cbor");
+    const p = safeJoin(this.root, module, version, "meta.cbor");
     await mkdir(dirname(p), { recursive: true });
     await writeFile(p, bytes);
   }
 
   async getMeta(module: string, version: string): Promise<Uint8Array | null> {
     try {
-      const buf = await readFile(join(this.root, module, version, "meta.cbor"));
+      const buf = await readFile(safeJoin(this.root, module, version, "meta.cbor"));
       return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;

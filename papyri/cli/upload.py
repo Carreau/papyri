@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -49,6 +50,43 @@ def _load_from_zip(path: Path) -> tuple[bytes, Bundle]:
     return data, bundle
 
 
+def _resolve_upload_params(
+    url_flag: str | None,
+    token_flag: str | None,
+    to: str | None,
+) -> tuple[str, str | None]:
+    """Return (effective_url, effective_token) applying the full resolution chain.
+
+    Priority (highest to lowest):
+    1. Explicit ``--url`` / ``--token`` CLI flags.
+    2. Named target from ``--to`` (URL and token/keychain from config).
+    3. ``$PAPYRI_UPLOAD_URL`` / ``$PAPYRI_UPLOAD_TOKEN`` env vars.
+    4. Hardcoded default URL (``http://localhost:4321/api/bundle``).
+    """
+    from papyri.user_config import get_target, load_user_config
+
+    user_cfg = load_user_config()
+
+    # Determine which named target to use (--to takes precedence over default_target).
+    effective_to = to if to is not None else user_cfg.default_target
+
+    target_url: str | None = None
+    target_token: str | None = None
+    if effective_to is not None:
+        target = get_target(user_cfg, effective_to)
+        target_url = target.url
+        target_token = target.resolve_token(effective_to)
+
+    effective_url = (
+        url_flag or target_url or os.environ.get("PAPYRI_UPLOAD_URL") or _DEFAULT_URL
+    )
+    effective_token = (
+        token_flag or target_token or os.environ.get("PAPYRI_UPLOAD_TOKEN")
+    )
+
+    return effective_url, effective_token
+
+
 def upload(
     paths: Annotated[
         list[Path],
@@ -61,24 +99,40 @@ def upload(
             ),
         ),
     ],
+    to: Annotated[
+        str | None,
+        typer.Option(
+            "--to",
+            help=(
+                "Named upload target defined in ~/.papyri/config.toml "
+                "(e.g. 'staging', 'production').  "
+                "Overrides $PAPYRI_UPLOAD_URL / $PAPYRI_UPLOAD_TOKEN.  "
+                "Explicit --url / --token flags override --to."
+            ),
+        ),
+    ] = None,
     url: Annotated[
-        str,
+        str | None,
         typer.Option(
             "--url",
             "-u",
-            envvar="PAPYRI_UPLOAD_URL",
-            help="URL of the viewer ingest endpoint.  Overridden by $PAPYRI_UPLOAD_URL.",
+            help=(
+                "URL of the viewer ingest endpoint.  "
+                "Overrides --to and $PAPYRI_UPLOAD_URL.  "
+                "Defaults to $PAPYRI_UPLOAD_URL, then the target set by --to, "
+                "then http://localhost:4321/api/bundle."
+            ),
         ),
-    ] = _DEFAULT_URL,
+    ] = None,
     token: Annotated[
         str | None,
         typer.Option(
             "--token",
             "-t",
-            envvar="PAPYRI_UPLOAD_TOKEN",
             help=(
                 "Bearer token for /api/bundle authentication.  "
-                "Overridden by $PAPYRI_UPLOAD_TOKEN.  "
+                "Overrides --to and $PAPYRI_UPLOAD_TOKEN.  "
+                "Defaults to $PAPYRI_UPLOAD_TOKEN, then the target set by --to.  "
                 "Omit when the viewer has no token configured (local dev)."
             ),
         ),
@@ -110,13 +164,38 @@ def upload(
     server-side; this is the canonical way to ship a bundle into the
     cross-linked graph.
 
-    Authentication: if the viewer has ``PAPYRI_UPLOAD_TOKEN`` configured,
-    set the same value here (via ``--token`` or ``$PAPYRI_UPLOAD_TOKEN``)
-    so the request is accepted.
+    **Named targets** (recommended for repeated use)::
+
+        # ~/.papyri/config.toml
+        [upload.targets.staging]
+        url = "https://staging.example.com/api/bundle"
+        token = "my-token"
+
+        [upload.targets.production]
+        url = "https://docs.example.com/api/bundle"
+        keychain = true   # token stored in system keychain
+
+    Then: ``papyri upload --to staging mybundle.papyri``
+
+    For keychain targets, store the token once with::
+
+        python -m keyring set papyri production
+
+    **Token resolution order**: ``--token`` flag > ``--to`` target
+    (config file or keychain) > ``$PAPYRI_UPLOAD_TOKEN`` env var.
+
+    **URL resolution order**: ``--url`` flag > ``--to`` target > ``$PAPYRI_UPLOAD_URL``
+    env var > ``http://localhost:4321/api/bundle``.
     """
     import time
 
     from papyri.pack import BundleError, load_artifact, make_artifact_from_dir
+
+    try:
+        effective_url, effective_token = _resolve_upload_params(url, token, to)
+    except (KeyError, ValueError, RuntimeError) as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(1) from exc
 
     ok = True
     total = len(paths)
@@ -162,7 +241,7 @@ def upload(
 
         size_mb = len(data) / (1024 * 1024)
         typer.echo(
-            f"{prefix} uploading {pkg} {version} ({size_mb:.2f} MiB) → {url}",
+            f"{prefix} uploading {pkg} {version} ({size_mb:.2f} MiB) → {effective_url}",
             err=True,
         )
 
@@ -174,15 +253,17 @@ def upload(
         # request host with "Cross-site PUT form submissions are forbidden".
         # `/api/bundle` is meant for cross-origin CLI use, so we set Origin
         # to the upload URL's own scheme+host to satisfy the check.
-        parsed = urllib.parse.urlsplit(url)
+        parsed = urllib.parse.urlsplit(effective_url)
         headers: dict[str, str] = {
             "Content-Type": "application/gzip",
             "User-Agent": f"papyri-upload/{_PAPYRI_VERSION}",
             "Origin": f"{parsed.scheme}://{parsed.netloc}",
         }
-        if token:
-            headers["Authorization"] = f"Bearer {token}"
-        req = urllib.request.Request(url, data=data, method="PUT", headers=headers)
+        if effective_token:
+            headers["Authorization"] = f"Bearer {effective_token}"
+        req = urllib.request.Request(
+            effective_url, data=data, method="PUT", headers=headers
+        )
         t0 = time.monotonic()
         try:
             with urllib.request.urlopen(req) as resp:

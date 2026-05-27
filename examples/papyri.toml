@@ -9,6 +9,11 @@ exec_failure = 'raise'
 exclude= ["papyri.utils:FullQual","papyri.utils:Canonical" ]
 [global.directives]
 mydirective='papyri.examples:_mydirective_handler'
+# papyri.examples.example_3's docstring demonstrates a bare ``.. directive::``.
+# papyri ships no handler for it, and an unhandled directive can no longer be
+# serialized into the IR — so register one explicitly. Here we keep its body
+# verbatim as a code block; map it to papyri.directives:drop to discard it.
+directive = 'papyri.directives:code_handler'
 # To silently drop a directive, map it to papyri.directives:drop:
 # testsetup = 'papyri.directives:drop'
 

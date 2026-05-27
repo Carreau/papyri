@@ -62,6 +62,14 @@ service *could* be built later without a breaking change to the IR.
 
 ## Ground rules for changes
 
+0. **Pre-production: prefer deleting dead code over keeping it.** Nothing here
+   is shipped to real users yet, there are no published bundles or external
+   consumers to keep compatible, and we rebuild everything from the raw
+   archives when the IR changes (see "Storage invariant" in `PLAN.md`). So when
+   a change makes code, a CBOR tag, a schema entry, a render branch, or a CSS
+   block unreachable, **delete it** rather than leaving it for
+   backwards-compatibility. Don't add compat shims, legacy-format readers, or
+   "just in case" fallbacks for old data — there is no old data that matters.
 1. **Stay inside scope.** Before adding or fixing anything, check `PLAN.md`.
    If a task is not in the open work or follow-ups, stop and ask the user.
 2. **Small focused PRs.** One logical change per commit.

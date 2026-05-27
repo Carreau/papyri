@@ -201,24 +201,52 @@ def test_encoder_is_byte_deterministic() -> None:
     assert encoder.encode(sec) == encoder.encode(sec)
 
 
-def test_encoder_dict_key_order_does_not_affect_bytes() -> None:
-    # A dict-typed Node field encoded with two different insertion orders
-    # for the same key/value pairs must yield identical CBOR bytes.
-    # We use a Directive's `options` field, which is `dict[str, str]`.
+def test_directive_is_not_serializable() -> None:
+    # An unhandled directive must never reach the IR: both CBOR and JSON
+    # serialization refuse it, and the error names the offending directive so
+    # the maintainer knows which handler to register.
+    import pytest
+
     from papyri.nodes import Directive
 
-    d1 = Directive(
-        name="role",
+    d = Directive(
+        name="someunknowndirective",
         args=None,
-        options={"a": "1", "b": "2"},
-        value=None,
+        options={},
+        value="body",
         children=[],
     )
-    d2 = Directive(
-        name="role",
-        args=None,
-        options={"b": "2", "a": "1"},
-        value=None,
-        children=[],
+
+    with pytest.raises(NotImplementedError, match="someunknowndirective"):
+        encoder.encode(d)
+    with pytest.raises(NotImplementedError, match="someunknowndirective"):
+        d.to_json()
+
+
+def test_nested_directive_is_not_serializable() -> None:
+    # The refusal must also fire when the directive is nested inside another
+    # node, on both the CBOR path (recursive encode) and the JSON path
+    # (recursive node_serializer.serialize via to_dict/to_json).
+    import pytest
+
+    from papyri.nodes import Directive
+
+    sec = Section(
+        children=[
+            Directive(
+                name="someunknowndirective",
+                args=None,
+                options={},
+                value="body",
+                children=[],
+            )
+        ],
+        title=(Text("Sec"),),
+        level=1,
+        target=None,
     )
-    assert encoder.encode(d1) == encoder.encode(d2)
+
+    with pytest.raises(NotImplementedError, match="someunknowndirective"):
+        encoder.encode(sec)
+    with pytest.raises(NotImplementedError, match="someunknowndirective"):
+        sec.to_json()

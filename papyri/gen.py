@@ -1085,6 +1085,8 @@ class Gen:
                     blob.signature = None
                     blob.validate()
                 except Exception as e:
+                    if self.config.early_error:
+                        raise
                     self.log.warning("Could not process %s, skipping: %s", p, e)
                     continue
                 # Only register the toctree references after the doc validates

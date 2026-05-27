@@ -19,6 +19,11 @@ base_types = {int, str, bool, type(None)}
 
 
 def serialize(instance: Any, annotation: Any) -> Any:
+    # Nodes flagged unserializable (e.g. an unhandled ``Directive``) have no IR
+    # representation. ``cbor``/``to_json`` reject the top-level case; this guard
+    # rejects them when nested inside another node's fields.
+    if getattr(instance, "_dont_serialise", False):
+        raise NotImplementedError(instance._why_unserializable())
     try:
         if annotation in base_types:
             # print("BASE", instance)

@@ -210,8 +210,15 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
 
 - **Missing block directives for numpy / scipy / IPython builds.**
   Audited 2026-04-30. The following directives are encountered when running
-  `papyri gen` against these packages but have no handler; they fall through
-  to a raw `Directive` node in the IR.
+  `papyri gen` against these packages but have no handler. As of the
+  unhandled-directive change, an unregistered directive can no longer be
+  serialized: gen emits a transient `Directive` node carrying the name, and
+  serialization (CBOR or JSON) raises with that name, so the bundle cannot be
+  produced until a handler is registered (`papyri.directives:drop` to discard,
+  `papyri.directives:code_handler` to keep verbatim, or a real handler). The
+  directives below therefore need a handler registered — in `papyri.toml`'s
+  `[global.directives]` table or, for the common ones, as built-in defaults in
+  `tree.py` — before these packages will gen cleanly.
 
   *High priority* (very common; materially degrades output):
   - `rubric` — unnumbered section heading (`.. rubric:: References`). Used

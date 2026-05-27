@@ -7,7 +7,6 @@
 // they are not yet considered stable IR output. Must stay in sync with
 // DEBUG_TYPES in node_base.py.
 export const DEBUG_TYPE_NAMES: ReadonlySet<string> = new Set([
-  "Directive",
   "InlineRole",
   "Options",
   "SubstitutionDef",
@@ -54,7 +53,6 @@ export const IR_TYPE_NAMES: readonly string[] = [
   "Link",
   "Code",
   "InlineCode",
-  "Directive",
   "BulletList",
   "ListItem",
   "AdmonitionTitle",

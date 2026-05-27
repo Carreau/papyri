@@ -380,27 +380,6 @@ table.ir-table th > p:last-child {
   margin-bottom: 0;
 }
 
-/* Generic "directive" admonition for block directives we didn't specialise. */
-aside.directive {
-  border-left: 3px solid var(--fg-muted);
-  background: var(--admonition-bg);
-  padding: 0.5rem 0.75rem;
-  margin: 1rem 0;
-}
-aside.directive .directive-name {
-  font-size: 0.8rem;
-  color: var(--fg-muted);
-  margin: 0 0 0.25rem;
-}
-aside.directive .directive-name code {
-  background: transparent;
-  padding: 0;
-}
-aside.directive .directive-args {
-  margin-left: 0.5rem;
-  font-family: var(--mono);
-}
-
 /* Footnotes from RST: superscripted inline references, and block-level
    footnote definitions that link back to the place they were cited. */
 a.footnote-reference {

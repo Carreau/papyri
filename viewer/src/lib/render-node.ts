@@ -307,15 +307,6 @@ export async function renderNode(node: IRNode, opts: RenderOptions = {}): Promis
       return `<dt>${name}</dt><dd>${body}</dd>`;
     }
 
-    case "Directive": {
-      const dirName = escapeHtml(String(n.name ?? "unknown"));
-      const args = n.args
-        ? `<span class="directive-args">${escapeHtml(String(n.args))}</span>`
-        : "";
-      const inner = await renderChildren(asArray(n.children), opts);
-      return `<aside class="directive directive-${dirName}"><p class="directive-name"><code>:${dirName}:</code>${args}</p>${inner}</aside>`;
-    }
-
     case "Image": {
       const src = escapeHtml(String(n.url ?? ""));
       const alt = escapeHtml(String(n.alt ?? ""));

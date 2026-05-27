@@ -716,6 +716,19 @@ section.backrefs ul.qualnames {
   gap: 0.5rem;
 }
 
+.site-login-link {
+  padding: 0.3rem 0.75rem;
+  font-size: 0.875rem;
+  text-decoration: none;
+  color: inherit;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 4px;
+}
+.site-login-link:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .visibility-toggles {
   display: flex;
   align-items: center;

@@ -111,10 +111,6 @@ export const IR_SCHEMA: IRSchema = {
       array: false,
       types: ["boolean"],
     },
-    spread: {
-      array: false,
-      types: ["boolean"],
-    },
     start: {
       array: false,
       types: ["number"],
@@ -151,10 +147,6 @@ export const IR_SCHEMA: IRSchema = {
     },
   },
   CrossRef: {
-    anchor: {
-      array: false,
-      types: ["null", "string"],
-    },
     kind: {
       array: false,
       types: ["string"],
@@ -451,10 +443,6 @@ export const IR_SCHEMA: IRSchema = {
         "UnprocessedDirective",
         "[]",
       ],
-    },
-    spread: {
-      array: false,
-      types: ["boolean"],
     },
   },
   LocalRef: {

@@ -46,7 +46,7 @@ export type IRNode = TypedNode | UnknownNode;
 export const FIELD_ORDER: Readonly<Record<number, { name: string; fields: readonly string[] }>> = {
   4000: { name: "RefInfo", fields: ["module", "version", "kind", "path"] },
   4001: { name: "Root", fields: ["children"] },
-  4002: { name: "CrossRef", fields: ["value", "reference", "kind", "anchor"] },
+  4002: { name: "CrossRef", fields: ["value", "reference", "kind"] },
   4003: { name: "InlineRole", fields: ["value", "domain", "role", "inventory"] },
   4010: {
     name: "IngestedDoc",
@@ -117,8 +117,8 @@ export const FIELD_ORDER: Readonly<Record<number, { name: string; fields: readon
   4050: { name: "Code", fields: ["value", "execution_status"] },
   4051: { name: "InlineCode", fields: ["value"] },
   4052: { name: "Directive", fields: ["name", "args", "options", "value", "children"] },
-  4053: { name: "BulletList", fields: ["ordered", "start", "spread", "children"] },
-  4054: { name: "ListItem", fields: ["spread", "children"] },
+  4053: { name: "BulletList", fields: ["ordered", "start", "children"] },
+  4054: { name: "ListItem", fields: ["children"] },
   4055: { name: "AdmonitionTitle", fields: ["children"] },
   4056: { name: "Admonition", fields: ["kind", "base_type", "children"] },
   4057: { name: "InlineMath", fields: ["value"] },

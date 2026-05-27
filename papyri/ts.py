@@ -556,8 +556,8 @@ class TSVisitor:
             # assert len(body.children) == 1
             # parg = body.children[0]
             # assert parg.type == "paragraph", parg.type
-            items.append(ListItem(False, self.visit(body)))
-        return [BulletList(ordered=False, start=1, spread=False, children=items)]
+            items.append(ListItem(self.visit(body)))
+        return [BulletList(ordered=False, start=1, children=items)]
 
     def visit_section(self, node: Node) -> list[Any]:
         if node.children[0].type == "adornment":
@@ -687,8 +687,8 @@ class TSVisitor:
         for list_item in node.children:
             assert list_item.type == "list_item"
             _bullet, body = list_item.children
-            items.append(ListItem(False, self.visit(body)))
-        return [BulletList(ordered=True, start=1, spread=False, children=items)]
+            items.append(ListItem(self.visit(body)))
+        return [BulletList(ordered=True, start=1, children=items)]
 
     def visit_target(self, node: Node) -> list[Any]:
         # Internal anchor target: ``.. _label:``

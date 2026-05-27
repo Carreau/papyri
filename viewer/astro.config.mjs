@@ -58,4 +58,10 @@ export default defineConfig({
   integrations: [react()],
   server: { port: 4321 },
   vite: viteCfg,
+  // Astro v5 enables checkOrigin by default for server output, but all
+  // mutating API endpoints (/api/bundle, /api/reingest, …) carry their own
+  // bearer-token or session-cookie checks, so the Origin cross-check adds no
+  // security while breaking PUT requests forwarded by a reverse proxy (Caddy,
+  // nginx) whose external host differs from localhost:4321.
+  security: { checkOrigin: false },
 });

@@ -5,6 +5,7 @@
 // latest available version.
 import { loadBundleNav } from "../lib/nav.ts";
 import { getBackends } from "../lib/backends.ts";
+import { linkForBundle, linkForPkg } from "../lib/links.ts";
 
 interface Props {
   pkg: string;
@@ -20,8 +21,8 @@ const nav = await loadBundleNav(blobStore, pkg, latest);
 const docCount = nav.docs.length + nav.tutorials.length;
 const exampleCount = nav.examples.length;
 const summary = typeof nav.meta.summary === "string" ? nav.meta.summary : null;
-const docsHref = `/project/${pkg}/latest/`;
-const detailHref = `/project/${pkg}/`;
+const docsHref = linkForBundle(pkg, "latest");
+const detailHref = linkForPkg(pkg);
 ---
 
 <div class="bundle-card" data-pkg={pkg} data-summary={summary ?? ""}>

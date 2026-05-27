@@ -9,7 +9,7 @@ import { getBackrefs } from "../../../../lib/graph.ts";
 import { getBackends } from "../../../../lib/backends.ts";
 import { buildQualnamePageView } from "../../../../lib/qualname-page.ts";
 import { buildXrefResolver } from "../../../../lib/xref.ts";
-import { linkForQualname } from "../../../../lib/links.ts";
+import { linkForBundle, linkForQualname } from "../../../../lib/links.ts";
 import { loadBundleNav } from "../../../../lib/nav.ts";
 import { qualnameAncestors, qualnameLabel } from "../../../../lib/qualname.ts";
 import IrNode from "../../../../components/IrNode.astro";
@@ -132,7 +132,7 @@ const crumbs = qualnameAncestors(qualname).map((qa) => ({
   rawPath={qualname}
 >
   <p class="crumb">
-    <a href="/">bundles</a> / <a href={`/project/${pkg}/${ver}/`}>{pkg} {ver}</a>
+    <a href="/">bundles</a> / <a href={linkForBundle(pkg, ver)}>{pkg} {ver}</a>
     {
       crumbs.map((c, i) =>
         i === crumbs.length - 1 ? (

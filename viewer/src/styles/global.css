@@ -733,58 +733,11 @@ section.backrefs ul.qualnames {
   outline-offset: 2px;
 }
 
-/* Bundle search island. Stays above the qualname list; results overlay
-   visually by separating the block with a border-top. */
-.bundle-search {
-  margin: 0 0 1.5rem;
-}
-.bundle-search-input {
-  width: 100%;
-  padding: 0.5rem 0.75rem;
-  font-family: var(--mono);
-  font-size: 0.9rem;
-  background: var(--surface);
-  color: var(--fg);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-}
-.bundle-search-input:focus {
-  outline: none;
-  border-color: var(--accent);
-}
-.bundle-search-input:disabled {
-  color: var(--fg-muted);
-  background: var(--surface-alt);
-}
+/* Bundle search error message (shown in sidebar if index fails to load) */
 .bundle-search-error {
   color: var(--math-error-fg);
   font-size: 0.85rem;
   margin: 0.25rem 0 0;
-}
-.bundle-search-results {
-  list-style: none;
-  padding: 0;
-  margin: 0.5rem 0 0;
-  border-top: 1px solid var(--border);
-  font-family: var(--mono);
-  font-size: 0.85rem;
-  max-height: 20rem;
-  overflow-y: auto;
-}
-.bundle-search-results li {
-  padding: 0.25rem 0;
-  border-bottom: 1px solid var(--border);
-}
-.bundle-search-results a {
-  color: var(--accent);
-  text-decoration: none;
-}
-.bundle-search-results a:hover {
-  text-decoration: underline;
-}
-.bundle-search-empty {
-  color: var(--fg-muted);
-  font-style: italic;
 }
 
 /* ---------------------------------------------------------------------------
@@ -895,13 +848,131 @@ section.backrefs ul.qualnames {
   min-height: 0;
 }
 
-/* Tighten the bundle-search padding inside the narrower sidebar */
-.sidebar-api .bundle-search {
-  margin-bottom: 0.75rem;
-}
-.sidebar-api .bundle-search-input {
+/* Sidebar search trigger — styled button that looks like a read-only input */
+.bundle-search-trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
   padding: 0.35rem 0.5rem;
+  font-family: var(--mono);
   font-size: 0.8rem;
+  background: var(--surface);
+  color: var(--fg-muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  margin-bottom: 0.75rem;
+  transition:
+    border-color 0.1s,
+    color 0.1s;
+}
+.bundle-search-trigger:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--fg);
+}
+.bundle-search-trigger:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.bundle-search-trigger-icon {
+  font-size: 1rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.bundle-search-trigger-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Dialog overlay */
+.bundle-search-dialog {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--fg);
+  padding: 0;
+  width: min(560px, 90vw);
+  max-height: 70vh;
+  top: 10vh;
+  margin: 0 auto;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+.bundle-search-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.35);
+}
+.bundle-search-dialog-inner {
+  display: flex;
+  flex-direction: column;
+}
+.bundle-search-dialog-input {
+  width: 100%;
+  padding: 0.85rem 1rem;
+  font-family: var(--mono);
+  font-size: 1rem;
+  background: transparent;
+  color: var(--fg);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  outline: none;
+  flex-shrink: 0;
+}
+.bundle-search-dialog-results {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  overflow-y: auto;
+  max-height: calc(70vh - 3.5rem);
+}
+.bundle-search-dialog-results li {
+  border-bottom: 1px solid var(--border);
+}
+.bundle-search-dialog-results li:last-child {
+  border-bottom: none;
+}
+.bundle-search-dialog-results a {
+  display: block;
+  padding: 0.45rem 1rem;
+  text-decoration: none;
+  color: var(--fg);
+}
+.bundle-search-dialog-results a:hover {
+  background: var(--surface-alt);
+}
+.bundle-search-dialog-results .bundle-search-empty {
+  padding: 0.75rem 1rem;
+  color: var(--fg-muted);
+  font-style: italic;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+}
+
+/* Two-line result item */
+.search-hit-label {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+.search-hit-module {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+}
+
+/* Keyboard-selected result */
+.bundle-search-dialog-results li[aria-selected="true"] > a {
+  background: var(--surface-alt);
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.bundle-search-dialog-results li[aria-selected="true"] .search-hit-label {
+  color: var(--fg);
 }
 
 /* Base styles for sidebar list variants. Each variant overrides font, sizing,

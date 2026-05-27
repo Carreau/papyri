@@ -23,9 +23,7 @@
 //   a streaming sequence of one JSON object per line. The client must read
 //   the body to determine outcome — the final line is either `{"event":
 //   "done", "pkg":..., "version":...}` or `{"event":"error","error":...}`.
-//   On Cloudflare Workers `console.log` is buffered until the request ends,
-//   so this stream is the only way to give the client live progress on
-//   long ingests.
+//   The stream gives the client live progress on long ingests.
 //
 //   Pre-stream errors that we can resolve before hitting the wire still
 //   come back as buffered JSON with the appropriate status code:
@@ -113,7 +111,7 @@ export const PUT: APIRoute = async ({ request }) => {
   }
 
   // Decode the artifact: gunzip → CBOR → Bundle Node. DecompressionStream
-  // is in Web Streams (Workers + Node 18+), so this is a single code path.
+  // is a portable Web Streams API, so this is a single code path.
   // Read the compressed bytes into a buffer first so we can record the
   // on-wire size before decompressing. The raw compressed bytes are kept for
   // archiving to rawStore before ingest runs.
@@ -171,9 +169,8 @@ export const PUT: APIRoute = async ({ request }) => {
   // server cancellation.
   // Timing decoration: each event is enriched with `elapsed_s` (since the
   // stream opened) and `since_last_ms` (since the previous event) so the
-  // client can render live wall-time stats. console.log inside the worker
-  // is buffered until request end, so the stream is the only way to
-  // surface per-chunk timings during a long ingest.
+  // client can render live wall-time stats — the stream surfaces per-chunk
+  // timings during a long ingest.
   const startedAt = Date.now();
   let prevEventAt = startedAt;
   const sendWithTiming = async (event: Record<string, unknown>) => {
@@ -231,7 +228,7 @@ export const PUT: APIRoute = async ({ request }) => {
       "Content-Type": "application/x-ndjson",
       "Cache-Control": "no-store",
       // Disable response buffering on intermediaries that honor it. The
-      // worker emits one line per progress event; without this some
+      // server emits one line per progress event; without this some
       // proxies coalesce until the connection closes.
       "X-Accel-Buffering": "no",
     },

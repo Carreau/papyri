@@ -29,7 +29,7 @@ const externalProjects = await graphDb.all<ExternalProject>(
 
 // --- External inventory explorer (debug) ---
 // Server-rendered: plain GET forms drive parameterised queries so the page
-// works on Node and Workers without a client island or extra endpoint.
+// works without a client island or extra endpoint.
 interface ExtObjRow {
   project: string;
   name: string;

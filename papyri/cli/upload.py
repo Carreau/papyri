@@ -306,9 +306,9 @@ def upload(
             err=True,
         )
 
-        # User-Agent: Cloudflare's default bot protection on *.workers.dev
-        # rejects urllib's `Python-urllib/3.x` UA with a 1010 before the
-        # request reaches the worker. Send a real identifier.
+        # User-Agent: some reverse proxies / WAFs reject urllib's default
+        # `Python-urllib/3.x` UA before the request reaches the viewer.
+        # Send a real identifier.
         # Origin: Astro's CSRF protection (`security.checkOrigin`, on by
         # default in Astro 6+) blocks PUTs whose Origin doesn't match the
         # request host with "Cross-site PUT form submissions are forbidden".
@@ -330,7 +330,7 @@ def upload(
             with urllib.request.urlopen(req) as resp:
                 # The server streams NDJSON: one JSON event per line.
                 # Read line-by-line so progress events surface in real
-                # time on the terminal — important when the worker would
+                # time on the terminal — important when the server would
                 # otherwise look hung for tens of seconds.
                 final: dict[str, object] | None = None
                 err_msg: str | None = None
@@ -352,8 +352,7 @@ def upload(
                     # Server may decorate every event with timing fields
                     # (elapsed_s seconds since the stream opened, since_last_ms
                     # since the previous event). Render them when present so
-                    # the client shows live progress in real time despite
-                    # console.log being unbuffered on the worker side.
+                    # the client shows live progress in real time.
                     suffix = ""
                     if elapsed is not None and since is not None:
                         suffix = f" [t={elapsed}s Δ={since}ms]"

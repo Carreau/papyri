@@ -20,7 +20,7 @@ export interface GraphDb {
   run(sql: string, params?: unknown[]): Promise<void>;
   get<R = GraphRow>(sql: string, params?: unknown[]): Promise<R | null>;
   all<R = GraphRow>(sql: string, params?: unknown[]): Promise<R[]>;
-  /** Atomic batch (D1) / single sync transaction (SQLite). */
+  /** Atomic batch — a single sync transaction on the SQLite backend. */
   batch(stmts: BatchStmt[]): Promise<void>;
   /**
    * Empty every row from `nodes`, `links`, and `bundles` without dropping

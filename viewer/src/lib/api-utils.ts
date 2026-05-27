@@ -19,10 +19,9 @@ export function respond(
 }
 
 /**
- * Hex-encoded SHA-256 of `bytes`. Uses Web Crypto (`crypto.subtle`), available
- * on both Node 18+ and Cloudflare Workers, so the upload dedup hash is computed
- * the same way regardless of backend. Matches `hashlib.sha256(...).hexdigest()`
- * on the `papyri upload` client side.
+ * Hex-encoded SHA-256 of `bytes`. Uses Web Crypto (`crypto.subtle`), a portable
+ * Web API with no backend-specific dependency. Matches
+ * `hashlib.sha256(...).hexdigest()` on the `papyri upload` client side.
  */
 export async function sha256Hex(bytes: Uint8Array): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", bytes as BufferSource);

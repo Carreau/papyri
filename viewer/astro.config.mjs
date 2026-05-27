@@ -19,6 +19,12 @@ import cloudflare from "@astrojs/cloudflare";
 // the adapter's worker bundle. See `viewer/PLAN.md` § M9.1.
 const ADAPTER = process.env.PAPYRI_ADAPTER ?? "node";
 
+// PAPYRI_SITE sets the canonical origin (e.g. "https://docs.example.com").
+// Astro uses this for CSRF origin checks (security.checkOrigin) and canonical
+// URL generation. Required when deployed behind a reverse proxy whose external
+// hostname differs from the container's internal host.
+const PAPYRI_SITE = process.env.PAPYRI_SITE;
+
 const adapter =
   ADAPTER === "cloudflare"
     ? cloudflare({
@@ -58,4 +64,5 @@ export default defineConfig({
   integrations: [react()],
   server: { port: 4321 },
   vite: viteCfg,
+  ...(PAPYRI_SITE ? { site: PAPYRI_SITE } : {}),
 });

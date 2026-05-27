@@ -13,6 +13,7 @@ base_dir = Path(expanduser("~/.papyri/"))
 
 ingest_dir = base_dir / "ingest"
 data_dir = base_dir / "data"
+user_config_path = base_dir / "config.toml"
 
 
 def ensure_dirs() -> None:

@@ -643,8 +643,117 @@ Environment variables read by ``--upload``:
      - Description
    * - ``PAPYRI_UPLOAD_URL``
      - Viewer ingest endpoint (default: ``http://localhost:4321/api/bundle``).
+       Overridden by a named target if ``default_target`` is set in
+       ``~/.papyri/config.toml``.
    * - ``PAPYRI_UPLOAD_TOKEN``
-     - Bearer token for the ingest endpoint.
+     - Bearer token for the ingest endpoint.  Overridden by a named target's
+       token or keychain entry if ``default_target`` is set.
+
+
+.. _upload-config:
+
+``~/.papyri/config.toml`` — user upload config
+------------------------------------------------
+
+``papyri upload`` reads an optional user-level config file at
+``~/.papyri/config.toml``.  It lets you define **named upload targets**
+so you can type ``papyri upload --to staging`` instead of repeating a
+long URL and token on every invocation.
+
+The file is separate from the per-library TOML config used by
+``papyri gen``.
+
+.. code:: toml
+
+   # ~/.papyri/config.toml
+
+   [upload]
+   # Optional: use this target when --to is not given.
+   default_target = "localhost"
+
+   # ── targets ────────────────────────────────────────────────────────────
+
+   [upload.targets.localhost]
+   url = "http://localhost:4321/api/bundle"
+   # No token needed for a local dev instance.
+
+   [upload.targets.staging]
+   url   = "https://staging.example.com/api/bundle"
+   token = "my-staging-token"        # plain-text — OK for dev/staging
+
+   [upload.targets.production]
+   url      = "https://docs.example.com/api/bundle"
+   keychain = true                   # read token from system keychain
+
+
+``[upload.targets.<name>]`` keys
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 15 65
+
+   * - Key
+     - Required
+     - Description
+   * - ``url``
+     - **yes**
+     - Full URL of the viewer's ``/api/bundle`` ingest endpoint.
+   * - ``token``
+     - no
+     - Bearer token as plain text.  Cannot be combined with ``keychain``.
+   * - ``keychain``
+     - no
+     - When ``true``, the token is fetched from the system keychain at
+       upload time.  See :ref:`upload-keychain`.  Cannot be combined with ``token``.
+
+``[upload]`` keys
+~~~~~~~~~~~~~~~~~
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 75
+
+   * - Key
+     - Description
+   * - ``default_target``
+     - Name of the target to use when ``--to`` is not supplied.  Must
+       match a key under ``[upload.targets]``.  Omit to keep the current
+       behaviour (fall through to ``$PAPYRI_UPLOAD_URL`` / hardcoded
+       default).
+
+
+.. _upload-keychain:
+
+Storing tokens in the system keychain
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Setting ``keychain = true`` in a target tells ``papyri upload`` to look
+up the bearer token from the OS credential store at upload time, rather
+than storing it in the config file.  The lookup uses the `keyring
+<https://pypi.org/project/keyring/>`__ package (macOS Keychain, Windows
+Credential Manager, Linux Secret Service / KWallet).
+
+**Install keyring support:**
+
+.. code:: bash
+
+   pip install "papyri[keychain]"
+
+**Store a token (run once per machine / token rotation):**
+
+.. code:: bash
+
+   python -m keyring set papyri <target-name>
+   # e.g.
+   python -m keyring set papyri production
+
+You will be prompted for the token value.  It is then encrypted and
+stored in the OS credential store; ``papyri upload`` retrieves it
+automatically.  The token never appears in ``~/.papyri/config.toml``.
+
+If ``keyring`` is not installed or no entry is found, the upload fails
+with a clear message explaining the fix.
 
 
 ``papyri upload`` CLI reference
@@ -660,20 +769,57 @@ directory (packed on the fly).
 
 .. list-table::
    :header-rows: 1
-   :widths: 25 20 55
+   :widths: 20 20 60
 
    * - Option
      - Default
      - Description
-   * - ``--url`` / ``-u``
-     - ``http://localhost:4321/api/bundle``
-     - Viewer ingest endpoint.  Overridden by ``$PAPYRI_UPLOAD_URL``.
-   * - ``--token`` / ``-t``
+   * - ``--to NAME``
      - —
-     - Bearer token for ``/api/bundle``.  Overridden by ``$PAPYRI_UPLOAD_TOKEN``.  Omit for local dev instances with no auth.
+     - Named target from ``~/.papyri/config.toml``.  Supplies the URL and
+       token for that target.  Explicit ``--url`` / ``--token`` flags
+       override ``--to``.
+   * - ``--url`` / ``-u``
+     - see below
+     - Viewer ingest endpoint.  Overrides ``--to`` and
+       ``$PAPYRI_UPLOAD_URL``.
+   * - ``--token`` / ``-t``
+     - see below
+     - Bearer token.  Overrides ``--to`` and ``$PAPYRI_UPLOAD_TOKEN``.
+       Omit for local dev instances with no auth.
    * - ``--verbose`` / ``-v``
      - ``false``
      - Show per-step packing progress when building a bundle on the fly.
+
+**URL resolution order** (first match wins):
+
+1. ``--url`` flag
+2. ``--to`` target's ``url`` (or ``default_target`` from config if ``--to`` is omitted)
+3. ``$PAPYRI_UPLOAD_URL`` environment variable
+4. ``http://localhost:4321/api/bundle``
+
+**Token resolution order** (first match wins):
+
+1. ``--token`` flag
+2. ``--to`` target's ``token`` / ``keychain`` entry
+3. ``$PAPYRI_UPLOAD_TOKEN`` environment variable
+4. *(no token — omit the ``Authorization`` header)*
+
+**Typical workflows:**
+
+.. code:: bash
+
+   # Local dev (no config needed — hits localhost by default).
+   papyri upload ~/.papyri/data/mylib_1.0/
+
+   # Named target from config (URL + token resolved automatically).
+   papyri upload --to staging mylib-1.0.papyri
+
+   # Named target but override URL for a one-off.
+   papyri upload --to production --url https://override.example.com/api/bundle mylib.papyri
+
+   # One-off with explicit credentials (no config file needed).
+   papyri upload --url https://docs.example.com/api/bundle --token $MY_TOKEN mylib.papyri
 
 
 ``papyri pack`` CLI reference

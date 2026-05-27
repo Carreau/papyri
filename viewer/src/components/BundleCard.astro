@@ -19,10 +19,11 @@ const nav = await loadBundleNav(blobStore, pkg, latest);
 const docCount = nav.docs.length + nav.tutorials.length;
 const exampleCount = nav.examples.length;
 const summary = typeof nav.meta.summary === "string" ? nav.meta.summary : null;
-const href = `/project/${pkg}/`;
+const docsHref = `/project/${pkg}/latest/`;
+const detailHref = `/project/${pkg}/`;
 ---
 
-<a class="bundle-card" href={href} data-pkg={pkg} data-summary={summary ?? ""}>
+<a class="bundle-card" href={docsHref} data-pkg={pkg} data-summary={summary ?? ""}>
   <div class="bundle-card-header">
     {
       nav.logoDataUrl ? (
@@ -37,7 +38,20 @@ const href = `/project/${pkg}/`;
       <span class="bundle-card-pkg">{pkg}</span>
       <span class="bundle-card-version">
         {latest}
-        {versionCount > 1 ? ` · ${versionCount} versions` : ""}
+        {
+          versionCount > 1 ? (
+            <>
+              {" · "}
+              <a
+                class="bundle-card-versions-link"
+                href={detailHref}
+                onclick="event.stopPropagation()"
+              >
+                {versionCount} versions
+              </a>
+            </>
+          ) : null
+        }
       </span>
     </div>
   </div>

@@ -5,6 +5,7 @@
 // qualname list.
 import BundleSearch from "./BundleSearch.tsx";
 import BundleSidebarTocItem from "./BundleSidebarTocItem.astro";
+import DocSwitcher, { type VersionEntry } from "./DocSwitcher.tsx";
 import { linkForDoc, linkForQualname } from "../lib/links.ts";
 import {
   qualnameAncestors,
@@ -19,9 +20,20 @@ interface Props {
   activeQualname?: string;
   activeDocPath?: string;
   activeExamplePath?: string;
+  switcherVersions?: VersionEntry[];
+  switcherCurrent?: string;
+  switcherHrefs?: Record<string, string>;
 }
 
-const { nav, activeQualname, activeDocPath, activeExamplePath } = Astro.props;
+const {
+  nav,
+  activeQualname,
+  activeDocPath,
+  activeExamplePath,
+  switcherVersions,
+  switcherCurrent,
+  switcherHrefs,
+} = Astro.props;
 const bundleHref = `/project/${nav.pkg}/${nav.version}/`;
 const summary = typeof nav.meta.summary === "string" ? nav.meta.summary : null;
 
@@ -117,6 +129,17 @@ const expandedTocHrefs = collectExpandedHrefs(nav.toc, activeTocHref);
       <span class="bundle-identity-version">{nav.version}</span>
     </span>
   </a>
+
+  {
+    switcherVersions && switcherCurrent && switcherHrefs && (
+      <DocSwitcher
+        client:load
+        versions={switcherVersions}
+        current={switcherCurrent}
+        hrefs={switcherHrefs}
+      />
+    )
+  }
 
   {summary ? <p class="bundle-summary">{summary}</p> : null}
 

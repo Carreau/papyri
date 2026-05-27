@@ -1,6 +1,7 @@
 /* IR-node visual skin. Separate file so component-level rules stay out of
    the page-chrome stylesheet. */
 @import "./ir-nodes.css";
+@import "./doc-switcher.css";
 
 :root {
   --fg: #1a1a1a;

@@ -891,7 +891,6 @@ class DirectiveVisiter(TreeReplacer):
             text,
             reference=LocalRef("docs", self._resolve_doc_path(path)),
             kind="exists",
-            anchor=None,
         )
 
     def _toctree_handler(
@@ -943,7 +942,7 @@ class DirectiveVisiter(TreeReplacer):
         if hidden:
             return []
 
-        acc = [ListItem(False, [Paragraph([line])]) for line in lls]
+        acc = [ListItem([Paragraph([line])]) for line in lls]
         # Every entry was filtered out (empty/blank content, only comments or
         # ``self``, or a ``:glob:`` toctree of pure wildcards). Emit nothing
         # rather than an empty ``<ul>`` — it renders invisibly but litters the
@@ -951,7 +950,7 @@ class DirectiveVisiter(TreeReplacer):
         # above, so navigation is unaffected (same contract as ``hidden``).
         if not acc:
             return []
-        return [BulletList(ordered=False, start=1, spread=False, children=acc)]
+        return [BulletList(ordered=False, start=1, children=acc)]
 
     def replace_UnprocessedDirective(
         self, directive: UnprocessedDirective

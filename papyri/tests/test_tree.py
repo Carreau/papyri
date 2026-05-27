@@ -152,7 +152,6 @@ def test_delayed_resolver_reference_then_target() -> None:
         "lbl",
         reference=RefInfo(module="", version="", kind="?", path="x"),
         kind="exists",
-        anchor=None,
     )
     r.add_reference(link, "sec-1")
     # Nothing yet → reference unresolved sentinel preserved.
@@ -173,7 +172,6 @@ def test_delayed_resolver_target_then_reference() -> None:
         "lbl",
         reference=RefInfo(module="", version="", kind="?", path="x"),
         kind="exists",
-        anchor=None,
     )
     r.add_reference(link, "sec-1")
     # Arrived after target — must still be resolved.

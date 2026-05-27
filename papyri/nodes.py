@@ -159,7 +159,6 @@ class CrossRef(Node):
     # `reference.kind`; see tree.py's toctree handler for an example where the
     # two diverge.
     kind: str
-    anchor: str | None = None
 
     @property
     def exists(self) -> bool:
@@ -173,7 +172,7 @@ class CrossRef(Node):
         return f"<CrossRef: {self.value=} {self.reference=} {self.kind=}>"
 
     def __hash__(self) -> int:
-        return hash((self.value, self.reference, self.kind, self.anchor))
+        return hash((self.value, self.reference, self.kind))
 
 
 class Leaf(Node):
@@ -421,13 +420,11 @@ class Paragraph(Node):
 @register(4053)
 class BulletList(Node):
     """Ordered or unordered list.  ``ordered`` distinguishes the two;
-    ``start`` is the first item number for ordered lists (typically 1).
-    ``spread`` is true when items are separated by blank lines."""
+    ``start`` is the first item number for ordered lists (typically 1)."""
 
     type = "list"
     ordered: bool
     start: int
-    spread: bool
     children: tuple[ListContent, ...]
 
 
@@ -436,7 +433,6 @@ class ListItem(Node):
     """Single item in a ``BulletList``."""
 
     type = "listItem"
-    spread: bool
     children: tuple[FlowContent | PhrasingContent | DefList | UnprocessedDirective, ...]
 
 

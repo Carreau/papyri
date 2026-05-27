@@ -61,7 +61,6 @@ def test_roundtrip_crossref_with_localref() -> None:
         "Intro",
         reference=LocalRef("docs", "intro"),
         kind="docs",
-        anchor=None,
     )
     out = _roundtrip(ref)
     assert isinstance(out, CrossRef)
@@ -73,7 +72,7 @@ def test_roundtrip_crossref_with_localref() -> None:
 
 def test_roundtrip_crossref_with_refinfo() -> None:
     ri = RefInfo("numpy", "2.3.5", "module", "numpy:linspace")
-    ref = CrossRef("linspace", reference=ri, kind="module", anchor=None)
+    ref = CrossRef("linspace", reference=ri, kind="module")
     out = _roundtrip(ref)
     assert isinstance(out.reference, RefInfo)
     assert out.reference == ri
@@ -129,10 +128,9 @@ def test_roundtrip_bullet_list() -> None:
     bl = BulletList(
         ordered=False,
         start=1,
-        spread=False,
         children=[
-            ListItem(False, [Paragraph([Text("one")])]),
-            ListItem(False, [Paragraph([Text("two")])]),
+            ListItem([Paragraph([Text("one")])]),
+            ListItem([Paragraph([Text("two")])]),
         ],
     )
     out = _roundtrip(bl)

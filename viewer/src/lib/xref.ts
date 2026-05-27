@@ -1,5 +1,5 @@
 // CrossRef resolution. The IR shape:
-//   { __type: "CrossRef", value: label, reference: RefInfo, kind, anchor }
+//   { __type: "CrossRef", value: label, reference: RefInfo, kind }
 // where `reference` is a RefInfo tag node with fields
 // (module, version, kind, path).
 //

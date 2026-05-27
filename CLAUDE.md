@@ -40,6 +40,8 @@ latency on it was far too high.
   `~/.papyri/data/<pkg>_<ver>/`.
 - **`papyri pack`**: packs a DocBundle directory into a `.papyri` artifact
   (gzip-compressed CBOR). The artifact is the canonical shipping unit.
+  `papyri unpack` is the inverse — it explodes a `.papyri` artifact back into
+  a JSON DocBundle directory for inspection.
 - **`papyri upload`**: ships a `.papyri` file, a `.zip` containing one, or a
   DocBundle directory to a viewer instance whose `/api/bundle` endpoint (HTTP
   `PUT`) runs the TypeScript ingest pipeline server-side to wire bundles into
@@ -171,8 +173,8 @@ service *could* be built later without a breaking change to the IR.
 ```
 papyri/                   Python package (IR producer + CLI)
   __init__.py             CLI entry (typer app), wires commands from cli/
-  cli/                    One file per subcommand: gen, upload, pack, find,
-                          describe, diff, debug, about, bootstrap
+  cli/                    One file per subcommand: gen, upload, pack, unpack,
+                          find, describe, diff, debug, about, bootstrap
   gen.py                  Core IR generation (inspect + docstring → IR)
   nodes.py                IR node types (CST/AST nodes)
   node_base.py            Base class for IR nodes (serialization hooks)
@@ -208,6 +210,7 @@ ingest/                   TypeScript papyri-ingest package
     graph-db.ts           GraphDb interface + SqliteGraphDb
     blob-store.ts         BlobStore interface + FsBlobStore
     raw-store.ts          RawStore interface + FsRawStore
+    inventory.ts          Intersphinx objects.inv parser (link to non-papyri projects)
   migrations/             SQL schema applied to the SQLite graph DB
 
 viewer/                   TypeScript Astro web renderer
@@ -215,8 +218,10 @@ viewer/                   TypeScript Astro web renderer
     lib/
       ir-reader.ts        Decode blobs → typed IR (shock absorber for IR changes)
       ir-types.ts         TypeScript types mirroring IR node shapes
+      ir-schema.ts        Auto-generated IR field/type schema (drives IR-stats panel)
       backends.ts         getBackends() — builds BlobStore+GraphDb per adapter
       graph.ts            Graph queries (getBackrefs, getForwardRefs, …)
+      bundle-walk.ts      Shared bundle traversal (walkBundle/walkAllBundles)
       nav.ts              Navigation / TOC helpers
       qualname-page.ts    Qualname page view model
       qualname.ts         Qualname parsing/normalization
@@ -251,6 +256,10 @@ viewer/                   TypeScript Astro web renderer
         bundle.ts         PUT /api/bundle — ingest endpoint
         reingest.ts       POST /api/reingest — replay raw archive
         bundles.json.ts   GET /api/bundles.json — bundle list
+        inventory.ts      Intersphinx inventory register/list (external links)
+        nodes.json.ts, ir-stats.json.ts, search.json.ts, text-search.json.ts
+        [pkg]/[ver]/{nodes,raw,text-search}.json.ts  Per-bundle data endpoints
+        auth/login.ts, auth/logout.ts  Session login/logout
         clear.ts, clear-raw.ts, health.json.ts, stats.ts
       admin/              Admin panel (auth-gated)
       login.astro         Login page
@@ -328,6 +337,9 @@ the graphstore and blob store is rebuildable via `POST /api/reingest`.
 | `PAPYRI_INGEST_DB` | viewer | SQLite graph DB (default `~/.papyri/ingest/papyri.db`) |
 | `PAPYRI_SITE` | viewer build | Canonical external origin for canonical-URL generation behind a reverse proxy |
 | `PAPYRI_USERNAME` / `PAPYRI_PASSWORD` | viewer middleware | Credentials for the session-cookie auth gate |
+| `PAPYRI_VERSION` | `papyri upload` | Overrides the `papyri-upload/<version>` User-Agent string |
+| `PAPYRI_BUILD_COMMIT` | viewer build | Git commit surfaced on the admin panel |
+| `PAPYRI_BUILD_ADAPTER` | viewer build | Build adapter name surfaced on the admin panel |
 
 ## Viewer current state
 
@@ -348,8 +360,8 @@ See `viewer/PLAN.md` for the detailed milestone tracker.
 ## Handy starting points
 
 - CLI entry: `papyri/__init__.py` (typer app, wires `papyri/cli/*`).
-- CLI subcommands: `papyri/cli/gen.py`, `upload.py`, `pack.py`, `find.py`,
-  `describe.py`, `diff.py`, `debug.py`, `about.py`, `bootstrap.py`.
+- CLI subcommands: `papyri/cli/gen.py`, `upload.py`, `pack.py`, `unpack.py`,
+  `find.py`, `describe.py`, `diff.py`, `debug.py`, `about.py`, `bootstrap.py`.
 - IR gen: `papyri/gen.py`.
 - RST→IR visitor + directive handlers: `papyri/tree.py`.
 - RST parsing via tree-sitter: `papyri/ts.py`.

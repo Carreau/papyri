@@ -12,7 +12,7 @@
 --
 -- ingested_at: Unix epoch seconds (UTC) at ingest time.
 
-CREATE TABLE bundles (
+CREATE TABLE IF NOT EXISTS bundles (
     module            TEXT    NOT NULL,
     version           TEXT    NOT NULL,
     bundle_size_bytes INTEGER NOT NULL,

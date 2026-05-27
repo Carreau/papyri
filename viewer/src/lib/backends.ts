@@ -33,20 +33,13 @@ async function nodeBackends(): Promise<Backends> {
 
   fs.mkdirSync(ingestDir, { recursive: true });
   const db = new Database(dbPath) as BetterSqlite3.Database;
-  for (const sql of [
-    "PRAGMA journal_mode = WAL",
-    "PRAGMA synchronous = NORMAL",
-    "CREATE TABLE IF NOT EXISTS nodes (id INTEGER PRIMARY KEY, package TEXT NOT NULL, version TEXT NOT NULL, category TEXT NOT NULL, identifier TEXT NOT NULL, has_blob INTEGER NOT NULL DEFAULT 0, digest BLOB, UNIQUE (package, version, category, identifier))",
-    "CREATE TABLE IF NOT EXISTS links (source INTEGER NOT NULL REFERENCES nodes (id) ON DELETE CASCADE, dest INTEGER NOT NULL REFERENCES nodes (id) ON DELETE CASCADE, PRIMARY KEY (source, dest))",
-    "CREATE INDEX IF NOT EXISTS idx_links_dest ON links (dest)",
-    "CREATE INDEX IF NOT EXISTS idx_nodes_pkg_cat_ident ON nodes (package, category, identifier)",
-    "CREATE TABLE IF NOT EXISTS bundles (module TEXT NOT NULL, version TEXT NOT NULL, bundle_size_bytes INTEGER NOT NULL, ingested_at INTEGER NOT NULL, content_hash TEXT, PRIMARY KEY (module, version))",
-    "CREATE TABLE IF NOT EXISTS external_projects (name TEXT PRIMARY KEY, base_url TEXT NOT NULL, version TEXT, fetched_at INTEGER)",
-    "CREATE TABLE IF NOT EXISTS external_objects (project TEXT NOT NULL REFERENCES external_projects (name) ON DELETE CASCADE, name TEXT NOT NULL, domain TEXT NOT NULL, role TEXT NOT NULL, uri TEXT NOT NULL, dispname TEXT, priority INTEGER, PRIMARY KEY (project, name, domain, role))",
-    "CREATE INDEX IF NOT EXISTS idx_external_objects_name ON external_objects (project, name)",
-  ]) {
+  for (const sql of ["PRAGMA journal_mode = WAL", "PRAGMA synchronous = NORMAL"]) {
     db.prepare(sql).run();
   }
+  // Schema lives in ingest/migrations/*.sql; applyMigrations brings this
+  // long-running server's DB up to the latest version on startup (it runs
+  // pending migrations against existing DBs too, not just fresh ones).
+  ingest.applyMigrations(db);
 
   return {
     blobStore: new ingest.FsBlobStore(ingestDir),

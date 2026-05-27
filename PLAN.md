@@ -722,11 +722,16 @@ directives.)
 
 (Resolved and removed: "Extract shared schema bootstrap" and "Deduplicate ref
 resolution" are moot — `viewer/src/lib/graphstore.ts` no longer exists. Schema
-bootstrap lives only in `ingest/src/ingest.ts`, and forward/back-ref queries
-moved to `viewer/src/lib/graph.ts`; `_getForwardRefs` is gone with the
-directory-ingest path. "Async fs in `ingest()`" is also resolved — the
+bootstrap now genuinely lives only in `ingest/src/ingest.ts`: the
+`applyMigrations` runner reads `ingest/migrations/*.sql` and applies pending
+files (gated by `PRAGMA user_version`) to both fresh and existing DBs. Both the
+standalone init path and the long-running viewer (`viewer/src/lib/backends.ts`)
+call it — the viewer on startup, so a new migration reaches a live DB without a
+wipe; the previously hardcoded inline schema in `backends.ts` is gone. Forward/
+back-ref queries moved to `viewer/src/lib/graph.ts`; `_getForwardRefs` is gone
+with the directory-ingest path. "Async fs in `ingest()`" is also resolved — the
 directory `ingest()` pipeline was deleted; the surviving `readFileSync` is only
-in the one-time synchronous `loadSchemaFromDisk` DB-init path.)
+in the one-time synchronous DB-init path.)
 
 - **Type-safe key parsing.** `visitor.ts` still hand-builds key strings
   (`${module}/${version}/${kind}/${path}`) with silent `?? ""` fallbacks

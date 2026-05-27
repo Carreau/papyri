@@ -19,7 +19,7 @@
  * graph so back-references work.
  */
 
-import { readdirSync, readFileSync, existsSync, mkdirSync } from "node:fs";
+import { readdirSync, readFileSync, mkdirSync } from "node:fs";
 import { join, extname, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { encode as cborEncode } from "cbor-x";
@@ -94,14 +94,6 @@ function migrationsDir(): string {
   return join(dirname(fileURLToPath(import.meta.url)), "..", "migrations");
 }
 
-function loadSchemaFromDisk(): string {
-  const dir = migrationsDir();
-  const files = readdirSync(dir)
-    .filter((f) => f.endsWith(".sql"))
-    .sort();
-  return files.map((f) => readFileSync(join(dir, f), "utf8")).join("\n");
-}
-
 function splitStatements(sql: string): string[] {
   const stripped = sql
     .split("\n")
@@ -114,20 +106,54 @@ function splitStatements(sql: string): string[] {
 }
 
 /**
+ * Apply pending SQL migrations from `ingest/migrations/` to `db`.
+ *
+ * Versioning uses SQLite's `PRAGMA user_version`: a migration file named
+ * `NNNN_*.sql` carries version `NNNN`, and after it is applied the DB's
+ * `user_version` is bumped to `NNNN`. On each call we run only the files
+ * whose number is greater than the stored `user_version`, in ascending
+ * order. This applies to both freshly created and pre-existing DBs — the
+ * long-running viewer calls this on startup so a schema change reaches a
+ * live DB without a wipe.
+ *
+ * Each file (its statements + the version bump) runs in a single
+ * transaction so a crash mid-file cannot leave the version half-advanced.
+ * Migration bodies use `IF NOT EXISTS` where possible, so a re-run is a
+ * no-op; `ALTER TABLE ADD COLUMN` (which SQLite has no `IF NOT EXISTS`
+ * for) is kept safe by the version gate running it exactly once.
+ */
+export function applyMigrations(db: Database.Database): void {
+  const dir = migrationsDir();
+  const current = (db.prepare("PRAGMA user_version").get() as { user_version: number })
+    .user_version;
+  const files = readdirSync(dir)
+    .filter((f) => f.endsWith(".sql"))
+    .map((f) => ({ file: f, num: Number.parseInt(f.slice(0, 4), 10) }))
+    .filter((m) => m.num > current)
+    .sort((a, b) => a.num - b.num);
+  for (const { file, num } of files) {
+    const stmts = splitStatements(readFileSync(join(dir, file), "utf8"));
+    // user_version cannot be a bound `?` parameter; `num` is a parsed
+    // integer from the filename, not user input, so interpolation is safe.
+    db.transaction(() => {
+      for (const stmt of stmts) db.prepare(stmt).run();
+      db.prepare(`PRAGMA user_version = ${num}`).run();
+    })();
+    console.log(`  migration applied: ${file} (user_version=${num})`);
+  }
+}
+
+/**
  * Build Node-mode backends (filesystem blob store + better-sqlite3 graph
- * db). Applies migrations on first init. Used by `Ingester` when the
- * caller provides `ingestDir` instead of explicit backends.
+ * db). Applies migrations on init. Used by `Ingester` when the caller
+ * provides `ingestDir` instead of explicit backends.
  */
 function openNodeBackends(ingestDir: string): { blobStore: BlobStore; graphDb: GraphDb } {
   mkdirSync(ingestDir, { recursive: true });
   const dbPath = join(ingestDir, "papyri.db");
-  const isNew = !existsSync(dbPath);
   const db = new Database(dbPath);
   for (const p of PRAGMAS) db.prepare(p).run();
-  if (isNew) {
-    const sql = loadSchemaFromDisk();
-    for (const stmt of splitStatements(sql)) db.prepare(stmt).run();
-  }
+  applyMigrations(db);
   return {
     blobStore: new FsBlobStore(ingestDir),
     graphDb: new SqliteGraphDb(db),

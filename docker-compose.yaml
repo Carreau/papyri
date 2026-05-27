@@ -8,6 +8,12 @@ services:
     volumes:
       - papyri-data:/data
     restart: unless-stopped
+    labels:
+      # Forward the original public hostname to Astro so its Origin check
+      # (security.checkOrigin) sees Host == Origin even behind Caddy/Coolify.
+      # caddy-docker-proxy picks this up; Coolify merges rather than replaces
+      # the header_up sub-directive so it survives alongside its own labels.
+      caddy.reverse_proxy.header_up: "Host {http.request.host}"
 
 volumes:
   papyri-data:

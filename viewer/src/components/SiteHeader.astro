@@ -18,7 +18,15 @@ const authenticated = isAuthenticated(Astro);
   <div class="site-header-spacer"></div>
   <div class="site-header-tools">
     <slot name="tools" />
-    {authenticated && <UserMenu client:load />}
+    {
+      authenticated ? (
+        <UserMenu client:load />
+      ) : (
+        <a href="/login" class="site-login-link">
+          Login
+        </a>
+      )
+    }
     <VisibilityToggle client:load />
     <ThemeToggle client:load />
   </div>

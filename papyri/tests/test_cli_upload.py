@@ -5,6 +5,7 @@ from __future__ import annotations
 import gzip
 import io
 import json
+import textwrap
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -392,3 +393,135 @@ def test_upload_zip_multiple_papyri_files(tmp_path: Any) -> None:
     result = runner.invoke(_app, [str(zip_path)])
     assert result.exit_code == 1
     assert "2 .papyri files" in result.output
+
+
+# ---------------------------------------------------------------------------
+# --to named target
+# ---------------------------------------------------------------------------
+
+
+def _write_config(path: Path, content: str) -> None:
+    path.write_text(textwrap.dedent(content))
+
+
+def test_upload_to_named_target_uses_target_url(tmp_path: Path) -> None:
+    cfg = tmp_path / "config.toml"
+    _write_config(
+        cfg,
+        """\
+        [upload.targets.staging]
+        url = "https://staging.example.com/api/bundle"
+        token = "stagetoken"
+        """,
+    )
+    bundle = _make_bundle(tmp_path / "mypkg_1.0")
+    resp = _mock_response({"ok": True, "pkg": "mypkg", "version": "1.0"})
+
+    with (
+        patch("urllib.request.urlopen", return_value=resp) as mock_open,
+        patch("papyri.user_config.USER_CONFIG_PATH", cfg),
+    ):
+        result = runner.invoke(_app, [str(bundle), "--to", "staging"])
+
+    assert result.exit_code == 0, result.output
+    req: urllib.request.Request = mock_open.call_args[0][0]
+    assert req.full_url == "https://staging.example.com/api/bundle"
+    assert req.get_header("Authorization") == "Bearer stagetoken"
+
+
+def test_upload_explicit_url_overrides_to(tmp_path: Path) -> None:
+    cfg = tmp_path / "config.toml"
+    _write_config(
+        cfg,
+        """\
+        [upload.targets.staging]
+        url = "https://staging.example.com/api/bundle"
+        """,
+    )
+    bundle = _make_bundle(tmp_path / "mypkg_1.0")
+    resp = _mock_response({"ok": True, "pkg": "mypkg", "version": "1.0"})
+
+    with (
+        patch("urllib.request.urlopen", return_value=resp) as mock_open,
+        patch("papyri.user_config.USER_CONFIG_PATH", cfg),
+    ):
+        result = runner.invoke(
+            _app,
+            [
+                str(bundle),
+                "--to",
+                "staging",
+                "--url",
+                "http://override.example.com/api/bundle",
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    req: urllib.request.Request = mock_open.call_args[0][0]
+    assert req.full_url == "http://override.example.com/api/bundle"
+
+
+def test_upload_to_unknown_target_exits_with_error(tmp_path: Path) -> None:
+    cfg = tmp_path / "config.toml"
+    _write_config(
+        cfg,
+        """\
+        [upload.targets.localhost]
+        url = "http://localhost:4321/api/bundle"
+        """,
+    )
+    bundle = _make_bundle(tmp_path / "mypkg_1.0")
+
+    with patch("papyri.user_config.USER_CONFIG_PATH", cfg):
+        result = runner.invoke(_app, [str(bundle), "--to", "production"])
+
+    assert result.exit_code == 1
+    assert "production" in result.output
+
+
+def test_upload_default_target_used_when_no_to(tmp_path: Path) -> None:
+    cfg = tmp_path / "config.toml"
+    _write_config(
+        cfg,
+        """\
+        [upload]
+        default_target = "myserver"
+
+        [upload.targets.myserver]
+        url = "http://myserver.example.com/api/bundle"
+        """,
+    )
+    bundle = _make_bundle(tmp_path / "mypkg_1.0")
+    resp = _mock_response({"ok": True, "pkg": "mypkg", "version": "1.0"})
+
+    with (
+        patch("urllib.request.urlopen", return_value=resp) as mock_open,
+        patch("papyri.user_config.USER_CONFIG_PATH", cfg),
+    ):
+        result = runner.invoke(_app, [str(bundle)])
+
+    assert result.exit_code == 0, result.output
+    req: urllib.request.Request = mock_open.call_args[0][0]
+    assert req.full_url == "http://myserver.example.com/api/bundle"
+
+
+def test_upload_env_var_used_when_no_to_and_no_config(tmp_path: Path) -> None:
+    cfg = tmp_path / "nonexistent_config.toml"  # file does not exist
+    bundle = _make_bundle(tmp_path / "mypkg_1.0")
+    resp = _mock_response({"ok": True, "pkg": "mypkg", "version": "1.0"})
+
+    env_url = "http://envvar.example.com/api/bundle"
+
+    with (
+        patch("urllib.request.urlopen", return_value=resp) as mock_open,
+        patch("papyri.user_config.USER_CONFIG_PATH", cfg),
+        patch(
+            "papyri.cli.upload.os.environ.get",
+            side_effect=lambda k, d=None: env_url if k == "PAPYRI_UPLOAD_URL" else d,
+        ),
+    ):
+        result = runner.invoke(_app, [str(bundle)])
+
+    assert result.exit_code == 0, result.output
+    req: urllib.request.Request = mock_open.call_args[0][0]
+    assert req.full_url == env_url

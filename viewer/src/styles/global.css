@@ -1212,6 +1212,17 @@ section.backrefs ul.qualnames {
   color: var(--fg-muted);
 }
 
+.bundle-card-versions-link {
+  color: var(--fg-muted);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+}
+.bundle-card-versions-link:hover {
+  color: var(--accent);
+  text-decoration-style: solid;
+}
+
 .bundle-card-summary {
   font-size: 0.82rem;
   color: var(--fg-muted);

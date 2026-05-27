@@ -1,47 +1,16 @@
 /**
  * Request-scoped storage backend factory.
  *
- * Returns a `{ blobStore, graphDb }` pair pointing at whichever runtime is
- * serving the current request:
+ * Returns a `{ blobStore, graphDb, rawStore }` triple backed by the local
+ * filesystem + SQLite under `~/.papyri/ingest/` (or the paths set by
+ * `PAPYRI_INGEST_DIR` / `PAPYRI_INGEST_DB`).
  *
- *   • Cloudflare Workers (`wrangler dev` / deployed). Bindings come from
- *     `import { env } from "cloudflare:workers"` — `env.BLOBS` (R2) and
- *     `env.GRAPH_DB` (D1). The schema is bootstrapped lazily on first use
- *     via `IF NOT EXISTS` DDL so a virgin local D1 (no `wrangler d1
- *     migrations apply` run) still works.
- *
- *   • Node SSR (`astro dev` / `pnpm serve`). The `cloudflare:workers`
- *     import fails; we fall back to fs+sqlite under `~/.papyri/ingest/`.
- *     The Node-side modules are loaded via dynamic `import()` so the
- *     Workers bundle never pulls in `node:fs` or `better-sqlite3`.
- *
- * Both branches return the same `BlobStore` / `GraphDb` interface, so all
- * consumer code (pages, libs) is backend-agnostic.
+ * The Node-side modules are loaded via dynamic `import()` so Vite/Rollup can
+ * tree-shake them in future build targets.
  */
-import {
-  R2BlobStore,
-  D1GraphDb,
-  R2RawStore,
-  FsRawStore,
-  type BlobStore,
-  type GraphDb,
-  type RawStore,
-  type R2BucketLike,
-  type D1DatabaseLike,
-} from "papyri-ingest";
-// Type-only import; erased at compile time, so the Workers bundle never
-// pulls in the native better-sqlite3 addon.
+import { FsRawStore, type BlobStore, type GraphDb, type RawStore } from "papyri-ingest";
+// Type-only import; erased at compile time.
 import type BetterSqlite3 from "better-sqlite3";
-
-interface WorkersEnv {
-  GRAPH_DB?: D1DatabaseLike;
-  BLOBS?: R2BucketLike;
-  PAPYRI_UPLOAD_TOKEN?: string;
-}
-
-// Raw archive uses a _raw/ prefix within the same BLOBS R2 bucket.
-// The prefix is never a valid processed-blob key (those start with a letter
-// or digit) so the two namespaces are disjoint without a separate binding.
 
 export interface Backends {
   blobStore: BlobStore;
@@ -49,91 +18,6 @@ export interface Backends {
   rawStore: RawStore;
 }
 
-async function loadCfEnv(): Promise<WorkersEnv | null> {
-  try {
-    const mod = (await import(/* @vite-ignore */ "cloudflare:workers")) as {
-      env?: WorkersEnv;
-    };
-    return mod.env ?? null;
-  } catch {
-    return null;
-  }
-}
-
-// D1 schema bootstrap — idempotent. Mirrors `ingest/migrations/*.sql`
-// with `IF NOT EXISTS` so re-running against a populated DB is a cheap
-// no-op. Run once per worker isolate via the latch below.
-let _d1SchemaApplied = false;
-async function ensureD1Schema(graphDb: GraphDb): Promise<void> {
-  if (_d1SchemaApplied) return;
-  await graphDb.batch([
-    {
-      sql:
-        "CREATE TABLE IF NOT EXISTS nodes (" +
-        "  id INTEGER PRIMARY KEY," +
-        "  package TEXT NOT NULL," +
-        "  version TEXT NOT NULL," +
-        "  category TEXT NOT NULL," +
-        "  identifier TEXT NOT NULL," +
-        "  has_blob INTEGER NOT NULL DEFAULT 0," +
-        "  digest BLOB," +
-        "  UNIQUE (package, version, category, identifier)" +
-        ")",
-    },
-    {
-      sql:
-        "CREATE TABLE IF NOT EXISTS links (" +
-        "  source INTEGER NOT NULL REFERENCES nodes (id) ON DELETE CASCADE," +
-        "  dest INTEGER NOT NULL REFERENCES nodes (id) ON DELETE CASCADE," +
-        "  PRIMARY KEY (source, dest)" +
-        ")",
-    },
-    { sql: "CREATE INDEX IF NOT EXISTS idx_links_dest ON links (dest)" },
-    {
-      sql: "CREATE INDEX IF NOT EXISTS idx_nodes_pkg_cat_ident ON nodes (package, category, identifier)",
-    },
-    {
-      sql:
-        "CREATE TABLE IF NOT EXISTS bundles (" +
-        "  module TEXT NOT NULL," +
-        "  version TEXT NOT NULL," +
-        "  bundle_size_bytes INTEGER NOT NULL," +
-        "  ingested_at INTEGER NOT NULL," +
-        "  PRIMARY KEY (module, version)" +
-        ")",
-    },
-    {
-      sql:
-        "CREATE TABLE IF NOT EXISTS external_projects (" +
-        "  name TEXT PRIMARY KEY," +
-        "  base_url TEXT NOT NULL," +
-        "  version TEXT," +
-        "  fetched_at INTEGER" +
-        ")",
-    },
-    {
-      sql:
-        "CREATE TABLE IF NOT EXISTS external_objects (" +
-        "  project TEXT NOT NULL REFERENCES external_projects (name) ON DELETE CASCADE," +
-        "  name TEXT NOT NULL," +
-        "  domain TEXT NOT NULL," +
-        "  role TEXT NOT NULL," +
-        "  uri TEXT NOT NULL," +
-        "  dispname TEXT," +
-        "  priority INTEGER," +
-        "  PRIMARY KEY (project, name, domain, role)" +
-        ")",
-    },
-    {
-      sql: "CREATE INDEX IF NOT EXISTS idx_external_objects_name ON external_objects (project, name)",
-    },
-  ]);
-  _d1SchemaApplied = true;
-}
-
-// Node-side build: load via dynamic import so Vite/rollup leaves these
-// outside the Workers bundle (the cloudflare adapter and `vite.external`
-// in astro.config.mjs both need this to be lazy).
 async function nodeBackends(): Promise<Backends> {
   const ingest = await import(/* @vite-ignore */ "papyri-ingest");
   const fs = await import(/* @vite-ignore */ "node:fs");
@@ -149,10 +33,6 @@ async function nodeBackends(): Promise<Backends> {
 
   fs.mkdirSync(ingestDir, { recursive: true });
   const db = new Database(dbPath) as BetterSqlite3.Database;
-  // Apply schema idempotently (matches the Workers branch). The Ingester
-  // also bootstraps schema for fresh DBs; we duplicate the IF NOT EXISTS
-  // form here so the read-side viewer doesn't depend on a write happening
-  // first.
   for (const sql of [
     "PRAGMA journal_mode = WAL",
     "PRAGMA synchronous = NORMAL",
@@ -175,41 +55,17 @@ async function nodeBackends(): Promise<Backends> {
   };
 }
 
-/**
- * Resolve backends for the current request. Cheap to call repeatedly — the
- * Node branch is cached per process; the Workers branch builds a thin
- * wrapper around shared bindings on each call.
- */
-let _nodeCached: Promise<Backends> | null = null;
+let _cached: Promise<Backends> | null = null;
 
 export async function getBackends(): Promise<Backends> {
-  const cf = await loadCfEnv();
-  if (cf?.GRAPH_DB && cf?.BLOBS) {
-    const graphDb = new D1GraphDb(cf.GRAPH_DB);
-    await ensureD1Schema(graphDb);
-    return {
-      blobStore: new R2BlobStore(cf.BLOBS),
-      graphDb,
-      rawStore: new R2RawStore(cf.BLOBS),
-    };
-  }
-  if (!_nodeCached) _nodeCached = nodeBackends();
-  return _nodeCached;
+  if (!_cached) _cached = nodeBackends();
+  return _cached;
 }
 
 /**
- * Return the expected upload token, or `undefined` when auth is disabled.
- *
- * On Workers the value comes from the `PAPYRI_UPLOAD_TOKEN` secret binding
- * (set via `wrangler secret put PAPYRI_UPLOAD_TOKEN`).
- * On Node it is read from `process.env.PAPYRI_UPLOAD_TOKEN`.
- *
- * When the returned value is `undefined` the caller must skip auth entirely —
- * disabling the check is intentional for local development.
+ * Return the expected upload token, or `undefined` when auth is disabled
+ * (local development without the env var set).
  */
 export async function getUploadToken(): Promise<string | undefined> {
-  const cf = await loadCfEnv();
-  // cf is non-null whenever cloudflare:workers resolved (Workers runtime).
-  if (cf !== null) return cf.PAPYRI_UPLOAD_TOKEN || undefined;
   return process.env.PAPYRI_UPLOAD_TOKEN || undefined;
 }

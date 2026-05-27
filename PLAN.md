@@ -42,8 +42,7 @@ The boundary between the two halves:
   implementation detail; do not assume JSON or CBOR exclusively.
 - Storage is abstracted: the viewer and ingest pipeline must not assume a
   specific on-disk layout or wire encoding. The current implementation uses
-  SQLite for the cross-link graph and a filesystem store for blobs; the
-  hosted service will use different backends (e.g. Cloudflare D1 + R2).
+  SQLite for the cross-link graph and a filesystem store for blobs.
 
 ## Storage invariant: the graphstore is a derived cache
 

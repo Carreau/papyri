@@ -10,17 +10,11 @@ export type { IngestOptions, ProgressCallback } from "./ingest.js";
 export { GraphStore } from "./graphstore.js";
 export type { Key } from "./graphstore.js";
 
-export { FsBlobStore, R2BlobStore, keyToPath } from "./blob-store.js";
-export type { BlobStore, R2BucketLike, R2ObjectLike } from "./blob-store.js";
+export { FsBlobStore, keyToPath } from "./blob-store.js";
+export type { BlobStore } from "./blob-store.js";
 
-export { SqliteGraphDb, D1GraphDb } from "./graph-db.js";
-export type {
-  GraphDb,
-  BatchStmt,
-  GraphRow,
-  D1DatabaseLike,
-  D1PreparedStatement,
-} from "./graph-db.js";
+export { SqliteGraphDb } from "./graph-db.js";
+export type { GraphDb, BatchStmt, GraphRow } from "./graph-db.js";
 
 export { decode, encode, generatedDocToIngested, FIELD_ORDER } from "./encoder.js";
 export type { IRNode, TypedNode, UnknownNode } from "./encoder.js";
@@ -29,7 +23,7 @@ export { assertBundle, explodeBundleToDir } from "./bundle.js";
 
 export { collectForwardRefs, collectForwardRefsFromSection } from "./visitor.js";
 
-export { FsRawStore, R2RawStore } from "./raw-store.js";
+export { FsRawStore } from "./raw-store.js";
 export type { RawStore } from "./raw-store.js";
 
 export {

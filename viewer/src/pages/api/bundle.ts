@@ -8,9 +8,7 @@
 // pipeline directly — no temporary directory, no fs round-trip.
 //
 // Backend selection happens in `lib/backends.ts`: same {blobStore, graphDb}
-// pair that the read-side pages use, so both halves of the round trip
-// agree on where data lives. Under Cloudflare that's R2 + D1; under Node
-// it's filesystem + better-sqlite3.
+// pair that the read-side pages use (filesystem + better-sqlite3).
 //
 // Expected client command:
 //   papyri pack ~/.papyri/data/numpy_2.3.5
@@ -95,9 +93,8 @@ export const PUT: APIRoute = async ({ request }) => {
   }
 
   // Path-traversal guard: validate package/version segments before they
-  // become R2 keys or fs paths. A hostile artifact could otherwise set
-  // ".." or "/" in `bundle.module` / `bundle.version` and escape the
-  // ingest namespace.
+  // become fs paths. A hostile artifact could otherwise set ".." or "/"
+  // in `bundle.module` / `bundle.version` and escape the ingest namespace.
   const rawPkg = (bundle as Record<string, unknown>)["module"];
   const rawVer = (bundle as Record<string, unknown>)["version"];
   if (typeof rawPkg !== "string" || !rawPkg || !isSafeSegment(rawPkg)) {
@@ -113,12 +110,9 @@ export const PUT: APIRoute = async ({ request }) => {
     );
   }
 
-  // Streaming response: ingest is potentially long-running (D1 / R2 round-
-  // trips dominate). Open an NDJSON stream now and emit progress events as
-  // the ingest walks the bundle; the client reads line-by-line. This
-  // bypasses the Workers per-request console.log buffer, which only flushes
-  // when the request ends and therefore makes `wrangler tail` useless for
-  // live progress.
+  // Streaming response: ingest is potentially long-running. Open an NDJSON
+  // stream now and emit progress events as the ingest walks the bundle; the
+  // client reads line-by-line.
   const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
   const writer = writable.getWriter();
   const encoder = new TextEncoder();
@@ -126,17 +120,12 @@ export const PUT: APIRoute = async ({ request }) => {
     await writer.write(encoder.encode(JSON.stringify(event) + "\n"));
   };
 
-  // Kick the ingest off without awaiting. Workers keeps the worker alive
-  // while the response body is being consumed, so this IIFE is allowed to
-  // outlive the handler return. Any throw turns into a final `error` event.
+  // Kick the ingest off without awaiting. The response stream keeps the
+  // connection alive; any throw turns into a final `error` event.
   //
-  // Note: if the client disconnects mid-stream (Ctrl-C on `papyri upload`,
-  // network drop), writer.close() throws and the ingest continues silently
-  // to completion. The data still lands consistently — D1 batches stay
-  // atomic per `_put`, and the bundles row writes last — but a client
-  // cancellation is NOT a server cancellation. If we ever need true
-  // cancellation propagation, wire an AbortController through ingestBundle
-  // and abort it from the writer's close handler.
+  // Note: if the client disconnects mid-stream, writer.close() throws and
+  // the ingest continues silently to completion. Client cancellation is NOT
+  // server cancellation.
   // Timing decoration: each event is enriched with `elapsed_s` (since the
   // stream opened) and `since_last_ms` (since the previous event) so the
   // client can render live wall-time stats. console.log inside the worker

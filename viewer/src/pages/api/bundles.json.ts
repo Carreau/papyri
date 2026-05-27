@@ -1,9 +1,6 @@
 // SSR endpoint: live list of ingested bundles.
-//
-// Queries the bundles table on every hit (cached per request via getBackends).
-// Used by the future hosted service where bundles are added / removed
-// out-of-band — and locally by `wrangler dev`, where uploads land in R2
-// during a long-running session.
+// Queries the bundles table on every hit so newly uploaded bundles appear
+// without a server restart.
 
 import type { APIRoute } from "astro";
 import { listBundlesFromDb } from "../../lib/ir-reader.ts";

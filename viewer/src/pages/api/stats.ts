@@ -13,8 +13,7 @@ import { respond } from "../../lib/api-utils.ts";
 
 export const prerender = false;
 
-// Hard-coded against the known schema (see ingest/migrations/*.sql). Keeps
-// the endpoint backend-agnostic: D1 doesn't expose sqlite_master uniformly.
+// Hard-coded against the known schema (see ingest/migrations/*.sql).
 const TABLES = ["nodes", "links", "bundles"] as const;
 
 export const GET: APIRoute = async () => {

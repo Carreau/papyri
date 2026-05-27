@@ -6,12 +6,8 @@
  * and writes its contents into the cross-link graph store via the
  * `BlobStore` + `GraphDb` abstractions.
  *
- * Two backends are supported:
- *   • Node fs + better-sqlite3 — default. The CLI and the Node-adapter
- *     viewer use this path; the constructor builds them from `ingestDir`.
- *   • Cloudflare R2 + D1 — explicit. The Workers-adapter viewer passes
- *     pre-built backends via the `backends` option so the same Ingester
- *     code runs unchanged.
+ * The default backend is Node fs + better-sqlite3, built from `ingestDir`.
+ * Pre-built backends can be injected via the `backends` option.
  *
  * What this does vs the Python version
  * -------------------------------------
@@ -40,12 +36,10 @@ import { SqliteGraphDb, type GraphDb, type BatchStmt } from "./graph-db.js";
 
 const DIGEST_SIZE = 16;
 
-// Max concurrent R2 puts during a bundle flush.  R2 has no batch-put API so
-// we parallelise the individual puts instead of serialising them.
+// Max concurrent blob puts during a bundle flush.
 const BLOB_CONCURRENCY = 100;
 
-// D1 batch calls are capped at ~1 000 statements; stay well under that limit
-// so a single large bundle does not blow the API ceiling.
+// Cap per db.batch() call to keep individual transactions bounded.
 const DB_CHUNK_SIZE = 500;
 
 // Fields that change across rebuilds without reflecting any user-visible
@@ -178,10 +172,7 @@ export interface IngestOptions {
    */
   ingestDir?: string;
   /**
-   * Pre-built async backends. Pass these in environments where the default
-   * Node fs + SQLite backends are not available — e.g. the viewer's
-   * Cloudflare Workers build, which supplies `R2BlobStore` + `D1GraphDb`
-   * built from `locals.runtime.env` bindings.
+   * Pre-built async backends. Overrides the default fs + SQLite pair.
    */
   backends?: { blobStore: BlobStore; graphDb: GraphDb };
 }
@@ -270,8 +261,7 @@ export class Ingester {
     const version = bundle.version;
     const aliases = (bundle.aliases ?? {}) as Record<string, string>;
 
-    // Wall-clock timing: ingest is dominated by R2/D1 round-trips on
-    // Workers; surface per-phase timings so we can tell where time goes.
+    // Per-phase wall-clock timings so we can tell where time goes.
     const t0 = Date.now();
     const elapsed = () => `${((Date.now() - t0) / 1000).toFixed(2)}s`;
 
@@ -291,8 +281,8 @@ export class Ingester {
     // blobs, no links to reconcile).  For a fresh bundle both subsequent
     // queries would return nothing, so we skip them and use empty
     // collections — the accumulate loop treats them the same way.
-    // For re-uploads we run two bulk D1 queries to replace the old
-    // N×(R2 HEAD + D1 SELECT) per-doc pattern.
+    // For re-uploads we run two bulk queries to replace the old
+    // per-doc SELECT + HEAD pattern.
     const tBundle = Date.now();
     const existingBundle = await this.graphDb.all(
       "SELECT 1 AS one FROM bundles WHERE module = ? AND version = ? LIMIT 1",
@@ -480,7 +470,7 @@ export class Ingester {
   // Two-phase ingest helpers (used by ingestBundle)
   // -------------------------------------------------------------------------
 
-  /** One D1 query replaces N R2 HEAD requests for existence checks. */
+  /** Bulk DB query replaces N per-doc HEAD requests for existence checks. */
   private async _fetchExistingBlobKeys(root: string, version: string): Promise<Set<string>> {
     const rows = await this.graphDb.all<{ category: string; identifier: string }>(
       "SELECT category, identifier FROM nodes WHERE package=? AND version=? AND has_blob=1",
@@ -489,7 +479,7 @@ export class Ingester {
     return new Set(rows.map((r) => `${r.category}/${r.identifier}`));
   }
 
-  /** One D1 JOIN query replaces N per-doc _getForwardRefs calls. */
+  /** One bulk JOIN query replaces N per-doc _getForwardRefs calls. */
   private async _fetchAllForwardRefsForBundle(
     root: string,
     version: string,
@@ -629,17 +619,12 @@ export class Ingester {
   // -------------------------------------------------------------------------
   // Core write — used by the directory-based ingest() path only.
   //
-  // Atomicity contract:
-  //   On SQLite (`SqliteGraphDb`) the whole `batch` runs inside one
-  //   transaction. On D1 it runs as a single `db.batch([...])` call which
-  //   is atomic per the D1 contract. Either way: all nodes + links for one
-  //   `_put` either land together or not at all.
+  // Atomicity: the whole `batch` runs inside one SQLite transaction so all
+  // nodes + links for one `_put` land together or not at all.
   //
-  //   To stay D1-compatible we never read from the DB inside `batch`: we
-  //   resolve source/dest ids inline via subqueries
-  //   (`SELECT id FROM nodes WHERE …`) so each link insert is self-contained.
-  //   D1 batches do not surface intermediate query results, so this is the
-  //   only way to chain ID-dependent writes.
+  // Source/dest ids are resolved inline via subqueries
+  // (`SELECT id FROM nodes WHERE …`) so each link insert is self-contained
+  // without intermediate reads.
   // -------------------------------------------------------------------------
 
   private async _put(

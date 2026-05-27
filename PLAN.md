@@ -785,3 +785,85 @@ in the one-time synchronous `loadSchemaFromDisk` DB-init path.)
   of the graph layer. Once the schema stabilises, consider promoting the
   shared bits into the `papyri-ingest` package and having the viewer import
   from it rather than re-implementing.
+
+## Security review follow-ups (audited 2026-05-27)
+
+A multi-agent review of the whole tree surfaced the items below. The
+path-traversal and `javascript:`/`data:` URL items were fixed in the same
+pass; the rest are recorded here as TBD so the next PR can pick them up.
+
+### Fixed in this pass
+
+- **Path traversal in the FS stores.** `FsBlobStore`/`FsRawStore` now route
+  every on-disk path through `safeJoin` (`ingest/src/fs-safe.ts`), which
+  refuses any key whose resolved path escapes the store root. This closes both
+  the ingest write vector and the unauthenticated read vector in
+  `viewer/src/pages/api/[pkg]/[ver]/raw.json.ts` (it uses the same
+  `FsBlobStore`). `papyri unpack` got the equivalent guard (`_safe_child` in
+  `pack.py`) for untrusted artifact keys.
+- **`javascript:`/`data:` URLs in Link/Image.** A shared scheme allowlist
+  (`ingest/src/url-safety.ts`, `isSafeUrl`) is enforced at three layers: the
+  renderer blanks unsafe `href`/`src` (`render-node.ts`, the guaranteed
+  defense), and both ingest (`assertSafeUrls`) and `papyri pack`
+  (`_assert_safe_urls`) reject a bundle that carries one. Pack/ingest can't be
+  assumed to have run on a given bundle, which is why the renderer sanitises
+  too.
+- Smaller correctness fixes: `tree.py` interpreted-text split
+  (`split(" <", 1)`); `node_base._invalidate` list/dict branch + error-path
+  string; dedup pre-check now has a finite HTTP timeout
+  (`_DEDUP_TIMEOUT_S`); the viewer bundle endpoint no longer echoes raw
+  backend errors to the client (logs server-side instead).
+
+### TBD — auth hardening (viewer)
+
+- **Default credentials.** `viewer/src/pages/api/auth/login.ts` falls back to
+  `admin`/`password` when `PAPYRI_USERNAME`/`PAPYRI_PASSWORD` are unset. Fail
+  closed (refuse login + warn) instead of shipping known creds.
+- **Session token is unsigned and never expires server-side.** The cookie is
+  `base64(user:timestamp)` and the middleware only checks it is *present*. Sign
+  it (HMAC with a server secret) and verify signature + embedded expiry.
+- **Constant-time comparison.** Login (`===`) and the bundle upload bearer-token
+  check (`!==`) are timing-variable; switch to `crypto.timingSafeEqual`.
+
+### TBD — upload / ingest robustness
+
+- **Streaming PUT has no timeout** (`papyri/cli/upload.py`). A finite
+  idle-read timeout needs to be balanced against large-bundle ingests that may
+  have long gaps between progress events, and the read-phase `TimeoutError`
+  must be caught alongside the existing `HTTPError`/`URLError` handlers (it is
+  not a `URLError`). Left as TBD pending a chosen value.
+- **Zip-bomb guard on upload** (`upload.py` `_load_from_zip`). `zf.read()`
+  decompresses the chosen member fully into memory with no cap. The `.papyri`
+  member is itself already gzip-compressed, so expansion is normally ~1×, but a
+  crafted zip could lie. Add a `ZipInfo.file_size` ceiling (and ideally bounded
+  chunked reads) once a sane max bundle size is picked.
+- **`assertBundle` validates shape shallowly** (`ingest/src/bundle.ts`). It
+  checks `__type`/`__tag` only, then narrows to a fully-typed `BundleNode`.
+  A tag-4070 artifact with `module`/`version` as non-strings flows into path
+  joins and DB params. Validate that those are non-empty strings and that the
+  record fields are objects.
+- **`inflateZlib` corrupt-body handling** (`ingest/src/inventory.ts`). A
+  malformed `objects.inv` body rejects the decompression stream and throws to
+  the caller, despite the "skip bad lines" comment. Wrap parse/inflate and
+  surface a clean error.
+
+### TBD — SSRF (viewer, matters for the hosted service)
+
+- **Intersphinx inventory fetch** (`viewer/src/pages/api/inventory.ts`,
+  `ingest/src/inventory.ts`). The endpoint fetches an admin-supplied
+  `inventory_url`/`base_url` with no host restriction — `isHttpUrl` permits
+  internal/link-local hosts (e.g. `http://169.254.169.254/…`). Admin-gated
+  today, so low risk, but on the multi-tenant hosted service this is a
+  metadata-endpoint SSRF vector. Block private/link-local ranges and disable
+  redirects to them before hosting.
+
+### TBD — minor
+
+- **Dead `Signature` properties** (`papyri/signature.py`). `is_generator`,
+  `is_async_generator`, `is_async_function` are unused; `is_generator` also
+  calls `inspect.isgenerator` (always false on a function object) where
+  `isgeneratorfunction` was meant. Either wire them up correctly or delete
+  them per the repo's delete-dead-code rule.
+- **`removedRefStrs` reparses keys by `/`-split** (`ingest/src/ingest.ts`).
+  Fragile if a path component ever contains `/`; keep the original `Key`
+  object in `existingRefs` instead of reparsing the string.

@@ -23,6 +23,11 @@ except PackageNotFoundError:
 
 _DEFAULT_URL = "http://localhost:4321/api/bundle"
 
+# Timeout for the dedup pre-check GET. It is a quick metadata lookup, and the
+# call fails open (any error → upload anyway), so a finite bound just stops the
+# CLI hanging forever against an unresponsive host before the upload begins.
+_DEDUP_TIMEOUT_S = 30
+
 
 def _load_from_zip(path: Path) -> tuple[bytes, Bundle]:
     """Extract and load the single ``.papyri`` artifact from a zip file.
@@ -109,7 +114,7 @@ def _bundle_already_uploaded(
         headers["Authorization"] = f"Bearer {token}"
     req = urllib.request.Request(check_url, method="GET", headers=headers)
     try:
-        with urllib.request.urlopen(req) as resp:
+        with urllib.request.urlopen(req, timeout=_DEDUP_TIMEOUT_S) as resp:
             body = json.loads(resp.read())
         return bool(body.get("exists"))
     except Exception:

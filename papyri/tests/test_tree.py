@@ -868,6 +868,16 @@ def test_named_hyperlink_angle_bracket_uses_display_text() -> None:
     assert child.value == "Show"
 
 
+def test_named_hyperlink_multiple_angle_segments_does_not_crash() -> None:
+    # Regression: a value containing more than one " <" must not raise.
+    # Previously ``text.split(" <")`` unpacked into >2 parts → ValueError,
+    # re-raised as AssertionError. With maxsplit=1 it splits on the first " <".
+    v = _make_visitor_with_external({})
+    role = InlineRole(domain=None, role=None, value="a <b> c <d>")
+    out = v.replace_InlineRole(role)  # must not raise
+    assert out
+
+
 def test_embedded_uri_autolink_produces_link() -> None:
     # `<https://example.com/>`_ — embedded URI with no display text. visit_reference
     # in ts.py synthesizes ``uri <uri>`` so replace_InlineRole turns it into a Link

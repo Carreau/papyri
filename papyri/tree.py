@@ -1061,7 +1061,7 @@ class DirectiveVisiter(TreeReplacer):
             ("\n <" in text) and text.endswith(">")
         ):
             try:
-                text, to_resolve = text.split(" <")
+                text, to_resolve = text.split(" <", 1)
                 text = text.rstrip()
             except ValueError as e:
                 raise AssertionError(directive.value) from e

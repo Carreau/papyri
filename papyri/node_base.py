@@ -188,7 +188,7 @@ def _invalidate(obj: Any, depth: int = 0) -> str | None:
                 sub = _invalidate(i, depth + 1)
                 if sub is not None:
                     return f"{k}.{ii}." + sub
-        if isinstance(item, dict):
+        elif isinstance(item, dict):
             for ii, i in item.items():
                 sub = _invalidate(i, depth + 1)
                 if sub is not None:
@@ -196,7 +196,7 @@ def _invalidate(obj: Any, depth: int = 0) -> str | None:
         else:
             sub = _invalidate(item, depth + 1)
             if sub is not None:
-                return f"{k}.{sub}." + sub
+                return f"{k}." + sub
 
     return None
 

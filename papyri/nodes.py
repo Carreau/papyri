@@ -454,6 +454,11 @@ class Directive(UnserializableNode):
     """
 
     type = "directive"
+    # Unlike the in-memory intermediates (UnprocessedDirective &c.), a Directive
+    # is a *terminal* node — nothing replaces it later — so its presence in a
+    # tree is always a bug. Make ``validate()`` reject it (see node_base) so gen
+    # fails fast instead of only at write/pack time.
+    _reject_at_validate: ClassVar[bool] = True
     name: str
     args: str | None
     options: dict[str, str]

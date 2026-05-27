@@ -160,6 +160,21 @@ def _invalidate(obj: Any, depth: int = 0) -> str | None:
     Recursively validate type anotated classes.
     """
 
+    # An unhandled ``Directive`` (the catch-all carrier gen emits when no
+    # handler is registered) has no serializable representation. Reject it here
+    # — during the per-object ``validate()`` that gen already runs inside its
+    # error-handling window — so the failure surfaces (and ``--fail-early``
+    # trips) before the whole bundle is built and packed, instead of deep in the
+    # write/pack step. We raise rather than return a string so the node's own
+    # message (naming the offending directive) reaches the user verbatim.
+    #
+    # This is keyed on ``_reject_at_validate``, not the broader
+    # ``_dont_serialise``: pure in-memory intermediates (``UnprocessedDirective``
+    # & co.) are still present in trees that ``validate()`` legitimately runs on
+    # before the directive-visiting pass replaces them, so they must pass here.
+    if getattr(obj, "_reject_at_validate", False):
+        raise NotImplementedError(obj._why_unserializable())
+
     annotations = get_type_hints(type(obj))  # type: ignore[arg-type]
     for k, v in annotations.items():
         # FIX: AttributeError: 'Text' object has no attribute 'position'

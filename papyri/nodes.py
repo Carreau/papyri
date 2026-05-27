@@ -436,15 +436,21 @@ class ListItem(Node):
     children: tuple[FlowContent | PhrasingContent | DefList | UnprocessedDirective, ...]
 
 
-@debug(4052)
-class Directive(Node):
-    """Catch-all for RST directives that gen partially handles.
+class Directive(UnserializableNode):
+    """Transient carrier for an RST directive papyri has no handler for.
 
-    ``name`` is the directive name (e.g. ``"note"``, ``"code-block"``).
-    ``args`` is the directive argument line; ``options`` holds the
-    ``:key: value`` option block; ``value`` is the raw body text;
-    ``children`` holds any parsed child nodes.  Schema is ``@debug`` —
-    well-known directives gain dedicated node types over time.
+    ``DirectiveVisiter`` emits one of these when it meets a directive name with
+    no registered handler, purely so the *name* survives long enough to be
+    reported. A ``Directive`` is deliberately **not serializable**: encoding one
+    (to CBOR or JSON) raises and names the offending directive. That forces the
+    maintainer to register at least a drop or verbatim handler for it (e.g.
+    ``papyri.directives:drop`` to discard it, or ``papyri.directives:code_handler``
+    to keep its body verbatim) before the bundle can be produced — an unhandled
+    directive can never silently leak into the IR.
+
+    ``name`` is the directive name (e.g. ``"plot"``); ``args`` is the argument
+    line; ``options`` holds the ``:key: value`` option block; ``value`` is the
+    raw body text; ``children`` holds any parsed child nodes.
     """
 
     type = "directive"
@@ -455,6 +461,16 @@ class Directive(Node):
     children: tuple[FlowContent | PhrasingContent | None, ...] = field(
         default_factory=tuple
     )
+
+    def _why_unserializable(self) -> str:
+        return (
+            f"refusing to serialize unhandled directive {self.name!r}: papyri has "
+            f"no handler registered for it, so its content has no representation "
+            f"in the IR. Register a handler for {self.name!r} in the "
+            f"[global.directives] table of your papyri config — e.g. "
+            f"{self.name!r} = 'papyri.directives:drop' to drop it, or "
+            f"'papyri.directives:code_handler' to keep the body verbatim."
+        )
 
     @classmethod
     def from_unprocessed(cls, up: UnprocessedDirective) -> Directive:

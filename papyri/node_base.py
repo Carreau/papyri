@@ -117,19 +117,23 @@ class UnserializableNode(Node):
     Base for Node subclasses that are purely in-memory intermediates and must
     never cross the gen->disk boundary. Encoding one is a bug: the gen-time
     visitor was supposed to replace it before serialization.
+
+    Both serialization paths refuse these nodes: ``cbor``/``to_json`` here
+    cover the top-level case, and the recursive ``node_serializer.serialize``
+    checks ``_dont_serialise`` for nested ones. Subclasses override
+    ``_why_unserializable`` to give a more specific reason.
     """
 
     _dont_serialise = True
 
+    def _why_unserializable(self) -> str:
+        return f"{type(self).__name__} must be rewritten before serialization"
+
     def cbor(self, encoder: Any) -> None:
-        raise NotImplementedError(
-            f"{type(self).__name__} must be rewritten before serialization"
-        )
+        raise NotImplementedError(self._why_unserializable())
 
     def to_json(self) -> bytes:
-        raise NotImplementedError(
-            f"{type(self).__name__} must be rewritten before serialization"
-        )
+        raise NotImplementedError(self._why_unserializable())
 
 
 TAG_MAP: dict[Any, int] = {}

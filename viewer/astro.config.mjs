@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import { defineConfig } from "astro/config";
 import react from "@astrojs/react";
 import node from "@astrojs/node";
@@ -18,6 +19,18 @@ import cloudflare from "@astrojs/cloudflare";
 // SSG contract, and only routes marked `prerender = false` end up in
 // the adapter's worker bundle. See `viewer/PLAN.md` § M9.1.
 const ADAPTER = process.env.PAPYRI_ADAPTER ?? "node";
+
+// Bake the git commit hash at build time so the admin panel can display it.
+// Falls back to PAPYRI_COMMIT env var (useful when git is unavailable in CI),
+// then to "unknown".
+let PAPYRI_BUILD_COMMIT = process.env.PAPYRI_COMMIT ?? "unknown";
+try {
+  PAPYRI_BUILD_COMMIT = execSync("git rev-parse HEAD", { stdio: ["pipe", "pipe", "ignore"] })
+    .toString()
+    .trim();
+} catch {
+  // git not available (e.g. Docker build without .git); keep env var fallback
+}
 
 // PAPYRI_SITE sets the canonical origin (e.g. "https://docs.example.com").
 // Astro uses this for CSRF origin checks (security.checkOrigin) and canonical
@@ -53,10 +66,21 @@ const adapter =
 // Workers runtime; under the Node adapter it must be marked external so
 // rollup leaves the (dynamic, runtime-guarded) import alone instead of
 // trying to bundle it. The Cloudflare adapter knows about it natively.
+// Build-time constants injected into import.meta.env for both adapters.
+// These are statically replaced by Vite at bundle time, so they work inside
+// the Cloudflare Workers bundle where process.env is unavailable at runtime.
+const buildDefine = {
+  "import.meta.env.PAPYRI_BUILD_COMMIT": JSON.stringify(PAPYRI_BUILD_COMMIT),
+  "import.meta.env.PAPYRI_BUILD_ADAPTER": JSON.stringify(ADAPTER),
+};
+
 const viteCfg =
   ADAPTER === "cloudflare"
-    ? {}
-    : { build: { rollupOptions: { external: ["cloudflare:workers"] } } };
+    ? { define: buildDefine }
+    : {
+        build: { rollupOptions: { external: ["cloudflare:workers"] } },
+        define: buildDefine,
+      };
 
 export default defineConfig({
   output: "server",

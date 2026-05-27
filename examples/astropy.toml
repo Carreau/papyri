@@ -23,3 +23,9 @@ exclude = [
                         "astropy.extern.configobj.validate:Validator.check",
 ]
 submodules = [ "io", "io.fits",]
+
+[global.directives]
+# astropy docstrings use a capitalised ``.. Note::``; papyri's built-in
+# handler is registered under the lowercase ``note`` only, so the capitalised
+# spelling has no handler. Keep its body verbatim as a code block.
+Note = 'papyri.directives:code_handler'

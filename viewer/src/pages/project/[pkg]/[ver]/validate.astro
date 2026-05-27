@@ -11,6 +11,7 @@ import {
   type DetailedXref,
 } from "../../../../lib/xref.ts";
 import { walkBundle, type PageRef } from "../../../../lib/bundle-walk.ts";
+import { linkForBundle } from "../../../../lib/links.ts";
 
 const { pkg, ver } = Astro.params;
 if (!pkg || !ver) return new Response(null, { status: 404 });
@@ -87,7 +88,7 @@ const totalUnresolved = unresolvedPages.reduce((s, p) => s + p.items.length, 0);
   actualVer={actualVer}
   title={`Outgoing ref diagnostics — ${pkg} ${ver} — Papyri viewer`}
 >
-  <p class="crumb"><a href={`/project/${pkg}/${ver}/`}>&larr; {pkg} {ver}</a></p>
+  <p class="crumb"><a href={linkForBundle(pkg, ver)}>&larr; {pkg} {ver}</a></p>
   <h1>Outgoing reference diagnostics</h1>
 
   <h2 class="diag-section">Dangling local references</h2>

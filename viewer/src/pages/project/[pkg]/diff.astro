@@ -15,7 +15,7 @@
 import { listIngestedPackages } from "../../../lib/ir-reader.ts";
 import { listDigests } from "../../../lib/graph.ts";
 import { getBackends } from "../../../lib/backends.ts";
-import { linkForDoc, linkForExample, linkForQualname } from "../../../lib/links.ts";
+import { linkForDoc, linkForExample, linkForPkg, linkForQualname } from "../../../lib/links.ts";
 import BaseLayout from "../../../layouts/BaseLayout.astro";
 
 export const prerender = false;
@@ -101,7 +101,7 @@ if (haveBoth && fromVer && toVer) {
 
 <BaseLayout title={`${pkg} diff — Papyri viewer`}>
   <p class="crumb">
-    <a href={`/project/${pkg}/`}>&larr; {pkg}</a>
+    <a href={linkForPkg(pkg)}>&larr; {pkg}</a>
   </p>
   <h1>
     {pkg}

@@ -2,7 +2,7 @@
 import { loadBundleNav } from "../../../../lib/nav.ts";
 import { resolveVersion } from "../../../../lib/ir-reader.ts";
 import { getBackends } from "../../../../lib/backends.ts";
-import { linkForQualname } from "../../../../lib/links.ts";
+import { linkForBackrefValidate, linkForQualname, linkForValidate } from "../../../../lib/links.ts";
 import { countBrokenBackrefs } from "../../../../lib/graph.ts";
 import BundleLayout from "../../../../layouts/BundleLayout.astro";
 
@@ -72,10 +72,10 @@ const apiHref = nav.qualnames.includes(pkg)
   </div>
 
   <div class="diag-links">
-    <a class="diag-link" href={`/project/${pkg}/${ver}/validate`}> Outgoing ref diagnostics </a>
+    <a class="diag-link" href={linkForValidate(pkg, ver)}> Outgoing ref diagnostics </a>
     <a
       class:list={["diag-link", brokenBackrefCount > 0 && "diag-link-warn"]}
-      href={`/project/${pkg}/${ver}/backref-validate`}
+      href={linkForBackrefValidate(pkg, ver)}
     >
       {
         brokenBackrefCount > 0

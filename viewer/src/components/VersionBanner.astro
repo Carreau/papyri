@@ -3,6 +3,7 @@
 // Dismissible via a button; dismissal state lives in sessionStorage so the
 // banner reappears on the next browser session.
 import type { VersionStatus } from "../lib/version-utils.ts";
+import { linkForBundle } from "../lib/links.ts";
 
 interface Props {
   pkg: string;
@@ -34,7 +35,7 @@ if (status.kind === "old") {
   message = `You are viewing version ${ver}.`;
 }
 
-const latestHref = latestVersion ? (latestHrefProp ?? `/project/${pkg}/${latestVersion}/`) : null;
+const latestHref = latestVersion ? (latestHrefProp ?? linkForBundle(pkg, latestVersion)) : null;
 const bannerId = `version-banner-${pkg}-${ver}`;
 ---
 

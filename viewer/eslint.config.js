@@ -45,6 +45,23 @@ export default [
     },
   },
   {
+    // Prevent inline /project/… URL construction — use links.ts helpers instead.
+    // The links.ts file itself is excluded because it IS the source of truth.
+    files: ["**/*.{ts,tsx,astro}"],
+    ignores: ["**/lib/links.ts"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "TemplateLiteral:has(TemplateElement[value.raw=/^\\/project\\//])",
+          message:
+            "Build viewer URLs via links.ts helpers (linkForBundle, linkForQualname, …), not inline template literals.",
+        },
+      ],
+    },
+  },
+  {
     files: ["**/*.astro"],
     languageOptions: {
       parser: astroParser,

@@ -3,6 +3,7 @@ import BundleLayout from "../../../../../layouts/BundleLayout.astro";
 import { collectBundleImages } from "../../../../../lib/image-index.ts";
 import { resolveVersion } from "../../../../../lib/ir-reader.ts";
 import { getBackends } from "../../../../../lib/backends.ts";
+import { linkForBundle } from "../../../../../lib/links.ts";
 
 export const prerender = false;
 
@@ -21,7 +22,7 @@ const entries = await collectBundleImages(graphDb, blobStore, pkg, actualVer, ve
   actualVer={actualVer}
   title={`Images — ${pkg} ${ver} — Papyri viewer`}
 >
-  <p class="crumb"><a href={`/project/${pkg}/${ver}/`}>&larr; {pkg} {ver}</a></p>
+  <p class="crumb"><a href={linkForBundle(pkg, ver)}>&larr; {pkg} {ver}</a></p>
   <h1>Images</h1>
   <p class="lede">
     {entries.length} image{entries.length !== 1 ? "s" : ""}

@@ -12,7 +12,7 @@ import { resolveVersion, listIngestedPackages } from "../lib/ir-reader.ts";
 import { getBackends } from "../lib/backends.ts";
 import { getVersionStatus, equivalentLatestHref } from "../lib/version-utils.ts";
 import { getVersionDigests } from "../lib/graph.ts";
-import { linkForQualname, linkForDoc, linkForExample } from "../lib/links.ts";
+import { linkForBundle, linkForQualname, linkForDoc, linkForExample } from "../lib/links.ts";
 import "../styles/global.css";
 
 interface Props {
@@ -88,7 +88,7 @@ const switcherHrefs: Record<string, string> = Object.fromEntries(
         ? linkForDoc(pkg, v, rawPath)
         : rawKind === "examples" && rawPath
           ? linkForExample(pkg, v, rawPath)
-          : `/project/${pkg}/${v}/`,
+          : linkForBundle(pkg, v),
   ])
 );
 

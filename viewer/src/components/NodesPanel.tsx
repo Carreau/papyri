@@ -9,6 +9,7 @@
 
 import { useEffect, useState } from "react";
 import { DEBUG_TYPE_NAMES, IR_TYPE_NAMES, slugFromType } from "../lib/ir-types.ts";
+import { linkForNodeType, linkForNodes, VIEWER_ROUTES } from "../lib/links.ts";
 
 interface PageRef {
   label: string;
@@ -61,7 +62,9 @@ export default function NodesPanel({ pkg, ver, nodetype }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const apiPath = pkg && ver ? `/api/${pkg}/${ver}/nodes.json` : `/api/nodes.json`;
-  const basePath = pkg && ver ? `/project/${pkg}/${ver}/nodes` : `/nodes`;
+  const allNodesHref = pkg && ver ? linkForNodes(pkg, ver) : VIEWER_ROUTES.globalNodes;
+  const nodeTypeHref = (slug: string) =>
+    pkg && ver ? linkForNodeType(pkg, ver, slug) : (`/nodes/${slug}/` as const);
 
   useEffect(() => {
     const u = new URL(apiPath, window.location.origin);
@@ -87,7 +90,7 @@ export default function NodesPanel({ pkg, ver, nodetype }: Props) {
     <div>
       <nav className="node-type-nav" aria-label="Filter by node type">
         <a
-          href={`${basePath}/`}
+          href={allNodesHref}
           className={"node-type-nav-item" + (!nodetype ? " active" : "")}
           aria-current={!nodetype ? "page" : undefined}
         >
@@ -99,7 +102,7 @@ export default function NodesPanel({ pkg, ver, nodetype }: Props) {
           return (
             <a
               key={slug}
-              href={`${basePath}/${slug}/`}
+              href={nodeTypeHref(slug)}
               className={
                 "node-type-nav-item" +
                 (nodetype === slug ? " active" : "") +

@@ -5,7 +5,7 @@ import BundleLayout from "../../../../layouts/BundleLayout.astro";
 import { resolveVersion } from "../../../../lib/ir-reader.ts";
 import { getBackends } from "../../../../lib/backends.ts";
 import { getBrokenBackrefs, type BrokenBackref } from "../../../../lib/graph.ts";
-import { linkForRef } from "../../../../lib/links.ts";
+import { linkForBundle, linkForRef } from "../../../../lib/links.ts";
 
 const { pkg, ver } = Astro.params;
 if (!pkg || !ver) return new Response(null, { status: 404 });
@@ -44,7 +44,7 @@ groups.sort((a, b) => `${a.srcPkg}/${a.srcVer}`.localeCompare(`${b.srcPkg}/${b.s
   actualVer={actualVer}
   title={`Broken incoming refs — ${pkg} ${ver} — Papyri viewer`}
 >
-  <p class="crumb"><a href={`/project/${pkg}/${ver}/`}>&larr; {pkg} {ver}</a></p>
+  <p class="crumb"><a href={linkForBundle(pkg, ver)}>&larr; {pkg} {ver}</a></p>
   <h1>Broken incoming references</h1>
   <p class="lede">
     Incoming cross-references that point at identifiers missing from{" "}
@@ -68,7 +68,7 @@ groups.sort((a, b) => `${a.srcPkg}/${a.srcVer}`.localeCompare(`${b.srcPkg}/${b.s
           {groups.map(({ srcPkg, srcVer, items }) => (
             <section class="diag-source">
               <h2>
-                <a href={`/project/${srcPkg}/${srcVer}/`}>
+                <a href={linkForBundle(srcPkg, srcVer)}>
                   {srcPkg} {srcVer}
                 </a>
               </h2>

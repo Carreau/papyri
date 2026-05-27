@@ -5,6 +5,7 @@ import { listIngestedPackages, type IngestedPackage } from "../../../lib/ir-read
 import { loadBundleNav } from "../../../lib/nav.ts";
 import { getBackends } from "../../../lib/backends.ts";
 import BaseLayout from "../../../layouts/BaseLayout.astro";
+import { linkForBundle, linkForDiff } from "../../../lib/links.ts";
 
 export const prerender = false;
 
@@ -176,8 +177,8 @@ const defaultTo = entry.versions[0]!;
               rows.map((r) => {
                 const isLatest = r.version === entry.latest;
                 const browseHref = isLatest
-                  ? `/project/${pkg}/latest/`
-                  : `/project/${pkg}/${r.version}/`;
+                  ? linkForBundle(pkg, "latest")
+                  : linkForBundle(pkg, r.version);
                 return (
                   <tr>
                     <td>
@@ -204,7 +205,7 @@ const defaultTo = entry.versions[0]!;
         entry.versions.length >= 2 ? (
           <section class="diff-picker">
             <h2>Compare versions</h2>
-            <form method="get" action={`/project/${pkg}/diff`}>
+            <form method="get" action={linkForDiff(pkg)}>
               <label>
                 From
                 <select name="from">
@@ -239,7 +240,7 @@ const defaultTo = entry.versions[0]!;
         <div class="info-row">
           <span class="info-label">Version</span>
           <span class="info-value">
-            <a href={`/project/${pkg}/${entry.latest}/`}>{entry.latest}</a>
+            <a href={linkForBundle(pkg, entry.latest)}>{entry.latest}</a>
           </span>
         </div>
         {

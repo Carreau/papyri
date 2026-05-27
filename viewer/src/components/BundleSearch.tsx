@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactElement } from "react";
-import { linkForQualname } from "../lib/links.ts";
+import { linkForQualname, linkForSearchJson } from "../lib/links.ts";
 import { filterQualnames } from "../lib/search.ts";
 import { qualnameLabel, qualnameParent } from "../lib/qualname.ts";
 
@@ -32,7 +32,7 @@ export default function BundleSearch({ pkg, ver }: Props): ReactElement {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`/project/${pkg}/${ver}/search.json`);
+        const res = await fetch(linkForSearchJson(pkg, ver));
         if (!res.ok) {
           throw new Error(`HTTP ${res.status}`);
         }

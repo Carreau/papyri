@@ -12,7 +12,7 @@ import { buildDocPageView } from "../../../../../lib/doc-page.ts";
 import { getBackends } from "../../../../../lib/backends.ts";
 import { buildXrefResolver } from "../../../../../lib/xref.ts";
 import { loadBundleNav, flattenToc } from "../../../../../lib/nav.ts";
-import { linkForDoc } from "../../../../../lib/links.ts";
+import { linkForBundle, linkForDoc } from "../../../../../lib/links.ts";
 import IrNode from "../../../../../components/IrNode.astro";
 import BundleLayout from "../../../../../layouts/BundleLayout.astro";
 
@@ -81,7 +81,7 @@ function sectionHasTitle(s: SectionNode): boolean {
   hasToc={view.tocEntries.length >= 2}
 >
   <p class="crumb">
-    <a href="/">bundles</a> / <a href={`/project/${pkg}/${ver}/`}>{pkg} {ver}</a> /
+    <a href="/">bundles</a> / <a href={linkForBundle(pkg, ver)}>{pkg} {ver}</a> /
     <span>docs</span>
   </p>
 

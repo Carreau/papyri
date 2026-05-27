@@ -7,9 +7,11 @@ import SiteHeader from "../components/SiteHeader.astro";
 import BundleSidebar from "../components/BundleSidebar.astro";
 import VersionBanner from "../components/VersionBanner.astro";
 import { loadBundleNav } from "../lib/nav.ts";
-import { resolveVersion } from "../lib/ir-reader.ts";
+import { resolveVersion, listIngestedPackages } from "../lib/ir-reader.ts";
 import { getBackends } from "../lib/backends.ts";
 import { getVersionStatus, equivalentLatestHref } from "../lib/version-utils.ts";
+import { getVersionDigests } from "../lib/graph.ts";
+import { linkForQualname, linkForDoc, linkForExample } from "../lib/links.ts";
 import "../styles/global.css";
 
 interface Props {
@@ -47,10 +49,47 @@ const rawJsonHref =
     : null;
 const { blobStore, graphDb } = await getBackends();
 const actualVer = propActualVer ?? (await resolveVersion(graphDb, pkg, ver)) ?? ver;
-const [nav, versionStatus] = await Promise.all([
+
+// Fetch all versions for the package plus, for single-blob pages, the
+// per-identifier content digests used to group identical versions.
+const digestCategory = rawKind === "module" ? "module" : rawKind === "docs" ? "docs" : null;
+const [nav, versionStatus, allPkgs, digestMap] = await Promise.all([
   loadBundleNav(blobStore, pkg, actualVer, ver),
   getVersionStatus(graphDb, pkg, actualVer),
+  listIngestedPackages(graphDb),
+  digestCategory && rawPath
+    ? getVersionDigests(graphDb, pkg, digestCategory, rawPath)
+    : Promise.resolve(new Map<string, string>()),
 ]);
+
+// All ingested versions for this package, sorted oldest → newest.
+// listIngestedPackages returns them latest-first, so reverse.
+const pkgVersions = [...(allPkgs.find((p) => p.pkg === pkg)?.versions ?? [actualVer])].reverse();
+
+// Build the switcher version list: every package version with a content
+// group key. Pages with digest data use the BLAKE2b hex as the group so
+// identical versions cluster; other pages (and versions missing this page)
+// fall back to the version string itself (each a singleton group).
+const switcherVersions = pkgVersions.map((v) => ({
+  v,
+  group: digestMap.get(v) ?? v,
+}));
+
+// Per-version navigation href. For single-blob pages, go to the same page
+// in that version; for everything else (bundle index, search, …) go to the
+// bundle root in that version.
+const switcherHrefs: Record<string, string> = Object.fromEntries(
+  pkgVersions.map((v) => [
+    v,
+    rawKind === "module" && rawPath
+      ? linkForQualname(pkg, v, rawPath)
+      : rawKind === "docs" && rawPath
+        ? linkForDoc(pkg, v, rawPath)
+        : rawKind === "examples" && rawPath
+          ? linkForExample(pkg, v, rawPath)
+          : `/project/${pkg}/${v}/`,
+  ])
+);
 
 // When browsing an older/dev/pre version, point "Go to latest" at the same
 // page in the latest version (falling back to the bundle root inside the
@@ -115,6 +154,9 @@ if (versionStatus.kind !== "latest" && versionStatus.latestVersion) {
         activeQualname={activeQualname}
         activeDocPath={activeDocPath}
         activeExamplePath={activeExamplePath}
+        switcherVersions={switcherVersions}
+        switcherCurrent={actualVer}
+        switcherHrefs={switcherHrefs}
       />
       <main class="bundle-main">
         {

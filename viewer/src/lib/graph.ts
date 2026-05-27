@@ -180,6 +180,34 @@ export async function getBackrefs(graphDb: GraphDb, target: RefTuple): Promise<R
 }
 
 /**
+ * Map of `version → digest hex` for all blob-backed nodes of a given
+ * (package, category, identifier) across every ingested version. Used by
+ * the DocSwitcher to group versions by identical content.
+ */
+export async function getVersionDigests(
+  graphDb: GraphDb,
+  pkg: string,
+  category: string,
+  identifier: string
+): Promise<Map<string, string>> {
+  const rows = await graphDb.all<{ version: string; digest: Uint8Array | null }>(
+    "SELECT version, digest FROM nodes " +
+      "WHERE has_blob=1 AND package=? AND category=? AND identifier=?",
+    [pkg, category, identifier]
+  );
+  const out = new Map<string, string>();
+  for (const r of rows) {
+    if (!r.digest) continue;
+    const bytes =
+      r.digest instanceof Uint8Array ? r.digest : new Uint8Array(r.digest as ArrayLike<number>);
+    let hex = "";
+    for (const b of bytes) hex += b.toString(16).padStart(2, "0");
+    out.set(r.version, hex);
+  }
+  return out;
+}
+
+/**
  * Map of `identifier → digest hex` for all blob-backed nodes of a given
  * (package, version, category). Digests are 16-byte BLAKE2b sums of the
  * raw blob bytes (see `Ingester._digest_blob`); we hex-encode here so

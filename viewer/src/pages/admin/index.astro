@@ -89,6 +89,32 @@ if (probePath) {
     <h1>Admin</h1>
 
     <section class="admin-section">
+      <h2>Deployment <span class="admin-debug-tag">debug</span></h2>
+      <table class="admin-stats-table admin-deploy-table">
+        <tbody>
+          <tr>
+            <td>PAPYRI_SITE</td>
+            <td><code>{Astro.site?.href ?? <em class="admin-unset">(not set)</em>}</code></td>
+          </tr>
+          <tr>
+            <td>Request origin</td>
+            <td><code>{Astro.url.origin}</code></td>
+          </tr>
+          <tr>
+            <td>Adapter</td>
+            <td><code>{import.meta.env.PAPYRI_BUILD_ADAPTER}</code></td>
+          </tr>
+          <tr>
+            <td>Build commit</td>
+            <td>
+              <code class="admin-commit">{import.meta.env.PAPYRI_BUILD_COMMIT}</code>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="admin-section">
       <h2>Raw archive</h2>
       {
         rawEntries.length === 0 ? (
@@ -310,6 +336,26 @@ if (probePath) {
   }
 
   .admin-empty {
+    color: var(--color-muted, #888);
+  }
+
+  .admin-deploy-table td:first-child {
+    color: var(--color-muted, #666);
+    font-size: 0.82rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    width: 1%;
+  }
+
+  .admin-commit {
+    font-size: 0.8rem;
+    word-break: break-all;
+  }
+
+  .admin-unset {
+    font-style: italic;
     color: var(--color-muted, #888);
   }
 

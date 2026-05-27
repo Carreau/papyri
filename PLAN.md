@@ -682,12 +682,23 @@ directives.)
   (note / warning / tip / seealso / …). Look at
   https://sphinx-immaterial.readthedocs.io/en/latest/admonitions.html for
   per-kind color tokens and icons to model richer admonition styling on.
-- **Auth is intentional but minimal.** `middleware.ts` gates everything
-  except `/login`, `/api/auth/`, `/api/bundle` behind a session cookie, and
-  credentials come from `PAPYRI_USERNAME` / `PAPYRI_PASSWORD` env vars
-  (see `api/auth/login.ts`). This is the v0 deploy gate and should stay,
-  but the hardcoded-single-user model is not the long-term answer for a
-  multi-tenant hosted service. Track when M9 / hosting design firms up.
+- **Auth is intentional but minimal.** `middleware.ts` uses a two-tier model:
+  - *Always public*: `/login`, `/api/auth/`, `/api/bundle` (upload endpoint uses
+    its own bearer-token check).
+  - *Admin-only* (requires session): `/admin`, `/nodes`, `/ir-stats`, and their
+    backing API endpoints (`/api/nodes.json`, `/api/ir-stats.json`, `/api/clear`,
+    `/api/clear-raw`, `/api/reingest`, `/api/inventory`, `/api/stats`). These
+    are gated because they are computationally expensive (full corpus walks) or
+    destructive. Unauthenticated page requests redirect to `/login`; API
+    requests get a JSON 403.
+  - *Guest-accessible*: everything else — bundle index, all qualname/doc/example
+    pages, text search, assets. Guests can browse documentation without an
+    account.
+
+  Credentials come from `PAPYRI_USERNAME` / `PAPYRI_PASSWORD` env vars
+  (see `api/auth/login.ts`). The hardcoded-single-user model is not the
+  long-term answer for a multi-tenant hosted service. Track when M9 / hosting
+  design firms up.
 
 ### Cross-cutting
 

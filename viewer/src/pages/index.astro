@@ -4,11 +4,14 @@ import { getBackends } from "../lib/backends.ts";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import BundleCard from "../components/BundleCard.astro";
 import BundleGridSearch from "../components/BundleGridSearch.tsx";
+import { isAuthenticated } from "../lib/auth.ts";
 
 export const prerender = false;
 
 const { graphDb } = await getBackends();
 const packages = await listIngestedPackages(graphDb);
+
+const authenticated = isAuthenticated(Astro);
 
 const bundlesForFilter = packages.map((p) => ({
   pkg: p.pkg,
@@ -19,10 +22,15 @@ const bundlesForFilter = packages.map((p) => ({
 <BaseLayout title="Papyri viewer">
   <h1>Papyri viewer</h1>
   <p class="lede">
-    {packages.length} package{packages.length !== 1 ? "s" : ""} ingested. Browse <a href="/nodes/"
-      >all nodes</a
-    >, <a href="/ir-stats/">IR statistics</a>, or <a href="/text-search/">search text</a> across every
-    bundle.
+    {packages.length} package{packages.length !== 1 ? "s" : ""} ingested.{" "}
+    {
+      authenticated && (
+        <>
+          Browse <a href="/nodes/">all nodes</a>, <a href="/ir-stats/">IR statistics</a>, or{" "}
+        </>
+      )
+    }
+    <a href="/text-search/">Search text</a> across every bundle.
   </p>
 
   {

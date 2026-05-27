@@ -25,6 +25,10 @@ get_ipython = 'IPython:get_ipython'
 ipython   = 'papyri.directives:code_handler'
 automodule   = 'papyri.directives:warn'
 automethod   = 'papyri.directives:warn'
+# ``.. inheritance-diagram::`` (sphinx.ext.inheritance_diagram) renders a
+# Graphviz class-hierarchy image at Sphinx build time — meaningless in the IR,
+# so drop it.
+inheritance-diagram = 'papyri.directives:drop'
 
 [meta]
 github_slug = 'IPython/IPython'

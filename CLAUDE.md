@@ -356,3 +356,6 @@ See `viewer/PLAN.md` for the detailed milestone tracker.
 - Update `PLAN.md` when you complete an open work item or discover a new
   constraint. Treat `PLAN.md` as a living document.
 - Commit messages: imperative mood, explain *why*.
+- PR descriptions: be concise. Two to four bullet points covering what
+  changed and why. Do not describe how you verified the change — that is
+  CI's job. No "I ran X and saw Y" narratives.

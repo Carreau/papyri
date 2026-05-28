@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { isSecureRequest } from "../../../lib/surface.ts";
+import { isSecureRequest } from "../../../../lib/surface.ts";
 
 export const POST: APIRoute = async ({ request }) => {
   // Set-Cookie must be set directly on the Response — relying on Astro's

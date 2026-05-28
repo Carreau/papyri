@@ -16,7 +16,7 @@ export default function ClearGraphstoreButton({ rawCount }: Props) {
     setRunning(true);
     setResult(null);
     try {
-      const resp = await fetch("/api/clear", { method: "POST" });
+      const resp = await fetch("/api/admin/clear", { method: "POST" });
       const body = (await resp.json()) as {
         ok: boolean;
         deletedBlobs?: number;

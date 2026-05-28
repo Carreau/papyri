@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { isSecureRequest } from "../../../lib/surface.ts";
+import { isSecureRequest } from "../../../../lib/surface.ts";
 
 const PAPYRI_USERNAME = process.env.PAPYRI_USERNAME || "admin";
 const PAPYRI_PASSWORD = process.env.PAPYRI_PASSWORD || "password";

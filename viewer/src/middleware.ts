@@ -2,10 +2,14 @@ import { defineMiddleware } from "astro:middleware";
 import { decideRoute, getSurface, splitEnabled } from "./lib/surface.ts";
 
 // Two-domain split:
-//   - "admin" surface owns /admin, /nodes, /ir-stats, /login, /api/auth/*,
-//     /api/bundle, and all admin /api/* endpoints. Mutating + authenticated.
-//   - "docs" surface owns everything else (bundle index, /project/**, the
-//     read-only search/text-search/health/[pkg]/[ver] APIs). Read-only.
+//   - "admin" surface owns everything under /admin/* (pages: dashboard,
+//     login, /admin/nodes, /admin/ir-stats) and /api/admin/* (auth, the
+//     upload endpoint, reingest, clear, inventory, stats, the global
+//     nodes/ir-stats JSON). Mutating + authenticated.
+//   - "docs" surface owns everything else (bundle index, /project/**,
+//     /text-search/, and the read-only /api/* endpoints — bundles.json,
+//     search.json, text-search.json, health.json, /api/[pkg]/[ver]/*).
+//     Read-only.
 //
 // When PAPYRI_DOCS_HOST / PAPYRI_ADMIN_HOST are unset the split is off:
 // every host serves everything and the behaviour matches the pre-split

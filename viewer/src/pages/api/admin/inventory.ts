@@ -6,13 +6,13 @@
 // then resolves otherwise-unresolved cross-package refs to real external URLs
 // at render time (see viewer/src/lib/xref.ts).
 //
-// POST /api/inventory
+// POST /api/admin/inventory
 //   body: { "name": "numpy", "base_url": "https://numpy.org/doc/stable/",
 //           "inventory_url"?: "<url to objects.inv>" }
 //   Fetches + parses objects.inv, replaces the project's stored objects.
 //   Response: { ok, project, version, count }.
 //
-// GET /api/inventory
+// GET /api/admin/inventory
 //   Lists registered external projects with object counts.
 //
 // Auth: an admin action — authorized by the session-cookie middleware (the
@@ -21,8 +21,8 @@
 
 import type { APIRoute } from "astro";
 import { parseObjectsInv, registerProject, storeInventory, unloadProject } from "papyri-ingest";
-import { getBackends } from "../../lib/backends.ts";
-import { respond } from "../../lib/api-utils.ts";
+import { getBackends } from "../../../lib/backends.ts";
+import { respond } from "../../../lib/api-utils.ts";
 
 export const prerender = false;
 
@@ -119,7 +119,7 @@ export const POST: APIRoute = async ({ request }) => {
   return respond({ ok: true, project: name, version: parsed.version, count });
 };
 
-// DELETE /api/inventory
+// DELETE /api/admin/inventory
 //   body: { "name": "numpy", "objects_only"?: true }
 //   Default: drops the project and all its objects. With objects_only=true,
 //   *unloads* — clears the objects but keeps the (name, base_url) row so it can

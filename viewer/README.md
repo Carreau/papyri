@@ -85,11 +85,11 @@ pnpm serve
 
 SSR endpoints:
 
-| Method | Route                       | What it does                                       |
-| ------ | --------------------------- | -------------------------------------------------- |
-| `GET`  | `/api/bundles.json`         | Live list of ingested bundles, read per request.   |
-| `GET`  | `/api/search.json?q=<term>` | Cross-bundle substring search over qualnames.      |
-| `PUT`  | `/api/bundle`               | Receive a gen bundle, ingest it, update the graph. |
+| Method | Route                       | Surface | What it does                                       |
+| ------ | --------------------------- | ------- | -------------------------------------------------- |
+| `GET`  | `/api/bundles.json`         | docs    | Live list of ingested bundles, read per request.   |
+| `GET`  | `/api/search.json?q=<term>` | docs    | Cross-bundle substring search over qualnames.      |
+| `PUT`  | `/api/admin/bundle`         | admin   | Receive a gen bundle, ingest it, update the graph. |
 
 These are the designated shock absorber for future dynamic behaviour
 (global search, on-the-fly bundle swaps, the hosted multi-tenant
@@ -99,7 +99,7 @@ read live state handle requests at runtime.
 
 ## Uploading a bundle
 
-The `PUT /api/bundle` endpoint receives a packed `.papyri` artifact, runs
+The `PUT /api/admin/bundle` endpoint receives a packed `.papyri` artifact, runs
 the full ingest pipeline, and updates the cross-link graph — so cross-refs and back-refs
 work immediately without restarting the server. This is the canonical
 ingest entry point; the Python side ships bundles to it via
@@ -125,7 +125,7 @@ papyri upload ~/.papyri/data/papyri_<version>/
 
 `papyri upload` (defined in `papyri/cli/upload.py`) tars the bundle
 directory and PUTs it to the endpoint. It defaults to the local
-viewer (`http://localhost:4321/api/bundle`); point it elsewhere with
+viewer (`http://localhost:4321/api/admin/bundle`); point it elsewhere with
 `--url`. Multiple bundle paths can be passed in a single invocation.
 
 ### Response
@@ -166,7 +166,7 @@ viewer (`http://localhost:4321/api/bundle`); point it elsewhere with
 
 The viewer can serve its read-only docs surface (`/`,
 `/project/<pkg>/<ver>/...`) and its mutating admin surface (`/admin`,
-`/login`, `/api/bundle`, …) under different hostnames so a
+`/admin/login`, `/api/admin/bundle`, …) under different hostnames so a
 bundle-injected XSS payload on a docs page cannot reach the admin
 session cookie. Set `PAPYRI_DOCS_HOST` and `PAPYRI_ADMIN_HOST` and the
 middleware in `src/middleware.ts` 404s any cross-surface path. See

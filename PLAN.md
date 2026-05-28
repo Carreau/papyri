@@ -23,7 +23,7 @@ service ingests many and serves them from one place.
 - **`papyri gen`**: run per project, by each library maintainer in their own
   CI or build environment. Produces a self-contained DocBundle on disk.
 - **`papyri upload`**: ships the bundle to a viewer instance's
-  `/api/bundle` endpoint, which runs the TypeScript ingest pipeline
+  `/api/admin/bundle` endpoint, which runs the TypeScript ingest pipeline
   server-side to wire bundles into the cross-linked graph.
 - **`viewer/`**: TypeScript web renderer. Works locally for development and
   is being built with the centralized service in mind — it is the intended
@@ -50,7 +50,7 @@ The DocBundle (the `.papyri.gz` artifact produced by `papyri gen` and
 archived verbatim in the `_raw/` zone — see "Raw bundle archive" below) is
 the **only** authoritative IR. Everything the viewer's graphstore + blob
 store contains is a derived projection of those raw bundles, rebuildable at
-any time via `POST /api/reingest`.
+any time via `POST /api/admin/reingest`.
 
 Consequence: **what ingest writes into the graphstore is not required to be
 the IR.** Ingest may freely denormalize, precompute, rewrite, resolve refs
@@ -133,7 +133,7 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
     write contention matters.
   - **Re-ingest semantics.** Today removing a bundle means deleting from
     `nodes` (and `links` cascades). Per-bundle tables make
-    `POST /api/reingest` and bundle eviction trivially atomic per bundle
+    `POST /api/admin/reingest` and bundle eviction trivially atomic per bundle
     — drop the table.
   - **Wildcard-version stubs.** `getBackrefs` already matches
     `version IN ('?','*')` for cross-package refs whose target version
@@ -303,7 +303,7 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
 - **External (intersphinx) linking — landed.** The viewer can now resolve a
   cross-package `RefInfo` that points at a non-papyri project (numpy, the
   stdlib, …) to a real external URL. An admin registers a project by pointing
-  `POST /api/inventory` at its Sphinx `objects.inv`; the parser lives in
+  `POST /api/admin/inventory` at its Sphinx `objects.inv`; the parser lives in
   `ingest/src/inventory.ts`, the rows are stored via the
   `0001_external_inventory.sql` migration, and `resolveExternalRefs`
   (`viewer/src/lib/xref.ts`) consults them at render time for refs the local
@@ -341,7 +341,7 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   or `SubstitutionRef` nodes. Non-`replace::` substitution types (image,
   unicode) are warned and dropped; support can be added per demand.
 - **Separate domains/processes for upload, admin, and user surfaces.**
-  In a hosted deployment the upload endpoint (`POST /api/bundle`), any admin
+  In a hosted deployment the upload endpoint (`POST /api/admin/bundle`), any admin
   panel, and any per-user management UI should run as isolated processes on
   separate subdomains. Keeping them isolated limits blast
   radius: a vulnerability in the upload path cannot reach admin state, and
@@ -353,7 +353,7 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   turns on host-based gating in `viewer/src/middleware.ts` (admin routes
   return 404 on the docs host and vice versa); the admin session cookie
   stays host-only so a bundle-injected XSS on the docs origin cannot
-  reach it. Upload (`PUT /api/bundle`) is on the admin host; the docs
+  reach it. Upload (`PUT /api/admin/bundle`) is on the admin host; the docs
   host has zero mutating endpoints. Remaining: split into two build /
   process units, carve `upload.` out to its own host, and a per-user
   layer when multi-tenant design firms up.
@@ -371,7 +371,7 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   *Partially landed:* `papyri upload` now computes a SHA-256 over the whole
   `.papyri` artifact and skips the upload when the viewer already holds that
   exact content for `(module, version)` (stored as `bundles.content_hash`;
-  served via `GET /api/bundle`; `--force` bypasses). This artifact-level hash
+  served via `GET /api/admin/bundle`; `--force` bypasses). This artifact-level hash
   deliberately includes image bytes, so a re-`papyri gen` with churned images
   triggers a redundant re-upload — safe (never a false "already uploaded"),
   but coarse. The refinement below — a *content-identity* hash over IR
@@ -404,7 +404,7 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   inputs: a `papyri gen` bundle *directory* (`ingest(dirPath)`, with its own
   per-item `_put` write path and `_ingest*Dir` helpers) and a decoded
   `Bundle` Node (`ingestBundle(node)`, the optimized two-phase write used by
-  `PUT /api/bundle`). The directory path was legacy (it even read CBOR, not
+  `PUT /api/admin/bundle`). The directory path was legacy (it even read CBOR, not
   the JSON `papyri gen` actually writes) and only the standalone
   `papyri-ingest` CLI used it. `ingestBundle` (decoded packed `.papyri`
   artifact) is now the sole ingest contract: `ingest()`, `_put`,
@@ -412,7 +412,7 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   unused `explodeBundleToDir` (Bundle → directory) are removed. The standalone
   `papyri-ingest` CLI (`ingest/src/cli.ts`, the `bin` entry) existed only to
   drive that directory path and has been removed too — `papyri-ingest` is now
-  a library consumed by the viewer's `PUT /api/bundle`, which is the one ingest
+  a library consumed by the viewer's `PUT /api/admin/bundle`, which is the one ingest
   entry point. Consequence: the `--check` / `normalise_ref` skip that only
   existed on the directory path is gone — re-introduce it at gen time (see
   "`normalise_ref` validation could move to gen" above) if still wanted.
@@ -578,12 +578,12 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
     backref tables are not updated.
   - Drop semantics: deleting a staged bundle is a single table/row drop with
     no cascading side-effects on other bundles.
-  - Upload endpoint: `POST /api/bundle?staging=1` (or a separate
-    `POST /api/bundle/staging`). The viewer should make the staging zone
+  - Upload endpoint: `POST /api/admin/bundle?staging=1` (or a separate
+    `POST /api/admin/bundle/staging`). The viewer should make the staging zone
     visually distinct (e.g. a persistent "STAGING" banner, excluded from the
     default bundle list on the home page).
   - Promotion path (later, not required for v1): an explicit
-    `POST /api/bundle/staging/<pkg>/<ver>/promote` that moves the raw
+    `POST /api/admin/bundle/staging/<pkg>/<ver>/promote` that moves the raw
     archive to the main zone and re-ingests it into the full graph.
   - Staging bundles are not subject to the "only latest backrefs" dedup rule
     since they have no backrefs; that simplifies staging-aware backref logic.
@@ -599,7 +599,7 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
 
   *Files to create/modify (when implemented):*
   - `ingest/src/ingest.ts` — `staging` flag; skip backref writes when set
-  - `viewer/src/pages/api/bundle/[...path].ts` — pass flag to ingest
+  - `viewer/src/pages/api/admin/bundle/[...path].ts` — pass flag to ingest
   - `viewer/src/lib/graphstore.ts` — `listStagingBundles`, `dropStagingBundle`
   - `viewer/src/pages/[pkg]/[ver]/index.astro` — staging banner
   - `viewer/src/pages/staging.astro` — list of all staged bundles (admin view)
@@ -823,23 +823,27 @@ in the one-time synchronous `loadSchemaFromDisk` DB-init path.)
   (note / warning / tip / seealso / …). Look at
   https://sphinx-immaterial.readthedocs.io/en/latest/admonitions.html for
   per-kind color tokens and icons to model richer admonition styling on.
-- **Auth is intentional but minimal.** `middleware.ts` uses a two-tier model:
-  - *Always public*: `/login`, `/api/auth/`, `/api/bundle` (upload endpoint uses
-    its own bearer-token check).
-  - *Admin-only* (requires session): `/admin`, `/nodes`, `/ir-stats`, and their
-    backing API endpoints (`/api/nodes.json`, `/api/ir-stats.json`, `/api/clear`,
-    `/api/clear-raw`, `/api/reingest`, `/api/inventory`, `/api/stats`). These
-    are gated because they are computationally expensive (full corpus walks) or
-    destructive. Unauthenticated page requests redirect to `/login`; API
-    requests get a JSON 403.
-  - *Guest-accessible*: everything else — bundle index, all qualname/doc/example
-    pages, text search, assets. Guests can browse documentation without an
-    account.
+- **Auth is intentional but minimal.** `middleware.ts` uses a two-tier model
+  on the admin surface (`/admin/*` + `/api/admin/*`):
+  - *No-session admin routes*: `/admin/login`, `/api/admin/auth/*`,
+    `/api/admin/bundle` (upload endpoint uses its own bearer-token check).
+  - *Session-required admin routes*: everything else under `/admin/*` and
+    `/api/admin/*` — the dashboard, `/admin/nodes`, `/admin/ir-stats`, plus
+    `/api/admin/{nodes,ir-stats}.json`, `/api/admin/{clear,clear-raw,reingest,
+    inventory,stats}`. These are gated because they are computationally
+    expensive (full corpus walks) or destructive. Unauthenticated page
+    requests redirect to `/admin/login`; API requests get a JSON 403.
+  - *Guest-accessible (docs surface)*: everything else — bundle index, all
+    qualname/doc/example pages, text search, assets, the read-only
+    `/api/bundles.json` / `/api/search.json` / `/api/text-search.json` /
+    `/api/health.json` / `/api/[pkg]/[ver]/*` endpoints. Guests can browse
+    documentation without an account.
 
   Credentials come from `PAPYRI_USERNAME` / `PAPYRI_PASSWORD` env vars
-  (see `api/auth/login.ts`). The hardcoded-single-user model is not the
-  long-term answer for a multi-tenant hosted service. Track when the hosting
-  design firms up.
+  (see `api/admin/auth/login.ts`). The hardcoded-single-user model is not
+  the long-term answer for a multi-tenant hosted service; per-maintainer
+  tokens scoped to a project come next. Track when the hosting design
+  firms up.
 
 ### Cross-cutting
 
@@ -879,7 +883,7 @@ pass; the rest are recorded here as TBD so the next PR can pick them up.
 
 ### TBD — auth hardening (viewer)
 
-- **Default credentials.** `viewer/src/pages/api/auth/login.ts` falls back to
+- **Default credentials.** `viewer/src/pages/api/admin/auth/login.ts` falls back to
   `admin`/`password` when `PAPYRI_USERNAME`/`PAPYRI_PASSWORD` are unset. Fail
   closed (refuse login + warn) instead of shipping known creds.
 - **Session token is unsigned and never expires server-side.** The cookie is
@@ -912,7 +916,7 @@ pass; the rest are recorded here as TBD so the next PR can pick them up.
 
 ### TBD — SSRF (viewer, matters for the hosted service)
 
-- **Intersphinx inventory fetch** (`viewer/src/pages/api/inventory.ts`,
+- **Intersphinx inventory fetch** (`viewer/src/pages/api/admin/inventory.ts`,
   `ingest/src/inventory.ts`). The endpoint fetches an admin-supplied
   `inventory_url`/`base_url` with no host restriction — `isHttpUrl` permits
   internal/link-local hosts (e.g. `http://169.254.169.254/…`). Admin-gated

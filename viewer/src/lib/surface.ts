@@ -13,27 +13,26 @@
 // HTML, which we render on the docs surface. Putting admin on a separate
 // hostname keeps the admin session cookie out of the docs origin's cookie
 // store, so XSS in a bundle cannot steal it or fire authenticated calls
-// against /api/clear, /api/reingest, etc.
+// against /api/admin/clear, /api/admin/reingest, etc.
 
 export type Surface = "docs" | "admin";
 
-/** Routes that require an admin session cookie. Mirror tightly with
- *  decideRoute below — these are also the routes the docs surface refuses. */
-export const ADMIN_SESSION_PREFIXES = [
-  "/admin",
-  "/nodes",
-  "/ir-stats",
-  "/api/nodes.json",
-  "/api/ir-stats.json",
-  "/api/clear",
-  "/api/clear-raw",
-  "/api/reingest",
-  "/api/inventory",
-  "/api/stats",
-] as const;
+/** Every admin-surface route lives under one of these prefixes. Anything
+ *  else is the docs surface. The layout is URL-aligned with the source
+ *  tree (`pages/admin/*` and `pages/api/admin/*`) so the eventual
+ *  two-build split is a `cp -r` of those subtrees. */
+export const ADMIN_PREFIXES = ["/admin", "/api/admin"] as const;
 
-/** Auth + upload: pre-session but admin-surface-only. */
-export const ADMIN_PUBLIC_PREFIXES = ["/login", "/api/auth/", "/api/bundle"] as const;
+/** Admin-surface routes that bypass the session-cookie check:
+ *  - `/admin/login` and `/api/admin/auth/*`: the login flow itself.
+ *  - `/api/admin/bundle`: the upload endpoint, gated by its own bearer
+ *    token (`PAPYRI_UPLOAD_TOKEN`) so external CI can ship bundles
+ *    without holding a browser session. */
+export const ADMIN_NO_SESSION_PREFIXES = [
+  "/admin/login",
+  "/api/admin/auth/",
+  "/api/admin/bundle",
+] as const;
 
 function envHost(name: "PAPYRI_DOCS_HOST" | "PAPYRI_ADMIN_HOST"): string | null {
   const v = process.env[name];
@@ -123,14 +122,15 @@ function matchesAny(prefixes: readonly string[], pathname: string): boolean {
 
 /** Which surface a route belongs to. */
 export function routeSurface(pathname: string): Surface {
-  if (matchesAny(ADMIN_SESSION_PREFIXES, pathname)) return "admin";
-  if (matchesAny(ADMIN_PUBLIC_PREFIXES, pathname)) return "admin";
-  return "docs";
+  return matchesAny(ADMIN_PREFIXES, pathname) ? "admin" : "docs";
 }
 
-/** True when the route requires a session cookie (admin pages / API). */
+/** True when the route requires a session cookie. The no-session list
+ *  takes precedence so `/admin/login` and `/api/admin/auth/*` are
+ *  reachable without already being logged in. */
 export function routeRequiresSession(pathname: string): boolean {
-  return matchesAny(ADMIN_SESSION_PREFIXES, pathname);
+  if (matchesAny(ADMIN_NO_SESSION_PREFIXES, pathname)) return false;
+  return matchesAny(ADMIN_PREFIXES, pathname);
 }
 
 export type RouteDecision =
@@ -156,7 +156,7 @@ export function decideRoute(args: {
 
   if (routeRequiresSession(pathname) && !hasSession) {
     if (pathname.startsWith("/api/")) return { kind: "deny", status: 403 };
-    return { kind: "redirect", to: "/login" };
+    return { kind: "redirect", to: "/admin/login" };
   }
 
   return { kind: "allow" };

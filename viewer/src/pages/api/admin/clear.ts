@@ -12,8 +12,8 @@
 // Response: JSON { ok, deletedBlobs, elapsed_s } on success.
 
 import type { APIRoute } from "astro";
-import { getBackends } from "../../lib/backends.ts";
-import { respond } from "../../lib/api-utils.ts";
+import { getBackends } from "../../../lib/backends.ts";
+import { respond } from "../../../lib/api-utils.ts";
 
 export const prerender = false;
 

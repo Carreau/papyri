@@ -50,7 +50,6 @@ describe("surface env", () => {
     process.env.PAPYRI_ADMIN_HOST = "admin.example.com";
     expect(getSurfaceForHost("admin.example.com")).toBe("admin");
     expect(getSurfaceForHost("docs.example.com")).toBe("docs");
-    // Case-insensitive
     expect(getSurfaceForHost("ADMIN.EXAMPLE.COM")).toBe("admin");
   });
 
@@ -71,30 +70,34 @@ describe("surface env", () => {
   });
 });
 
-describe("routeSurface / routeRequiresSession", () => {
-  it("classifies admin-session routes as admin + session-required", () => {
+describe("routeSurface", () => {
+  it("classifies every /admin/* path as admin", () => {
     for (const p of [
       "/admin",
       "/admin/",
-      "/admin/anything",
-      "/nodes",
-      "/ir-stats",
-      "/api/clear",
-      "/api/reingest",
-      "/api/inventory",
-      "/api/stats",
-      "/api/nodes.json",
-      "/api/ir-stats.json",
+      "/admin/login",
+      "/admin/nodes",
+      "/admin/nodes/paragraph",
+      "/admin/ir-stats",
     ]) {
       expect(routeSurface(p)).toBe("admin");
-      expect(routeRequiresSession(p)).toBe(true);
     }
   });
 
-  it("classifies admin-public routes as admin without session", () => {
-    for (const p of ["/login", "/api/auth/login", "/api/auth/logout", "/api/bundle"]) {
+  it("classifies every /api/admin/* path as admin", () => {
+    for (const p of [
+      "/api/admin/bundle",
+      "/api/admin/clear",
+      "/api/admin/clear-raw",
+      "/api/admin/reingest",
+      "/api/admin/inventory",
+      "/api/admin/stats",
+      "/api/admin/nodes.json",
+      "/api/admin/ir-stats.json",
+      "/api/admin/auth/login",
+      "/api/admin/auth/logout",
+    ]) {
       expect(routeSurface(p)).toBe("admin");
-      expect(routeRequiresSession(p)).toBe(false);
     }
   });
 
@@ -103,6 +106,7 @@ describe("routeSurface / routeRequiresSession", () => {
       "/",
       "/project/numpy/2.0.0/",
       "/project/numpy/2.0.0/docs/whatsnew/",
+      "/text-search/",
       "/api/bundles.json",
       "/api/search.json",
       "/api/text-search.json",
@@ -112,16 +116,56 @@ describe("routeSurface / routeRequiresSession", () => {
       "/assets/project/numpy/2.0.0/img.png",
     ]) {
       expect(routeSurface(p)).toBe("docs");
+    }
+  });
+});
+
+describe("routeRequiresSession", () => {
+  it("admin-no-session prefixes bypass the cookie check", () => {
+    for (const p of [
+      "/admin/login",
+      "/admin/login/",
+      "/api/admin/auth/login",
+      "/api/admin/auth/logout",
+      "/api/admin/bundle",
+      "/api/admin/bundle?hash=abc",
+    ]) {
+      // Strip query so the test mirrors how middleware checks pathname only.
+      const pathname = p.split("?")[0];
+      expect(routeRequiresSession(pathname)).toBe(false);
+    }
+  });
+
+  it("other /admin/* and /api/admin/* paths need a session", () => {
+    for (const p of [
+      "/admin",
+      "/admin/",
+      "/admin/nodes",
+      "/admin/ir-stats",
+      "/api/admin/clear",
+      "/api/admin/clear-raw",
+      "/api/admin/reingest",
+      "/api/admin/inventory",
+      "/api/admin/stats",
+      "/api/admin/nodes.json",
+      "/api/admin/ir-stats.json",
+    ]) {
+      expect(routeRequiresSession(p)).toBe(true);
+    }
+  });
+
+  it("docs routes never need a session", () => {
+    for (const p of ["/", "/project/numpy/2.0.0/", "/api/bundles.json", "/text-search/"]) {
       expect(routeRequiresSession(p)).toBe(false);
     }
   });
 });
 
 describe("decideRoute", () => {
-  it("split off: existing behaviour — docs surface, admin path needs session", () => {
+  it("split off: admin path still needs session, redirects to /admin/login", () => {
     expect(
       decideRoute({ pathname: "/admin", surface: "docs", hasSession: false, splitOn: false })
-    ).toEqual({ kind: "redirect", to: "/login" });
+    ).toEqual({ kind: "redirect", to: "/admin/login" });
     expect(
       decideRoute({ pathname: "/admin", surface: "docs", hasSession: true, splitOn: false })
     ).toEqual({ kind: "allow" });
@@ -130,9 +174,14 @@ describe("decideRoute", () => {
     ).toEqual({ kind: "allow" });
   });
 
-  it("split off: admin API without session is 403, not redirect", () => {
+  it("split off: admin API without session is 403", () => {
     expect(
-      decideRoute({ pathname: "/api/clear", surface: "docs", hasSession: false, splitOn: false })
+      decideRoute({
+        pathname: "/api/admin/clear",
+        surface: "docs",
+        hasSession: false,
+        splitOn: false,
+      })
     ).toEqual({ kind: "deny", status: 403 });
   });
 
@@ -141,10 +190,20 @@ describe("decideRoute", () => {
       decideRoute({ pathname: "/admin", surface: "docs", hasSession: true, splitOn: true })
     ).toEqual({ kind: "deny", status: 404 });
     expect(
-      decideRoute({ pathname: "/login", surface: "docs", hasSession: false, splitOn: true })
+      decideRoute({
+        pathname: "/admin/login",
+        surface: "docs",
+        hasSession: false,
+        splitOn: true,
+      })
     ).toEqual({ kind: "deny", status: 404 });
     expect(
-      decideRoute({ pathname: "/api/bundle", surface: "docs", hasSession: false, splitOn: true })
+      decideRoute({
+        pathname: "/api/admin/bundle",
+        surface: "docs",
+        hasSession: false,
+        splitOn: true,
+      })
     ).toEqual({ kind: "deny", status: 404 });
   });
 
@@ -173,21 +232,44 @@ describe("decideRoute", () => {
   it("split on: admin route on admin host still needs session", () => {
     expect(
       decideRoute({ pathname: "/admin", surface: "admin", hasSession: false, splitOn: true })
-    ).toEqual({ kind: "redirect", to: "/login" });
+    ).toEqual({ kind: "redirect", to: "/admin/login" });
     expect(
-      decideRoute({ pathname: "/api/clear", surface: "admin", hasSession: false, splitOn: true })
+      decideRoute({
+        pathname: "/api/admin/clear",
+        surface: "admin",
+        hasSession: false,
+        splitOn: true,
+      })
     ).toEqual({ kind: "deny", status: 403 });
     expect(
       decideRoute({ pathname: "/admin", surface: "admin", hasSession: true, splitOn: true })
     ).toEqual({ kind: "allow" });
   });
 
-  it("split on: upload + login bypass session check but require admin host", () => {
+  it("split on: login + upload + auth API bypass session check on admin host", () => {
     expect(
-      decideRoute({ pathname: "/login", surface: "admin", hasSession: false, splitOn: true })
+      decideRoute({
+        pathname: "/admin/login",
+        surface: "admin",
+        hasSession: false,
+        splitOn: true,
+      })
     ).toEqual({ kind: "allow" });
     expect(
-      decideRoute({ pathname: "/api/bundle", surface: "admin", hasSession: false, splitOn: true })
+      decideRoute({
+        pathname: "/api/admin/bundle",
+        surface: "admin",
+        hasSession: false,
+        splitOn: true,
+      })
+    ).toEqual({ kind: "allow" });
+    expect(
+      decideRoute({
+        pathname: "/api/admin/auth/login",
+        surface: "admin",
+        hasSession: false,
+        splitOn: true,
+      })
     ).toEqual({ kind: "allow" });
   });
 
@@ -202,6 +284,9 @@ describe("decideRoute", () => {
         hasSession: false,
         splitOn: true,
       })
+    ).toEqual({ kind: "allow" });
+    expect(
+      decideRoute({ pathname: "/text-search/", surface: "docs", hasSession: false, splitOn: true })
     ).toEqual({ kind: "allow" });
   });
 });

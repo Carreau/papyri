@@ -6,9 +6,9 @@ export default function UserMenu() {
   const handleLogout = async () => {
     setLoading(true);
     try {
-      const response = await fetch("/api/auth/logout", { method: "POST" });
+      const response = await fetch("/api/admin/auth/logout", { method: "POST" });
       if (response.ok) {
-        window.location.href = "/login";
+        window.location.href = "/admin/login";
       }
     } catch (err) {
       console.error("Logout failed:", err);

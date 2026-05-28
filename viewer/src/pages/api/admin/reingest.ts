@@ -1,6 +1,6 @@
 // SSR endpoint: re-ingest one or all bundles from the raw archive.
 //
-// Every bundle accepted by PUT /api/bundle is archived verbatim in rawStore
+// Every bundle accepted by PUT /api/admin/bundle is archived verbatim in rawStore
 // before ingest runs. This endpoint replays those raw bytes through a fresh
 // ingest run — useful when the ingest schema changes, a pipeline bug is fixed,
 // or the processed store (BlobStore + GraphDb) needs to be rebuilt from
@@ -27,9 +27,9 @@
 
 import type { APIRoute } from "astro";
 import { Ingester, decode, type TypedNode } from "papyri-ingest";
-import { isSafeSegment } from "../../lib/paths.ts";
-import { getBackends } from "../../lib/backends.ts";
-import { respond, sha256Hex } from "../../lib/api-utils.ts";
+import { isSafeSegment } from "../../../lib/paths.ts";
+import { getBackends } from "../../../lib/backends.ts";
+import { respond, sha256Hex } from "../../../lib/api-utils.ts";
 
 export const prerender = false;
 

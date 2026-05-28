@@ -1,7 +1,7 @@
 ---
-import BaseLayout from "../layouts/BaseLayout.astro";
-import LoginForm from "../components/LoginForm.tsx";
-import { docsHref } from "../lib/links.ts";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import LoginForm from "../../components/LoginForm.tsx";
+import { docsHref } from "../../lib/links.ts";
 
 const sessionToken = Astro.cookies.get("papyri_session_token");
 if (sessionToken) {

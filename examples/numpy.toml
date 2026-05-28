@@ -3,6 +3,10 @@
 module = 'numpy'
 
 exclude = [
+    # token errror
+    'numpy:__array_namespace_info__',
+
+
     'numpy:tensordot',
     # See https://github.com/jupyter/papyri/issues/361'
     'numpy.ma.core:MaskedArray.resize',

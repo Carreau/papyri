@@ -75,6 +75,7 @@ narrative_exclude = [
    'doc/source/tutorial/optimize.rst',
    'doc/source/tutorial/signal.rst',
    'doc/source/tutorial/stats/continuous_wrapcauchy.rst',
+   'doc/source/building/blas_lapack.rst',
 ]
 
 

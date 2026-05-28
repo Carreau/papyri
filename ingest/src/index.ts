@@ -5,7 +5,7 @@
  * PUT /api/bundle ingest endpoint.
  */
 
-export { Ingester } from "./ingest.js";
+export { Ingester, applyMigrations } from "./ingest.js";
 export type { IngestOptions, ProgressCallback } from "./ingest.js";
 
 export type { Key } from "./keys.js";

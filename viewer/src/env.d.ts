@@ -3,7 +3,7 @@
 interface ImportMetaEnv {
   /** Git commit SHA baked in at build time (see astro.config.mjs). */
   readonly PAPYRI_BUILD_COMMIT: string;
-  /** Adapter used at build time: "node" or "cloudflare". */
+  /** Astro adapter baked in at build time (currently always "node"). */
   readonly PAPYRI_BUILD_ADAPTER: string;
 }
 

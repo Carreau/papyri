@@ -614,6 +614,7 @@ _SPHINX_ONLY_DIRECTIVES: frozenset[str] = frozenset(
         "autoattribute",
         "autodata",
         "autoexception",
+        "automodule",
         # doctest infrastructure — drop; content is not documentation prose
         "testsetup",
         "testcleanup",
@@ -640,6 +641,21 @@ _SPHINX_ONLY_DIRECTIVES: frozenset[str] = frozenset(
         "data",
         "exception",
         "module",
+        # sphinx-design — pure HTML-layout directives used on PyData-theme landing
+        # pages (e.g. numpy / scipy `doc/source/index.rst`). They have no IR
+        # equivalent and their body is decorative wrapping around links the
+        # toctree already provides; drop the whole block so a single grid in
+        # the root index doesn't take down the page (and with it the toc).
+        "grid",
+        "grid-item",
+        "grid-item-card",
+        "card",
+        "card-carousel",
+        "tab-set",
+        "tab-item",
+        "dropdown",
+        "button-link",
+        "button-ref",
     }
 )
 
@@ -839,6 +855,13 @@ class DirectiveVisiter(TreeReplacer):
     def replace_SubstitutionDef(self, node: SubstitutionDef) -> list[Any]:
         return []
 
+    def replace_Comment(self, node: Any) -> list[Any]:
+        # RST ``.. comment text`` is editor-side prose with no rendered output.
+        # Dropping it at visit time keeps Comment nodes out of containers that
+        # would otherwise have to allow it everywhere, and out of the IR shape
+        # that the viewer has to know about.
+        return []
+
     def replace_SubstitutionRef(self, node: SubstitutionRef) -> list[Any]:
         name = node.value  # e.g. '|foo|'
         if name in self._substitutions:
@@ -974,7 +997,7 @@ class DirectiveVisiter(TreeReplacer):
             return acc
 
         if directive.name in _SPHINX_ONLY_DIRECTIVES:
-            log.warning(
+            log.info(
                 "skipping Sphinx-only directive %r in %s (not meaningful outside a Sphinx build)",
                 directive.name,
                 self.qa,
@@ -1061,7 +1084,7 @@ class DirectiveVisiter(TreeReplacer):
             ("\n <" in text) and text.endswith(">")
         ):
             try:
-                text, to_resolve = text.split(" <")
+                text, to_resolve = text.split(" <", 1)
                 text = text.rstrip()
             except ValueError as e:
                 raise AssertionError(directive.value) from e

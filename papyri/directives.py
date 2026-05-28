@@ -24,6 +24,7 @@ from .nodes import (
     TableCell,
     TableRow,
     Text,
+    UnprocessedDirective,
 )
 from .ts import parse
 
@@ -345,7 +346,7 @@ def raw_handler(argument: str, options: dict[str, str], content: str) -> list[An
     risk (XSS via raw HTML) and is meaningless outside the target output format.
     """
     fmt = (argument or "").strip()
-    log.warning(
+    log.info(
         "raw directive: dropping block (format=%r); "
         "raw output-format content is not safe to include in the IR",
         fmt,
@@ -471,9 +472,8 @@ def literalinclude_handler(
     Verbatim file inclusion requires filesystem access at gen time; we emit
     nothing and warn so the maintainer knows content was skipped.
     """
-    log.warning(
-        "literalinclude directive: file %r not embedded (filesystem access "
-        "not available at gen time); dropping",
+    log.info(
+        "literalinclude directive: file %r not embedded (not implemented yet); dropping",
         (argument or "").strip(),
     )
     return []
@@ -779,6 +779,47 @@ def make_include_handler(
             log.warning("include directive: failed to parse %s: %s", inc_path, e)
             return []
 
-        return list(sections)
+        # Nested ``.. include::`` directives inside the parsed content must
+        # resolve against the included file's directory, not the outer file's.
+        # Otherwise the outer visitor's ``generic_visit`` would walk them with
+        # the handler bound at the outer scope (this closure's ``doc_path``)
+        # and follow paths relative to the wrong file. Build an inner handler
+        # bound to the included file's parent and pre-resolve them in place.
+        inner_handler = make_include_handler(inc_path.parent, doc_root)
+        for s in sections:
+            _resolve_nested_includes(s, inner_handler)
+
+        # ts.parse wraps top-level RST in synthetic ``Section`` nodes, but the
+        # include directive is invoked from inside *another* Section's children
+        # — and Section is not in that field's type union. Returning the raw
+        # sections would put Section in Section.children and trip validate().
+        # The include is a content-fragment splice, so flatten one level: drop
+        # the wrapper Sections and inline their children. Any actually-titled
+        # sub-section is preserved (it sits one level deeper, in those
+        # children).
+        out: list[Any] = []
+        for s in sections:
+            out.extend(s.children)
+        return out
 
     return include_handler
+
+
+def _resolve_nested_includes(
+    node: Any,
+    inner_handler: "Callable[[str, dict[str, str], str], list[Any]]",
+) -> None:
+    """Walk *node*'s subtree, splicing the result of *inner_handler* in place
+    of any nested ``UnprocessedDirective(name="include")`` child."""
+    if not hasattr(node, "children"):
+        return
+    new_children: list[Any] = []
+    for child in node.children:
+        if isinstance(child, UnprocessedDirective) and child.name == "include":
+            new_children.extend(
+                inner_handler(child.args or "", child.options, child.value or "")
+            )
+        else:
+            _resolve_nested_includes(child, inner_handler)
+            new_children.append(child)
+    node.children = tuple(new_children)

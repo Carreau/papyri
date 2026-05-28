@@ -11,6 +11,6 @@
 -- only the has_blob=1 rows and carries both columns needed, so SQLite
 -- satisfies the query entirely from the index.
 
-CREATE INDEX idx_nodes_pkg_ident ON nodes (package, identifier);
+CREATE INDEX IF NOT EXISTS idx_nodes_pkg_ident ON nodes (package, identifier);
 
-CREATE INDEX idx_nodes_blob_pkg_ver ON nodes (package, version) WHERE has_blob=1;
+CREATE INDEX IF NOT EXISTS idx_nodes_blob_pkg_ver ON nodes (package, version) WHERE has_blob=1;

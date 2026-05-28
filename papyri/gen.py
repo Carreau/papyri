@@ -15,6 +15,22 @@ import inspect
 import io
 import json
 import logging
+
+# pytest-doctestplus and several scientific packages (astropy, scipy, ...)
+# register custom doctest option flags in their Sphinx config; ``papyri gen``
+# parses example sections standalone with stdlib ``doctest.DocTestParser``,
+# which rejects unknown options with a ``ValueError``. Register the
+# well-known third-party flags as no-ops here so the parser accepts them
+# — the runner ignores any unset flag, so this is purely a parse-time fix.
+for _doctest_optname in (
+    "FLOAT_CMP",
+    "REMOTE_DATA",
+    "IGNORE_OUTPUT",
+    "IGNORE_WARNINGS",
+    "IGNORE_EXCEPTION",
+):
+    doctest.register_optionflag(_doctest_optname)
+del _doctest_optname
 import os
 import shutil
 import site
@@ -776,9 +792,12 @@ class Gen:
         self.log = logging.getLogger("papyri")
         self.log.setLevel("INFO")
         formatter = logging.Formatter(FORMAT, datefmt="[%X]")
-        rich_handler = RichHandler(rich_tracebacks=False)
-        rich_handler.setFormatter(formatter)
-        self.log.addHandler(rich_handler)
+        if sys.stderr.isatty():
+            handler: logging.Handler = RichHandler(rich_tracebacks=False)
+        else:
+            handler = logging.StreamHandler()
+        handler.setFormatter(formatter)
+        self.log.addHandler(handler)
 
         self.config = config
         self.log.debug("Configuration: %s", self.config)
@@ -789,6 +808,20 @@ class Gen:
         self.examples = {}
         self.docs = {}
         self._toc_nodes: list[TocTree] = []
+        # Structured record of every per-object failure gen swallowed in
+        # lenient mode. Written into ``papyri.json`` at write time and
+        # rejected at pack time so a degraded bundle can't ship silently.
+        self._gen_errors: list[dict[str, str]] = []
+
+    def _record_error(self, kind: str, path: str, exc: BaseException) -> None:
+        self._gen_errors.append(
+            {
+                "kind": kind,
+                "path": path,
+                "error_type": type(exc).__name__,
+                "message": str(exc),
+            }
+        )
 
     def get_example_data(
         self,
@@ -1012,9 +1045,11 @@ class Gen:
                 data = ts.parse(p.read_bytes(), str(p))
             except ts.TreeSitterParseError as e:
                 self.log.warning("Could not parse %s:%d, skipping: %s", p, e.line, e)
+                self._record_error("narrative", str(p), e)
                 continue
             except Exception as e:
                 self.log.warning("Could not parse %s, skipping: %s", p, e)
+                self._record_error("narrative", str(p), e)
                 continue
             key = ":".join(parts)[:-4]
             first_title = next(
@@ -1085,7 +1120,10 @@ class Gen:
                     blob.signature = None
                     blob.validate()
                 except Exception as e:
+                    if self.config.early_error:
+                        raise
                     self.log.warning("Could not process %s, skipping: %s", p, e)
+                    self._record_error("narrative", str(p), e)
                     continue
                 # Only register the toctree references after the doc validates
                 # — otherwise a failed doc can still seed `trees` with itself
@@ -1172,7 +1210,10 @@ class Gen:
         self.write_assets(where)
         with (where / "papyri.json").open("w") as f:
             assert "version" in self._meta
-            f.write(json.dumps(self._meta, indent=2, sort_keys=True))
+            meta = dict(self._meta)
+            if self._gen_errors:
+                meta["errors"] = self._gen_errors
+            f.write(json.dumps(meta, indent=2, sort_keys=True))
 
     def write_assets(self, where: Path) -> None:
         assets = where / "assets"
@@ -1244,7 +1285,7 @@ class Gen:
             else:
                 rqan = str(qa).split(".")[-1]
                 if not (rqan.startswith("__") and rqan.endswith("__")):
-                    self.log.warning(
+                    self.log.info(
                         "Could not find source file for %s (%s) [%s], will not be able to link to it.",
                         repr(qa) + ":" + rqan,
                         target_item,
@@ -2034,6 +2075,19 @@ class Gen:
                     ",", ",    \n"
                 )
             )
+            # Mirror into _gen_errors so pack refuses to ship the bundle.
+            # error_collector keeps only the type name + qa (the traceback is
+            # already logged at except-time); record that pair here.
+            for error_type, qas in error_collector._unexpected_errors.items():
+                for qa in qas:
+                    self._gen_errors.append(
+                        {
+                            "kind": "api",
+                            "path": qa,
+                            "error_type": error_type,
+                            "message": "",
+                        }
+                    )
         if error_collector._expected_unseen:
             inverted = defaultdict(lambda: [])
             for qa, errs in error_collector._expected_unseen.items():

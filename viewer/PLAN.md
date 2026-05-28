@@ -52,42 +52,28 @@ Splitting into a separate repo remains an option once the IR schema stabilizes.
 
 ### Open follow-ups
 
-- **Unify bundle-walk logic + fix perf.** `lib/image-index.ts` and
-  `pages/api/[pkg]/[ver]/nodes.json.ts` both walk every module + doc +
-  example, load each blob, and run a per-node visitor; the structure is
-  duplicated and currently very slow (observed ~25s for `/images/` on a
-  large scipy bundle). Extract a shared `walkBundle(ctx, visit)` helper,
-  then think hard about perf: precompute and cache an index at ingest
-  time (e.g. an "images" / "nodes-by-type" table in the graph store) so
-  these pages do an indexed lookup instead of a full bundle scan; if a
-  scan is still needed, parallelize blob loads and avoid re-decoding
-  CBOR per request. Server-side timing logs were added on both endpoints
-  to make the regression visible.
-
-- **Fix node-search dedup + Image type.** Two related bugs in
-  `pages/api/[pkg]/[ver]/nodes.json.ts`:
-  1. Searching for `Figure` collapses to a single entry that claims to
-     appear on every page — the dedup key (`displayValueFor` →
-     `JSON.stringify(node).slice(0, 120)`) doesn't actually capture the
-     figure's distinguishing inner content, so distinct figures hash to
-     the same key. Need a type-aware key (e.g. hash the figure's `src`
-     / caption / children) instead of a truncated JSON prefix.
-  2. Searching for `Image` returns zero results even though images
-     clearly exist in bundles. Likely either the IR type name doesn't
-     match what `typeFromSlug("image")` returns, or `collectNodes`
-     isn't traversing into the container that holds Image nodes.
-     Cross-check against `lib/image-index.ts`, which does find them.
+- **Bundle-walk shared helper — landed; ingest-time index still open.** The
+  duplicated walk in `lib/image-index.ts` and
+  `pages/api/[pkg]/[ver]/nodes.json.ts` is now consolidated in
+  `lib/bundle-walk.ts` (`walkBundle` / `walkAllBundles`), and the node-search
+  dedup + Image-type bugs are fixed (dedup is keyed by `type\0content` with
+  page-merge in `nodes.json.ts`). What remains is the perf optimisation:
+  precompute a `nodes_by_type` table at ingest time so `/images/` and the node
+  browser do an indexed lookup instead of a full bundle scan (the ~25s scan).
+  Per the "Storage invariant" in the top-level `PLAN.md`, that table is free to
+  hold whatever shape the endpoints want. `bundle-walk.ts` is the place to hang
+  the optimisation once it lands.
 
 ## Tech choices
 
 | Area             | Choice                        | Why                                          |
 | ---------------- | ----------------------------- | -------------------------------------------- |
 | Language         | TypeScript                    | Typed IR = fewer renderer bugs               |
-| Runtime          | Node LTS / Cloudflare Workers | Local dev + hosted service target            |
+| Runtime          | Node LTS (long-running server)| Local dev + hosted service (VPS) target      |
 | Framework        | Astro (SSG + SSR islands)     | Current choice; not locked in permanently    |
 | UI components    | React (inside Astro islands)  | Familiar; may revisit with framework choice  |
-| Graph client     | abstracted (`GraphBackend`)   | SQLite for Node, D1 for Workers              |
-| Blob storage     | abstracted (`StorageBackend`) | Filesystem for Node, R2 for Workers          |
+| Graph client     | abstracted (`GraphDb`)        | SQLite today; abstraction allows a swap later|
+| Blob storage     | abstracted (`BlobStore`)      | Filesystem today; abstraction allows a swap  |
 | Math             | `katex` (server-side)         | No JS runtime shipped to the client          |
 | Syntax highlight | `shiki`                       | Zero-runtime, VS Code grammars               |
 | Styling          | Plain CSS + CSS custom props  | No Tailwind yet; keep the surface small      |
@@ -105,8 +91,8 @@ viewer/
 ├── src/
 │   ├── lib/
 │   │   ├── ir-reader.ts     # load bundle, decode blobs, typed IR
-│   │   ├── storage.ts       # StorageBackend (NodeFsBackend / R2Backend)
-│   │   ├── graph.ts         # GraphBackend (Sqlite3Backend / D1Backend)
+│   │   ├── backends.ts      # getBackends() → BlobStore + GraphDb + RawStore
+│   │   ├── graph.ts         # graph queries over GraphDb
 │   │   └── paths.ts         # discovery, env override
 │   ├── components/          # React islands: Signature, Param, SeeAlso, …
 │   ├── pages/
@@ -135,68 +121,51 @@ Data flow per request/page:
 
 ## Milestones
 
-All milestones through M8 and M9.0–M9.1 are complete. Open milestones:
+All milestones through M8 are complete. The viewer runs as a
+long-running Node.js server (`@astrojs/node`, `output: "server"`) on a
+VPS; newly uploaded bundles appear without a rebuild.
 
-- [x] **M9.2 — async storage + graph layer.** `BlobStore` /
-      `GraphDb` abstractions in `papyri-ingest` (fs+sqlite ↔ R2+D1),
-      built per-request by `viewer/src/lib/backends.ts`.
+The pieces below landed during the (now abandoned) Cloudflare Workers
+exploration and are kept because they stand on their own:
+
+- [x] **Async storage + graph layer.** `BlobStore` / `GraphDb` /
+      `RawStore` abstractions in `papyri-ingest`, built per-request by
+      `viewer/src/lib/backends.ts`.
       `viewer/src/lib/{ir-reader,graph,nav,image-index,xref}.ts` are
-      async and parameterised on the backend pair; every page calls
-      `getBackends()` and passes the pair down. CrossRef resolution
-      batches once per page via `buildXrefResolver(graphDb, doc)` so
-      render components stay sync. `output: "server"` (no SSG): newly
-      uploaded bundles appear without a rebuild.
-- [x] **M9.3 — bundle upload on Workers.** `PUT /api/bundle` shares
-      the same `getBackends()` path. Body is gunzipped via
-      `DecompressionStream` and CBOR-decoded to a `Bundle` Node, then
-      handed to `Ingester.ingestBundle(node)` — no temp dir, no `tar`
+      async and parameterised on the backend triple; every page calls
+      `getBackends()` and passes it down. CrossRef resolution batches
+      once per page via `buildXrefResolver(graphDb, doc)` so render
+      components stay sync.
+- [x] **Bundle upload in-process.** `PUT /api/bundle` gunzips the body
+      via `DecompressionStream`, CBOR-decodes it to a `Bundle` Node, and
+      hands it to `Ingester.ingestBundle(node)` — no temp dir, no `tar`
       spawn. Write path uses subquery-based link inserts so a single
-      `db.batch([…])` is atomic on both SQLite and D1.
-- [x] **M9.3b — Raw bundle archive.** Every `PUT /api/bundle` now archives the
-      compressed `.papyri.gz` bytes to `_raw/<pkg>/<ver>.papyri.gz` in the
-      `BLOBS` bucket (R2) or `<ingest-dir>/_raw/` on the filesystem (Node)
-      before ingest runs. `POST /api/reingest` (auth-gated, NDJSON stream)
-      replays the raw archive through a fresh ingest — supports
-      `?pkg=` / `?ver=` to scope to one bundle. `RawStore` interface +
-      `FsRawStore` / `R2RawStore` implementations live in `ingest/src/raw-store.ts`.
-- [ ] **M9.4 — CI smoke + cutover.** A workflow that runs `wrangler dev`
-      against an empty store, hits a few routes, then `papyri upload`s a
-      fixture bundle and checks that pages now resolve. Decide whether the
-      Node `pnpm serve` mode stays as a maintained fallback or is dropped.
-- [ ] **M9.5 — Cut ingest subrequest count per `PUT /api/bundle`.**
-      Workers caps subrequests per invocation: 50 on Free, 1000 on Paid.
-      The current ingest does ~3 subrequests per object (`blobStore.has`
-      + `blobStore.put` + `graphDb.batch`), so even the smallest bundles
-      overflow the Free limit and scipy-sized bundles overflow Paid.
-      Confirmed live against `papyri-viewer.<sub>.workers.dev` with the
-      0.16 MiB astropy bundle, which 422s on Free.
+      `db.batch([…])` is atomic.
+- [x] **Raw bundle archive.** Every `PUT /api/bundle` archives the
+      compressed `.papyri.gz` bytes to `_raw/<pkg>/<ver>.papyri.gz`
+      (`<ingest-dir>/_raw/` on the filesystem) before ingest runs.
+      `POST /api/reingest` (auth-gated, NDJSON stream) replays the raw
+      archive through a fresh ingest — supports `?pkg=` / `?ver=` to
+      scope to one bundle. `RawStore` interface + `FsRawStore` live in
+      `ingest/src/raw-store.ts`.
 
-      Concrete reductions to investigate, cheapest first:
-      * Skip the `blobStore.has(key)` round-trip on first ingest of a
-        new `(pkg, version)`. The `bundles` table tells us at request
-        entry whether the version already exists; if not, every `_put`
-        is unambiguously fresh and `oldRefs` is empty.
-      * Coalesce many per-object `db.batch([...])` calls into a few
-        large batches (e.g. batch every N objects, or one batch per
-        `kind`). D1 batches are one subrequest regardless of statement
-        count, so this is the highest-leverage win.
-      * `blobStore.put` is one subrequest per object and is the
-        irreducible floor without queue-based chunking. Run R2 puts
-        in parallel (`Promise.all(chunks)`) — doesn't lower the count
-        but cuts wall time and reduces the chance of hitting the CPU
-        time limit before the subrequest limit.
+### Cloudflare Workers (R2 + D1) — abandoned
 
-      Hard ceiling: even after these reductions, a single invocation
-      can't ingest a scipy-sized bundle in one shot on Paid. The full
-      fix is queue-based chunking (split the bundle, enqueue per chunk,
-      consumer worker processes each under the limit). Track separately
-      if/when M9.5 isn't enough.
+The hosted target was a Cloudflare Workers deploy (graph in D1, blobs in
+R2). It was dropped: **ingest latency on Workers/R2/D1 was far too
+high.** Workers caps subrequests per invocation (50 Free / 1000 Paid),
+and ingest does ~3 subrequests per object (`blobStore.has` +
+`blobStore.put` + `graphDb.batch`); even a 0.16 MiB astropy bundle 422'd
+on Free, and there was no way to ingest a scipy-sized bundle in one
+invocation without queue-based chunking. The wall-clock cost of R2/D1
+round-trips made it impractical. Hosting is now a long-running Node
+process on a VPS, where ingest is a single in-process transaction.
 
-M9 constraints:
-
-- Nothing in the IR shape changes as part of M9.
-- `better-sqlite3` and `node:fs` must not be reachable from a route compiled
-  into the Workers bundle (sync APIs, native bindings).
+The storage **abstractions are kept** (`BlobStore` / `GraphDb` /
+`RawStore`) so a different backend can be slotted in later without
+touching the viewer — but only the filesystem + SQLite implementations
+exist today, and there is no Cloudflare adapter, `wrangler.toml`, or
+`build:cf` target anymore.
 
 ## Open questions
 

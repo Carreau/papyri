@@ -13,6 +13,7 @@ narrative_exclude = [
 automodule   = 'papyri.directives:warn'
 autoclass    = 'papyri.directives:warn'
 automethod   = 'papyri.directives:warn'
+"py:currentmodule" = 'papyri.directives:drop'
 
 [meta]
 github_slug = 'ipython/traitlets'

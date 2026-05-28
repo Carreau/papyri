@@ -1,13 +1,8 @@
 /**
  * BlobStore — async key→bytes store used by the Ingester.
  *
- * Two implementations share the same on-disk / R2 layout, keyed by
- * `<module>/<version>/<kind>/<path>` so a key like
- * `numpy/2.3.5/module/numpy.linspace` round-trips unchanged between Node-fs
- * and Cloudflare R2:
- *
- *   FsBlobStore  — Node filesystem rooted at a directory.
- *   R2BlobStore  — Cloudflare R2 bucket binding (Workers runtime).
+ * FsBlobStore — Node filesystem rooted at a directory. Keyed by
+ * `<module>/<version>/<kind>/<path>`.
  *
  * Per-bundle metadata (`meta.cbor`) lives at `<module>/<version>/meta.cbor`
  * — outside the (kind,path) addressing scheme, which is why it needs its
@@ -15,9 +10,10 @@
  */
 import { mkdir, writeFile, readFile, stat, readdir, rm } from "node:fs/promises";
 import { join, dirname, sep } from "node:path";
-import type { Key } from "./graphstore.js";
+import type { Key } from "./keys.js";
+import { safeJoin } from "./fs-safe.js";
 
-/** Flat path used as both fs path-suffix and R2 object key. */
+/** Flat path used as the blob key (an fs path-suffix, or an object-store key). */
 export function keyToPath(key: Key): string {
   return `${key.module}/${key.version}/${key.kind}/${key.path}`;
 }
@@ -27,8 +23,8 @@ export interface BlobStore {
   get(key: Key): Promise<Uint8Array | null>;
   has(key: Key): Promise<boolean>;
   /**
-   * List every key under *prefix*, recursive (matching R2's default
-   * semantics — fs walks recursively to match). Returned strings are full
+   * List every key under *prefix*, recursive (fs walks recursively).
+   * Returned strings are full
    * keys including the prefix; sorted lexicographically. Empty array if
    * the prefix is absent.
    *
@@ -57,7 +53,7 @@ export class FsBlobStore implements BlobStore {
   constructor(private readonly root: string) {}
 
   private fullPath(key: Key): string {
-    return join(this.root, key.module, key.version, key.kind, key.path);
+    return safeJoin(this.root, key.module, key.version, key.kind, key.path);
   }
 
   async put(key: Key, bytes: Uint8Array): Promise<void> {
@@ -86,14 +82,14 @@ export class FsBlobStore implements BlobStore {
   }
 
   async putMeta(module: string, version: string, bytes: Uint8Array): Promise<void> {
-    const p = join(this.root, module, version, "meta.cbor");
+    const p = safeJoin(this.root, module, version, "meta.cbor");
     await mkdir(dirname(p), { recursive: true });
     await writeFile(p, bytes);
   }
 
   async getMeta(module: string, version: string): Promise<Uint8Array | null> {
     try {
-      const buf = await readFile(join(this.root, module, version, "meta.cbor"));
+      const buf = await readFile(safeJoin(this.root, module, version, "meta.cbor"));
       return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
@@ -150,91 +146,5 @@ export class FsBlobStore implements BlobStore {
     const rels = out.map((p) => p.slice(rootSlash.length).split(sep).join("/"));
     rels.sort();
     return rels;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Cloudflare R2
-//
-// Typed against a minimal structural shape so the Node build doesn't need to
-// pull in `@cloudflare/workers-types`. The viewer's Workers build supplies
-// the real R2Bucket binding; the structural type matches what we actually
-// call.
-// ---------------------------------------------------------------------------
-
-export interface R2ObjectLike {
-  arrayBuffer(): Promise<ArrayBuffer>;
-}
-
-export interface R2ListResult {
-  objects: { key: string }[];
-  truncated: boolean;
-  cursor?: string;
-}
-
-export interface R2BucketLike {
-  put(key: string, value: ArrayBuffer | ArrayBufferView | Uint8Array): Promise<unknown>;
-  get(key: string): Promise<R2ObjectLike | null>;
-  head(key: string): Promise<unknown | null>;
-  list(opts?: { prefix?: string; cursor?: string; limit?: number }): Promise<R2ListResult>;
-  delete(keys: string | string[]): Promise<unknown>;
-}
-
-export class R2BlobStore implements BlobStore {
-  constructor(private readonly bucket: R2BucketLike) {}
-
-  async put(key: Key, bytes: Uint8Array): Promise<void> {
-    await this.bucket.put(keyToPath(key), bytes);
-  }
-
-  async get(key: Key): Promise<Uint8Array | null> {
-    const obj = await this.bucket.get(keyToPath(key));
-    if (!obj) return null;
-    return new Uint8Array(await obj.arrayBuffer());
-  }
-
-  async has(key: Key): Promise<boolean> {
-    return (await this.bucket.head(keyToPath(key))) !== null;
-  }
-
-  async putMeta(module: string, version: string, bytes: Uint8Array): Promise<void> {
-    await this.bucket.put(`${module}/${version}/meta.cbor`, bytes);
-  }
-
-  async getMeta(module: string, version: string): Promise<Uint8Array | null> {
-    const obj = await this.bucket.get(`${module}/${version}/meta.cbor`);
-    if (!obj) return null;
-    return new Uint8Array(await obj.arrayBuffer());
-  }
-
-  async list(prefix: string): Promise<string[]> {
-    // R2 list paginates at 1000 keys/page. Follow the cursor until
-    // `truncated === false` so callers see one materialised array.
-    const out: string[] = [];
-    let cursor: string | undefined;
-    do {
-      const r: R2ListResult = await this.bucket.list({ prefix, cursor });
-      for (const o of r.objects) out.push(o.key);
-      cursor = r.truncated ? r.cursor : undefined;
-    } while (cursor);
-    out.sort();
-    return out;
-  }
-
-  async clear(): Promise<number> {
-    // List every object in the bucket and delete in batches, skipping
-    // anything under `_raw/` (the raw archive shares this bucket).
-    let count = 0;
-    let cursor: string | undefined;
-    do {
-      const r: R2ListResult = await this.bucket.list({ cursor });
-      const keys = r.objects.map((o) => o.key).filter((k) => !k.startsWith("_raw/"));
-      if (keys.length > 0) {
-        await this.bucket.delete(keys);
-        count += keys.length;
-      }
-      cursor = r.truncated ? r.cursor : undefined;
-    } while (cursor);
-    return count;
   }
 }

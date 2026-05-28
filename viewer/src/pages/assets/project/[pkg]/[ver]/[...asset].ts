@@ -3,8 +3,8 @@
 // URL shape (built by `linkForAsset` in `lib/links.ts`):
 //   /assets/project/<pkg>/<ver>/<filename-with-colons-as-dollars>
 //
-// Reads through the active BlobStore so it works under both Node fs and
-// Cloudflare R2. R2 doesn't infer Content-Type, so we map by extension.
+// Reads through the active BlobStore. We map Content-Type by extension
+// since the fs backend doesn't infer it.
 
 import { extname } from "node:path";
 import type { APIRoute } from "astro";

@@ -1,6 +1,7 @@
 /* IR-node visual skin. Separate file so component-level rules stay out of
    the page-chrome stylesheet. */
 @import "./ir-nodes.css";
+@import "./doc-switcher.css";
 
 :root {
   --fg: #1a1a1a;
@@ -1145,6 +1146,7 @@ section.backrefs ul.qualnames {
 }
 
 .bundle-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   text-decoration: none;
@@ -1206,10 +1208,36 @@ section.backrefs ul.qualnames {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Primary link: stretched over the whole card via ::after so the entire
+   card is clickable, while sibling links (project details) stay on top. */
+.bundle-card-link {
+  color: inherit;
+  text-decoration: none;
+}
+.bundle-card-link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
 .bundle-card-version {
   font-family: var(--mono);
   font-size: 0.75rem;
   color: var(--fg-muted);
+}
+
+.bundle-card-details-link {
+  /* Sits above the stretched primary link so it is independently clickable. */
+  position: relative;
+  z-index: 1;
+  align-self: flex-start;
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  text-decoration: none;
+}
+.bundle-card-details-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .bundle-card-summary {

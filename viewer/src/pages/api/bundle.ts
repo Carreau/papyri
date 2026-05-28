@@ -8,9 +8,7 @@
 // pipeline directly — no temporary directory, no fs round-trip.
 //
 // Backend selection happens in `lib/backends.ts`: same {blobStore, graphDb}
-// pair that the read-side pages use, so both halves of the round trip
-// agree on where data lives. Under Cloudflare that's R2 + D1; under Node
-// it's filesystem + better-sqlite3.
+// pair that the read-side pages use (filesystem + better-sqlite3).
 //
 // Expected client command:
 //   papyri pack ~/.papyri/data/numpy_2.3.5
@@ -25,9 +23,7 @@
 //   a streaming sequence of one JSON object per line. The client must read
 //   the body to determine outcome — the final line is either `{"event":
 //   "done", "pkg":..., "version":...}` or `{"event":"error","error":...}`.
-//   On Cloudflare Workers `console.log` is buffered until the request ends,
-//   so this stream is the only way to give the client live progress on
-//   long ingests.
+//   The stream gives the client live progress on long ingests.
 //
 //   Pre-stream errors that we can resolve before hitting the wire still
 //   come back as buffered JSON with the appropriate status code:
@@ -42,21 +38,65 @@ import type { APIRoute } from "astro";
 import { Ingester, decode, type TypedNode } from "papyri-ingest";
 import { isSafeSegment } from "../../lib/paths.ts";
 import { getBackends, getUploadToken } from "../../lib/backends.ts";
-import { respond } from "../../lib/api-utils.ts";
+import { respond, sha256Hex } from "../../lib/api-utils.ts";
 
 export const prerender = false;
+
+// Shared bearer-token gate for both PUT (upload) and GET (existence check).
+// When PAPYRI_UPLOAD_TOKEN is unset the check is skipped — intentional for
+// local development. Returns a 401 Response when the token is required and
+// missing/wrong, or null when the request may proceed.
+async function checkAuth(request: Request): Promise<Response | null> {
+  const expectedToken = await getUploadToken();
+  if (!expectedToken) return null;
+  const auth = request.headers.get("Authorization") ?? "";
+  if (auth !== `Bearer ${expectedToken}`) {
+    return respond({ ok: false, error: "unauthorized" }, 401, { "WWW-Authenticate": "Bearer" });
+  }
+  return null;
+}
+
+// Existence check for `papyri upload`'s dedup step. The client computes the
+// SHA-256 of the .papyri artifact it is about to send and asks whether the
+// server already holds that exact content for (module, version). When it
+// does, the client skips the upload entirely. Failing open (any error → the
+// client uploads anyway) is the responsibility of the client.
+export const GET: APIRoute = async ({ request, url }) => {
+  const authFail = await checkAuth(request);
+  if (authFail) return authFail;
+
+  const module = url.searchParams.get("module");
+  const version = url.searchParams.get("version");
+  const hash = url.searchParams.get("hash");
+  if (!module || !version) {
+    return respond({ ok: false, error: "module and version query params required" }, 400);
+  }
+
+  let backends: Awaited<ReturnType<typeof getBackends>>;
+  try {
+    backends = await getBackends();
+  } catch (err) {
+    console.error("failed to open ingest backend:", err);
+    return respond({ ok: false, error: "failed to open ingest backend" }, 500);
+  }
+
+  const row = await backends.graphDb.get<{ content_hash: string | null }>(
+    "SELECT content_hash FROM bundles WHERE module = ? AND version = ?",
+    [module, version]
+  );
+  const storedHash = row?.content_hash ?? null;
+  // With a hash supplied, "exists" means identical content already ingested.
+  // Without one, it degrades to "is this (module, version) present at all".
+  const exists = hash ? storedHash !== null && storedHash === hash : row !== null;
+  return respond({ ok: true, module, version, stored_hash: storedHash, exists });
+};
 
 export const PUT: APIRoute = async ({ request }) => {
   // Token auth: if PAPYRI_UPLOAD_TOKEN is configured, every PUT must carry
   // "Authorization: Bearer <token>".  When the env var is absent the check is
   // skipped entirely — that's intentional for local development.
-  const expectedToken = await getUploadToken();
-  if (expectedToken) {
-    const auth = request.headers.get("Authorization") ?? "";
-    if (auth !== `Bearer ${expectedToken}`) {
-      return respond({ ok: false, error: "unauthorized" }, 401, { "WWW-Authenticate": "Bearer" });
-    }
-  }
+  const authFail = await checkAuth(request);
+  if (authFail) return authFail;
 
   if (!request.body) {
     return respond({ ok: false, error: "request body required (.papyri artifact)" }, 400);
@@ -68,11 +108,12 @@ export const PUT: APIRoute = async ({ request }) => {
     backends = await getBackends();
     ingester = new Ingester({ backends });
   } catch (err) {
-    return respond({ ok: false, error: `failed to open ingest backend: ${err}` }, 500);
+    console.error("failed to open ingest backend:", err);
+    return respond({ ok: false, error: "failed to open ingest backend" }, 500);
   }
 
   // Decode the artifact: gunzip → CBOR → Bundle Node. DecompressionStream
-  // is in Web Streams (Workers + Node 18+), so this is a single code path.
+  // is a portable Web Streams API, so this is a single code path.
   // Read the compressed bytes into a buffer first so we can record the
   // on-wire size before decompressing. The raw compressed bytes are kept for
   // archiving to rawStore before ingest runs.
@@ -95,9 +136,8 @@ export const PUT: APIRoute = async ({ request }) => {
   }
 
   // Path-traversal guard: validate package/version segments before they
-  // become R2 keys or fs paths. A hostile artifact could otherwise set
-  // ".." or "/" in `bundle.module` / `bundle.version` and escape the
-  // ingest namespace.
+  // become fs paths. A hostile artifact could otherwise set ".." or "/"
+  // in `bundle.module` / `bundle.version` and escape the ingest namespace.
   const rawPkg = (bundle as Record<string, unknown>)["module"];
   const rawVer = (bundle as Record<string, unknown>)["version"];
   if (typeof rawPkg !== "string" || !rawPkg || !isSafeSegment(rawPkg)) {
@@ -113,12 +153,9 @@ export const PUT: APIRoute = async ({ request }) => {
     );
   }
 
-  // Streaming response: ingest is potentially long-running (D1 / R2 round-
-  // trips dominate). Open an NDJSON stream now and emit progress events as
-  // the ingest walks the bundle; the client reads line-by-line. This
-  // bypasses the Workers per-request console.log buffer, which only flushes
-  // when the request ends and therefore makes `wrangler tail` useless for
-  // live progress.
+  // Streaming response: ingest is potentially long-running. Open an NDJSON
+  // stream now and emit progress events as the ingest walks the bundle; the
+  // client reads line-by-line.
   const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
   const writer = writable.getWriter();
   const encoder = new TextEncoder();
@@ -126,22 +163,16 @@ export const PUT: APIRoute = async ({ request }) => {
     await writer.write(encoder.encode(JSON.stringify(event) + "\n"));
   };
 
-  // Kick the ingest off without awaiting. Workers keeps the worker alive
-  // while the response body is being consumed, so this IIFE is allowed to
-  // outlive the handler return. Any throw turns into a final `error` event.
+  // Kick the ingest off without awaiting. The response stream keeps the
+  // connection alive; any throw turns into a final `error` event.
   //
-  // Note: if the client disconnects mid-stream (Ctrl-C on `papyri upload`,
-  // network drop), writer.close() throws and the ingest continues silently
-  // to completion. The data still lands consistently — D1 batches stay
-  // atomic per `_put`, and the bundles row writes last — but a client
-  // cancellation is NOT a server cancellation. If we ever need true
-  // cancellation propagation, wire an AbortController through ingestBundle
-  // and abort it from the writer's close handler.
+  // Note: if the client disconnects mid-stream, writer.close() throws and
+  // the ingest continues silently to completion. Client cancellation is NOT
+  // server cancellation.
   // Timing decoration: each event is enriched with `elapsed_s` (since the
   // stream opened) and `since_last_ms` (since the previous event) so the
-  // client can render live wall-time stats. console.log inside the worker
-  // is buffered until request end, so the stream is the only way to
-  // surface per-chunk timings during a long ingest.
+  // client can render live wall-time stats — the stream surfaces per-chunk
+  // timings during a long ingest.
   const startedAt = Date.now();
   let prevEventAt = startedAt;
   const sendWithTiming = async (event: Record<string, unknown>) => {
@@ -169,12 +200,17 @@ export const PUT: APIRoute = async ({ request }) => {
           message: `raw archive write failed: ${archiveErr}`,
         });
       }
+      // Content hash of the artifact as received — stored in the bundles row
+      // so a later `papyri upload` of identical bytes can be skipped via the
+      // GET existence check above.
+      const contentHash = await sha256Hex(compressedBytes);
       const result = await ingester.ingestBundle(
         bundle,
         bundleSizeBytes,
         async (phase, done, total) => {
           await sendWithTiming({ event: "progress", phase, done, total });
-        }
+        },
+        contentHash
       );
       await sendWithTiming({ event: "done", pkg: result.pkg, version: result.version });
     } catch (err) {
@@ -194,7 +230,7 @@ export const PUT: APIRoute = async ({ request }) => {
       "Content-Type": "application/x-ndjson",
       "Cache-Control": "no-store",
       // Disable response buffering on intermediaries that honor it. The
-      // worker emits one line per progress event; without this some
+      // server emits one line per progress event; without this some
       // proxies coalesce until the connection closes.
       "X-Accel-Buffering": "no",
     },

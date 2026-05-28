@@ -25,6 +25,23 @@ get_ipython = 'IPython:get_ipython'
 ipython   = 'papyri.directives:code_handler'
 automodule   = 'papyri.directives:warn'
 automethod   = 'papyri.directives:warn'
+# ``.. inheritance-diagram::`` (sphinx.ext.inheritance_diagram) renders a
+# Graphviz class-hierarchy image at Sphinx build time — meaningless in the IR,
+# so drop it.
+inheritance-diagram = 'papyri.directives:drop'
+# Narrative-doc directives papyri has no dedicated node for. Keep them as
+# verbatim Code blocks so the body still shows up; the renderer just won't
+# get domain-specific styling for env vars / magics / Sphinx RST-domain.
+# (Capitalised ``Note`` mirrors the astropy entry — case-sensitive dispatch
+# means ``.. Note::`` doesn't route to the lowercase ``note`` handler.)
+Note = 'papyri.directives:code_handler'
+envvar = 'papyri.directives:code_handler'
+option = 'papyri.directives:code_handler'
+magic = 'papyri.directives:code_handler'
+"rst:directive" = 'papyri.directives:code_handler'
+# ``.. role:: name(parent)`` declares a custom RST role; setup-only, no body
+# content worth rendering.
+role = 'papyri.directives:drop'
 
 [meta]
 github_slug = 'IPython/IPython'

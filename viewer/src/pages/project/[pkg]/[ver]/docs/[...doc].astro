@@ -37,11 +37,12 @@ try {
   return new Response(`Doc ${docPath} not found`, { status: 404 });
 }
 const view = buildDocPageView(doc, docPath);
-const resolveXref = await buildXrefResolver(graphDb, doc, pkg, actualVer);
 
-// Build ordered page list for prev/next navigation.
-// loadBundleNav is memoised — this call is effectively free.
-const nav = await loadBundleNav(blobStore, pkg, actualVer, ver);
+// Two independent operations: run concurrently.
+const [resolveXref, nav] = await Promise.all([
+  buildXrefResolver(graphDb, doc, pkg, actualVer),
+  loadBundleNav(blobStore, pkg, actualVer, ver),
+]);
 interface PageLink {
   title: string;
   href: string;

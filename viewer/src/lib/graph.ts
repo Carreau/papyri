@@ -1,9 +1,7 @@
 // Async wrappers over the cross-link graph (`nodes` / `links` tables).
 //
-// Everything routes through `papyri-ingest`'s `GraphDb` interface, so the
-// same code runs against:
-//   • better-sqlite3 (Node SSR / `pnpm serve`)  — `SqliteGraphDb`
-//   • Cloudflare D1   (Workers / `wrangler dev`) — `D1GraphDb`
+// Everything routes through `papyri-ingest`'s `GraphDb` interface
+// (`SqliteGraphDb` backed by better-sqlite3).
 //
 // Operations mirror the ingest tables:
 //   nodes  — one row per known key; has_blob=1 means the blob is on disk,
@@ -73,15 +71,14 @@ export async function resolveRef(graphDb: GraphDb, ref: RefTuple): Promise<RefTu
 /**
  * Batch-resolve a list of refs in one query. Returns a map keyed by the
  * input ref's `pkg|ver|kind|path` so callers can look up resolutions
- * synchronously after `await`. Cheaper than N round-trips to D1.
+ * synchronously after `await`.
  */
 export async function resolveRefs(
   graphDb: GraphDb,
   refs: RefTuple[]
 ): Promise<Map<string, RefTuple>> {
-  // Naive impl: parallel resolves. Good enough until N gets big — D1
-  // batches don't help here because each lookup may need its own fallback
-  // query. Switch to a single VALUES-based join if profiling shows it.
+  // Naive impl: parallel resolves. Each lookup may need its own fallback
+  // query; switch to a single VALUES-based join if profiling shows it.
   const out = new Map<string, RefTuple>();
   await Promise.all(
     refs.map(async (r) => {
@@ -183,11 +180,38 @@ export async function getBackrefs(graphDb: GraphDb, target: RefTuple): Promise<R
 }
 
 /**
+ * Map of `version → digest hex` for all blob-backed nodes of a given
+ * (package, category, identifier) across every ingested version. Used by
+ * the DocSwitcher to group versions by identical content.
+ */
+export async function getVersionDigests(
+  graphDb: GraphDb,
+  pkg: string,
+  category: string,
+  identifier: string
+): Promise<Map<string, string>> {
+  const rows = await graphDb.all<{ version: string; digest: Uint8Array | null }>(
+    "SELECT version, digest FROM nodes " +
+      "WHERE has_blob=1 AND package=? AND category=? AND identifier=?",
+    [pkg, category, identifier]
+  );
+  const out = new Map<string, string>();
+  for (const r of rows) {
+    if (!r.digest) continue;
+    const bytes =
+      r.digest instanceof Uint8Array ? r.digest : new Uint8Array(r.digest as ArrayLike<number>);
+    let hex = "";
+    for (const b of bytes) hex += b.toString(16).padStart(2, "0");
+    out.set(r.version, hex);
+  }
+  return out;
+}
+
+/**
  * Map of `identifier → digest hex` for all blob-backed nodes of a given
  * (package, version, category). Digests are 16-byte BLAKE2b sums of the
  * raw blob bytes (see `Ingester._digest_blob`); we hex-encode here so
- * callers can compare across backends (better-sqlite3 returns Buffer,
- * D1 returns Uint8Array).
+ * callers can compare (better-sqlite3 returns Buffer, normalised to hex).
  */
 export async function listDigests(
   graphDb: GraphDb,

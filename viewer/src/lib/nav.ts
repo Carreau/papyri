@@ -8,10 +8,8 @@ import { linkForDoc, linkForExample, linkForLocalRef, linkForRef } from "./links
 // Per-bundle view-model. Pages under [pkg]/[ver]/** call `loadBundleNav` to
 // get everything the sidebar + bundle identity block need in one shot.
 //
-// The store layout is `<pkg>/<ver>/{meta,docs,examples,module,assets}/...`
-// — the same shape under both the Node FsBlobStore and the Workers
-// R2BlobStore. No fs paths leak out; every read goes through the
-// `BlobStore` passed in.
+// The store layout is `<pkg>/<ver>/{meta,docs,examples,module,assets}/...`.
+// No fs paths leak out; every read goes through the `BlobStore` passed in.
 // ---------------------------------------------------------------------------
 
 export interface BundleMeta {
@@ -53,8 +51,8 @@ export interface BundleNav {
 }
 
 // Per-process memo. Keyed by `<pkg>/<ver>` — the BlobStore singleton is
-// stable per request, so caching by bundle id is correct. A fresh worker
-// isolate / Node process gets a clean map.
+// stable per request, so caching by bundle id is correct. A fresh Node
+// process gets a clean map.
 const _navCache = new Map<string, Promise<BundleNav>>();
 
 async function readMetaCbor(blobStore: BlobStore, pkg: string, ver: string): Promise<BundleMeta> {

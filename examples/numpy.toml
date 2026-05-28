@@ -3,9 +3,17 @@
 module = 'numpy'
 
 exclude = [
+    # token errror
+    'numpy:__array_namespace_info__',
+
+
     'numpy:tensordot',
     # See https://github.com/jupyter/papyri/issues/361'
     'numpy.ma.core:MaskedArray.resize',
+    # Docstring trips NumpydocParseError; not worth a special-case fix yet.
+    'numpy.polynomial._polybase:ABCPolyBase',
+    # Internal helper with a malformed docstring (IncorrectInternalDocsLen).
+    'numpy._core._internal:_view_is_safe',
 ]
 
 execute_exclude_patterns = [
@@ -82,7 +90,33 @@ pypi = 'numpy'
 homepage = 'https://numpy.org/'
 docspage = 'https://numpy.org/doc/1.26/'
 
-
-[global.expected_errors]
-VisitCitationReferenceNotImplementedError = ["numpy.fft"]
-
+[global.directives]
+"c:enum"   = 'papyri.directives:drop'
+"c:function"   = 'papyri.directives:drop'
+"c:macro"   = 'papyri.directives:drop'
+"c:member"   = 'papyri.directives:drop'
+"c:struct"   = 'papyri.directives:drop'
+"c:type"   = 'papyri.directives:drop'
+"c:var"   = 'papyri.directives:drop'
+"tab-set"   = 'papyri.directives:drop'
+"try_examples"   = 'papyri.directives:drop'
+attribute   = 'papyri.directives:drop'
+autoattributes   = 'papyri.directives:drop'
+automethod   = 'papyri.directives:drop'
+autoproperty   = 'papyri.directives:drop'
+currentmodule   = 'papyri.directives:drop'
+data   = 'papyri.directives:drop'
+doxygenfunction   = 'papyri.directives:drop'
+doxygenclass   = 'papyri.directives:drop'
+function   = 'papyri.directives:drop'
+glossary   = 'papyri.directives:drop'
+grid   = 'papyri.directives:drop'
+index   = 'papyri.directives:drop'
+ipython   = 'papyri.directives:drop'
+legacy   = 'papyri.directives:drop'
+moduleauthor   = 'papyri.directives:drop'
+sectionauthor   = 'papyri.directives:drop'
+table   = 'papyri.directives:drop'
+testcleanup   = 'papyri.directives:drop'
+testcode   = 'papyri.directives:drop'
+testsetup   = 'papyri.directives:drop'

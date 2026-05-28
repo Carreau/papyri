@@ -17,3 +17,15 @@ export function respond(
     headers: { "Content-Type": "application/json", ...extra },
   });
 }
+
+/**
+ * Hex-encoded SHA-256 of `bytes`. Uses Web Crypto (`crypto.subtle`), a portable
+ * Web API with no backend-specific dependency. Matches
+ * `hashlib.sha256(...).hexdigest()` on the `papyri upload` client side.
+ */
+export async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", bytes as BufferSource);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}

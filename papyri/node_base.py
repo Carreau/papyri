@@ -117,19 +117,23 @@ class UnserializableNode(Node):
     Base for Node subclasses that are purely in-memory intermediates and must
     never cross the gen->disk boundary. Encoding one is a bug: the gen-time
     visitor was supposed to replace it before serialization.
+
+    Both serialization paths refuse these nodes: ``cbor``/``to_json`` here
+    cover the top-level case, and the recursive ``node_serializer.serialize``
+    checks ``_dont_serialise`` for nested ones. Subclasses override
+    ``_why_unserializable`` to give a more specific reason.
     """
 
     _dont_serialise = True
 
+    def _why_unserializable(self) -> str:
+        return f"{type(self).__name__} must be rewritten before serialization"
+
     def cbor(self, encoder: Any) -> None:
-        raise NotImplementedError(
-            f"{type(self).__name__} must be rewritten before serialization"
-        )
+        raise NotImplementedError(self._why_unserializable())
 
     def to_json(self) -> bytes:
-        raise NotImplementedError(
-            f"{type(self).__name__} must be rewritten before serialization"
-        )
+        raise NotImplementedError(self._why_unserializable())
 
 
 TAG_MAP: dict[Any, int] = {}
@@ -156,6 +160,21 @@ def _invalidate(obj: Any, depth: int = 0) -> str | None:
     Recursively validate type anotated classes.
     """
 
+    # An unhandled ``Directive`` (the catch-all carrier gen emits when no
+    # handler is registered) has no serializable representation. Reject it here
+    # — during the per-object ``validate()`` that gen already runs inside its
+    # error-handling window — so the failure surfaces (and ``--fail-early``
+    # trips) before the whole bundle is built and packed, instead of deep in the
+    # write/pack step. We raise rather than return a string so the node's own
+    # message (naming the offending directive) reaches the user verbatim.
+    #
+    # This is keyed on ``_reject_at_validate``, not the broader
+    # ``_dont_serialise``: pure in-memory intermediates (``UnprocessedDirective``
+    # & co.) are still present in trees that ``validate()`` legitimately runs on
+    # before the directive-visiting pass replaces them, so they must pass here.
+    if getattr(obj, "_reject_at_validate", False):
+        raise NotImplementedError(obj._why_unserializable())
+
     annotations = get_type_hints(type(obj))  # type: ignore[arg-type]
     for k, v in annotations.items():
         # FIX: AttributeError: 'Text' object has no attribute 'position'
@@ -169,7 +188,7 @@ def _invalidate(obj: Any, depth: int = 0) -> str | None:
                 sub = _invalidate(i, depth + 1)
                 if sub is not None:
                     return f"{k}.{ii}." + sub
-        if isinstance(item, dict):
+        elif isinstance(item, dict):
             for ii, i in item.items():
                 sub = _invalidate(i, depth + 1)
                 if sub is not None:
@@ -177,7 +196,7 @@ def _invalidate(obj: Any, depth: int = 0) -> str | None:
         else:
             sub = _invalidate(item, depth + 1)
             if sub is not None:
-                return f"{k}.{sub}." + sub
+                return f"{k}." + sub
 
     return None
 

@@ -12,16 +12,90 @@ from __future__ import annotations
 import gzip
 import io
 import json
-from collections.abc import Callable
+import logging
+import re
+from collections.abc import Callable, Iterator
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .bundle import IR_SCHEMA_VERSION, PACK_FORMAT_VERSION, Bundle, BundleManifest
 from .node_base import Node
-from .nodes import encoder
+from .nodes import Image, Link, encoder
+from .serde import get_type_hints
+
+if TYPE_CHECKING:
+    from .nodes import TocTree
+
+log = logging.getLogger("papyri")
 
 _ALLOWED_TOPLEVEL = {"papyri.json", "toc.json", "module", "docs", "examples", "assets"}
 _OPTIONAL_DIRS = ("docs", "examples", "assets")
+
+
+def _safe_child(base: Path, name: str) -> Path:
+    """Resolve ``base / name`` and refuse any result that escapes ``base``.
+
+    ``name`` comes from decoded (untrusted) artifact keys; a value like
+    ``../../etc/x`` or an absolute path would otherwise let a crafted
+    ``.papyri`` file write outside the target directory on ``papyri unpack``.
+    """
+    base_resolved = base.resolve()
+    child = (base / name).resolve()
+    if not child.is_relative_to(base_resolved):
+        raise BundleError(f"unsafe path in bundle: {name!r}")
+    return child
+
+
+_SAFE_URL_SCHEMES = frozenset({"http", "https", "mailto"})
+_URL_SCHEME_RE = re.compile(r"^([a-z][a-z0-9+.-]*):", re.IGNORECASE)
+
+
+def _is_safe_url(url: str) -> bool:
+    """Mirror of ingest's ``isSafeUrl``: only http/https/mailto + relative URLs.
+
+    Disallows ``javascript:``/``data:``/… which would become an XSS vector
+    once a Link/Image reaches a renderer. Control chars and whitespace are
+    stripped first so ``java\\tscript:`` cannot smuggle a scheme past the test.
+    """
+    stripped = "".join(c for c in url if ord(c) > 0x20 and not (0x7F <= ord(c) <= 0x9F))
+    m = _URL_SCHEME_RE.match(stripped)
+    if m is None:
+        return True
+    return m.group(1).lower() in _SAFE_URL_SCHEMES
+
+
+def _iter_nodes(obj: Any) -> Iterator[Node]:
+    """Yield every Node reachable from *obj*, depth-first."""
+    if isinstance(obj, Node):
+        yield obj
+        for attr in get_type_hints(type(obj)):  # type: ignore[arg-type]
+            yield from _iter_nodes(getattr(obj, attr))
+    elif isinstance(obj, (list, tuple)):
+        for item in obj:
+            yield from _iter_nodes(item)
+    elif isinstance(obj, dict):
+        for v in obj.values():
+            yield from _iter_nodes(v)
+
+
+def _assert_safe_urls(bundle: Bundle) -> None:
+    """Refuse to pack a bundle whose Link/Image nodes use a disallowed scheme.
+
+    Defense-in-depth alongside the ingest-time check and the renderer's own
+    sanitisation — pack runs in the maintainer's build, so neither downstream
+    layer can assume the bundle was vetted here.
+    """
+    unsafe = [
+        n.url
+        for n in _iter_nodes([bundle.api, bundle.narrative, bundle.examples])
+        if isinstance(n, (Link, Image)) and not _is_safe_url(n.url)
+    ]
+    if unsafe:
+        sample = ", ".join(unsafe[:3])
+        raise BundleError(
+            f"{len(unsafe)} link/image URL(s) use a disallowed scheme "
+            f"(only http, https, mailto and relative URLs are allowed): {sample}"
+        )
 
 
 def _count_files(d: Path) -> int:
@@ -77,6 +151,46 @@ def _check_layout(path: Path) -> None:
             raise BundleError(f"unexpected top-level entry: {entry.name}")
 
 
+def _check_no_gen_errors(raw: dict[str, Any]) -> None:
+    """Refuse to pack a bundle whose gen step swallowed errors.
+
+    ``papyri gen`` (in lenient mode) records every per-object failure under
+    ``errors`` in ``papyri.json`` instead of producing a degraded bundle in
+    silence. Pack treats any such record as fatal: the maintainer must fix
+    or explicitly suppress (e.g. register a handler for the offending
+    directive, add the qa to ``exclude`` or ``[global.expected_errors]``)
+    before the bundle can ship. CI sees a non-zero ``papyri pack`` and fails.
+
+    Every error is listed on its own line so the maintainer can copy qas
+    straight into their config; the qa column is grouped by error type so
+    common failure modes stand out.
+    """
+    errors = raw.get("errors")
+    if not errors:
+        return
+    if not isinstance(errors, list):
+        raise BundleError(
+            f"papyri.json 'errors' must be a list, got {type(errors).__name__}"
+        )
+    grouped: dict[str, list[str]] = {}
+    malformed: list[str] = []
+    for e in errors:
+        if not isinstance(e, dict):
+            malformed.append(repr(e))
+            continue
+        key = f"{e.get('kind', '?')} {e.get('error_type', '?')}"
+        grouped.setdefault(key, []).append(str(e.get("path", "?")))
+    lines: list[str] = []
+    for key in sorted(grouped):
+        lines.append(f"  [{key}]")
+        lines.extend(f"    - {path}" for path in sorted(grouped[key]))
+    lines.extend(f"  (malformed) {entry}" for entry in malformed)
+    raise BundleError(
+        f"bundle records {len(errors)} gen error(s) — refusing to pack:\n"
+        + "\n".join(lines)
+    )
+
+
 def _read_meta(path: Path) -> BundleManifest:
     try:
         raw: Any = json.loads((path / "papyri.json").read_text())
@@ -84,6 +198,7 @@ def _read_meta(path: Path) -> BundleManifest:
         raise BundleError(f"papyri.json is not valid JSON: {exc}") from exc
     if not isinstance(raw, dict):
         raise BundleError("papyri.json is not a JSON object")
+    _check_no_gen_errors(raw)
     for key in ("module", "version"):
         if key not in raw:
             raise BundleError(f"papyri.json is missing required key {key!r}")
@@ -133,6 +248,105 @@ def _decode_dir(
             key = key[: -len(strip_suffix)]
         out[key] = value
     return out
+
+
+def _check_toc_refs(bundle: Bundle) -> None:
+    """Every toc entry must point at a document present in the bundle.
+
+    ``LocalRef`` promises its target exists, and gen is meant to guarantee
+    that before writing the toc — but a regression in narrative collection
+    can leave the toc pointing at docs that were dropped (e.g. a page that
+    failed to parse). That produces a toc full of dead links and pages that
+    render empty. Catch it at pack time, fail-fast, so a broken bundle never
+    ships.
+    """
+    targets: dict[str, dict[str, Any]] = {
+        "docs": bundle.narrative,
+        "module": bundle.api,
+        "examples": bundle.examples,
+    }
+
+    def walk(node: TocTree) -> None:
+        store = targets.get(node.ref.kind)
+        if store is None:
+            raise BundleError(
+                f"toc entry {node.ref.path!r} has unknown ref kind "
+                f"{node.ref.kind!r} (expected one of {sorted(targets)})"
+            )
+        if node.ref.path not in store:
+            raise BundleError(
+                f"toc entry {node.ref.path!r} (kind {node.ref.kind!r}) has no "
+                f"corresponding document in the bundle"
+            )
+        for child in node.children:
+            walk(child)
+
+    for node in bundle.toc:
+        walk(node)
+
+
+def find_orphan_docs(bundle: Bundle) -> list[str]:
+    """Narrative docs that no toc entry points at, sorted.
+
+    The toc is a tree and ``_check_toc_refs`` already guarantees every node
+    resolves, so "reachable via the toc" reduces to "the doc's key appears
+    as some entry's ``docs`` ref anywhere in the tree". A doc that is present
+    in ``narrative`` but missing from that set is an orphan: it renders fine
+    at its own URL but is invisible in navigation. A large crop of orphans
+    usually means narrative collection lost a toctree root (e.g. an index
+    page failed to parse), stranding everything it would have linked.
+
+    An empty toc makes every narrative doc an orphan — that *is* the failure
+    mode here (no navigation at all), so it is reported rather than special-cased.
+    """
+    referenced: set[str] = set()
+
+    def walk(node: TocTree) -> None:
+        if node.ref.kind == "docs":
+            referenced.add(node.ref.path)
+        for child in node.children:
+            walk(child)
+
+    for node in bundle.toc:
+        walk(node)
+
+    return sorted(k for k in bundle.narrative if k not in referenced)
+
+
+def _warn_orphan_docs(bundle: Bundle) -> None:
+    """Log a warning if narrative docs are unreachable from the toc.
+
+    Not fatal: papyri's IR does not yet track Sphinx ``:orphan:`` markers, so
+    an intentionally-unlisted page can't be told apart from an accidental
+    one. Surfacing a count + sample lets a maintainer notice the regression
+    (e.g. "200 orphaned docs") without blocking bundles that orphan pages on
+    purpose.
+    """
+    orphans = find_orphan_docs(bundle)
+    if not orphans:
+        return
+    sample = ", ".join(orphans[:10])
+    more = f" (+{len(orphans) - 10} more)" if len(orphans) > 10 else ""
+    if not bundle.toc:
+        log.warning(
+            "bundle %s %s has %d narrative doc(s) but an empty toc — none are "
+            "reachable via navigation: %s%s",
+            bundle.module,
+            bundle.version,
+            len(orphans),
+            sample,
+            more,
+        )
+    else:
+        log.warning(
+            "bundle %s %s has %d narrative doc(s) not reachable from the toc "
+            "(orphans): %s%s",
+            bundle.module,
+            bundle.version,
+            len(orphans),
+            sample,
+            more,
+        )
 
 
 def read_bundle_dir(path: Path, log: Callable[[str], None] | None = None) -> Bundle:
@@ -218,11 +432,14 @@ def read_bundle_dir(path: Path, log: Callable[[str], None] | None = None) -> Bun
         toc=toc,
     )
     bundle.validate()
+    _check_toc_refs(bundle)
+    _warn_orphan_docs(bundle)
     return bundle
 
 
 def make_artifact(bundle: Bundle, log: Callable[[str], None] | None = None) -> bytes:
     """Encode a ``Bundle`` to canonical-CBOR + gzip bytes (deterministic)."""
+    _assert_safe_urls(bundle)
     if log:
         log("  encoding CBOR …")
     cbor_bytes = encoder.encode(bundle)
@@ -297,7 +514,7 @@ def explode_bundle_to_dir(
     module_dir = path / "module"
     module_dir.mkdir()
     for qa, doc in bundle.api.items():
-        (module_dir / f"{qa}.json").write_bytes(doc.to_json())
+        _safe_child(module_dir, f"{qa}.json").write_bytes(doc.to_json())
 
     if bundle.narrative:
         if log:
@@ -306,7 +523,7 @@ def explode_bundle_to_dir(
         docs_dir = path / "docs"
         docs_dir.mkdir()
         for name, doc in bundle.narrative.items():
-            (docs_dir / name).write_bytes(doc.to_json())
+            _safe_child(docs_dir, name).write_bytes(doc.to_json())
 
     if bundle.examples:
         if log:
@@ -315,7 +532,7 @@ def explode_bundle_to_dir(
         examples_dir = path / "examples"
         examples_dir.mkdir()
         for name, section in bundle.examples.items():
-            (examples_dir / name).write_bytes(section.to_json())
+            _safe_child(examples_dir, name).write_bytes(section.to_json())
 
     if bundle.assets:
         if log:
@@ -324,7 +541,7 @@ def explode_bundle_to_dir(
         assets_dir = path / "assets"
         assets_dir.mkdir()
         for name, data in bundle.assets.items():
-            (assets_dir / name).write_bytes(data)
+            _safe_child(assets_dir, name).write_bytes(data)
 
     if bundle.toc:
         if log:
@@ -354,6 +571,6 @@ def explode_artifact_to_dir(
     if log:
         log(f"  loading {artifact.name} …")
     bundle = load_artifact(artifact.read_bytes())
-    out_dir = dest_parent / f"{bundle.module}_{bundle.version}"
+    out_dir = _safe_child(dest_parent, f"{bundle.module}_{bundle.version}")
     explode_bundle_to_dir(bundle, out_dir, log=log)
     return out_dir

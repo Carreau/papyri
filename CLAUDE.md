@@ -26,9 +26,12 @@ links (conda-forge model).
 
 The **local viewer** (`viewer/`) is the current reference implementation of
 the rendering side. It is used for development and debugging, and is being
-designed with the centralized service in mind. The architecture is
-intentionally shaped to support a future hosted service (Cloudflare Workers +
-R2 + D1).
+designed with the centralized service in mind. The hosted service runs as a
+long-running Node.js server on a VPS. The storage layer is kept behind
+abstractions (`BlobStore` / `GraphDb` / `RawStore`) so the backend can be
+swapped later, but only the filesystem + SQLite implementations exist. An
+earlier Cloudflare Workers (R2 + D1) target was abandoned because ingest
+latency on it was far too high.
 
 ## Repo purpose, short version
 
@@ -37,6 +40,8 @@ R2 + D1).
   `~/.papyri/data/<pkg>_<ver>/`.
 - **`papyri pack`**: packs a DocBundle directory into a `.papyri` artifact
   (gzip-compressed CBOR). The artifact is the canonical shipping unit.
+  `papyri unpack` is the inverse — it explodes a `.papyri` artifact back into
+  a JSON DocBundle directory for inspection.
 - **`papyri upload`**: ships a `.papyri` file, a `.zip` containing one, or a
   DocBundle directory to a viewer instance whose `/api/bundle` endpoint (HTTP
   `PUT`) runs the TypeScript ingest pipeline server-side to wire bundles into
@@ -45,9 +50,11 @@ R2 + D1).
 - **`ingest/`**: TypeScript `papyri-ingest` package — the canonical
   ingestion engine, invoked by the viewer's upload endpoint. There is no
   `papyri ingest` Python CLI; do not add one.
-- **`viewer/`**: TypeScript web renderer (Astro + React islands). Targets both
-  Node.js (local dev, `pnpm dev`) and Cloudflare Workers (`pnpm build:cf`).
-  When building the viewer, think about what the hosted service will need.
+- **`viewer/`**: TypeScript web renderer (Astro + React islands). Runs as a
+  long-running Node.js server (`@astrojs/node`, `output: "server"`) for both
+  local dev (`pnpm dev`) and the hosted VPS deployment (`pnpm build` + `pnpm
+  serve`). When building the viewer, think about what the hosted service will
+  need.
 - There is no Python-side rendering. Do not add any.
 
 ## Audience
@@ -62,6 +69,14 @@ service *could* be built later without a breaking change to the IR.
 
 ## Ground rules for changes
 
+0. **Pre-production: prefer deleting dead code over keeping it.** Nothing here
+   is shipped to real users yet, there are no published bundles or external
+   consumers to keep compatible, and we rebuild everything from the raw
+   archives when the IR changes (see "Storage invariant" in `PLAN.md`). So when
+   a change makes code, a CBOR tag, a schema entry, a render branch, or a CSS
+   block unreachable, **delete it** rather than leaving it for
+   backwards-compatibility. Don't add compat shims, legacy-format readers, or
+   "just in case" fallbacks for old data — there is no old data that matters.
 1. **Stay inside scope.** Before adding or fixing anything, check `PLAN.md`.
    If a task is not in the open work or follow-ups, stop and ask the user.
 2. **Small focused PRs.** One logical change per commit.
@@ -148,17 +163,18 @@ service *could* be built later without a breaking change to the IR.
 8. **Viewer design should anticipate the hosted service.** When working on
    `viewer/`, consider what a centralized multi-bundle service will need (URL
    structure, bundle switching, cross-package search). The storage and graph
-   layers must be abstracted so the same code runs against local backends
-   (filesystem + SQLite, via `FsBlobStore`/`SqliteGraphDb`) and cloud backends
-   (R2 + D1, via `R2BlobStore`/`D1GraphDb`). Both are in `ingest/src/`.
+   layers stay abstracted behind the `BlobStore` / `GraphDb` / `RawStore`
+   interfaces (in `ingest/src/`) so the backend can be swapped later, but the
+   only implementations today are the filesystem + SQLite ones
+   (`FsBlobStore` / `SqliteGraphDb` / `FsRawStore`).
 
 ## Repository layout
 
 ```
 papyri/                   Python package (IR producer + CLI)
   __init__.py             CLI entry (typer app), wires commands from cli/
-  cli/                    One file per subcommand: gen, upload, pack, find,
-                          describe, diff, debug, about, bootstrap
+  cli/                    One file per subcommand: gen, upload, pack, unpack,
+                          find, describe, diff, debug, about, bootstrap
   gen.py                  Core IR generation (inspect + docstring → IR)
   nodes.py                IR node types (CST/AST nodes)
   node_base.py            Base class for IR nodes (serialization hooks)
@@ -189,21 +205,23 @@ ingest/                   TypeScript papyri-ingest package
     ingest.ts             Ingester class — writes bundle into blob+graph
     encoder.ts            CBOR decode/encode, IR node types
     visitor.ts            Forward-ref collector (walks IR nodes)
-    bundle.ts             Bundle validation + directory exploder
-    graphstore.ts         GraphStore (legacy; used by CLI)
-    graph-db.ts           GraphDb interface + SqliteGraphDb/D1GraphDb
-    blob-store.ts         BlobStore interface + FsBlobStore/R2BlobStore
-    raw-store.ts          RawStore interface + FsRawStore/R2RawStore
-    cli.ts                papyri-ingest CLI (standalone use)
-  migrations/             SQL schema applied to both SQLite and D1
+    bundle.ts             Bundle Node validation (assertBundle)
+    keys.ts               Key tuple (module/version/kind/path) + keyStr
+    graph-db.ts           GraphDb interface + SqliteGraphDb
+    blob-store.ts         BlobStore interface + FsBlobStore
+    raw-store.ts          RawStore interface + FsRawStore
+    inventory.ts          Intersphinx objects.inv parser (link to non-papyri projects)
+  migrations/             SQL schema applied to the SQLite graph DB
 
 viewer/                   TypeScript Astro web renderer
   src/
     lib/
       ir-reader.ts        Decode blobs → typed IR (shock absorber for IR changes)
       ir-types.ts         TypeScript types mirroring IR node shapes
+      ir-schema.ts        Auto-generated IR field/type schema (drives IR-stats panel)
       backends.ts         getBackends() — builds BlobStore+GraphDb per adapter
       graph.ts            Graph queries (getBackrefs, getForwardRefs, …)
+      bundle-walk.ts      Shared bundle traversal (walkBundle/walkAllBundles)
       nav.ts              Navigation / TOC helpers
       qualname-page.ts    Qualname page view model
       qualname.ts         Qualname parsing/normalization
@@ -238,6 +256,10 @@ viewer/                   TypeScript Astro web renderer
         bundle.ts         PUT /api/bundle — ingest endpoint
         reingest.ts       POST /api/reingest — replay raw archive
         bundles.json.ts   GET /api/bundles.json — bundle list
+        inventory.ts      Intersphinx inventory register/list (external links)
+        nodes.json.ts, ir-stats.json.ts, search.json.ts, text-search.json.ts
+        [pkg]/[ver]/{nodes,raw,text-search}.json.ts  Per-bundle data endpoints
+        auth/login.ts, auth/logout.ts  Session login/logout
         clear.ts, clear-raw.ts, health.json.ts, stats.ts
       admin/              Admin panel (auth-gated)
       login.astro         Login page
@@ -245,7 +267,6 @@ viewer/                   TypeScript Astro web renderer
     styles/               global.css, ir-nodes.css
     middleware.ts         Auth session middleware
   tests/                  Vitest test suite
-  wrangler.toml           Cloudflare Workers config (D1 + R2 + KV bindings)
   PLAN.md                 Viewer-specific milestone tracker
 
 examples/                 Example TOML configs for papyri gen
@@ -286,13 +307,15 @@ the graphstore and blob store is rebuildable via `POST /api/reingest`.
   human-readable. CBOR starts at `papyri pack`. Do not write CBOR into the
   bundle directory, and do not write JSON into the `.papyri` artifact or
   the ingest/viewer layers.
-- `papyri upload` sends `PUT` (not `POST`) to `/api/bundle`. The viewer's
-  CSRF protection requires the `Origin` header to match the upload host; the
-  upload CLI sets it automatically. Cloudflare's default bot-protection
-  rejects `Python-urllib/3.x`; the CLI sends `papyri-upload/<version>`.
-- `better-sqlite3` and `node:fs` must not be reachable from a route compiled
-  into the Workers bundle (sync APIs, native bindings). Backend selection
-  happens in `viewer/src/lib/backends.ts` via `PAPYRI_ADAPTER` env var.
+- `papyri upload` sends `PUT` (not `POST`) to `/api/bundle`. The upload CLI
+  sets an `Origin` header matching the upload host (defensive — Astro's
+  `checkOrigin` is disabled in `astro.config.mjs`, since the endpoint carries
+  its own bearer-token check). Some reverse proxies / WAFs reject
+  `Python-urllib/3.x`, so the CLI sends `papyri-upload/<version>` instead.
+- Storage backends are chosen in `viewer/src/lib/backends.ts`. Only the
+  filesystem + SQLite implementations exist (`FsBlobStore` / `SqliteGraphDb` /
+  `FsRawStore`); the `BlobStore` / `GraphDb` / `RawStore` interfaces are kept
+  so a different backend can be added later without touching the viewer.
 
 ## Code conventions
 
@@ -310,28 +333,35 @@ the graphstore and blob store is rebuildable via `POST /api/reingest`.
 |---|---|---|
 | `PAPYRI_UPLOAD_URL` | `papyri upload` | Viewer endpoint (default `http://localhost:4321/api/bundle`) |
 | `PAPYRI_UPLOAD_TOKEN` | `papyri upload`, viewer | Bearer token for `PUT /api/bundle` |
-| `PAPYRI_INGEST_DIR` | viewer (Node mode) | Bundle data root (default `~/.papyri/ingest`) |
-| `PAPYRI_INGEST_DB` | viewer (Node mode) | SQLite graph DB (default `~/.papyri/ingest/papyri.db`) |
-| `PAPYRI_ADAPTER` | viewer build | `cloudflare` to build for Workers; omit for Node |
+| `PAPYRI_INGEST_DIR` | viewer | Bundle data root (default `~/.papyri/ingest`) |
+| `PAPYRI_INGEST_DB` | viewer | SQLite graph DB (default `~/.papyri/ingest/papyri.db`) |
+| `PAPYRI_SITE` | viewer build | Canonical external origin for canonical-URL generation behind a reverse proxy |
 | `PAPYRI_USERNAME` / `PAPYRI_PASSWORD` | viewer middleware | Credentials for the session-cookie auth gate |
+| `PAPYRI_VERSION` | `papyri upload` | Overrides the `papyri-upload/<version>` User-Agent string |
+| `PAPYRI_BUILD_COMMIT` | viewer build | Git commit surfaced on the admin panel |
+| `PAPYRI_BUILD_ADAPTER` | viewer build | Build adapter name surfaced on the admin panel |
 
-## Viewer current state (M9 milestones)
+## Viewer current state
 
-- **M9.0–M9.3b complete.** Async storage+graph layer (`BlobStore`/`GraphDb`
-  abstractions), Workers bundle upload via `PUT /api/bundle`, raw bundle
-  archive (`_raw/<pkg>/<ver>.papyri.gz`), and `POST /api/reingest`.
-- **M9.4 open.** CI smoke test against `wrangler dev` + `papyri upload`
-  fixture; decide whether Node `pnpm serve` stays as a maintained fallback.
-- **M9.5 open.** Cut subrequest count per `PUT /api/bundle` (Workers has a
-  per-invocation cap; large bundles currently exceed it).
+The viewer runs as a long-running Node.js server (`@astrojs/node`,
+`output: "server"`) on a VPS. Complete: async storage+graph layer
+(`BlobStore` / `GraphDb` / `RawStore` abstractions, filesystem + SQLite
+implementations), in-process bundle upload via `PUT /api/bundle`, raw bundle
+archive (`_raw/<pkg>/<ver>.papyri.gz`), and `POST /api/reingest`.
+
+The earlier Cloudflare Workers (R2 + D1) target was abandoned — ingest latency
+on it was far too high (per-object subrequest fan-out against the Workers cap;
+see `viewer/PLAN.md`). The storage abstractions are kept so a backend swap
+stays possible, but there is no Cloudflare adapter, `wrangler.toml`, or
+`build:cf` target anymore.
 
 See `viewer/PLAN.md` for the detailed milestone tracker.
 
 ## Handy starting points
 
 - CLI entry: `papyri/__init__.py` (typer app, wires `papyri/cli/*`).
-- CLI subcommands: `papyri/cli/gen.py`, `upload.py`, `pack.py`, `find.py`,
-  `describe.py`, `diff.py`, `debug.py`, `about.py`, `bootstrap.py`.
+- CLI subcommands: `papyri/cli/gen.py`, `upload.py`, `pack.py`, `unpack.py`,
+  `find.py`, `describe.py`, `diff.py`, `debug.py`, `about.py`, `bootstrap.py`.
 - IR gen: `papyri/gen.py`.
 - RST→IR visitor + directive handlers: `papyri/tree.py`.
 - RST parsing via tree-sitter: `papyri/ts.py`.
@@ -356,3 +386,6 @@ See `viewer/PLAN.md` for the detailed milestone tracker.
 - Update `PLAN.md` when you complete an open work item or discover a new
   constraint. Treat `PLAN.md` as a living document.
 - Commit messages: imperative mood, explain *why*.
+- PR descriptions: be concise. Two to four bullet points covering what
+  changed and why. Do not describe how you verified the change — that is
+  CI's job. No "I ran X and saw Y" narratives.

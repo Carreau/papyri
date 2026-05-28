@@ -1,6 +1,7 @@
 ---
-// Landing-page card. One card per package; links to the package overview
-// page (`/<pkg>/`) where the user can pick a version. Counts reflect the
+// Landing-page card. One card per package. The card body links to the latest
+// docs (`/project/<pkg>/latest/`) via a stretched link; a footer link always
+// points to the project detail page (`/project/<pkg>/`). Counts reflect the
 // latest available version.
 import { loadBundleNav } from "../lib/nav.ts";
 import { getBackends } from "../lib/backends.ts";
@@ -19,10 +20,11 @@ const nav = await loadBundleNav(blobStore, pkg, latest);
 const docCount = nav.docs.length + nav.tutorials.length;
 const exampleCount = nav.examples.length;
 const summary = typeof nav.meta.summary === "string" ? nav.meta.summary : null;
-const href = `/project/${pkg}/`;
+const docsHref = `/project/${pkg}/latest/`;
+const detailHref = `/project/${pkg}/`;
 ---
 
-<a class="bundle-card" href={href} data-pkg={pkg} data-summary={summary ?? ""}>
+<div class="bundle-card" data-pkg={pkg} data-summary={summary ?? ""}>
   <div class="bundle-card-header">
     {
       nav.logoDataUrl ? (
@@ -34,11 +36,12 @@ const href = `/project/${pkg}/`;
       )
     }
     <div class="bundle-card-title">
-      <span class="bundle-card-pkg">{pkg}</span>
-      <span class="bundle-card-version">
-        {latest}
-        {versionCount > 1 ? ` · ${versionCount} versions` : ""}
+      <span class="bundle-card-pkg">
+        <a class="bundle-card-link" href={docsHref}>
+          {pkg}
+        </a>
       </span>
+      <span class="bundle-card-version">{latest}</span>
     </div>
   </div>
 
@@ -66,4 +69,8 @@ const href = `/project/${pkg}/`;
       ) : null
     }
   </div>
-</a>
+
+  <a class="bundle-card-details-link" href={detailHref}>
+    {`Project details (${versionCount} version${versionCount === 1 ? "" : "s"})`} →
+  </a>
+</div>

@@ -42,8 +42,7 @@ The boundary between the two halves:
   implementation detail; do not assume JSON or CBOR exclusively.
 - Storage is abstracted: the viewer and ingest pipeline must not assume a
   specific on-disk layout or wire encoding. The current implementation uses
-  SQLite for the cross-link graph and a filesystem store for blobs; the
-  hosted service will use different backends (e.g. Cloudflare D1 + R2).
+  SQLite for the cross-link graph and a filesystem store for blobs.
 
 ## Storage invariant: the graphstore is a derived cache
 
@@ -84,7 +83,14 @@ the raw archive, not via reading the graphstore back.
 
 ## Open work
 
-### Viewer — M9 (Cloudflare Workers)
+### Viewer — hosting
+
+The viewer is deployed as a long-running Node.js server on a VPS. An
+earlier Cloudflare Workers (R2 + D1) target was abandoned because ingest
+latency on Workers/R2/D1 was far too high (per-object subrequest fan-out
+against the Workers cap; see `viewer/PLAN.md`). The storage abstractions
+(`BlobStore` / `GraphDb` / `RawStore`) are kept so a backend swap stays
+possible, but only the filesystem + SQLite implementations exist.
 
 Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
 
@@ -123,8 +129,8 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
     be small, so the *total* row count scanned might still be lower.
   - **Cache friendliness.** Per-bundle tables are append-only during a
     single ingest; the global `links` table is write-amplified across
-    every concurrent upload. The per-bundle shape probably wins on the
-    hosted service (D1) where write contention matters.
+    every concurrent upload. The per-bundle shape probably wins where
+    write contention matters.
   - **Re-ingest semantics.** Today removing a bundle means deleting from
     `nodes` (and `links` cascades). Per-bundle tables make
     `POST /api/reingest` and bundle eviction trivially atomic per bundle
@@ -137,8 +143,9 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   - **Schema-per-bundle vs. partition column.** "Per-bundle table" can
     mean a literal `refs_<pkg>_<ver>` table (clean partitioning, ugly
     DDL churn) or one `refs` table partitioned by `(from_pkg,
-    from_ver)` with a covering index. D1 doesn't love DDL churn; one
-    table with a partition column is probably the realistic shape.
+    from_ver)` with a covering index. Per-bundle DDL churn is best
+    avoided; one table with a partition column is probably the realistic
+    shape.
   - **Interaction with the "graphstore is a derived cache" invariant.**
     This is purely a denormalization choice — no IR contract changes,
     no raw-archive impact — so it's exactly the kind of change the
@@ -211,13 +218,31 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
 
 - **Missing block directives for numpy / scipy / IPython builds.**
   Audited 2026-04-30. The following directives are encountered when running
-  `papyri gen` against these packages but have no handler; they fall through
-  to a raw `Directive` node in the IR.
+  `papyri gen` against these packages but have no handler. As of the
+  unhandled-directive change, an unregistered directive can no longer be
+  serialized: gen emits a transient `Directive` node carrying the name, and
+  serialization (CBOR or JSON) raises with that name, so the bundle cannot be
+  produced until a handler is registered (`papyri.directives:drop` to discard,
+  `papyri.directives:code_handler` to keep verbatim, or a real handler). The
+  directives below therefore need a handler registered — in `papyri.toml`'s
+  `[global.directives]` table or, for the common ones, as built-in defaults in
+  `tree.py` — before these packages will gen cleanly.
 
   *High priority* (very common; materially degrades output):
   - `rubric` — unnumbered section heading (`.. rubric:: References`). Used
     in all three packages for headings that must not appear in the TOC. Should
     produce a lightweight `Section`-like node or an `Admonition`.
+  - sphinx-design (`grid`, `grid-item`, `grid-item-card`, `card`,
+    `card-carousel`, `tab-set`, `tab-item`, `dropdown`, `button-link`,
+    `button-ref`) — *landed as silent drops.* numpy / scipy build their root
+    `doc/source/index.rst` as a PyData-theme landing page out of these, and
+    losing the root index page collapses the entire toc to a single fallback
+    leaf via `make_tree`'s root-not-found path. Added to
+    `_SPHINX_ONLY_DIRECTIVES`. If a hosted DocBundle ever needs to render
+    these (probably not — they are pure layout around links the toctree
+    already provides), revisit with proper IR nodes.
+  - `automodule` — was missing from the autodoc family in
+    `_SPHINX_ONLY_DIRECTIVES`; now added next to `autofunction` / `autoclass`.
 
   *Medium priority* (structural / ref-resolution impact):
   - `only` — conditional content (`.. only:: html`). Content inside should be
@@ -275,11 +300,22 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   enforced at gen time so the bundle is self-consistent before upload.
 - **`mod_root == root` assertion could move to gen.** Gen already knows both
   values; moving the check surfaces mistakes earlier.
+- **External (intersphinx) linking — landed.** The viewer can now resolve a
+  cross-package `RefInfo` that points at a non-papyri project (numpy, the
+  stdlib, …) to a real external URL. An admin registers a project by pointing
+  `POST /api/inventory` at its Sphinx `objects.inv`; the parser lives in
+  `ingest/src/inventory.ts`, the rows are stored via the
+  `0001_external_inventory.sql` migration, and `resolveExternalRefs`
+  (`viewer/src/lib/xref.ts`) consults them at render time for refs the local
+  graph can't resolve. Admin UI: `ExternalInventoryPanel.tsx`. This covers a
+  broad slice of the "link to projects that don't publish a DocBundle" need.
 - **Builtin ref resolution belongs at gen time.** Ship a Python-builtins
   bundle shim — a minimal DocBundle that registers every builtin as a proper
   `RefInfo`. `papyri gen` emits references to builtins as ordinary cross-refs;
   ingest resolves them against the shim exactly like any other package. No
-  special-casing in the ingest resolver.
+  special-casing in the ingest resolver. (Note: the intersphinx inventory above
+  already handles stdlib links via the CPython `objects.inv`; the shim is the
+  gen-time alternative for builtins specifically.)
 - **Core invariant: gen owns all ref classification; ingest only links.**
   This invariant applies to the IR in the raw archive, not to the
   graphstore's internal representation (see "Storage invariant" above) —
@@ -306,12 +342,12 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   unicode) are warned and dropped; support can be added per demand.
 - **Separate domains/processes for upload, admin, and user surfaces.**
   In a hosted deployment the upload endpoint (`POST /api/bundle`), any admin
-  panel, and any per-user management UI should run as isolated processes (or
-  Workers routes) on separate subdomains. Keeping them isolated limits blast
+  panel, and any per-user management UI should run as isolated processes on
+  separate subdomains. Keeping them isolated limits blast
   radius: a vulnerability in the upload path cannot reach admin state, and
   per-user surfaces cannot touch other users' bundles. Design URL structure
   and routing with this separation in mind so the hosted service is not baked
-  into a monolithic app. Track this when the M9 / hosting design firms up.
+  into a monolithic app. Track this when the hosting design firms up.
 
 - **Track raw upload timestamps independently of bundle metadata.**
   The `_raw/<pkg>/<ver>.papyri.gz` archive should record when a bundle was
@@ -323,6 +359,26 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   policies without trusting generator-side clocks.
 
 - **Images are likely a volatile field for bundle hashes.**
+  *Partially landed:* `papyri upload` now computes a SHA-256 over the whole
+  `.papyri` artifact and skips the upload when the viewer already holds that
+  exact content for `(module, version)` (stored as `bundles.content_hash`;
+  served via `GET /api/bundle`; `--force` bypasses). This artifact-level hash
+  deliberately includes image bytes, so a re-`papyri gen` with churned images
+  triggers a redundant re-upload — safe (never a false "already uploaded"),
+  but coarse. The refinement below — a *content-identity* hash over IR
+  structure + text + asset references but **not** image bytes — remains open.
+
+  *Follow-up — make `content_hash` `NOT NULL`.* The column is nullable today
+  only as a migration cushion (`ALTER TABLE ADD COLUMN`, plus pre-existing
+  rows). Now that the *only* ingest input is a packed `.papyri` artifact
+  (the directory-based ingest path is gone — see "Drop directory-based
+  ingest" below), every ingest knows its compressed bytes and always
+  computes a hash, so a NULL is no longer reachable on the write path. We're
+  not production-ready, so it's fine to do a full wipe + re-ingest from the
+  raw archive at some point and recreate `bundles` with `content_hash TEXT
+  NOT NULL` (fold it into a future migration squash rather than carrying the
+  nullable form forever).
+
   If/when we content-address bundles (e.g. a SHA over the IR for dedup,
   caching, or change detection), image assets should almost certainly be
   excluded from the hashed payload — especially autogenerated ones (matplotlib
@@ -335,6 +391,23 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   hash so the viewer can cache-bust individual images? Probably yes, but kept
   out of the bundle-identity hash.
 
+- **Drop directory-based ingest.** *Landed.* The TypeScript `Ingester` had two
+  inputs: a `papyri gen` bundle *directory* (`ingest(dirPath)`, with its own
+  per-item `_put` write path and `_ingest*Dir` helpers) and a decoded
+  `Bundle` Node (`ingestBundle(node)`, the optimized two-phase write used by
+  `PUT /api/bundle`). The directory path was legacy (it even read CBOR, not
+  the JSON `papyri gen` actually writes) and only the standalone
+  `papyri-ingest` CLI used it. `ingestBundle` (decoded packed `.papyri`
+  artifact) is now the sole ingest contract: `ingest()`, `_put`,
+  `_getForwardRefs`, the `_ingest*Dir` helpers, `IngestOptions.check`, and the
+  unused `explodeBundleToDir` (Bundle → directory) are removed. The standalone
+  `papyri-ingest` CLI (`ingest/src/cli.ts`, the `bin` entry) existed only to
+  drive that directory path and has been removed too — `papyri-ingest` is now
+  a library consumed by the viewer's `PUT /api/bundle`, which is the one ingest
+  entry point. Consequence: the `--check` / `normalise_ref` skip that only
+  existed on the directory path is gone — re-introduce it at gen time (see
+  "`normalise_ref` validation could move to gen" above) if still wanted.
+
 - **`papyri pack` strict mode and bundle linting.**
   Add a `--strict` flag to `papyri pack` that promotes warnings to errors,
   useful in CI to block publishing a bundle with known issues. Add a `--lint`
@@ -344,6 +417,49 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   resolved, empty module-docstrings holding a sentinel placeholder rather than
   a parse failure marker. A `--strict --lint` step in maintainer CI gives fast
   feedback before upload.
+
+  *Partial landing — silent-drop → hard pack failure:* lenient `papyri gen`
+  used to swallow per-object failures (a narrative page that failed to
+  validate, an API qa whose introspection raised) with a `log.warning` and
+  produce a quietly-degraded bundle. Now every such failure is recorded
+  under `errors` in `papyri.json` (`Gen._record_error` / `_gen_errors` in
+  `papyri/gen.py`, mirroring `ErrorCollector._unexpected_errors` for the API
+  side), and `papyri pack`'s `_check_no_gen_errors` refuses to produce an
+  artifact while any are present. CI sees a non-zero pack and fails. This
+  is what would have caught the numpy toc-collapse regression at the
+  *moment* of breakage instead of at "narrative docs look mostly empty"
+  later. The remaining `--strict`/`--lint` items above (unresolved refs,
+  missing assets, …) are still open.
+
+- **Toc ↔ narrative consistency checks.**
+  *Forward direction landed:* `papyri pack` now fails (via `_check_toc_refs`
+  in `pack.py`, run from `read_bundle_dir`) if any toc entry points at a
+  document that isn't in the bundle — a dangling toc ref leaves the rendered
+  page empty and the nav full of dead links. A regression in narrative
+  collection (e.g. fail-fast on an unhandled directive dropping most numpy
+  pages) is what motivated it. `papyri/tests/test_pack.py` covers the check
+  plus a skip-guarded `test_numpy_toc_has_enough_items` smoke test that flags
+  a numpy build whose toc has collapsed to a handful of entries.
+
+  *Reverse direction landed (as a warning):* `find_orphan_docs` /
+  `_warn_orphan_docs` in `pack.py` (run from `read_bundle_dir`) flag every
+  narrative doc no toc entry points at. An orphaned doc — present in
+  `narrative/` but listed under no toctree root — renders fine at its URL but
+  is invisible in navigation, so the bundle looks "mostly empty" even though
+  the pages exist (a large crop usually means a toctree root failed to parse,
+  stranding everything it would have linked). It is a *warning*, not a hard
+  pack error, because papyri's IR does not yet capture Sphinx `:orphan:`
+  markers, so an intentionally-unlisted page can't be told apart from an
+  accidental one. `test_numpy_narrative_docs_mostly_reachable` (skip-guarded,
+  like the toc-count test) asserts the orphan ratio of a real numpy build
+  stays low.
+
+  *Still open:* once the IR carries an `:orphan:` flag (gen would read the
+  Sphinx field-list metadata at the top of a page), promote accidental
+  orphans to a hard pack error and exclude the flagged ones. Until then,
+  decide whether the canonical-`index`-root vs. any-root distinction matters
+  (today reachability is "appears anywhere in the toc tree", which is
+  equivalent since the toc is a validated tree).
 
 - Static export hardening for `viewer/dist/` deployment.
 - Dark-adapted Shiki theme + dark-mode-aware KaTeX glyphs.
@@ -422,9 +538,13 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   - Render-time only; defer CLI/background validation tooling.
 
   *Files to create/modify (when implemented):*
-  - `viewer/src/components/CrossRef.tsx` — add unresolved styling
-  - `viewer/src/styles/ir-nodes.css` — `.unresolved-ref` styles
-  - `viewer/src/pages/[pkg]/[ver]/validate.astro` — report page
+  - CrossRef rendering lives in `viewer/src/lib/render-node.ts` (string
+    helpers), not a `CrossRef.tsx` component — add the unresolved styling there.
+  - `viewer/src/styles/ir-nodes.css` — the `.xref.unresolved` class already
+    exists (`ir-nodes.css:172,186`); wire `render-node.ts` to emit it when
+    `.exists === false`.
+  - `viewer/src/pages/[pkg]/[ver]/validate.astro` — report page (does not exist
+    yet).
 
 - **Bundle staging area** (captured 2026-05-20).
   Support uploading a bundle into a *staging* zone that is isolated from the
@@ -616,27 +736,37 @@ file are cross-referenced rather than duplicated.
 
 ### Python (`papyri/`)
 
-- **LRU-cache `ts.parse()` results** (`gen.py:534/555/979/1349/1610`). The
-  parser is invoked many times per gen run; even if duplication is rare, an
-  LRU around `ts.parse()` is cheap insurance and removes a per-call cost. Note
-  the contrasting case in `tree.py:54` where `@lru_cache` was *removed*
-  because mutated nodes broke equality — `ts.parse()` operates on raw strings
-  and produces fresh trees, so it does not have that hazard.
-- **Decompose `Gen.collect_api_docs`** (`gen.py:1667–1978`, ~280 lines).
+- **LRU-cache `ts.parse()` results** (`ts.py:1132`; callers in `gen.py` around
+  lines 557/578/1012/1441/1704). The parser is invoked many times per gen run;
+  even if duplication is rare, an LRU around `ts.parse()` is cheap insurance and
+  removes a per-call cost. Note the contrasting case in `tree.py` where
+  `@lru_cache` was *removed* because mutated nodes broke equality — `ts.parse()`
+  operates on raw strings and produces fresh trees, so it does not have that
+  hazard.
+- **Decompose `Gen.collect_api_docs`** (`gen.py:1763`, ~315 lines).
   Split into module-walk / doc-extract / IR-emit so each step is testable in
   isolation.
-- **Directive handler registry redesign** (`tree.py:597–821`). Replace the
-  `"_" + name + "_handler"` string-key convention with an explicit registry
-  dict. The current scheme cannot express directive names containing
-  hyphens (e.g. `code-block`) without ad-hoc wiring. Combine with the
-  "no global state" / `DirectiveContext` work already listed above.
+- **Directive handler registry redesign** — *partially done.* An explicit
+  registry dict now exists (`tree.py:690` `self._handlers`, keyed by the exact
+  directive name so hyphenated names like `code-block` work). But the legacy
+  `"_" + name + "_handler"` getattr convention is still the *first* dispatch
+  path (`tree.py:958`, falling back to `self._handlers.get(...)` at line 960),
+  and `_autosummary_handler` / `_toctree_handler` still rely on it. Finish the
+  job by removing the getattr dispatch so the dict is the only mechanism.
+  Combine with the "no global state" / `DirectiveContext` work above.
 - **Replace assertion-based arg validation in `Node.__init__`**
-  (`node_base.py:31`). Use `TypeError`/`ValueError` so behaviour does not
-  change under `python -O`.
-- **Document the two serialization paths.** `node_serializer.py` (CBOR-side,
-  internally tagged) and `serde.py` (generic dataclass round-trip, JSON or
-  CBOR) coexist and are not duplicates. Add a short module-level comment in
-  each pointing at the other so contributors know which to extend.
+  (`node_base.py:53`). Use `TypeError`/`ValueError` so behaviour does not
+  change under `python -O`. (While here: `_invalidate` at `node_base.py:199`
+  builds its error path as `f"{k}.{sub}." + sub`, interpolating `sub` twice —
+  inconsistent with the dict/list branches that use `ii`; looks like a bug.)
+- **Fix stale `papyri ingest` reference.** `describe.py:85` tells the user
+  "Have you run `papyri ingest` yet?" — but there is no `papyri ingest` CLI
+  (it was removed; CLAUDE.md forbids re-adding it). Point the message at
+  `papyri upload` / the viewer's ingest endpoint instead.
+
+(Resolved and removed: "Document the two serialization paths" — both
+`node_serializer.py` and `serde.py` now carry module-level docstrings that
+cross-reference each other.)
 
 (Already tracked above and not repeated here: `_GITHUB_SLUG` global,
 `DirectiveContext` injection, graphstore write-side audit, missing
@@ -644,39 +774,41 @@ directives.)
 
 ### TypeScript ingest (`ingest/`)
 
-- **Extract shared schema bootstrap.** `migrationsDir`, `loadSchemaFromDisk`,
-  `splitStatements`, and the `PRAGMAS` constant are duplicated between
-  `ingest/src/ingest.ts:86–107` and `viewer/src/lib/graphstore.ts:60–91`.
-  Move into a shared module (most natural home: a new export from the
-  `papyri-ingest` package consumed by the viewer).
-- **Deduplicate ref resolution.** `_getForwardRefs` (`ingest.ts:455–475`)
-  duplicates `getForwardRefs` / `getBackRefs` (`viewer/src/lib/graphstore.ts:277–322`).
-  Parameterize direction and share the row-mapping helper.
-- **Type-safe key parsing.** `visitor.ts:78/90/122` and
-  `viewer/src/lib/graphstore.ts:215` use `split("/")` with silent `?? ""`
-  fallbacks. Add a `parseKeyStr(s) → Key` helper alongside `keyStr` so any
-  key containing `/` fails loudly instead of silently truncating.
-- **Unify forward-ref collection.** `collectForwardRefs` and
-  `collectForwardRefsFromSection` in `visitor.ts:45–131` walk the same node
-  types with slight differences. Parameterize the input subtrees so the
-  walker is shared; today the `Figure`-handling branch only exists in one of
-  the two.
-- **Async fs in `ingest()`.** `ingest.ts:487–489` uses `readFileSync` inside
-  an async pipeline; switch to `fs/promises` to avoid blocking the loop.
+(Resolved and removed: "Extract shared schema bootstrap" and "Deduplicate ref
+resolution" are moot — `viewer/src/lib/graphstore.ts` no longer exists. Schema
+bootstrap lives only in `ingest/src/ingest.ts`, and forward/back-ref queries
+moved to `viewer/src/lib/graph.ts`; `_getForwardRefs` is gone with the
+directory-ingest path. "Async fs in `ingest()`" is also resolved — the
+directory `ingest()` pipeline was deleted; the surviving `readFileSync` is only
+in the one-time synchronous `loadSchemaFromDisk` DB-init path.)
+
+- **Type-safe key parsing.** `visitor.ts` still hand-builds key strings
+  (`${module}/${version}/${kind}/${path}`) with silent `?? ""` fallbacks
+  (`visitor.ts:73–96, 117–127`) instead of reusing `keyStr` (`keys.ts:16`), and
+  there is no inverse. Reuse `keyStr` and add a `parseKeyStr(s) → Key` helper so
+  any key containing `/` fails loudly instead of silently truncating.
+- **Unify forward-ref collection.** `collectForwardRefs` (`visitor.ts:45`) and
+  `collectForwardRefsFromSection` (`visitor.ts:105`) walk the same node types
+  with slight differences. Parameterize the input subtrees so the walker is
+  shared; today the `Figure`-handling branch only exists in `collectForwardRefs`.
 
 ### Viewer (`viewer/`)
 
-- **Precompute bundle indices at ingest time.** PLAN's M9.2 already notes the
-  `~25s /images/` scan; once `walkBundle` exists, move the work into the
+- **Precompute bundle indices at ingest time.** The shared `walkBundle` /
+  `walkAllBundles` helper now exists (`viewer/src/lib/bundle-walk.ts`) and is
+  used by `image-index.ts` and the node-browser endpoint, but the `~25s
+  /images/` scan is still a live scan. The remaining work: move it into the
   ingest pipeline as a `nodes_by_type` table so endpoints query rather than
-  scan. Both the local SQLite and D1 backends benefit equally. Per the
-  "Storage invariant" section, these tables are free to hold whatever shape
-  the endpoint wants — they need not mirror IR node structure, since
-  re-ingest can rebuild them from the raw archive.
-- **CSS dead-code audit.** `global.css` (~1113 lines) + `ir-nodes.css`
-  (~283 lines) carry alternate trees (`.sidebar-flat` vs
-  `.sidebar-qualnames`) and feature-specific blocks (`.bundle-index-card*`)
-  that look stale. Audit and consolidate.
+  scan. Per the "Storage invariant" section, these tables are free to hold
+  whatever shape the endpoint wants — they need not mirror IR node structure,
+  since re-ingest can rebuild them from the raw archive.
+- **CSS dead-code audit.** `global.css` has grown to ~1563 lines and
+  `ir-nodes.css` to ~536. The previously-flagged selectors (`.sidebar-flat` /
+  `.sidebar-qualnames`, `.bundle-index-card*`) turned out to be live — all are
+  still referenced by `BundleSidebar.astro` and the bundle index page, so they
+  are NOT dead. A general audit/consolidation pass on the grown stylesheets may
+  still be worthwhile, but start from a fresh unused-selector check rather than
+  the old (now-stale) list.
 - **Admonition styling.** `Admonition` nodes render as a single generic
   `aside.admonition` (`render-node.ts`, `ir-nodes.css`) regardless of kind
   (note / warning / tip / seealso / …). Look at
@@ -697,7 +829,7 @@ directives.)
 
   Credentials come from `PAPYRI_USERNAME` / `PAPYRI_PASSWORD` env vars
   (see `api/auth/login.ts`). The hardcoded-single-user model is not the
-  long-term answer for a multi-tenant hosted service. Track when M9 / hosting
+  long-term answer for a multi-tenant hosted service. Track when the hosting
   design firms up.
 
 ### Cross-cutting
@@ -707,3 +839,85 @@ directives.)
   of the graph layer. Once the schema stabilises, consider promoting the
   shared bits into the `papyri-ingest` package and having the viewer import
   from it rather than re-implementing.
+
+## Security review follow-ups (audited 2026-05-27)
+
+A multi-agent review of the whole tree surfaced the items below. The
+path-traversal and `javascript:`/`data:` URL items were fixed in the same
+pass; the rest are recorded here as TBD so the next PR can pick them up.
+
+### Fixed in this pass
+
+- **Path traversal in the FS stores.** `FsBlobStore`/`FsRawStore` now route
+  every on-disk path through `safeJoin` (`ingest/src/fs-safe.ts`), which
+  refuses any key whose resolved path escapes the store root. This closes both
+  the ingest write vector and the unauthenticated read vector in
+  `viewer/src/pages/api/[pkg]/[ver]/raw.json.ts` (it uses the same
+  `FsBlobStore`). `papyri unpack` got the equivalent guard (`_safe_child` in
+  `pack.py`) for untrusted artifact keys.
+- **`javascript:`/`data:` URLs in Link/Image.** A shared scheme allowlist
+  (`ingest/src/url-safety.ts`, `isSafeUrl`) is enforced at three layers: the
+  renderer blanks unsafe `href`/`src` (`render-node.ts`, the guaranteed
+  defense), and both ingest (`assertSafeUrls`) and `papyri pack`
+  (`_assert_safe_urls`) reject a bundle that carries one. Pack/ingest can't be
+  assumed to have run on a given bundle, which is why the renderer sanitises
+  too.
+- Smaller correctness fixes: `tree.py` interpreted-text split
+  (`split(" <", 1)`); `node_base._invalidate` list/dict branch + error-path
+  string; dedup pre-check now has a finite HTTP timeout
+  (`_DEDUP_TIMEOUT_S`); the viewer bundle endpoint no longer echoes raw
+  backend errors to the client (logs server-side instead).
+
+### TBD — auth hardening (viewer)
+
+- **Default credentials.** `viewer/src/pages/api/auth/login.ts` falls back to
+  `admin`/`password` when `PAPYRI_USERNAME`/`PAPYRI_PASSWORD` are unset. Fail
+  closed (refuse login + warn) instead of shipping known creds.
+- **Session token is unsigned and never expires server-side.** The cookie is
+  `base64(user:timestamp)` and the middleware only checks it is *present*. Sign
+  it (HMAC with a server secret) and verify signature + embedded expiry.
+- **Constant-time comparison.** Login (`===`) and the bundle upload bearer-token
+  check (`!==`) are timing-variable; switch to `crypto.timingSafeEqual`.
+
+### TBD — upload / ingest robustness
+
+- **Streaming PUT has no timeout** (`papyri/cli/upload.py`). A finite
+  idle-read timeout needs to be balanced against large-bundle ingests that may
+  have long gaps between progress events, and the read-phase `TimeoutError`
+  must be caught alongside the existing `HTTPError`/`URLError` handlers (it is
+  not a `URLError`). Left as TBD pending a chosen value.
+- **Zip-bomb guard on upload** (`upload.py` `_load_from_zip`). `zf.read()`
+  decompresses the chosen member fully into memory with no cap. The `.papyri`
+  member is itself already gzip-compressed, so expansion is normally ~1×, but a
+  crafted zip could lie. Add a `ZipInfo.file_size` ceiling (and ideally bounded
+  chunked reads) once a sane max bundle size is picked.
+- **`assertBundle` validates shape shallowly** (`ingest/src/bundle.ts`). It
+  checks `__type`/`__tag` only, then narrows to a fully-typed `BundleNode`.
+  A tag-4070 artifact with `module`/`version` as non-strings flows into path
+  joins and DB params. Validate that those are non-empty strings and that the
+  record fields are objects.
+- **`inflateZlib` corrupt-body handling** (`ingest/src/inventory.ts`). A
+  malformed `objects.inv` body rejects the decompression stream and throws to
+  the caller, despite the "skip bad lines" comment. Wrap parse/inflate and
+  surface a clean error.
+
+### TBD — SSRF (viewer, matters for the hosted service)
+
+- **Intersphinx inventory fetch** (`viewer/src/pages/api/inventory.ts`,
+  `ingest/src/inventory.ts`). The endpoint fetches an admin-supplied
+  `inventory_url`/`base_url` with no host restriction — `isHttpUrl` permits
+  internal/link-local hosts (e.g. `http://169.254.169.254/…`). Admin-gated
+  today, so low risk, but on the multi-tenant hosted service this is a
+  metadata-endpoint SSRF vector. Block private/link-local ranges and disable
+  redirects to them before hosting.
+
+### TBD — minor
+
+- **Dead `Signature` properties** (`papyri/signature.py`). `is_generator`,
+  `is_async_generator`, `is_async_function` are unused; `is_generator` also
+  calls `inspect.isgenerator` (always false on a function object) where
+  `isgeneratorfunction` was meant. Either wire them up correctly or delete
+  them per the repo's delete-dead-code rule.
+- **`removedRefStrs` reparses keys by `/`-split** (`ingest/src/ingest.ts`).
+  Fragile if a path component ever contains `/`; keep the original `Key`
+  object in `existingRefs` instead of reparsing the string.

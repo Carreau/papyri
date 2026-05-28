@@ -1,0 +1,167 @@
+/* DocSwitcher — version range trigger + grouped panel */
+
+.ds-switcher {
+  position: relative;
+  display: inline-block;
+  font-family: var(--mono);
+  margin-bottom: 12px;
+}
+
+/* In the sidebar the switcher should span the full column width. */
+.bundle-sidebar .ds-switcher {
+  display: block;
+  margin-bottom: 0;
+}
+.bundle-sidebar .ds-trigger {
+  width: 100%;
+}
+
+.ds-trigger {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--fg);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  transition: background 0.15s;
+}
+.ds-trigger:hover {
+  background: var(--surface-alt);
+}
+.ds-trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.ds-caret {
+  opacity: 0.45;
+  transition: transform 0.2s;
+  font-size: 10px;
+  line-height: 1;
+}
+.ds-switcher:has(.ds-panel) .ds-caret {
+  transform: rotate(180deg);
+}
+
+/* --- closed-state range label -------------------------------------------- */
+.ds-range-label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--fg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40ch;
+}
+.ds-edge {
+  font-variant-numeric: tabular-nums;
+}
+.ds-sep {
+  opacity: 0.5;
+}
+.ds-cur {
+  color: var(--accent);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.ds-onward {
+  font-style: italic;
+  opacity: 0.6;
+  font-size: 11px;
+}
+
+/* --- floating panel ------------------------------------------------------ */
+.ds-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 160px;
+  max-width: 280px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.04),
+    0 8px 24px -8px rgba(0, 0, 0, 0.2);
+  padding: 4px;
+  z-index: 50;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.ds-group {
+  padding: 2px 0;
+  border-bottom: 1px dashed var(--border);
+}
+.ds-group:last-child {
+  border-bottom: none;
+}
+
+.ds-group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px 3px;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  user-select: none;
+}
+.ds-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--border);
+  flex-shrink: 0;
+}
+.ds-group--current .ds-group-head {
+  color: var(--accent);
+}
+.ds-group--current .ds-dot {
+  background: var(--accent);
+}
+
+.ds-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 2px;
+  font-size: 12px;
+  color: var(--fg);
+  text-decoration: none;
+  cursor: pointer;
+}
+.ds-opt:hover {
+  background: var(--surface-alt);
+}
+.ds-opt:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.ds-opt--current {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.ds-v {
+  font-variant-numeric: tabular-nums;
+}
+
+.ds-badge {
+  margin-left: auto;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}

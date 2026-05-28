@@ -19,7 +19,7 @@
  * project to a real external href at render time.
  *
  * Decompression goes through the Web `DecompressionStream("deflate")` (zlib
- * format) so the code runs unchanged on Node and on Cloudflare Workers.
+ * format), a portable Web API with no backend-specific dependency.
  */
 import type { GraphDb } from "./graph-db.js";
 
@@ -86,7 +86,14 @@ export async function parseObjectsInv(bytes: Uint8Array): Promise<ParsedInventor
   const project = (headerLines[1] ?? "").replace(/^#\s*Project:\s*/, "").trim();
   const version = (headerLines[2] ?? "").replace(/^#\s*Version:\s*/, "").trim();
 
-  const body = await inflateZlib(bytes.subarray(headerEnd));
+  let body: string;
+  try {
+    body = await inflateZlib(bytes.subarray(headerEnd));
+  } catch (err) {
+    throw new Error(
+      `objects.inv: failed to decompress body: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
   const objects: InventoryObject[] = [];
   // name  domain:role  priority  uri  dispname
   const line = /^(.+?)\s+(\S+?):(\S+)\s+(-?\d+)\s+(\S*)\s+(.*)$/;

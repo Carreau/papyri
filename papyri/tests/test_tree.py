@@ -534,10 +534,21 @@ def test_replace_unprocessed_directive_drops_sphinx_only(caplog: Any) -> None:
         children=[],
         raw=".. autofunction:: numpy.linspace",
     )
-    with caplog.at_level("WARNING", logger="papyri"):
+    with caplog.at_level("INFO", logger="papyri"):
         out = v.replace_UnprocessedDirective(ud)
     assert out == []
     assert any("Sphinx-only" in r.getMessage() for r in caplog.records)
+
+
+def test_replace_comment_drops_comments() -> None:
+    """RST ``.. comment`` is editor-side prose with no rendered output; the
+    visitor drops every Comment so they never appear in serialised IR.
+    """
+    from papyri.nodes import Comment
+
+    v = _make_visitor()
+    out = v.replace_Comment(Comment(value=".. an editor note"))
+    assert out == []
 
 
 # ---------------------------------------------------------------------------
@@ -868,6 +879,16 @@ def test_named_hyperlink_angle_bracket_uses_display_text() -> None:
     assert child.value == "Show"
 
 
+def test_named_hyperlink_multiple_angle_segments_does_not_crash() -> None:
+    # Regression: a value containing more than one " <" must not raise.
+    # Previously ``text.split(" <")`` unpacked into >2 parts → ValueError,
+    # re-raised as AssertionError. With maxsplit=1 it splits on the first " <".
+    v = _make_visitor_with_external({})
+    role = InlineRole(domain=None, role=None, value="a <b> c <d>")
+    out = v.replace_InlineRole(role)  # must not raise
+    assert out
+
+
 def test_embedded_uri_autolink_produces_link() -> None:
     # `<https://example.com/>`_ — embedded URI with no display text. visit_reference
     # in ts.py synthesizes ``uri <uri>`` so replace_InlineRole turns it into a Link
@@ -988,6 +1009,27 @@ def test_list_table_caption_emitted_as_paragraph() -> None:
     assert isinstance(inline, Text)
     assert inline.value == "My Caption"
     assert isinstance(out[1], Table)
+
+
+def test_list_table_with_empty_cells() -> None:
+    """numpy's ``numpy-for-matlab-users.rst`` ``list-table`` has rows like
+    ``* -`` with a blank cell. tree-sitter-rst represents the blank cell as
+    a list_item with only a bullet child (no body); ``visit_bullet_list``
+    must tolerate that instead of asserting len==2.
+    """
+    content = (
+        "* - filled\n  - also filled\n"
+        "* -\n  - second cell only\n"
+        "* - first cell only\n  -\n"
+    )
+    out = list_table_handler("", {}, content)
+    assert len(out) == 1
+    table = out[0]
+    assert isinstance(table, Table)
+    assert len(table.children) == 3
+    # Empty cells exist but carry no body content.
+    assert table.children[1].children[0].children == ()
+    assert table.children[2].children[1].children == ()
 
 
 def test_list_table_empty_body_returns_nothing() -> None:
@@ -1125,7 +1167,7 @@ def test_only_drops_html_via_visitor(caplog):
 
 
 def test_literalinclude_drops_with_warning(caplog):
-    with caplog.at_level("WARNING", logger="papyri"):
+    with caplog.at_level("INFO", logger="papyri"):
         out = literalinclude_handler("myfile.py", {}, "")
     assert out == []
     assert any("literalinclude" in r.getMessage() for r in caplog.records)
@@ -1245,9 +1287,11 @@ def test_include_basic_rst(tmp_path):
     rst_file.write_text("Hello world.\n", encoding="utf-8")
     handler = make_include_handler(doc_path=tmp_path, doc_root=None)
     out = handler("fragment.rst", {}, "")
-    # parse() returns Section nodes; the handler returns them as-is
+    # The handler flattens the synthetic ``Section`` wrapper that ``parse``
+    # adds around top-level RST, so a parent Section.children that splices
+    # the include in stays well-typed (Section is not in that union).
     assert len(out) >= 1
-    assert isinstance(out[0], Section)
+    assert not any(isinstance(n, Section) for n in out)
 
 
 def test_include_returns_parsed_nodes(tmp_path):
@@ -1255,16 +1299,41 @@ def test_include_returns_parsed_nodes(tmp_path):
     rst_file.write_text("Some included paragraph.\n", encoding="utf-8")
     handler = make_include_handler(doc_path=tmp_path, doc_root=None)
     out = handler("frag.rst", {}, "")
-    # Flatten all children from all returned sections and check for Text content
+    # Output is the included file's content with the wrapper Section unwrapped:
+    # the Paragraph sits at the top level.
     all_text = [
         item.value
-        for section in out
-        for child in section.children
+        for child in out
         if isinstance(child, Paragraph)
         for item in child.children
         if isinstance(item, Text)
     ]
     assert any("included" in t for t in all_text)
+
+
+def test_include_flattens_comments_and_targets_for_parent_section(tmp_path):
+    """A fragment of comments + link targets must not nest a Section inside
+    its parent Section.children — Section is not in that union, and a nested
+    one trips ``WrongTypeAtField`` at validate time. The include handler
+    flattens its wrapper so the children land at the splice site directly.
+    """
+    from papyri.nodes import Comment, Target
+
+    rst_file = tmp_path / "links.rst"
+    rst_file.write_text(
+        ".. This is a comment.\n\n"
+        ".. _ipython: https://ipython.org\n"
+        ".. _docs: https://ipython.readthedocs.org/\n",
+        encoding="utf-8",
+    )
+    handler = make_include_handler(doc_path=tmp_path, doc_root=None)
+    out = handler("links.rst", {}, "")
+    assert not any(isinstance(n, Section) for n in out)
+    kinds = {type(n) for n in out}
+    # The Targets must survive at the top level; Comment may be there too
+    # (the visitor drops it later via ``replace_Comment``).
+    assert Target in kinds, kinds
+    assert all(isinstance(n, (Comment, Target)) for n in out), kinds
 
 
 def test_include_start_line_option(tmp_path):
@@ -1327,6 +1396,29 @@ def test_include_absolute_path_no_doc_root_warns(caplog, tmp_path):
     assert any("include" in r.getMessage() for r in caplog.records)
 
 
+def test_include_nested_resolves_relative_to_included_file(tmp_path):
+    """A file in a subdirectory that includes a sibling must resolve that
+    sibling relative to the *included* file's directory, not the outer
+    file's. Real-world trigger: numpy's docs include a sub-page that itself
+    includes neighbouring snippets — those were resolving against the outer
+    directory and silently dropping (or failing) the build.
+    """
+    sub = tmp_path / "sub"
+    sub.mkdir()
+    (sub / "outer.rst").write_text(
+        "Outer line.\n\n.. include:: sibling.rst\n", encoding="utf-8"
+    )
+    (sub / "sibling.rst").write_text("Sibling content.\n", encoding="utf-8")
+    # The outer handler is bound to ``tmp_path`` (i.e. the directory of the
+    # file that holds the top-level include) — sibling.rst lives in ``sub/``
+    # so without the fix it would not be findable.
+    handler = make_include_handler(doc_path=tmp_path, doc_root=None)
+    out = handler("sub/outer.rst", {}, "")
+    flat = _flatten_text(out)
+    assert "Outer line." in flat
+    assert "Sibling content." in flat
+
+
 def test_include_registered_on_visitor():
     v = _make_visitor()
     assert "include" in v._handlers
@@ -1385,6 +1477,41 @@ def test_sphinx_only_directives_includes_highlight():
     from papyri.tree import _SPHINX_ONLY_DIRECTIVES
 
     assert "highlight" in _SPHINX_ONLY_DIRECTIVES
+
+
+def test_sphinx_only_directives_includes_sphinx_design() -> None:
+    """sphinx-design layout directives must be silently dropped, not turned
+    into unhandled ``Directive`` nodes that fail ``validate()``.
+
+    Regression: numpy / scipy build their root ``doc/source/index.rst`` as a
+    PyData-theme landing page made of ``.. grid::`` / ``.. grid-item-card::``.
+    Without handlers, those pages were dropped in lenient gen mode — and the
+    root being dropped collapsed the entire toc to a single fallback leaf
+    ("narrative docs appear mostly empty").
+    """
+    from papyri.tree import _SPHINX_ONLY_DIRECTIVES
+
+    for name in (
+        "grid",
+        "grid-item",
+        "grid-item-card",
+        "card",
+        "card-carousel",
+        "tab-set",
+        "tab-item",
+        "dropdown",
+        "button-link",
+        "button-ref",
+    ):
+        assert name in _SPHINX_ONLY_DIRECTIVES, (
+            f"{name!r} not in _SPHINX_ONLY_DIRECTIVES"
+        )
+
+
+def test_sphinx_only_directives_includes_automodule() -> None:
+    from papyri.tree import _SPHINX_ONLY_DIRECTIVES
+
+    assert "automodule" in _SPHINX_ONLY_DIRECTIVES
 
 
 def test_sphinx_only_directives_includes_currentmodule():
@@ -1647,7 +1774,7 @@ def test_topic_via_visitor_dispatch():
 
 
 def test_raw_handler_drops_html_with_warning(caplog):
-    with caplog.at_level("WARNING", logger="papyri"):
+    with caplog.at_level("INFO", logger="papyri"):
         out = raw_handler("html", {}, "<p>some html</p>")
     assert out == []
     assert any("raw" in r.getMessage() for r in caplog.records)

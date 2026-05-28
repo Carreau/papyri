@@ -97,16 +97,14 @@ def gen(
             limit_to=only,
         )
 
-        if pack and bundle_path:
-            from papyri.cli.pack import _pack_one
+    if pack and bundle_path:
+        from papyri.cli.pack import _pack_one
 
-            _pack_one(bundle_path, None)
+        _pack_one(bundle_path, None)
 
-        if upload and bundle_path:
-            from papyri.cli.upload import upload as upload_func
+    if upload and bundle_path:
+        from papyri.cli.upload import upload as upload_func
 
-            url = os.environ.get(
-                "PAPYRI_UPLOAD_URL", "http://localhost:4321/api/bundle"
-            )
-            token = os.environ.get("PAPYRI_UPLOAD_TOKEN")
-            upload_func([bundle_path], url=url, token=token)
+        url = os.environ.get("PAPYRI_UPLOAD_URL", "http://localhost:4321/api/bundle")
+        token = os.environ.get("PAPYRI_UPLOAD_TOKEN")
+        upload_func([bundle_path], url=url, token=token)

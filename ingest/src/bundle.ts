@@ -1,17 +1,14 @@
 /**
- * Explode a decoded `Bundle` Node into the per-file directory layout the
- * existing `Ingester` consumes.
+ * Bundle Node validation.
  *
  * `papyri pack` writes a `.papyri` artifact = gzip(canonical-CBOR(Bundle)).
- * The viewer's upload endpoint gunzips + cbor-decodes the request body to a
- * Bundle TypedNode, then calls into here to materialise the bundle as the
- * `~/.papyri/data/<pkg>_<ver>/`-shaped directory tree the Ingester already
- * understands. That keeps the ingest pipeline format-agnostic: pack/upload
- * is the contract, the Ingester's input format is unchanged.
+ * Callers (the viewer's upload endpoint, the standalone CLI) gunzip +
+ * cbor-decode the bytes to a Bundle TypedNode and pass it to
+ * `Ingester.ingestBundle`. This module type-narrows that decoded value to a
+ * `BundleNode` before ingest runs.
  */
-import { writeFile, mkdir } from "node:fs/promises";
-import { join } from "node:path";
-import { encode, type TypedNode } from "./encoder.js";
+import type { TypedNode } from "./encoder.js";
+import { isSafeUrl } from "./url-safety.js";
 
 interface BundleNode extends TypedNode {
   __type: "Bundle";
@@ -30,13 +27,6 @@ interface BundleNode extends TypedNode {
   toc: TypedNode[];
 }
 
-function asRecord<T>(value: unknown): Record<string, T> {
-  if (value && typeof value === "object" && !Array.isArray(value)) {
-    return value as Record<string, T>;
-  }
-  return {};
-}
-
 /** Type-narrowing assert that *node* is a Bundle (tag 4070). */
 export function assertBundle(node: unknown): asserts node is BundleNode {
   if (!node || typeof node !== "object") {
@@ -50,87 +40,65 @@ export function assertBundle(node: unknown): asserts node is BundleNode {
       } (tag ${typeof n.__tag === "number" ? n.__tag : "?"})`,
     );
   }
+  // Validate fields that flow into path joins and DB parameters.
+  const b = n as Record<string, unknown>;
+  if (typeof b.module !== "string" || b.module === "") {
+    throw new Error("Bundle.module must be a non-empty string");
+  }
+  if (typeof b.version !== "string" || b.version === "") {
+    throw new Error("Bundle.version must be a non-empty string");
+  }
+  for (const field of ["api", "narrative", "examples", "aliases", "extra"]) {
+    const v = b[field];
+    if (!v || typeof v !== "object" || Array.isArray(v)) {
+      throw new Error(`Bundle.${field} must be a non-null object`);
+    }
+  }
+  if (!Array.isArray(b.toc)) {
+    throw new Error("Bundle.toc must be an array");
+  }
+  if (!b.assets || typeof b.assets !== "object" || Array.isArray(b.assets)) {
+    throw new Error("Bundle.assets must be a non-null object");
+  }
+}
+
+const URL_BEARING_TYPES = new Set(["Link", "Image"]);
+
+function collectUnsafeUrls(val: unknown, out: string[]): void {
+  if (!val || typeof val !== "object") return;
+  if (Array.isArray(val)) {
+    for (const item of val) collectUnsafeUrls(item, out);
+    return;
+  }
+  const node = val as Record<string, unknown>;
+  if (
+    typeof node.__type === "string" &&
+    URL_BEARING_TYPES.has(node.__type) &&
+    typeof node.url === "string" &&
+    !isSafeUrl(node.url)
+  ) {
+    out.push(node.url);
+  }
+  for (const v of Object.values(node)) collectUnsafeUrls(v, out);
 }
 
 /**
- * Write a decoded Bundle out to *destDir* as a gen-bundle directory tree.
- *
- * Layout produced — matches what `papyri gen` writes to disk:
- *   papyri.json           {module, version, summary?, github_slug?, tag?,
- *                           logo?, aliases?, ...extra}
- *   module/<qa>.cbor      encoded GeneratedDoc
- *   docs/<key>            encoded GeneratedDoc (no .cbor suffix, matches gen)
- *   examples/<key>        encoded Section
- *   assets/<filename>     raw asset bytes
- *   toc.cbor              encoded list[TocTree]   (only when non-empty)
- *
- * Empty optional sections are skipped — the Ingester's existsSync checks
- * tolerate that.
+ * Reject a bundle whose Link/Image nodes carry a disallowed URL scheme
+ * (`javascript:`, `data:`, …). The renderer sanitises these defensively too,
+ * but a malicious or buggy bundle should never enter the store in the first
+ * place. Walks the IR-bearing sections only (api / narrative / examples);
+ * `assets` holds opaque bytes and is skipped.
  */
-export async function explodeBundleToDir(node: unknown, destDir: string): Promise<void> {
-  assertBundle(node);
-  const bundle = node;
-
-  await mkdir(destDir, { recursive: true });
-
-  // papyri.json — known string fields plus any forward-compatible extras.
-  const meta: Record<string, unknown> = {
-    module: bundle.module,
-    version: bundle.version,
-  };
-  if (bundle.summary) meta["summary"] = bundle.summary;
-  if (bundle.github_slug) meta["github_slug"] = bundle.github_slug;
-  if (bundle.tag) meta["tag"] = bundle.tag;
-  if (bundle.logo) meta["logo"] = bundle.logo;
-  const aliases = asRecord<string>(bundle.aliases);
-  if (Object.keys(aliases).length > 0) meta["aliases"] = aliases;
-  for (const [k, v] of Object.entries(asRecord<unknown>(bundle.extra))) {
-    if (!(k in meta)) meta[k] = v;
-  }
-  await writeFile(join(destDir, "papyri.json"), JSON.stringify(meta, null, 2));
-
-  // API — module/<qualname>.cbor
-  const api = asRecord<TypedNode>(bundle.api);
-  if (Object.keys(api).length > 0) {
-    const moduleDir = join(destDir, "module");
-    await mkdir(moduleDir, { recursive: true });
-    for (const [qa, doc] of Object.entries(api)) {
-      await writeFile(join(moduleDir, `${qa}.cbor`), encode(doc));
-    }
-  }
-
-  // Narrative — docs/<key>  (no extension; matches what `papyri gen` writes)
-  const narrative = asRecord<TypedNode>(bundle.narrative);
-  if (Object.keys(narrative).length > 0) {
-    const docsDir = join(destDir, "docs");
-    await mkdir(docsDir, { recursive: true });
-    for (const [key, doc] of Object.entries(narrative)) {
-      await writeFile(join(docsDir, key), encode(doc));
-    }
-  }
-
-  // Examples — examples/<key>  (encoded Section)
-  const examples = asRecord<TypedNode>(bundle.examples);
-  if (Object.keys(examples).length > 0) {
-    const examplesDir = join(destDir, "examples");
-    await mkdir(examplesDir, { recursive: true });
-    for (const [key, section] of Object.entries(examples)) {
-      await writeFile(join(examplesDir, key), encode(section));
-    }
-  }
-
-  // Assets — assets/<filename> (raw bytes)
-  const assets = asRecord<Uint8Array | Buffer>(bundle.assets);
-  if (Object.keys(assets).length > 0) {
-    const assetsDir = join(destDir, "assets");
-    await mkdir(assetsDir, { recursive: true });
-    for (const [name, bytes] of Object.entries(assets)) {
-      await writeFile(join(assetsDir, name), bytes);
-    }
-  }
-
-  // TOC — toc.cbor  (only when non-empty; matches gen.write_narrative)
-  if (Array.isArray(bundle.toc) && bundle.toc.length > 0) {
-    await writeFile(join(destDir, "toc.cbor"), encode(bundle.toc));
+export function assertSafeUrls(bundle: BundleNode): void {
+  const unsafe: string[] = [];
+  collectUnsafeUrls(bundle.api, unsafe);
+  collectUnsafeUrls(bundle.narrative, unsafe);
+  collectUnsafeUrls(bundle.examples, unsafe);
+  if (unsafe.length > 0) {
+    const sample = unsafe.slice(0, 3).join(", ");
+    throw new Error(
+      `bundle contains ${unsafe.length} link/image URL(s) with a disallowed scheme ` +
+        `(only http, https, mailto and relative URLs are allowed): ${sample}`,
+    );
   }
 }

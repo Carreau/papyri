@@ -95,6 +95,176 @@ it for canonical URL generation. (CSRF origin checks are disabled —
 mutating endpoints carry their own bearer-token / session-cookie checks;
 see `astro.config.mjs`.)
 
+## Splitting admin and docs onto two hostnames
+
+The viewer has two "surfaces":
+
+- **Docs** — read-only: bundle index (`/`), per-bundle pages
+  (`/project/<pkg>/<ver>/...`), the public JSON APIs
+  (`/api/bundles.json`, `/api/search.json`, `/api/text-search.json`,
+  `/api/health.json`, `/api/<pkg>/<ver>/...`).
+- **Admin** — mutating + authenticated: `/admin`, `/login`, `/nodes`,
+  `/ir-stats`, all `/api/auth/*`, `/api/bundle` (upload),
+  `/api/reingest`, `/api/clear`, `/api/clear-raw`, `/api/inventory`,
+  `/api/stats`, `/api/nodes.json`, `/api/ir-stats.json`.
+
+Setting **either** `PAPYRI_DOCS_HOST` or `PAPYRI_ADMIN_HOST` turns on
+host-based gating in `src/middleware.ts`: admin routes return `404` on
+the docs host and vice versa, so the admin URL is not discoverable from
+the public bundle pages. With both vars unset every host serves
+everything (the pre-split single-host dev flow).
+
+**Why bother.** A docstring inside a published bundle can carry
+arbitrary HTML, which we render on the docs surface. Putting admin on a
+different hostname keeps the admin session cookie out of the docs
+origin's cookie store, so an XSS payload in a bundle cannot steal it or
+fire authenticated requests against `/api/clear`, `/api/reingest`, etc.
+Middleware also sets a strict-ish CSP (`default-src 'self'`,
+`connect-src 'self'`, `frame-ancestors 'none'`, `form-action 'self'`,
+`object-src 'none'`) and `X-Frame-Options: DENY` as belt-and-braces.
+
+### Local dev recipe A — two ports, two processes
+
+Easiest for everyday work. Run two `node` processes on adjacent ports,
+both reading the same `~/.papyri/ingest/`. Each process holds the same
+env vars; the request's `Host` header (which on `curl` / a browser
+carries the port) decides which surface it serves.
+
+```sh
+cd viewer
+pnpm install --frozen-lockfile
+pnpm build
+
+# Terminal 1 — docs surface on :4321
+PAPYRI_DOCS_HOST=localhost:4321 \
+PAPYRI_ADMIN_HOST=localhost:4322 \
+PORT=4321 node ./dist/server/entry.mjs
+
+# Terminal 2 — admin surface on :4322
+PAPYRI_DOCS_HOST=localhost:4321 \
+PAPYRI_ADMIN_HOST=localhost:4322 \
+PORT=4322 node ./dist/server/entry.mjs
+```
+
+`pnpm dev` works the same way — pass `--port` to each invocation.
+SQLite supports multiple readers plus one writer in WAL mode, so both
+processes sharing `~/.papyri/ingest/papyri.db` is fine on one machine.
+
+Then:
+
+- Browse docs at <http://localhost:4321/>.
+- Log in at <http://localhost:4322/login> (`admin` / `password` by
+  default — override with `PAPYRI_USERNAME` / `PAPYRI_PASSWORD`).
+- Upload bundles:
+  ```sh
+  PAPYRI_UPLOAD_URL=http://localhost:4322/api/bundle \
+  papyri upload ~/.papyri/data/<pkg>_<ver>/
+  ```
+
+Sanity checks:
+
+```sh
+curl -i http://localhost:4321/admin         # → 404 (admin hidden on docs)
+curl -i http://localhost:4321/api/bundle    # → 404 (no upload on docs)
+curl -i http://localhost:4322/              # → 404 (no bundle list on admin)
+curl -i http://localhost:4322/admin         # → 302 to /login (needs session)
+```
+
+### Local dev recipe B — one process, two hostnames via `/etc/hosts`
+
+Useful when you want to test with real hostnames (e.g. before wiring up
+a reverse proxy). Add to `/etc/hosts`:
+
+```
+127.0.0.1 docs.local admin.local
+```
+
+Then a single process can demux by `Host`:
+
+```sh
+PAPYRI_DOCS_HOST=docs.local:4321 \
+PAPYRI_ADMIN_HOST=admin.local:4321 \
+node ./dist/server/entry.mjs
+
+# In another terminal:
+curl -i http://docs.local:4321/                # → 200 (bundle list)
+curl -i http://docs.local:4321/admin           # → 404
+curl -i http://admin.local:4321/admin          # → 302 → /login
+```
+
+Browsers do the right thing too — visit `http://docs.local:4321/` and
+`http://admin.local:4321/login` directly. Note that the session cookie
+is host-only: logging in on `admin.local` does **not** put a cookie on
+`docs.local` (you can verify in DevTools → Application → Cookies).
+
+### Local dev recipe C — one process behind a reverse proxy
+
+Closest to prod. Run **one** Node process on `localhost:4321` and have
+Caddy / Nginx route both hostnames to it. The proxy must forward the
+original `Host` (or set `X-Forwarded-Host`) so middleware sees the
+external hostname.
+
+Caddyfile:
+
+```caddy
+docs.local:443, admin.local:443 {
+    tls internal
+    reverse_proxy localhost:4321 {
+        header_up Host {host}
+    }
+}
+```
+
+Nginx:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name docs.local admin.local;
+    # ... ssl_certificate / ssl_certificate_key ...
+    location / {
+        proxy_pass http://127.0.0.1:4321;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+Then the Node process needs the env vars set to the **external**
+hostnames (no port suffix when standard 80/443):
+
+```sh
+PAPYRI_SITE=https://docs.local \
+PAPYRI_DOCS_HOST=docs.local \
+PAPYRI_ADMIN_HOST=admin.local \
+PAPYRI_USERNAME=admin PAPYRI_PASSWORD=hunter2 \
+PAPYRI_UPLOAD_TOKEN=$(cat /etc/papyri/upload-token) \
+node ./dist/server/entry.mjs
+```
+
+`X-Forwarded-Proto: https` lets the login endpoint set the cookie's
+`Secure` flag — required so the browser only sends it back over TLS.
+Without it the session cookie is set without `Secure` (correct for
+plain-HTTP local dev, wrong for prod).
+
+### Production deployment
+
+Same as recipe C, with two changes:
+
+- `PAPYRI_SITE` is the public docs URL (e.g. `https://docs.example.com`);
+  `PAPYRI_DOCS_HOST` / `PAPYRI_ADMIN_HOST` are the bare hostnames.
+- `PAPYRI_UPLOAD_TOKEN` is set, so `PUT /api/bundle` (admin host only)
+  requires `Authorization: Bearer …`.
+
+Point `papyri upload` at the admin host:
+
+```sh
+export PAPYRI_UPLOAD_URL=https://admin.example.com/api/bundle
+export PAPYRI_UPLOAD_TOKEN=<token>
+papyri upload ~/.papyri/data/<pkg>_<ver>/
+```
+
 ## Populating content
 
 ```sh

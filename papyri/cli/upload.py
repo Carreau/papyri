@@ -28,6 +28,18 @@ _DEFAULT_URL = "http://localhost:4321/api/bundle"
 # CLI hanging forever against an unresponsive host before the upload begins.
 _DEDUP_TIMEOUT_S = 30
 
+# Idle-read timeout for the streaming PUT response. The server emits NDJSON
+# progress events; if no byte arrives within this window, the connection is
+# stalled.  Generous enough that a large-bundle ingest (slow between phases)
+# doesn't trip it prematurely.
+_UPLOAD_IDLE_TIMEOUT_S = 300
+
+# Maximum uncompressed size accepted for a .papyri member inside a .zip.
+# A crafted zip could advertise a small compressed size that expands
+# arbitrarily; reject before full expansion if reported or actual size exceeds
+# this ceiling.
+_MAX_BUNDLE_BYTES = 256 * 1024 * 1024  # 256 MiB
+
 
 def _load_from_zip(path: Path) -> tuple[bytes, Bundle]:
     """Extract and load the single ``.papyri`` artifact from a zip file.
@@ -49,7 +61,23 @@ def _load_from_zip(path: Path) -> tuple[bytes, Bundle]:
                 f"{path.name} contains {len(papyri_members)} .papyri files "
                 f"({names}); expected exactly one"
             )
-        data = zf.read(papyri_members[0])
+        info = zf.getinfo(papyri_members[0])
+        # file_size is the uncompressed size per zip metadata (may be 0 for
+        # streamed zips). When non-zero and already over the ceiling, fail
+        # early before decompressing.
+        if info.file_size > _MAX_BUNDLE_BYTES:
+            raise BundleError(
+                f"{path.name}: .papyri member is too large "
+                f"({info.file_size // (1024 * 1024)} MiB; "
+                f"max {_MAX_BUNDLE_BYTES // (1024 * 1024)} MiB)"
+            )
+        with zf.open(papyri_members[0]) as f:
+            data = f.read(_MAX_BUNDLE_BYTES + 1)
+        if len(data) > _MAX_BUNDLE_BYTES:
+            raise BundleError(
+                f"{path.name}: .papyri member expands to more than "
+                f"{_MAX_BUNDLE_BYTES // (1024 * 1024)} MiB"
+            )
 
     bundle = load_artifact(data)
     return data, bundle
@@ -332,7 +360,7 @@ def upload(
         )
         t0 = time.monotonic()
         try:
-            with urllib.request.urlopen(req) as resp:
+            with urllib.request.urlopen(req, timeout=_UPLOAD_IDLE_TIMEOUT_S) as resp:
                 # The server streams NDJSON: one JSON event per line.
                 # Read line-by-line so progress events surface in real
                 # time on the terminal — important when the server would
@@ -403,6 +431,13 @@ def upload(
             except Exception:
                 msg = raw.decode(errors="replace")
             typer.echo(f"{prefix} error (HTTP {exc.code}): {msg}", err=True)
+            ok = False
+        except TimeoutError:
+            typer.echo(
+                f"{prefix} error: no data from server for "
+                f"{_UPLOAD_IDLE_TIMEOUT_S}s; connection timed out",
+                err=True,
+            )
             ok = False
         except urllib.error.URLError as exc:
             typer.echo(f"{prefix} error: {exc.reason}", err=True)

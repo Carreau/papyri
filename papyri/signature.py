@@ -210,18 +210,6 @@ class Signature:
     def parameters(self) -> Any:
         return self._sig.parameters
 
-    @property
-    def is_async_function(self) -> bool:
-        return inspect.iscoroutinefunction(self.target_item)
-
-    @property
-    def is_async_generator(self) -> bool:
-        return inspect.isasyncgenfunction(self.target_item)
-
-    @property
-    def is_generator(self) -> bool:
-        return inspect.isgenerator(self.target_item)
-
     def param_default(self, param: str) -> Any:
         return self.parameters.get(param).default
 

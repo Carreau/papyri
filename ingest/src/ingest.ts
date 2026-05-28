@@ -238,7 +238,7 @@ export class Ingester {
     );
 
     let existingBlobs: Set<string>;
-    let existingRefs: Map<string, Set<string>>;
+    let existingRefs: Map<string, Map<string, Key>>;
     if (freshIngest) {
       existingBlobs = new Set();
       existingRefs = new Map();
@@ -429,7 +429,7 @@ export class Ingester {
   private async _fetchAllForwardRefsForBundle(
     root: string,
     version: string,
-  ): Promise<Map<string, Set<string>>> {
+  ): Promise<Map<string, Map<string, Key>>> {
     const rows = await this.graphDb.all<{
       src_category: string;
       src_identifier: string;
@@ -447,22 +447,21 @@ export class Ingester {
         " WHERE n_src.package=? AND n_src.version=?",
       [root, version],
     );
-    const map = new Map<string, Set<string>>();
+    const map = new Map<string, Map<string, Key>>();
     for (const r of rows) {
       const srcKey = `${r.src_category}/${r.src_identifier}`;
-      let set = map.get(srcKey);
-      if (!set) {
-        set = new Set();
-        map.set(srcKey, set);
+      let inner = map.get(srcKey);
+      if (!inner) {
+        inner = new Map();
+        map.set(srcKey, inner);
       }
-      set.add(
-        keyStr({
-          module: r.dest_package,
-          version: r.dest_version,
-          kind: r.dest_category,
-          path: r.dest_identifier,
-        }),
-      );
+      const destKey: Key = {
+        module: r.dest_package,
+        version: r.dest_version,
+        kind: r.dest_category,
+        path: r.dest_identifier,
+      };
+      inner.set(keyStr(destKey), destKey);
     }
     return map;
   }
@@ -479,19 +478,19 @@ export class Ingester {
     bytes: Uint8Array,
     refs: Key[],
     existingBlobs: Set<string>,
-    existingRefs: Map<string, Set<string>>,
+    existingRefs: Map<string, Map<string, Key>>,
     digestInput?: Uint8Array,
   ): { nodeStmts: BatchStmt[]; linkStmts: BatchStmt[] } {
     const blobKey = `${key.kind}/${key.path}`;
     const isExisting = key.kind !== "assets" && existingBlobs.has(blobKey);
     const oldRefs = isExisting
-      ? (existingRefs.get(blobKey) ?? new Set<string>())
-      : new Set<string>();
+      ? (existingRefs.get(blobKey) ?? new Map<string, Key>())
+      : new Map<string, Key>();
 
     const digest = blake2b(digestInput ?? bytes, { dkLen: DIGEST_SIZE });
     const newRefSet = new Set(refs.map(keyStr));
     const addedRefs = refs.filter((r) => !oldRefs.has(keyStr(r)));
-    const removedRefStrs = [...oldRefs].filter((s) => !newRefSet.has(s));
+    const removedRefs = [...oldRefs.values()].filter((k) => !newRefSet.has(keyStr(k)));
 
     const insNode =
       "INSERT OR IGNORE INTO nodes(package, version, category, identifier) VALUES (?, ?, ?, ?)";
@@ -518,13 +517,10 @@ export class Ingester {
         sql: insLink,
         params: [key.module, key.version, key.kind, key.path, r.module, r.version, r.kind, r.path],
       })),
-      ...removedRefStrs.map((s) => {
-        const [m, v, k, p] = s.split("/");
-        return {
-          sql: delLink,
-          params: [key.module, key.version, key.kind, key.path, m ?? "", v ?? "", k ?? "", p ?? ""],
-        };
-      }),
+      ...removedRefs.map((r) => ({
+        sql: delLink,
+        params: [key.module, key.version, key.kind, key.path, r.module, r.version, r.kind, r.path],
+      })),
     ];
 
     return { nodeStmts, linkStmts };

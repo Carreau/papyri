@@ -7,17 +7,16 @@
 --
 -- Like everything else in the graphstore these are a rebuildable projection:
 -- re-loading an inventory drops + rebuilds the project's rows
--- (see ingest/src/inventory.ts `storeInventory`). Stay within the SQL subset
--- D1 supports (no triggers/PRAGMAs here).
+-- (see ingest/src/inventory.ts `storeInventory`).
 
-CREATE TABLE external_projects (
+CREATE TABLE IF NOT EXISTS external_projects (
     name       TEXT PRIMARY KEY,
     base_url   TEXT NOT NULL,
     version    TEXT,
     fetched_at INTEGER
 );
 
-CREATE TABLE external_objects (
+CREATE TABLE IF NOT EXISTS external_objects (
     project   TEXT NOT NULL REFERENCES external_projects (name) ON DELETE CASCADE,
     name      TEXT NOT NULL,
     domain    TEXT NOT NULL,
@@ -28,4 +27,4 @@ CREATE TABLE external_objects (
     PRIMARY KEY (project, name, domain, role)
 );
 
-CREATE INDEX idx_external_objects_name ON external_objects (project, name);
+CREATE INDEX IF NOT EXISTS idx_external_objects_name ON external_objects (project, name);

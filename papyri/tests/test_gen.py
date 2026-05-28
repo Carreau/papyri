@@ -436,3 +436,121 @@ def test_clinic_signature_objects_are_generated(qa: Any) -> None:
     assert "--" not in texts, (
         f"{qa}: Summary contains bare '--' (clinic separator not stripped)"
     )
+
+
+def test_narrative_grid_directive_does_not_drop_index(tmp_path: Path) -> None:
+    """A ``.. grid::`` in the root ``index.rst`` must not drop the page.
+
+    Regression: numpy / scipy build their root narrative page as a
+    PyData-theme landing page (``.. grid:: 2`` containing ``.. grid-item-card``).
+    When sphinx-design directives had no handler, ``gen`` produced terminal
+    ``Directive`` nodes that tripped ``blob.validate()``; in lenient mode the
+    whole ``index.rst`` was skipped, and ``make_tree`` then lost its root and
+    collapsed the toc to a single fallback leaf. End-to-end check that
+    sphinx-design directives are silently dropped and the toc stays intact.
+    """
+    docs = tmp_path / "docs"
+    (docs / "section").mkdir(parents=True)
+    (docs / "index.rst").write_text(
+        "Title\n=====\n\n"
+        ".. grid:: 2\n\n"
+        "   .. grid-item-card:: Card\n\n"
+        "      Body.\n\n"
+        ".. toctree::\n\n"
+        "   section/page\n"
+    )
+    (docs / "section" / "page.rst").write_text("Page\n====\n\nhi\n")
+
+    config = Config(dry_run=True, dummy_progress=True, execute_doctests=False)
+    config.docs_path = str(docs)
+    config.early_error = False  # match numpy.toml's lenient mode
+    gen = Gen(False, config=config)
+    gen._meta = {"version": "1.0", "module": "nptest"}
+    gen.collect_narrative_docs()
+
+    # The page with the grid must survive.
+    assert "index" in gen.docs, f"index was dropped; gen.docs keys = {sorted(gen.docs)}"
+    # The root must be the actual index, with the child reachable.
+    assert len(gen._toc_nodes) == 1
+    root = gen._toc_nodes[0]
+    assert root.ref.path == "index"
+    child_paths = [c.ref.path for c in root.children]
+    assert "section:page" in child_paths, child_paths
+    # No silent drops in this clean build.
+    assert gen._gen_errors == []
+
+
+def test_doctest_parser_accepts_pytest_doctestplus_options() -> None:
+    """``+FLOAT_CMP`` and friends from pytest-doctestplus must parse.
+
+    astropy / scipy / ... docstrings use option flags registered at runtime
+    by pytest-doctestplus. ``papyri gen`` parses examples standalone, so
+    stdlib ``doctest.DocTestParser`` rejects those unknown options with a
+    ``ValueError`` — turning every affected qa into an ``ExampleError1``
+    that the new pack-time error check refuses to ship. ``papyri/gen.py``
+    registers them as no-op flags at import time; this test pins that.
+    """
+    import doctest
+
+    parser = doctest.DocTestParser()
+    src = ">>> 1.0 / 3.0  # doctest: +FLOAT_CMP\n0.333...\n"
+    # Would raise ValueError("...invalid option: '+FLOAT_CMP'") without the
+    # registration in papyri/gen.py.
+    blocks = parser.parse(src, name="test")
+    assert any(isinstance(b, doctest.Example) for b in blocks)
+
+
+def test_lenient_narrative_skip_records_error_and_pack_refuses(
+    tmp_path: Path,
+) -> None:
+    """A lenient narrative-doc skip must surface as a pack-time failure.
+
+    In lenient mode (``early_error = false``) gen used to silently drop any
+    page that failed to validate (e.g. an unregistered directive), shipping
+    a bundle with missing pages. Now those failures are recorded under
+    ``errors`` in ``papyri.json``; ``papyri pack`` refuses to produce an
+    artifact while any are present, so CI fails on a real mistake instead
+    of producing a degraded bundle.
+    """
+    import json as _json
+
+    from papyri.pack import BundleError, make_artifact_from_dir
+
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    # 'completely-unregistered' has no handler and isn't in
+    # _SPHINX_ONLY_DIRECTIVES, so its Directive node trips validate().
+    (docs / "index.rst").write_text(
+        "Title\n=====\n\n"
+        ".. completely-unregistered::\n\n"
+        "   body\n\n"
+        ".. toctree::\n\n"
+        "   page\n"
+    )
+    (docs / "page.rst").write_text("Page\n====\n\nhi\n")
+
+    config = Config(dry_run=True, dummy_progress=True, execute_doctests=False)
+    config.docs_path = str(docs)
+    config.early_error = False
+    gen = Gen(False, config=config)
+    gen._meta = {"version": "1.0", "module": "nptest"}
+    gen.collect_narrative_docs()
+
+    # Lenient gen recorded the failure, didn't crash.
+    assert len(gen._gen_errors) == 1
+    err = gen._gen_errors[0]
+    assert err["kind"] == "narrative"
+    assert "index.rst" in err["path"]
+
+    # Write the bundle dir; pack reads errors from papyri.json and refuses.
+    bundle_dir = tmp_path / "nptest_1.0"
+    bundle_dir.mkdir()
+    (bundle_dir / "module").mkdir()
+    gen.write_narrative(bundle_dir)
+    meta = dict(gen._meta)
+    meta["errors"] = gen._gen_errors
+    (bundle_dir / "papyri.json").write_text(_json.dumps(meta))
+
+    with pytest.raises(BundleError) as excinfo:
+        make_artifact_from_dir(bundle_dir)
+    assert "gen error" in excinfo.value.problems[0]

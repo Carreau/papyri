@@ -540,6 +540,17 @@ def test_replace_unprocessed_directive_drops_sphinx_only(caplog: Any) -> None:
     assert any("Sphinx-only" in r.getMessage() for r in caplog.records)
 
 
+def test_replace_comment_drops_comments() -> None:
+    """RST ``.. comment`` is editor-side prose with no rendered output; the
+    visitor drops every Comment so they never appear in serialised IR.
+    """
+    from papyri.nodes import Comment
+
+    v = _make_visitor()
+    out = v.replace_Comment(Comment(value=".. an editor note"))
+    assert out == []
+
+
 # ---------------------------------------------------------------------------
 # make_image_handler (directives.py)
 # ---------------------------------------------------------------------------
@@ -1255,9 +1266,11 @@ def test_include_basic_rst(tmp_path):
     rst_file.write_text("Hello world.\n", encoding="utf-8")
     handler = make_include_handler(doc_path=tmp_path, doc_root=None)
     out = handler("fragment.rst", {}, "")
-    # parse() returns Section nodes; the handler returns them as-is
+    # The handler flattens the synthetic ``Section`` wrapper that ``parse``
+    # adds around top-level RST, so a parent Section.children that splices
+    # the include in stays well-typed (Section is not in that union).
     assert len(out) >= 1
-    assert isinstance(out[0], Section)
+    assert not any(isinstance(n, Section) for n in out)
 
 
 def test_include_returns_parsed_nodes(tmp_path):
@@ -1265,16 +1278,41 @@ def test_include_returns_parsed_nodes(tmp_path):
     rst_file.write_text("Some included paragraph.\n", encoding="utf-8")
     handler = make_include_handler(doc_path=tmp_path, doc_root=None)
     out = handler("frag.rst", {}, "")
-    # Flatten all children from all returned sections and check for Text content
+    # Output is the included file's content with the wrapper Section unwrapped:
+    # the Paragraph sits at the top level.
     all_text = [
         item.value
-        for section in out
-        for child in section.children
+        for child in out
         if isinstance(child, Paragraph)
         for item in child.children
         if isinstance(item, Text)
     ]
     assert any("included" in t for t in all_text)
+
+
+def test_include_flattens_comments_and_targets_for_parent_section(tmp_path):
+    """A fragment of comments + link targets must not nest a Section inside
+    its parent Section.children — Section is not in that union, and a nested
+    one trips ``WrongTypeAtField`` at validate time. The include handler
+    flattens its wrapper so the children land at the splice site directly.
+    """
+    from papyri.nodes import Comment, Target
+
+    rst_file = tmp_path / "links.rst"
+    rst_file.write_text(
+        ".. This is a comment.\n\n"
+        ".. _ipython: https://ipython.org\n"
+        ".. _docs: https://ipython.readthedocs.org/\n",
+        encoding="utf-8",
+    )
+    handler = make_include_handler(doc_path=tmp_path, doc_root=None)
+    out = handler("links.rst", {}, "")
+    assert not any(isinstance(n, Section) for n in out)
+    kinds = {type(n) for n in out}
+    # The Targets must survive at the top level; Comment may be there too
+    # (the visitor drops it later via ``replace_Comment``).
+    assert Target in kinds, kinds
+    assert all(isinstance(n, (Comment, Target)) for n in out), kinds
 
 
 def test_include_start_line_option(tmp_path):
@@ -1395,6 +1433,41 @@ def test_sphinx_only_directives_includes_highlight():
     from papyri.tree import _SPHINX_ONLY_DIRECTIVES
 
     assert "highlight" in _SPHINX_ONLY_DIRECTIVES
+
+
+def test_sphinx_only_directives_includes_sphinx_design() -> None:
+    """sphinx-design layout directives must be silently dropped, not turned
+    into unhandled ``Directive`` nodes that fail ``validate()``.
+
+    Regression: numpy / scipy build their root ``doc/source/index.rst`` as a
+    PyData-theme landing page made of ``.. grid::`` / ``.. grid-item-card::``.
+    Without handlers, those pages were dropped in lenient gen mode — and the
+    root being dropped collapsed the entire toc to a single fallback leaf
+    ("narrative docs appear mostly empty").
+    """
+    from papyri.tree import _SPHINX_ONLY_DIRECTIVES
+
+    for name in (
+        "grid",
+        "grid-item",
+        "grid-item-card",
+        "card",
+        "card-carousel",
+        "tab-set",
+        "tab-item",
+        "dropdown",
+        "button-link",
+        "button-ref",
+    ):
+        assert name in _SPHINX_ONLY_DIRECTIVES, (
+            f"{name!r} not in _SPHINX_ONLY_DIRECTIVES"
+        )
+
+
+def test_sphinx_only_directives_includes_automodule() -> None:
+    from papyri.tree import _SPHINX_ONLY_DIRECTIVES
+
+    assert "automodule" in _SPHINX_ONLY_DIRECTIVES
 
 
 def test_sphinx_only_directives_includes_currentmodule():

@@ -551,11 +551,15 @@ class TSVisitor:
         items = []
         for list_item in node.children:
             assert list_item.type == "list_item"
+            # An empty list item (just the bullet, no body) is legal RST —
+            # ``list-table`` directives in particular use ``* -`` to leave a
+            # cell blank. tree-sitter-rst gives us a single-child list_item in
+            # that case; treat it as an empty ListItem rather than asserting.
+            if len(list_item.children) == 1:
+                items.append(ListItem(()))
+                continue
             assert len(list_item.children) == 2, list_item.children
             _bullet, body = list_item.children
-            # assert len(body.children) == 1
-            # parg = body.children[0]
-            # assert parg.type == "paragraph", parg.type
             items.append(ListItem(self.visit(body)))
         return [BulletList(ordered=False, start=1, children=items)]
 
@@ -686,6 +690,9 @@ class TSVisitor:
         items = []
         for list_item in node.children:
             assert list_item.type == "list_item"
+            if len(list_item.children) == 1:
+                items.append(ListItem(()))
+                continue
             _bullet, body = list_item.children
             items.append(ListItem(self.visit(body)))
         return [BulletList(ordered=True, start=1, children=items)]

@@ -997,7 +997,7 @@ class DirectiveVisiter(TreeReplacer):
             return acc
 
         if directive.name in _SPHINX_ONLY_DIRECTIVES:
-            log.warning(
+            log.info(
                 "skipping Sphinx-only directive %r in %s (not meaningful outside a Sphinx build)",
                 directive.name,
                 self.qa,

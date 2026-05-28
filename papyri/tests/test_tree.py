@@ -534,7 +534,7 @@ def test_replace_unprocessed_directive_drops_sphinx_only(caplog: Any) -> None:
         children=[],
         raw=".. autofunction:: numpy.linspace",
     )
-    with caplog.at_level("WARNING", logger="papyri"):
+    with caplog.at_level("INFO", logger="papyri"):
         out = v.replace_UnprocessedDirective(ud)
     assert out == []
     assert any("Sphinx-only" in r.getMessage() for r in caplog.records)
@@ -1011,6 +1011,27 @@ def test_list_table_caption_emitted_as_paragraph() -> None:
     assert isinstance(out[1], Table)
 
 
+def test_list_table_with_empty_cells() -> None:
+    """numpy's ``numpy-for-matlab-users.rst`` ``list-table`` has rows like
+    ``* -`` with a blank cell. tree-sitter-rst represents the blank cell as
+    a list_item with only a bullet child (no body); ``visit_bullet_list``
+    must tolerate that instead of asserting len==2.
+    """
+    content = (
+        "* - filled\n  - also filled\n"
+        "* -\n  - second cell only\n"
+        "* - first cell only\n  -\n"
+    )
+    out = list_table_handler("", {}, content)
+    assert len(out) == 1
+    table = out[0]
+    assert isinstance(table, Table)
+    assert len(table.children) == 3
+    # Empty cells exist but carry no body content.
+    assert table.children[1].children[0].children == ()
+    assert table.children[2].children[1].children == ()
+
+
 def test_list_table_empty_body_returns_nothing() -> None:
     assert list_table_handler("", {}, "") == []
     assert list_table_handler("", {}, "   \n  \n") == []
@@ -1146,7 +1167,7 @@ def test_only_drops_html_via_visitor(caplog):
 
 
 def test_literalinclude_drops_with_warning(caplog):
-    with caplog.at_level("WARNING", logger="papyri"):
+    with caplog.at_level("INFO", logger="papyri"):
         out = literalinclude_handler("myfile.py", {}, "")
     assert out == []
     assert any("literalinclude" in r.getMessage() for r in caplog.records)
@@ -1373,6 +1394,29 @@ def test_include_absolute_path_no_doc_root_warns(caplog, tmp_path):
         out = handler("/absolute/path.rst", {}, "")
     assert out == []
     assert any("include" in r.getMessage() for r in caplog.records)
+
+
+def test_include_nested_resolves_relative_to_included_file(tmp_path):
+    """A file in a subdirectory that includes a sibling must resolve that
+    sibling relative to the *included* file's directory, not the outer
+    file's. Real-world trigger: numpy's docs include a sub-page that itself
+    includes neighbouring snippets — those were resolving against the outer
+    directory and silently dropping (or failing) the build.
+    """
+    sub = tmp_path / "sub"
+    sub.mkdir()
+    (sub / "outer.rst").write_text(
+        "Outer line.\n\n.. include:: sibling.rst\n", encoding="utf-8"
+    )
+    (sub / "sibling.rst").write_text("Sibling content.\n", encoding="utf-8")
+    # The outer handler is bound to ``tmp_path`` (i.e. the directory of the
+    # file that holds the top-level include) — sibling.rst lives in ``sub/``
+    # so without the fix it would not be findable.
+    handler = make_include_handler(doc_path=tmp_path, doc_root=None)
+    out = handler("sub/outer.rst", {}, "")
+    flat = _flatten_text(out)
+    assert "Outer line." in flat
+    assert "Sibling content." in flat
 
 
 def test_include_registered_on_visitor():

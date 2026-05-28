@@ -14,6 +14,7 @@
  */
 import { mkdir, writeFile, readFile, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { safeJoin } from "./fs-safe.js";
 
 export interface RawStore {
   /** Archive a raw .papyri.gz bundle (compressed bytes as received off the wire). */
@@ -37,12 +38,12 @@ export class FsRawStore implements RawStore {
   constructor(private readonly root: string) {}
 
   private fullPath(pkg: string, ver: string): string {
-    return join(this.root, "_raw", pkg, `${ver}.papyri.gz`);
+    return safeJoin(this.root, "_raw", pkg, `${ver}.papyri.gz`);
   }
 
   async put(pkg: string, ver: string, bytes: Uint8Array): Promise<void> {
     const p = this.fullPath(pkg, ver);
-    await mkdir(join(this.root, "_raw", pkg), { recursive: true });
+    await mkdir(safeJoin(this.root, "_raw", pkg), { recursive: true });
     await writeFile(p, bytes);
   }
 

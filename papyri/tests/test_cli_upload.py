@@ -194,7 +194,7 @@ def test_upload_sends_a_papyri_artifact(tmp_path: Any) -> None:
     resp = _mock_response({"ok": True, "pkg": "mypkg", "version": "1.0"})
     captured: list[bytes] = []
 
-    def fake_urlopen(req: urllib.request.Request) -> Any:
+    def fake_urlopen(req: urllib.request.Request, **_kwargs: Any) -> Any:
         assert isinstance(req.data, bytes)
         captured.append(req.data)
         return resp
@@ -225,7 +225,7 @@ def test_upload_dir_and_artifact_send_identical_bytes(tmp_path: Any) -> None:
     exists_resp = _mock_exists_response(False)
     captured: list[bytes] = []
 
-    def fake_urlopen(req: urllib.request.Request) -> Any:
+    def fake_urlopen(req: urllib.request.Request, **_kwargs: Any) -> Any:
         if req.get_method() == "GET":
             return exists_resp
         assert isinstance(req.data, bytes)
@@ -250,7 +250,7 @@ def test_upload_skips_when_already_present(tmp_path: Any) -> None:
     bundle = _make_bundle(tmp_path / "mypkg_1.0")
     exists_resp = _mock_exists_response(True)
 
-    def fake(req: urllib.request.Request) -> Any:
+    def fake(req: urllib.request.Request, **_kwargs: Any) -> Any:
         assert req.get_method() == "GET", "no PUT should be issued when bundle exists"
         return exists_resp
 
@@ -267,7 +267,7 @@ def test_upload_force_bypasses_existence_check(tmp_path: Any) -> None:
     bundle = _make_bundle(tmp_path / "mypkg_1.0")
     resp = _mock_response({"ok": True, "pkg": "mypkg", "version": "1.0"})
 
-    def fake(req: urllib.request.Request) -> Any:
+    def fake(req: urllib.request.Request, **_kwargs: Any) -> Any:
         assert req.get_method() == "PUT", "--force must skip the GET existence check"
         return resp
 
@@ -290,7 +290,7 @@ def test_upload_multiple_bundles(tmp_path: Any) -> None:
     resp = _mock_response({"ok": True, "pkg": "x", "version": "y"})
     exists_resp = _mock_exists_response(False)
 
-    def fake(req: urllib.request.Request) -> Any:
+    def fake(req: urllib.request.Request, **_kwargs: Any) -> Any:
         return exists_resp if req.get_method() == "GET" else resp
 
     with patch("urllib.request.urlopen", side_effect=fake) as mock_open:
@@ -312,7 +312,7 @@ def test_upload_continues_after_first_failure(tmp_path: Any) -> None:
     # PUT for the first bundle fails, the second succeeds.
     put_results = iter([urllib.error.URLError("connection refused"), resp_ok])
 
-    def fake(req: urllib.request.Request) -> Any:
+    def fake(req: urllib.request.Request, **_kwargs: Any) -> Any:
         if req.get_method() == "GET":
             return exists_resp
         result = next(put_results)
@@ -424,7 +424,7 @@ def test_upload_zip_sends_same_bytes_as_artifact(tmp_path: Any) -> None:
     exists_resp = _mock_exists_response(False)
     captured: list[bytes] = []
 
-    def fake_urlopen(req: urllib.request.Request) -> Any:
+    def fake_urlopen(req: urllib.request.Request, **_kwargs: Any) -> Any:
         if req.get_method() == "GET":
             return exists_resp
         captured.append(req.data)  # type: ignore[arg-type]

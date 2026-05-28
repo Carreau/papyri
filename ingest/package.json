@@ -9,6 +9,11 @@
       "import": "./src/index.ts",
       "default": "./dist/index.js"
     },
+    "./url-safety": {
+      "types": "./src/url-safety.ts",
+      "import": "./src/url-safety.ts",
+      "default": "./dist/url-safety.js"
+    },
     "./migrations/*": "./migrations/*"
   },
   "scripts": {

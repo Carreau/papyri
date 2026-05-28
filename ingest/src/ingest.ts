@@ -27,7 +27,7 @@ import { blake2b } from "@noble/hashes/blake2b.js";
 import Database from "better-sqlite3";
 import { encode, generatedDocToIngested } from "./encoder.js";
 import type { TypedNode } from "./encoder.js";
-import { assertBundle } from "./bundle.js";
+import { assertBundle, assertSafeUrls } from "./bundle.js";
 import { keyStr, type Key } from "./keys.js";
 import { collectForwardRefs, collectForwardRefsFromSection } from "./visitor.js";
 import { FsBlobStore, type BlobStore } from "./blob-store.js";
@@ -199,6 +199,7 @@ export class Ingester {
     contentHash?: string,
   ): Promise<{ pkg: string; version: string }> {
     assertBundle(node);
+    assertSafeUrls(node);
     const bundle = node;
     const root = bundle.module;
     const version = bundle.version;

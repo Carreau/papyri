@@ -76,7 +76,8 @@ export const GET: APIRoute = async ({ request, url }) => {
   try {
     backends = await getBackends();
   } catch (err) {
-    return respond({ ok: false, error: `failed to open ingest backend: ${err}` }, 500);
+    console.error("failed to open ingest backend:", err);
+    return respond({ ok: false, error: "failed to open ingest backend" }, 500);
   }
 
   const row = await backends.graphDb.get<{ content_hash: string | null }>(
@@ -107,7 +108,8 @@ export const PUT: APIRoute = async ({ request }) => {
     backends = await getBackends();
     ingester = new Ingester({ backends });
   } catch (err) {
-    return respond({ ok: false, error: `failed to open ingest backend: ${err}` }, 500);
+    console.error("failed to open ingest backend:", err);
+    return respond({ ok: false, error: "failed to open ingest backend" }, 500);
   }
 
   // Decode the artifact: gunzip → CBOR → Bundle Node. DecompressionStream

@@ -19,7 +19,9 @@ export type { GraphDb, BatchStmt, GraphRow } from "./graph-db.js";
 export { decode, encode, generatedDocToIngested, FIELD_ORDER } from "./encoder.js";
 export type { IRNode, TypedNode, UnknownNode } from "./encoder.js";
 
-export { assertBundle } from "./bundle.js";
+export { assertBundle, assertSafeUrls } from "./bundle.js";
+
+export { isSafeUrl } from "./url-safety.js";
 
 export { collectForwardRefs, collectForwardRefsFromSection } from "./visitor.js";
 

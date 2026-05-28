@@ -404,6 +404,71 @@ def test_explode_bundle_to_dir_omits_empty_optional_dirs(tmp_path: Any) -> None:
     assert not (out / "toc.json").exists()
 
 
+def test_explode_bundle_to_dir_rejects_path_traversal_in_item_key(
+    tmp_path: Any,
+) -> None:
+    """A crafted artifact whose item key escapes the target dir is rejected."""
+    bundle = _make_bundle_node(assets={"../../../../escape.bin": b"pwn"})
+    out = tmp_path / "mypkg_1.0"
+    with pytest.raises(BundleError) as excinfo:
+        explode_bundle_to_dir(bundle, out)
+    assert "unsafe path" in excinfo.value.problems[0]
+    # Nothing was written outside the target directory.
+    assert not (tmp_path / "escape.bin").exists()
+
+
+def test_explode_artifact_to_dir_rejects_traversal_in_module(tmp_path: Any) -> None:
+    """A crafted module/version that escapes dest_parent is rejected."""
+    bundle = _make_bundle_node(module="../../../../evil", version="1.0")
+    artifact = tmp_path / "evil.papyri"
+    artifact.write_bytes(make_artifact(bundle))
+    dest = tmp_path / "dest"
+    dest.mkdir()
+    with pytest.raises(BundleError) as excinfo:
+        explode_artifact_to_dir(artifact, dest)
+    assert "unsafe path" in excinfo.value.problems[0]
+
+
+def test_pack_rejects_unsafe_link_url() -> None:
+    """A Link with a javascript: URL must be refused at pack time."""
+    from papyri.nodes import Link
+
+    bundle = _make_bundle_node(
+        examples={"ex": Link(children=(), url="javascript:alert(1)", title="")}
+    )
+    with pytest.raises(BundleError) as excinfo:
+        make_artifact(bundle)
+    assert "disallowed scheme" in excinfo.value.problems[0]
+
+
+def test_pack_rejects_unsafe_image_url() -> None:
+    """An Image with a data: URL must be refused at pack time."""
+    from papyri.nodes import Image
+
+    bundle = _make_bundle_node(
+        examples={"ex": Image(url="data:text/html,<script>x</script>", alt="")}
+    )
+    with pytest.raises(BundleError) as excinfo:
+        make_artifact(bundle)
+    assert "disallowed scheme" in excinfo.value.problems[0]
+
+
+def test_pack_allows_safe_and_relative_urls() -> None:
+    """http/https/mailto and relative/fragment URLs pack without error."""
+    from papyri.nodes import Link
+
+    bundle = _make_bundle_node(
+        examples={
+            "a": Link(children=(), url="https://example.com", title=""),
+            "b": Link(children=(), url="../relative/path", title=""),
+            "c": Link(children=(), url="#frag", title=""),
+            "d": Link(children=(), url="mailto:a@b.com", title=""),
+        }
+    )
+    # Must not raise.
+    make_artifact(bundle)
+
+
 def test_explode_artifact_to_dir_names_dir_and_round_trips(tmp_path: Any) -> None:
     """explode_artifact_to_dir derives '<module>_<version>' and round-trips."""
     bundle = _make_bundle_node(module="mypkg", version="1.0")

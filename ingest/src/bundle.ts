@@ -40,6 +40,26 @@ export function assertBundle(node: unknown): asserts node is BundleNode {
       } (tag ${typeof n.__tag === "number" ? n.__tag : "?"})`,
     );
   }
+  // Validate fields that flow into path joins and DB parameters.
+  const b = n as Record<string, unknown>;
+  if (typeof b.module !== "string" || b.module === "") {
+    throw new Error("Bundle.module must be a non-empty string");
+  }
+  if (typeof b.version !== "string" || b.version === "") {
+    throw new Error("Bundle.version must be a non-empty string");
+  }
+  for (const field of ["api", "narrative", "examples", "aliases", "extra"]) {
+    const v = b[field];
+    if (!v || typeof v !== "object" || Array.isArray(v)) {
+      throw new Error(`Bundle.${field} must be a non-null object`);
+    }
+  }
+  if (!Array.isArray(b.toc)) {
+    throw new Error("Bundle.toc must be an array");
+  }
+  if (!b.assets || typeof b.assets !== "object" || Array.isArray(b.assets)) {
+    throw new Error("Bundle.assets must be a non-null object");
+  }
 }
 
 const URL_BEARING_TYPES = new Set(["Link", "Image"]);

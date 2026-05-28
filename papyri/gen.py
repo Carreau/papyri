@@ -1282,7 +1282,7 @@ class Gen:
             else:
                 rqan = str(qa).split(".")[-1]
                 if not (rqan.startswith("__") and rqan.endswith("__")):
-                    self.log.warning(
+                    self.log.info(
                         "Could not find source file for %s (%s) [%s], will not be able to link to it.",
                         repr(qa) + ":" + rqan,
                         target_item,

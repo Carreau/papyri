@@ -23,9 +23,20 @@ exclude = [
 
     # contain ascii diagram
     "scipy.stats._continuous_distns:crystalball_gen._pdf",
-    
+
     # assert len(tsc) in (0, 1), (tsc, data)
-    "scipy.io.matlab._mio5"
+    "scipy.io.matlab._mio5",
+
+    #Wrong type at field
+    "scipy.stats._morestats:anderson_ksamp",
+
+    # Space after directive
+    "scipy.stats._morestats:anderson",
+
+    # Tree SIttr parse error
+    "scipy.stats._multivariate:matrix_t_frozen.logpdf",
+    "scipy.stats._multivariate:matrix_t_gen.logpdf",
+
             ]
 exclude_jedi = [
     "scipy.linalg._sketches.clarkson_woodruff_transform",

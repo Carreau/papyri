@@ -43,10 +43,11 @@ latency on it was far too high.
   `papyri unpack` is the inverse — it explodes a `.papyri` artifact back into
   a JSON DocBundle directory for inspection.
 - **`papyri upload`**: ships a `.papyri` file, a `.zip` containing one, or a
-  DocBundle directory to a viewer instance whose `/api/bundle` endpoint (HTTP
-  `PUT`) runs the TypeScript ingest pipeline server-side to wire bundles into
-  the cross-linked graph. Auth: `$PAPYRI_UPLOAD_TOKEN` / `--token`; endpoint:
-  `$PAPYRI_UPLOAD_URL` / `--url` (default `http://localhost:4321/api/bundle`).
+  DocBundle directory to a viewer instance whose `/api/admin/bundle` endpoint
+  (HTTP `PUT`) runs the TypeScript ingest pipeline server-side to wire bundles
+  into the cross-linked graph. Auth: `$PAPYRI_UPLOAD_TOKEN` / `--token`;
+  endpoint: `$PAPYRI_UPLOAD_URL` / `--url` (default
+  `http://localhost:4321/api/admin/bundle`).
 - **`ingest/`**: TypeScript `papyri-ingest` package — the canonical
   ingestion engine, invoked by the viewer's upload endpoint. There is no
   `papyri ingest` Python CLI; do not add one.
@@ -242,27 +243,38 @@ viewer/                   TypeScript Astro web renderer
       visibility.ts       Visibility toggle state
       signature.ts        Signature rendering helpers
     components/           Astro + React islands
-    pages/                Routes (Astro file-based routing)
-      index.astro         Bundle list (home page)
-      [pkg]/[ver]/        Per-bundle routes
+    pages/                Routes (Astro file-based routing). Layout is
+                          URL-aligned with the admin/docs split: docs-
+                          surface routes live at the root, admin-surface
+                          routes live under `admin/` and `api/admin/`.
+      index.astro         Bundle list (docs home)
+      project/[pkg]/[ver]/  Per-bundle routes (docs)
         index.astro       Bundle overview
         [...slug].astro   Qualname pages
         docs/[...doc].astro  Narrative doc pages
         examples/[...ex].astro  Example pages
         images/           Image index
-        nodes/            Node browser
-        text-search/      Full-text search
+        nodes/            Per-bundle node browser
+        text-search/      Per-bundle full-text search
+      text-search/        Cross-bundle full-text search (docs)
+      admin/              Admin surface (host-gated by middleware)
+        index.astro       Admin dashboard
+        login.astro       Login page
+        nodes/            Global node browser
+        ir-stats/         IR statistics dashboard
       api/                API endpoints
-        bundle.ts         PUT /api/bundle — ingest endpoint
-        reingest.ts       POST /api/reingest — replay raw archive
-        bundles.json.ts   GET /api/bundles.json — bundle list
-        inventory.ts      Intersphinx inventory register/list (external links)
-        nodes.json.ts, ir-stats.json.ts, search.json.ts, text-search.json.ts
-        [pkg]/[ver]/{nodes,raw,text-search}.json.ts  Per-bundle data endpoints
-        auth/login.ts, auth/logout.ts  Session login/logout
-        clear.ts, clear-raw.ts, health.json.ts, stats.ts
-      admin/              Admin panel (auth-gated)
-      login.astro         Login page
+        bundles.json.ts   GET /api/bundles.json — bundle list (docs)
+        search.json.ts    GET /api/search.json — qualname search (docs)
+        text-search.json.ts  GET /api/text-search.json — fulltext (docs)
+        health.json.ts    GET /api/health.json — health check (docs)
+        [pkg]/[ver]/      Per-bundle data: nodes, raw, text-search (docs)
+        admin/            Admin-surface APIs (host-gated)
+          bundle.ts       PUT /api/admin/bundle — ingest endpoint
+          reingest.ts     POST /api/admin/reingest — replay raw archive
+          clear.ts, clear-raw.ts, stats.ts
+          inventory.ts    Intersphinx inventory register/list
+          nodes.json.ts, ir-stats.json.ts
+          auth/login.ts, auth/logout.ts  Session login/logout
     layouts/              BaseLayout, BundleLayout
     styles/               global.css, ir-nodes.css
     middleware.ts         Auth session middleware
@@ -296,7 +308,7 @@ See `node_base.py`, `node_serializer.py`, `pack.py`.
 
 The **graphstore is a derived cache** — the raw `.papyri.gz` archive stored
 at `_raw/<pkg>/<ver>.papyri.gz` is the only authoritative IR. Everything in
-the graphstore and blob store is rebuildable via `POST /api/reingest`.
+the graphstore and blob store is rebuildable via `POST /api/admin/reingest`.
 
 ## Known environmental gotchas
 
@@ -307,7 +319,7 @@ the graphstore and blob store is rebuildable via `POST /api/reingest`.
   human-readable. CBOR starts at `papyri pack`. Do not write CBOR into the
   bundle directory, and do not write JSON into the `.papyri` artifact or
   the ingest/viewer layers.
-- `papyri upload` sends `PUT` (not `POST`) to `/api/bundle`. The upload CLI
+- `papyri upload` sends `PUT` (not `POST`) to `/api/admin/bundle`. The upload CLI
   sets an `Origin` header matching the upload host (defensive — Astro's
   `checkOrigin` is disabled in `astro.config.mjs`, since the endpoint carries
   its own bearer-token check). Some reverse proxies / WAFs reject
@@ -331,11 +343,13 @@ the graphstore and blob store is rebuildable via `POST /api/reingest`.
 
 | Variable | Used by | Purpose |
 |---|---|---|
-| `PAPYRI_UPLOAD_URL` | `papyri upload` | Viewer endpoint (default `http://localhost:4321/api/bundle`) |
-| `PAPYRI_UPLOAD_TOKEN` | `papyri upload`, viewer | Bearer token for `PUT /api/bundle` |
+| `PAPYRI_UPLOAD_URL` | `papyri upload` | Viewer endpoint (default `http://localhost:4321/api/admin/bundle`) |
+| `PAPYRI_UPLOAD_TOKEN` | `papyri upload`, viewer | Bearer token for `PUT /api/admin/bundle` |
 | `PAPYRI_INGEST_DIR` | viewer | Bundle data root (default `~/.papyri/ingest`) |
 | `PAPYRI_INGEST_DB` | viewer | SQLite graph DB (default `~/.papyri/ingest/papyri.db`) |
-| `PAPYRI_SITE` | viewer build | Canonical external origin for canonical-URL generation behind a reverse proxy |
+| `PAPYRI_SITE` | viewer build | Canonical external origin for canonical-URL generation behind a reverse proxy. With the admin/docs domain split enabled, set to `https://$PAPYRI_DOCS_HOST` |
+| `PAPYRI_DOCS_HOST` | viewer middleware | External hostname of the docs (read-only) surface, e.g. `docs.example.com`. Optional — setting either `PAPYRI_DOCS_HOST` or `PAPYRI_ADMIN_HOST` turns on the host-based gating in `src/middleware.ts` |
+| `PAPYRI_ADMIN_HOST` | viewer middleware | External hostname of the admin surface (login, upload, all mutating endpoints), e.g. `admin.example.com`. Optional; same gating switch as above |
 | `PAPYRI_USERNAME` / `PAPYRI_PASSWORD` | viewer middleware | Credentials for the session-cookie auth gate |
 | `PAPYRI_VERSION` | `papyri upload` | Overrides the `papyri-upload/<version>` User-Agent string |
 | `PAPYRI_BUILD_COMMIT` | viewer build | Git commit surfaced on the admin panel |
@@ -346,8 +360,8 @@ the graphstore and blob store is rebuildable via `POST /api/reingest`.
 The viewer runs as a long-running Node.js server (`@astrojs/node`,
 `output: "server"`) on a VPS. Complete: async storage+graph layer
 (`BlobStore` / `GraphDb` / `RawStore` abstractions, filesystem + SQLite
-implementations), in-process bundle upload via `PUT /api/bundle`, raw bundle
-archive (`_raw/<pkg>/<ver>.papyri.gz`), and `POST /api/reingest`.
+implementations), in-process bundle upload via `PUT /api/admin/bundle`, raw
+bundle archive (`_raw/<pkg>/<ver>.papyri.gz`), and `POST /api/admin/reingest`.
 
 The earlier Cloudflare Workers (R2 + D1) target was abandoned — ingest latency
 on it was far too high (per-object subrequest fan-out against the Workers cap;

@@ -19,6 +19,12 @@ try {
 // Astro uses this for CSRF origin checks (security.checkOrigin) and canonical
 // URL generation. Required when deployed behind a reverse proxy whose external
 // hostname differs from the container's internal host.
+//
+// PAPYRI_DOCS_HOST / PAPYRI_ADMIN_HOST (read at request time, not here) turn
+// on the admin/docs domain split — middleware refuses admin routes on the
+// docs host and vice versa. See viewer/src/lib/surface.ts. With the split
+// enabled, PAPYRI_SITE should equal `https://$PAPYRI_DOCS_HOST` (the public
+// canonical surface).
 const PAPYRI_SITE = process.env.PAPYRI_SITE;
 
 // Build-time constants injected into import.meta.env.

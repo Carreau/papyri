@@ -2,16 +2,27 @@
 // Top strip shared by every page. Wordmark on the left links back to the
 // bundle index. Right side is reserved for utilities (theme toggle today;
 // global search later).
+//
+// With the admin/docs domain split the login/admin/logout UI is admin-only:
+// on the docs surface there is nothing to log into (no mutating endpoints
+// live there), so the controls are hidden to avoid 404s and to keep the
+// admin URL undiscoverable from public bundle pages.
 import ThemeToggle from "./ThemeToggle.tsx";
 import VisibilityToggle from "./VisibilityToggle.tsx";
 import UserMenu from "./UserMenu.tsx";
 import { isAuthenticated } from "../lib/auth.ts";
+import { getSurface } from "../lib/surface.ts";
 
 const authenticated = isAuthenticated(Astro);
+const surface = getSurface(Astro.request);
+const showAuthControls = surface === "admin";
+// On the admin surface the bundle index lives on the docs host, so the
+// wordmark stays on admin (→ /admin); on the docs surface it goes home.
+const wordmarkHref = surface === "admin" ? "/admin" : "/";
 ---
 
 <header class="site-header">
-  <a class="site-wordmark" href="/">
+  <a class="site-wordmark" href={wordmarkHref}>
     <span class="site-wordmark-mark" aria-hidden="true">&para;</span>
     <span class="site-wordmark-text">papyri</span>
   </a>
@@ -19,13 +30,14 @@ const authenticated = isAuthenticated(Astro);
   <div class="site-header-tools">
     <slot name="tools" />
     {
-      authenticated ? (
-        <UserMenu client:load />
-      ) : (
-        <a href="/login" class="site-login-link">
-          Login
-        </a>
-      )
+      showAuthControls &&
+        (authenticated ? (
+          <UserMenu client:load />
+        ) : (
+          <a href="/admin/login" class="site-login-link">
+            Login
+          </a>
+        ))
     }
     <VisibilityToggle client:load />
     <ThemeToggle client:load />

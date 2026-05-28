@@ -85,11 +85,11 @@ pnpm serve
 
 SSR endpoints:
 
-| Method | Route                       | What it does                                       |
-| ------ | --------------------------- | -------------------------------------------------- |
-| `GET`  | `/api/bundles.json`         | Live list of ingested bundles, read per request.   |
-| `GET`  | `/api/search.json?q=<term>` | Cross-bundle substring search over qualnames.      |
-| `PUT`  | `/api/bundle`               | Receive a gen bundle, ingest it, update the graph. |
+| Method | Route                       | Surface | What it does                                       |
+| ------ | --------------------------- | ------- | -------------------------------------------------- |
+| `GET`  | `/api/bundles.json`         | docs    | Live list of ingested bundles, read per request.   |
+| `GET`  | `/api/search.json?q=<term>` | docs    | Cross-bundle substring search over qualnames.      |
+| `PUT`  | `/api/admin/bundle`         | admin   | Receive a gen bundle, ingest it, update the graph. |
 
 These are the designated shock absorber for future dynamic behaviour
 (global search, on-the-fly bundle swaps, the hosted multi-tenant
@@ -99,7 +99,7 @@ read live state handle requests at runtime.
 
 ## Uploading a bundle
 
-The `PUT /api/bundle` endpoint receives a packed `.papyri` artifact, runs
+The `PUT /api/admin/bundle` endpoint receives a packed `.papyri` artifact, runs
 the full ingest pipeline, and updates the cross-link graph — so cross-refs and back-refs
 work immediately without restarting the server. This is the canonical
 ingest entry point; the Python side ships bundles to it via
@@ -125,7 +125,7 @@ papyri upload ~/.papyri/data/papyri_<version>/
 
 `papyri upload` (defined in `papyri/cli/upload.py`) tars the bundle
 directory and PUTs it to the endpoint. It defaults to the local
-viewer (`http://localhost:4321/api/bundle`); point it elsewhere with
+viewer (`http://localhost:4321/api/admin/bundle`); point it elsewhere with
 `--url`. Multiple bundle paths can be passed in a single invocation.
 
 ### Response
@@ -162,12 +162,26 @@ viewer (`http://localhost:4321/api/bundle`); point it elsewhere with
 | `pnpm test:watch` | Vitest in watch mode.                         |
 | `pnpm serve`      | Run the built Node server (SSG + SSR routes). |
 
+## Running admin and docs on separate hostnames
+
+The viewer can serve its read-only docs surface (`/`,
+`/project/<pkg>/<ver>/...`) and its mutating admin surface (`/admin`,
+`/admin/login`, `/api/admin/bundle`, …) under different hostnames so a
+bundle-injected XSS payload on a docs page cannot reach the admin
+session cookie. Set `PAPYRI_DOCS_HOST` and `PAPYRI_ADMIN_HOST` and the
+middleware in `src/middleware.ts` 404s any cross-surface path. See
+[`DEPLOY.md`](DEPLOY.md#splitting-admin-and-docs-onto-two-hostnames) for
+local-dev recipes (two ports, `/etc/hosts` aliases, or a reverse proxy).
+
 ## Environment variables
 
-| Variable            | Default                      | Purpose                     |
-| ------------------- | ---------------------------- | --------------------------- |
-| `PAPYRI_INGEST_DIR` | `~/.papyri/ingest`           | Root of the ingested store. |
-| `PAPYRI_INGEST_DB`  | `~/.papyri/ingest/papyri.db` | SQLite graph database.      |
+| Variable            | Default                      | Purpose                                                                              |
+| ------------------- | ---------------------------- | ------------------------------------------------------------------------------------ |
+| `PAPYRI_INGEST_DIR` | `~/.papyri/ingest`           | Root of the ingested store.                                                          |
+| `PAPYRI_INGEST_DB`  | `~/.papyri/ingest/papyri.db` | SQLite graph database.                                                               |
+| `PAPYRI_DOCS_HOST`  | _unset_                      | External hostname of the docs surface. Setting either host var turns on the split.   |
+| `PAPYRI_ADMIN_HOST` | _unset_                      | External hostname of the admin surface (login, upload, all mutating endpoints).      |
+| `PAPYRI_SITE`       | _unset_                      | Canonical external origin (Astro `site`). With the split enabled, the docs URL.      |
 
 If `PAPYRI_INGEST_DB` points at a missing file, the viewer still
 builds and serves: xrefs render as muted "unresolved" spans and the

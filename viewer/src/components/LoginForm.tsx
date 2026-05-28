@@ -13,14 +13,16 @@ export default function LoginForm() {
     setLoading(true);
 
     try {
-      const response = await fetch("/api/auth/login", {
+      const response = await fetch("/api/admin/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
       });
 
       if (response.ok) {
-        window.location.href = "/";
+        // Login lives on the admin surface (and `/` on that surface 404s
+        // when the split is enabled), so land on the admin dashboard.
+        window.location.href = "/admin";
       } else {
         const data = await response.json();
         setError(data.message || "Login failed");

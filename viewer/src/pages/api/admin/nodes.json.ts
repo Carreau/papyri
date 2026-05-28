@@ -1,6 +1,6 @@
 // SSR endpoint: browse unique IR nodes across every ingested bundle.
 //
-// Same shape as /api/[pkg]/[ver]/nodes.json, but walks all bundles rather
+// Same shape as /api/[pkg]/[ver]/nodes.json (docs surface), but walks all bundles rather
 // than one. Stops as soon as `limit` unique node values are collected.
 //
 // Query params:
@@ -9,13 +9,18 @@
 //   limit     — optional integer, default 100, capped at 100.
 
 import type { APIRoute } from "astro";
-import { collectNodes, ALL_NODE_TYPES, type IRNode, type TypedNode } from "../../lib/ir-reader.ts";
-import { getBackends } from "../../lib/backends.ts";
-import { typeFromSlug } from "../../lib/ir-types.ts";
-import { renderNode } from "../../lib/render-node.ts";
-import { walkAllBundles, type PageRef } from "../../lib/bundle-walk.ts";
-import { respond } from "../../lib/api-utils.ts";
-import type { NodeEntry, NodesResponse } from "./[pkg]/[ver]/nodes.json.ts";
+import {
+  collectNodes,
+  ALL_NODE_TYPES,
+  type IRNode,
+  type TypedNode,
+} from "../../../lib/ir-reader.ts";
+import { getBackends } from "../../../lib/backends.ts";
+import { typeFromSlug } from "../../../lib/ir-types.ts";
+import { renderNode } from "../../../lib/render-node.ts";
+import { walkAllBundles, type PageRef } from "../../../lib/bundle-walk.ts";
+import { respond } from "../../../lib/api-utils.ts";
+import type { NodeEntry, NodesResponse } from "../[pkg]/[ver]/nodes.json.ts";
 
 export const prerender = false;
 

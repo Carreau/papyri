@@ -12,7 +12,7 @@
 //
 // Expected client command:
 //   papyri pack ~/.papyri/data/numpy_2.3.5
-//   curl -X PUT http://localhost:4321/api/bundle \
+//   curl -X PUT http://localhost:4321/api/admin/bundle \
 //        -H "Content-Type: application/gzip" \
 //        --data-binary @numpy-2.3.5.papyri
 //
@@ -36,9 +36,9 @@
 
 import type { APIRoute } from "astro";
 import { Ingester, decode, type TypedNode } from "papyri-ingest";
-import { isSafeSegment } from "../../lib/paths.ts";
-import { getBackends, getUploadToken } from "../../lib/backends.ts";
-import { respond, sha256Hex } from "../../lib/api-utils.ts";
+import { isSafeSegment } from "../../../lib/paths.ts";
+import { getBackends, getUploadToken } from "../../../lib/backends.ts";
+import { respond, sha256Hex } from "../../../lib/api-utils.ts";
 
 export const prerender = false;
 

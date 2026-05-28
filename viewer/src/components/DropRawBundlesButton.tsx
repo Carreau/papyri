@@ -16,7 +16,7 @@ export default function DropRawBundlesButton({ rawCount }: Props) {
     setRunning(true);
     setResult(null);
     try {
-      const resp = await fetch("/api/clear-raw", { method: "POST" });
+      const resp = await fetch("/api/admin/clear-raw", { method: "POST" });
       const body = (await resp.json()) as {
         ok: boolean;
         deletedBundles?: number;

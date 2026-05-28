@@ -74,7 +74,7 @@ export default function ReingestPanel({ entries }: Props) {
     const params = new URLSearchParams();
     if (filterPkg) params.set("pkg", filterPkg);
     if (filterVer) params.set("ver", filterVer);
-    const url = `/api/reingest${params.size ? "?" + params.toString() : ""}`;
+    const url = `/api/admin/reingest${params.size ? "?" + params.toString() : ""}`;
 
     try {
       const resp = await fetch(url, { method: "POST" });

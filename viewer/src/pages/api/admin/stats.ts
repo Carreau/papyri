@@ -8,8 +8,8 @@
 // already reachable without auth in local dev.
 
 import type { APIRoute } from "astro";
-import { getBackends } from "../../lib/backends.ts";
-import { respond } from "../../lib/api-utils.ts";
+import { getBackends } from "../../../lib/backends.ts";
+import { respond } from "../../../lib/api-utils.ts";
 
 export const prerender = false;
 

@@ -40,7 +40,7 @@ export default function ExternalInventoryPanel({ initial }: Props) {
     setBusy(projName);
     setResult(null);
     try {
-      const resp = await fetch("/api/inventory", {
+      const resp = await fetch("/api/admin/inventory", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: projName, base_url: projBase }),
@@ -80,7 +80,7 @@ export default function ExternalInventoryPanel({ initial }: Props) {
     setRegistering(true);
     setResult(null);
     try {
-      const resp = await fetch("/api/inventory", {
+      const resp = await fetch("/api/admin/inventory", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: projName, base_url: projBase, register_only: true }),
@@ -120,7 +120,7 @@ export default function ExternalInventoryPanel({ initial }: Props) {
     setUnloading(projName);
     setResult(null);
     try {
-      const resp = await fetch("/api/inventory", {
+      const resp = await fetch("/api/admin/inventory", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: projName, objects_only: true }),
@@ -150,7 +150,7 @@ export default function ExternalInventoryPanel({ initial }: Props) {
     setDropping(projName);
     setResult(null);
     try {
-      const resp = await fetch("/api/inventory", {
+      const resp = await fetch("/api/admin/inventory", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: projName }),

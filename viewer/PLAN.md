@@ -52,6 +52,30 @@ Splitting into a separate repo remains an option once the IR schema stabilizes.
 
 ### Open follow-ups
 
+- **Admin/docs URL split — landed.** `pages/admin/*` owns every admin
+  page and `pages/api/admin/*` owns every admin endpoint, including
+  `/api/admin/bundle` (the upload endpoint, formerly `/api/bundle`) and
+  `/api/admin/auth/*`. `pages/` and `pages/api/` at the root are
+  docs-only. `papyri/cli/upload.py`'s default URL moved to
+  `http://localhost:4321/api/admin/bundle`. Middleware uses two short
+  prefix lists in `src/lib/surface.ts`: `ADMIN_PREFIXES` for surface
+  selection and `ADMIN_NO_SESSION_PREFIXES` (`/admin/login`,
+  `/api/admin/auth/`, `/api/admin/bundle`) for the routes that bypass
+  the session cookie. The two-build split becomes
+  `cp -r src/pages/admin admin-app/src/pages/` plus
+  `cp -r src/pages/api/admin admin-app/src/pages/api/`.
+
+- **Per-maintainer / per-project upload tokens.** With admin and
+  upload on their own host, the next step is letting library
+  maintainers log into the admin surface, register their packages,
+  and mint tokens scoped to a single `(pkg)` namespace for use in
+  their CI's `papyri upload`. Today `PAPYRI_UPLOAD_TOKEN` is a single
+  shared secret; that doesn't scale past one trusted maintainer.
+  Needs a token table, a UI on the admin dashboard to mint/revoke,
+  and `/api/admin/bundle` to verify the token's allowed packages
+  before ingest. Cross-cuts with the multi-tenant note in the root
+  PLAN.md.
+
 - **Bundle-walk shared helper — landed; ingest-time index still open.** The
   duplicated walk in `lib/image-index.ts` and
   `pages/api/[pkg]/[ver]/nodes.json.ts` is now consolidated in
@@ -136,15 +160,15 @@ exploration and are kept because they stand on their own:
       `getBackends()` and passes it down. CrossRef resolution batches
       once per page via `buildXrefResolver(graphDb, doc)` so render
       components stay sync.
-- [x] **Bundle upload in-process.** `PUT /api/bundle` gunzips the body
+- [x] **Bundle upload in-process.** `PUT /api/admin/bundle` gunzips the body
       via `DecompressionStream`, CBOR-decodes it to a `Bundle` Node, and
       hands it to `Ingester.ingestBundle(node)` — no temp dir, no `tar`
       spawn. Write path uses subquery-based link inserts so a single
       `db.batch([…])` is atomic.
-- [x] **Raw bundle archive.** Every `PUT /api/bundle` archives the
+- [x] **Raw bundle archive.** Every `PUT /api/admin/bundle` archives the
       compressed `.papyri.gz` bytes to `_raw/<pkg>/<ver>.papyri.gz`
       (`<ingest-dir>/_raw/` on the filesystem) before ingest runs.
-      `POST /api/reingest` (auth-gated, NDJSON stream) replays the raw
+      `POST /api/admin/reingest` (auth-gated, NDJSON stream) replays the raw
       archive through a fresh ingest — supports `?pkg=` / `?ver=` to
       scope to one bundle. `RawStore` interface + `FsRawStore` live in
       `ingest/src/raw-store.ts`.

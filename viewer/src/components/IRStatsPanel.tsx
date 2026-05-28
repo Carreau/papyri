@@ -264,7 +264,7 @@ export default function IRStatsPanel() {
 
     (async () => {
       try {
-        const resp = await fetch("/api/ir-stats.json");
+        const resp = await fetch("/api/admin/ir-stats.json");
         if (!resp.ok || !resp.body) {
           throw new Error(`HTTP ${resp.status}`);
         }

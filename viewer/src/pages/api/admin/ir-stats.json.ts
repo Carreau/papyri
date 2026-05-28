@@ -23,9 +23,9 @@
 // "Cache-Control: no-store" is sent so stale counts are never served.
 
 import type { APIRoute } from "astro";
-import { getBackends } from "../../lib/backends.ts";
-import { walkAllBundles, type PageRef } from "../../lib/bundle-walk.ts";
-import { respond } from "../../lib/api-utils.ts";
+import { getBackends } from "../../../lib/backends.ts";
+import { walkAllBundles, type PageRef } from "../../../lib/bundle-walk.ts";
+import { respond } from "../../../lib/api-utils.ts";
 
 export const prerender = false;
 

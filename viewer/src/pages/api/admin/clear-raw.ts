@@ -4,7 +4,7 @@
 // destructive: once the raw archive is empty, re-ingest can no longer replay
 // from local state and maintainers must re-upload bundles. The processed
 // store (BlobStore + GraphDb) is left untouched — pair this with
-// POST /api/clear to also drop the processed side.
+// POST /api/admin/clear to also drop the processed side.
 //
 // Method: POST (a trigger, not idempotent PUT)
 // Auth:   an admin action — authorized by the session-cookie middleware
@@ -13,8 +13,8 @@
 // Response: JSON { ok, deletedBundles, elapsed_s } on success.
 
 import type { APIRoute } from "astro";
-import { getBackends } from "../../lib/backends.ts";
-import { respond } from "../../lib/api-utils.ts";
+import { getBackends } from "../../../lib/backends.ts";
+import { respond } from "../../../lib/api-utils.ts";
 
 export const prerender = false;
 

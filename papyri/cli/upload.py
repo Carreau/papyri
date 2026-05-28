@@ -21,7 +21,7 @@ try:
 except PackageNotFoundError:
     _PAPYRI_VERSION = "0+unknown"
 
-_DEFAULT_URL = "http://localhost:4321/api/bundle"
+_DEFAULT_URL = "http://localhost:4321/api/admin/bundle"
 
 # Timeout for the dedup pre-check GET. It is a quick metadata lookup, and the
 # call fails open (any error → upload anyway), so a finite bound just stops the
@@ -94,7 +94,7 @@ def _resolve_upload_params(
     1. Explicit ``--url`` / ``--token`` CLI flags.
     2. Named target from ``--to`` (URL and token/keychain from config).
     3. ``$PAPYRI_UPLOAD_URL`` / ``$PAPYRI_UPLOAD_TOKEN`` env vars.
-    4. Hardcoded default URL (``http://localhost:4321/api/bundle``).
+    4. Hardcoded default URL (``http://localhost:4321/api/admin/bundle``).
     """
     from papyri.user_config import get_target, load_user_config
 
@@ -182,7 +182,7 @@ def upload(
                 "URL of the viewer ingest endpoint.  "
                 "Overrides --to and $PAPYRI_UPLOAD_URL.  "
                 "Defaults to $PAPYRI_UPLOAD_URL, then the target set by --to, "
-                "then http://localhost:4321/api/bundle."
+                "then http://localhost:4321/api/admin/bundle."
             ),
         ),
     ] = None,
@@ -192,7 +192,7 @@ def upload(
             "--token",
             "-t",
             help=(
-                "Bearer token for /api/bundle authentication.  "
+                "Bearer token for /api/admin/bundle authentication.  "
                 "Overrides --to and $PAPYRI_UPLOAD_TOKEN.  "
                 "Defaults to $PAPYRI_UPLOAD_TOKEN, then the target set by --to.  "
                 "Omit when the viewer has no token configured (local dev)."
@@ -234,7 +234,7 @@ def upload(
       so the bytes on the wire are identical to what ``papyri pack`` would
       produce — same validation, same byte-reproducibility guarantees.
 
-    The viewer's ``/api/bundle`` endpoint runs the full ingest pipeline
+    The viewer's ``/api/admin/bundle`` endpoint runs the full ingest pipeline
     server-side; this is the canonical way to ship a bundle into the
     cross-linked graph.
 
@@ -242,11 +242,11 @@ def upload(
 
         # ~/.papyri/config.toml
         [upload.targets.staging]
-        url = "https://staging.example.com/api/bundle"
+        url = "https://staging.example.com/api/admin/bundle"
         token = "my-token"
 
         [upload.targets.production]
-        url = "https://docs.example.com/api/bundle"
+        url = "https://docs.example.com/api/admin/bundle"
         keychain = true   # token stored in system keychain
 
     Then: ``papyri upload --to staging mybundle.papyri``
@@ -259,7 +259,7 @@ def upload(
     (config file or keychain) > ``$PAPYRI_UPLOAD_TOKEN`` env var.
 
     **URL resolution order**: ``--url`` flag > ``--to`` target > ``$PAPYRI_UPLOAD_URL``
-    env var > ``http://localhost:4321/api/bundle``.
+    env var > ``http://localhost:4321/api/admin/bundle``.
 
     Deduplication: before each upload the SHA-256 of the artifact is checked
     against the viewer (a ``GET`` to the same endpoint).  When the server
@@ -345,7 +345,7 @@ def upload(
         # Origin: Astro's CSRF protection (`security.checkOrigin`, on by
         # default in Astro 6+) blocks PUTs whose Origin doesn't match the
         # request host with "Cross-site PUT form submissions are forbidden".
-        # `/api/bundle` is meant for cross-origin CLI use, so we set Origin
+        # `/api/admin/bundle` is meant for cross-origin CLI use, so we set Origin
         # to the upload URL's own scheme+host to satisfy the check.
         parsed = urllib.parse.urlsplit(effective_url)
         headers: dict[str, str] = {

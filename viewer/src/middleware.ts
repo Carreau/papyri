@@ -1,62 +1,93 @@
 import { defineMiddleware } from "astro:middleware";
+import { decideRoute, getSurface, splitEnabled } from "./lib/surface.ts";
 
-// Routes that must remain reachable without a session (login form, auth
-// endpoints, bundle upload). Any new pre-auth route needs an entry here.
-// `/api/bundle` is the upload endpoint hit by `papyri upload`; it carries
-// its own bearer-token check and must stay reachable without a session cookie.
-const PUBLIC_PREFIXES = ["/login", "/api/auth/", "/api/bundle"] as const;
-
-// Routes restricted to authenticated users. Everything not listed here (and
-// not in PUBLIC_PREFIXES) is accessible to guests so they can browse docs
-// without logging in.
+// Two-domain split:
+//   - "admin" surface owns everything under /admin/* (pages: dashboard,
+//     login, /admin/nodes, /admin/ir-stats) and /api/admin/* (auth, the
+//     upload endpoint, reingest, clear, inventory, stats, the global
+//     nodes/ir-stats JSON). Mutating + authenticated.
+//   - "docs" surface owns everything else (bundle index, /project/**,
+//     /text-search/, and the read-only /api/* endpoints — bundles.json,
+//     search.json, text-search.json, health.json, /api/[pkg]/[ver]/*).
+//     Read-only.
 //
-// Admin-only routes are computationally expensive (full corpus walks) or
-// carry destructive write operations; guests have no need for them.
-const ADMIN_ONLY_PREFIXES = [
-  "/admin",
-  "/nodes",
-  "/ir-stats",
-  "/api/nodes.json",
-  "/api/ir-stats.json",
-  "/api/clear",
-  "/api/clear-raw",
-  "/api/reingest",
-  "/api/inventory",
-  "/api/stats",
-] as const;
+// When PAPYRI_DOCS_HOST / PAPYRI_ADMIN_HOST are unset the split is off:
+// every host serves everything and the behaviour matches the pre-split
+// dev flow.
+//
+// All routing is delegated to `decideRoute` in lib/surface.ts so the
+// logic is testable without spinning up Astro.
 
-/** True when `pathname` equals `prefix`, `prefix + "/"`, or any deeper path. */
-function matchesPrefix(prefix: string, pathname: string): boolean {
-  return pathname === prefix || pathname === prefix + "/" || pathname.startsWith(prefix + "/");
+const SESSION_COOKIE = "papyri_session_token";
+
+/** Security headers applied to every response.
+ *
+ *  The substantive XSS defence is the domain split itself — putting admin
+ *  on a different host keeps the admin session cookie out of the docs
+ *  origin's cookie store, so a bundle-injected script on the docs page
+ *  cannot steal it or fire authenticated requests against admin
+ *  endpoints. These headers are belt-and-braces on top of that:
+ *
+ *  - default-src/connect-src 'self': a docs-page XSS can't exfiltrate to
+ *    an attacker server or fetch admin endpoints (cross-origin + no
+ *    cookie anyway).
+ *  - object-src 'none' / base-uri 'self' / form-action 'self': close off
+ *    the remaining XSS amplification vectors.
+ *  - frame-ancestors 'none' + X-Frame-Options DENY: no clickjacking of
+ *    the admin login form, and no embedding of docs pages.
+ *  - 'unsafe-inline' for script/style is kept for now because Astro
+ *    hydration and Shiki/KaTeX styles emit inline tags; nonces are a
+ *    future tightening once Astro's CSP integration lands. */
+const CSP = [
+  "default-src 'self'",
+  "img-src 'self' data: blob:",
+  "style-src 'self' 'unsafe-inline'",
+  "script-src 'self' 'unsafe-inline'",
+  "font-src 'self' data:",
+  "connect-src 'self'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "frame-ancestors 'none'",
+  "form-action 'self'",
+].join("; ");
+
+function applySecurityHeaders(response: Response): Response {
+  // Headers are the same on both surfaces today — frame-ancestors 'none'
+  // applies to docs pages too (nobody legitimately iframes a bundle page).
+  response.headers.set("Content-Security-Policy", CSP);
+  response.headers.set("X-Frame-Options", "DENY");
+  response.headers.set("X-Content-Type-Options", "nosniff");
+  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  return response;
 }
 
-function matchesAny(prefixes: readonly string[], pathname: string): boolean {
-  return prefixes.some((p) => matchesPrefix(p, pathname));
-}
+export const onRequest = defineMiddleware(async (context, next) => {
+  const surface = getSurface(context.request);
+  const session = context.cookies.get(SESSION_COOKIE);
+  const decision = decideRoute({
+    pathname: context.url.pathname,
+    surface,
+    hasSession: !!session?.value,
+    splitOn: splitEnabled(),
+  });
 
-export const onRequest = defineMiddleware((context, next) => {
-  const { pathname } = context.url;
-
-  // Public routes bypass all auth checks.
-  if (matchesAny(PUBLIC_PREFIXES, pathname)) {
-    return next();
-  }
-
-  // Admin-only routes require an active session.
-  if (matchesAny(ADMIN_ONLY_PREFIXES, pathname)) {
-    const session = context.cookies.get("papyri_session_token");
-    if (!session?.value) {
-      // API callers receive a JSON 403 instead of an HTML redirect.
-      if (pathname.startsWith("/api/")) {
-        return new Response(JSON.stringify({ error: "Authentication required" }), {
-          status: 403,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-      return context.redirect("/login");
+  if (decision.kind === "deny") {
+    if (decision.status === 403) {
+      return new Response(JSON.stringify({ error: "Authentication required" }), {
+        status: 403,
+        headers: { "Content-Type": "application/json" },
+      });
     }
+    // 404: don't reveal whether the path exists on the other surface.
+    return new Response("Not Found", {
+      status: 404,
+      headers: { "Content-Type": "text/plain" },
+    });
   }
 
-  // Everything else (docs, bundle index, text search, …) is open to guests.
-  return next();
+  if (decision.kind === "redirect") {
+    return context.redirect(decision.to);
+  }
+
+  return applySecurityHeaders(await next());
 });

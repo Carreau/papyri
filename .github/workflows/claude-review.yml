@@ -1,0 +1,60 @@
+name: Claude Review
+
+# Automated code review by Claude on every pull request. Posts a single
+# review comment summarizing correctness, scope (per CLAUDE.md / PLAN.md), and
+# convention issues. Requires the `ANTHROPIC_API_KEY` repository secret.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+# Least privilege: read the code, write review comments back to the PR.
+permissions:
+  contents: read
+  pull-requests: write
+  issues: read
+
+# One review per PR at a time; cancel a superseded run when new commits land.
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    # Skip drafts and skip PRs from forks (secrets are unavailable there).
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Review with Claude
+        uses: anthropics/claude-code-action@537ffff2eff706bd7e3e1c3daf2d4b39067a9f85  # v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Review this pull request as a maintainer of the papyri repository.
+
+            First read CLAUDE.md and PLAN.md to understand the project's scope
+            and ground rules, then review the diff against them. Focus on, in
+            order of importance:
+
+            1. Correctness — logic errors, edge cases, broken contracts between
+               the Python IR producer and the TypeScript ingest/viewer layers.
+            2. Scope — flag anything outside PLAN.md (e.g. Python-side
+               rendering, a `papyri ingest` CLI, the JupyterLab extension, or
+               backwards-compat shims for non-existent old data).
+            3. Conventions — lazy CLI imports, JSON in the bundle dir vs CBOR in
+               the artifact, ir-reader.ts as the IR shock absorber, Python 3.13+
+               only.
+
+            Post one concise review with inline comments on specific lines.
+            Prefer high-signal findings over exhaustive nitpicks; if the change
+            looks good, say so briefly. Do not approve or request changes —
+            just comment.
+          claude_args: |
+            --allowedTools "Read,Grep,Glob,Bash(git diff:*),Bash(git log:*)"

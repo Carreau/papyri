@@ -346,7 +346,7 @@ def raw_handler(argument: str, options: dict[str, str], content: str) -> list[An
     risk (XSS via raw HTML) and is meaningless outside the target output format.
     """
     fmt = (argument or "").strip()
-    log.warning(
+    log.info(
         "raw directive: dropping block (format=%r); "
         "raw output-format content is not safe to include in the IR",
         fmt,

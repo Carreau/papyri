@@ -1774,7 +1774,7 @@ def test_topic_via_visitor_dispatch():
 
 
 def test_raw_handler_drops_html_with_warning(caplog):
-    with caplog.at_level("WARNING", logger="papyri"):
+    with caplog.at_level("INFO", logger="papyri"):
         out = raw_handler("html", {}, "<p>some html</p>")
     assert out == []
     assert any("raw" in r.getMessage() for r in caplog.records)

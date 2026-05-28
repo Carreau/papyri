@@ -20,7 +20,9 @@ export default function LoginForm() {
       });
 
       if (response.ok) {
-        window.location.href = "/";
+        // Login lives on the admin surface (and `/` on that surface 404s
+        // when the split is enabled), so land on the admin dashboard.
+        window.location.href = "/admin";
       } else {
         const data = await response.json();
         setError(data.message || "Login failed");

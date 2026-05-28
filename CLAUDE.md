@@ -335,7 +335,9 @@ the graphstore and blob store is rebuildable via `POST /api/reingest`.
 | `PAPYRI_UPLOAD_TOKEN` | `papyri upload`, viewer | Bearer token for `PUT /api/bundle` |
 | `PAPYRI_INGEST_DIR` | viewer | Bundle data root (default `~/.papyri/ingest`) |
 | `PAPYRI_INGEST_DB` | viewer | SQLite graph DB (default `~/.papyri/ingest/papyri.db`) |
-| `PAPYRI_SITE` | viewer build | Canonical external origin for canonical-URL generation behind a reverse proxy |
+| `PAPYRI_SITE` | viewer build | Canonical external origin for canonical-URL generation behind a reverse proxy. With the admin/docs domain split enabled, set to `https://$PAPYRI_DOCS_HOST` |
+| `PAPYRI_DOCS_HOST` | viewer middleware | External hostname of the docs (read-only) surface, e.g. `docs.example.com`. Optional — setting either `PAPYRI_DOCS_HOST` or `PAPYRI_ADMIN_HOST` turns on the host-based gating in `src/middleware.ts` |
+| `PAPYRI_ADMIN_HOST` | viewer middleware | External hostname of the admin surface (login, upload, all mutating endpoints), e.g. `admin.example.com`. Optional; same gating switch as above |
 | `PAPYRI_USERNAME` / `PAPYRI_PASSWORD` | viewer middleware | Credentials for the session-cookie auth gate |
 | `PAPYRI_VERSION` | `papyri upload` | Overrides the `papyri-upload/<version>` User-Agent string |
 | `PAPYRI_BUILD_COMMIT` | viewer build | Git commit surfaced on the admin panel |

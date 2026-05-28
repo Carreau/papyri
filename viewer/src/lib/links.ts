@@ -10,6 +10,7 @@
 // applicable so callers can drop them straight into `<a href>`.
 
 import { qualnameToSlug } from "./slugs.ts";
+import { getAdminHost, getDocsHost, originForHost } from "./surface.ts";
 
 export interface LinkRef {
   pkg: string;
@@ -81,4 +82,25 @@ export function linkForLocalRef(
   ver: string
 ): string | null {
   return linkForRef({ pkg, ver, kind: ref.kind, path: ref.path });
+}
+
+/**
+ * Cross-domain link from the admin surface to the docs surface (or vice
+ * versa). Returns a relative path when the split is disabled (env var
+ * unset), otherwise an absolute URL into the configured host so the
+ * browser navigates across origins. `currentUrl` is used to copy the
+ * scheme (http vs https) — pass `Astro.url` from pages.
+ */
+export function docsHref(path: string, currentUrl?: URL): string {
+  const host = getDocsHost();
+  if (!host) return path;
+  const slash = path.startsWith("/") ? "" : "/";
+  return `${originForHost(host, currentUrl)}${slash}${path}`;
+}
+
+export function adminHref(path: string, currentUrl?: URL): string {
+  const host = getAdminHost();
+  if (!host) return path;
+  const slash = path.startsWith("/") ? "" : "/";
+  return `${originForHost(host, currentUrl)}${slash}${path}`;
 }

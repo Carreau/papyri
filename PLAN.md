@@ -347,7 +347,16 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   radius: a vulnerability in the upload path cannot reach admin state, and
   per-user surfaces cannot touch other users' bundles. Design URL structure
   and routing with this separation in mind so the hosted service is not baked
-  into a monolithic app. Track this when the hosting design firms up.
+  into a monolithic app.
+  *First step landed:* one Node process can now serve both surfaces from
+  different hostnames. Setting `PAPYRI_DOCS_HOST` and `PAPYRI_ADMIN_HOST`
+  turns on host-based gating in `viewer/src/middleware.ts` (admin routes
+  return 404 on the docs host and vice versa); the admin session cookie
+  stays host-only so a bundle-injected XSS on the docs origin cannot
+  reach it. Upload (`PUT /api/bundle`) is on the admin host; the docs
+  host has zero mutating endpoints. Remaining: split into two build /
+  process units, carve `upload.` out to its own host, and a per-user
+  layer when multi-tenant design firms up.
 
 - **Track raw upload timestamps independently of bundle metadata.**
   The `_raw/<pkg>/<ver>.papyri.gz` archive should record when a bundle was

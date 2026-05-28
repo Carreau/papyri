@@ -1,11 +1,15 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 import LoginForm from "../components/LoginForm.tsx";
+import { docsHref } from "../lib/links.ts";
 
 const sessionToken = Astro.cookies.get("papyri_session_token");
 if (sessionToken) {
-  return Astro.redirect("/");
+  return Astro.redirect("/admin");
 }
+// Guest-browse link points at the docs origin when the split is enabled,
+// since `/` on the admin host 404s under the new middleware gating.
+const browseHref = docsHref("/", Astro.url);
 ---
 
 <BaseLayout title="Login - Papyri Viewer">
@@ -14,7 +18,7 @@ if (sessionToken) {
       <header class="login-card-header">
         <span class="login-card-mark" aria-hidden="true">&para;</span>
         <h1>Sign in to Papyri</h1>
-        <p>Sign in to access admin tools, or <a href="/">browse docs as a guest</a>.</p>
+        <p>Sign in to access admin tools, or <a href={browseHref}>browse docs as a guest</a>.</p>
       </header>
       <LoginForm client:load />
     </div>

@@ -792,9 +792,12 @@ class Gen:
         self.log = logging.getLogger("papyri")
         self.log.setLevel("INFO")
         formatter = logging.Formatter(FORMAT, datefmt="[%X]")
-        rich_handler = RichHandler(rich_tracebacks=False)
-        rich_handler.setFormatter(formatter)
-        self.log.addHandler(rich_handler)
+        if sys.stderr.isatty():
+            handler: logging.Handler = RichHandler(rich_tracebacks=False)
+        else:
+            handler = logging.StreamHandler()
+        handler.setFormatter(formatter)
+        self.log.addHandler(handler)
 
         self.config = config
         self.log.debug("Configuration: %s", self.config)

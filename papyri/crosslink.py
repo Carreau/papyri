@@ -14,11 +14,10 @@ the on-disk IR contract.
 from __future__ import annotations
 
 import logging
+import sys
 import warnings
 from dataclasses import dataclass
 from typing import Any
-
-from rich.logging import RichHandler
 
 from .doc import _OrderedDictProxy
 from .node_base import Node, register
@@ -32,9 +31,14 @@ warnings.simplefilter("ignore", UserWarning)
 
 
 FORMAT = "%(message)s"
-logging.basicConfig(
-    level="INFO", format=FORMAT, datefmt="[%X]", handlers=[RichHandler()]
-)
+if sys.stderr.isatty():
+    from rich.logging import RichHandler
+
+    _handler: logging.Handler = RichHandler()
+else:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter(FORMAT, datefmt="[%X]"))
+logging.basicConfig(level="INFO", format=FORMAT, datefmt="[%X]", handlers=[_handler])
 
 log = logging.getLogger("papyri")
 

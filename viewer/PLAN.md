@@ -52,6 +52,33 @@ Splitting into a separate repo remains an option once the IR schema stabilizes.
 
 ### Open follow-ups
 
+- **Decouple admin and docs routes in the source tree.** Host-based
+  gating landed (`src/middleware.ts` + `src/lib/surface.ts`), but the
+  filesystem layout still interleaves the two surfaces — e.g. `pages/`
+  has `index.astro` (docs) next to `admin/` and `login.astro` (admin),
+  and `pages/api/` mixes `bundles.json.ts` / `search.json.ts` (docs)
+  with `bundle.ts` / `clear.ts` / `reingest.ts` / `inventory.ts` /
+  `stats.ts` / `nodes.json.ts` / `ir-stats.json.ts` / `auth/` (admin).
+  Reading the directory no longer tells you which surface owns a file.
+  Worth resolving before splitting into two Astro builds, since the
+  layout chosen here becomes the natural seam. Two options:
+  - *(A) URL-aligned move.* Push every admin route under a predictable
+    prefix: keep `/admin/*` for pages, move `pages/api/*` admin routes
+    under `pages/api/admin/*` (so `/api/admin/bundle`, `/api/admin/clear`,
+    …), and fold `/nodes`, `/ir-stats`, `/text-search` into `/admin/`.
+    Requires changing `papyri upload`'s default URL and updating
+    middleware prefix lists, but the directory then mirrors the URL
+    space exactly and the two-build split is `cp -r pages/api/admin
+    admin-app/pages/api/`. Pre-production, so the URL break is cheap.
+  - *(B) Source folder via `injectRoute`.* Keep URLs unchanged but
+    physically separate `src/routes/admin/` and `src/routes/docs/`,
+    registered through a small Astro integration that walks each tree
+    and calls `injectRoute({ pattern, entrypoint })`. Preserves the
+    upload URL; adds one layer of indirection.
+
+  Pick before the two-build milestone. Mention in the same commit that
+  retires the host-gated single process.
+
 - **Bundle-walk shared helper — landed; ingest-time index still open.** The
   duplicated walk in `lib/image-index.ts` and
   `pages/api/[pkg]/[ver]/nodes.json.ts` is now consolidated in

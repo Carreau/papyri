@@ -21,6 +21,16 @@ exclude = [
                         # tree sitter don't like the " `Cards`s
                         "astropy.io.fits.hdu.base:_CorruptedHDU",
                         "astropy.extern.configobj.validate:Validator.check",
+                        # Docstrings that trip numpydoc / tree-sitter / internal
+                        # length-check (would surface at pack time under the
+                        # new fail-on-gen-errors check; not worth a special-case fix).
+                        "astropy.coordinates.builtin_frames",
+                        "astropy.io.ascii.misc:sortmore",
+                        "astropy.io.misc.ecsv:ColumnECSV",
+                        "astropy.io.misc.ecsv:ECSVEngine",
+                        "astropy.modeling.fitting:_NLLSQFitter",
+                        "astropy.nddata.mixins.ndarithmetic:NDArithmeticMixin._prepare_then_do_arithmetic",
+                        "astropy.table.index",
 ]
 submodules = [ "io", "io.fits",]
 

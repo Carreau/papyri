@@ -779,6 +779,17 @@ def make_include_handler(
             log.warning("include directive: failed to parse %s: %s", inc_path, e)
             return []
 
-        return list(sections)
+        # ts.parse wraps top-level RST in synthetic ``Section`` nodes, but the
+        # include directive is invoked from inside *another* Section's children
+        # — and Section is not in that field's type union. Returning the raw
+        # sections would put Section in Section.children and trip validate().
+        # The include is a content-fragment splice, so flatten one level: drop
+        # the wrapper Sections and inline their children. Any actually-titled
+        # sub-section is preserved (it sits one level deeper, in those
+        # children).
+        out: list[Any] = []
+        for s in sections:
+            out.extend(s.children)
+        return out
 
     return include_handler

@@ -17,6 +17,7 @@ from papyri.pack import (
     BundleError,
     explode_artifact_to_dir,
     explode_bundle_to_dir,
+    find_orphan_docs,
     load_artifact,
     make_artifact,
     make_artifact_from_dir,
@@ -73,6 +74,21 @@ def _make_bundle_node(**overrides: Any) -> Bundle:
     )
     defaults.update(overrides)
     return Bundle(**defaults)
+
+
+def _minimal_narrative_doc() -> Any:
+    """A minimal but valid narrative ``GeneratedDoc``.
+
+    ``GeneratedDoc.new()`` leaves ``example_section_data`` as ``None``, which
+    bundle validation rejects for narrative docs; gen sets it to an empty
+    ``Section`` (see ``Gen.collect_narrative_docs``), so mirror that here.
+    """
+    from papyri.doc import GeneratedDoc
+    from papyri.nodes import Section
+
+    doc = GeneratedDoc.new()
+    doc.example_section_data = Section([], ())
+    return doc
 
 
 # ---------------------------------------------------------------------------
@@ -241,6 +257,64 @@ def test_pack_rejects_unexpected_toplevel_entry(tmp_path: Any) -> None:
     assert any(".DS_Store" in p for p in excinfo.value.problems)
 
 
+def test_pack_rejects_bundle_with_gen_errors(tmp_path: Any) -> None:
+    """A bundle whose papyri.json records gen errors must not pack.
+
+    Lenient ``papyri gen`` records every per-object failure under ``errors``
+    instead of producing a silently-degraded bundle; pack treats any such
+    record as fatal so CI fails on a real mistake instead of shipping a
+    bundle with missing pages.
+    """
+    bundle_dir = tmp_path / "mypkg_1.0"
+    bundle_dir.mkdir()
+    (bundle_dir / "module").mkdir()
+    (bundle_dir / "papyri.json").write_text(
+        json.dumps(
+            {
+                "module": "mypkg",
+                "version": "1.0",
+                "errors": [
+                    {
+                        "kind": "narrative",
+                        "path": "docs/index.rst",
+                        "error_type": "NotImplementedError",
+                        "message": "unhandled directive 'totally-made-up'",
+                    }
+                ],
+            }
+        )
+    )
+    with pytest.raises(BundleError) as excinfo:
+        read_bundle_dir(bundle_dir)
+    assert "gen error" in excinfo.value.problems[0]
+    assert "docs/index.rst" in excinfo.value.problems[0]
+
+
+def test_pack_rejects_bundle_with_malformed_errors_field(tmp_path: Any) -> None:
+    """A non-list ``errors`` field is itself a bundle-format error."""
+    bundle_dir = tmp_path / "mypkg_1.0"
+    bundle_dir.mkdir()
+    (bundle_dir / "module").mkdir()
+    (bundle_dir / "papyri.json").write_text(
+        json.dumps({"module": "mypkg", "version": "1.0", "errors": "oops"})
+    )
+    with pytest.raises(BundleError) as excinfo:
+        read_bundle_dir(bundle_dir)
+    assert "must be a list" in excinfo.value.problems[0]
+
+
+def test_pack_accepts_bundle_with_empty_errors(tmp_path: Any) -> None:
+    """An explicitly empty ``errors`` list is the clean-build state."""
+    bundle_dir = tmp_path / "mypkg_1.0"
+    bundle_dir.mkdir()
+    (bundle_dir / "module").mkdir()
+    (bundle_dir / "papyri.json").write_text(
+        json.dumps({"module": "mypkg", "version": "1.0", "errors": []})
+    )
+    bundle = read_bundle_dir(bundle_dir)
+    assert bundle.module == "mypkg"
+
+
 def test_pack_rejects_invalid_papyri_json(tmp_path: Any) -> None:
     bundle_dir = tmp_path / "mypkg_1.0"
     bundle_dir.mkdir()
@@ -261,6 +335,282 @@ def test_bundle_error_is_fail_fast(tmp_path: Any) -> None:
     with pytest.raises(BundleError) as excinfo:
         read_bundle_dir(bundle_dir)
     assert len(excinfo.value.problems) == 1
+
+
+# ---------------------------------------------------------------------------
+# TOC referential integrity — every toc entry must resolve to a document.
+# ---------------------------------------------------------------------------
+
+
+def _write_toc(bundle_dir: Path, nodes: list[Any]) -> None:
+    (bundle_dir / "toc.json").write_text(
+        json.dumps([n.to_dict() for n in nodes], indent=2, sort_keys=True)
+    )
+
+
+def test_pack_rejects_toc_ref_to_missing_doc(tmp_path: Any) -> None:
+    """A toc entry pointing at a doc absent from the bundle is fatal."""
+    from papyri.nodes import LocalRef, TocTree
+
+    bundle_dir = _make_minimal_bundle_dir(tmp_path / "mypkg_1.0")
+    (bundle_dir / "docs").mkdir()
+    (bundle_dir / "docs" / "index").write_bytes(_minimal_narrative_doc().to_json())
+    # "index" exists, but its child "missing" was never written to docs/.
+    _write_toc(
+        bundle_dir,
+        [
+            TocTree(
+                children=(
+                    TocTree(
+                        children=(),
+                        title="Gone",
+                        ref=LocalRef("docs", "missing"),
+                    ),
+                ),
+                title="Root",
+                ref=LocalRef("docs", "index"),
+            )
+        ],
+    )
+    with pytest.raises(BundleError) as excinfo:
+        read_bundle_dir(bundle_dir)
+    assert "missing" in excinfo.value.problems[0]
+
+
+def test_pack_rejects_toc_root_to_missing_doc(tmp_path: Any) -> None:
+    """A toc root with no backing document is fatal."""
+    from papyri.nodes import LocalRef, TocTree
+
+    bundle_dir = _make_minimal_bundle_dir(tmp_path / "mypkg_1.0")
+    _write_toc(
+        bundle_dir,
+        [TocTree(children=(), title="Root", ref=LocalRef("docs", "index"))],
+    )
+    with pytest.raises(BundleError) as excinfo:
+        read_bundle_dir(bundle_dir)
+    assert "index" in excinfo.value.problems[0]
+
+
+def test_pack_accepts_toc_with_all_docs_present(tmp_path: Any) -> None:
+    """A toc whose every entry resolves to a doc packs cleanly."""
+    from papyri.nodes import LocalRef, TocTree
+
+    bundle_dir = _make_minimal_bundle_dir(tmp_path / "mypkg_1.0")
+    (bundle_dir / "docs").mkdir()
+    for name in ("index", "page"):
+        (bundle_dir / "docs" / name).write_bytes(_minimal_narrative_doc().to_json())
+    _write_toc(
+        bundle_dir,
+        [
+            TocTree(
+                children=(
+                    TocTree(
+                        children=(),
+                        title="Page",
+                        ref=LocalRef("docs", "page"),
+                    ),
+                ),
+                title="Root",
+                ref=LocalRef("docs", "index"),
+            )
+        ],
+    )
+    bundle = read_bundle_dir(bundle_dir)
+    assert len(bundle.toc) == 1
+    assert bundle.toc[0].children[0].ref.path == "page"
+
+
+def test_check_toc_refs_rejects_unknown_kind() -> None:
+    """A toc ref whose kind is not docs/module/examples is fatal."""
+    from papyri.nodes import LocalRef, TocTree
+    from papyri.pack import _check_toc_refs
+
+    bundle = _make_bundle_node(
+        toc=[TocTree(children=(), title="x", ref=LocalRef("bogus", "x"))]
+    )
+    with pytest.raises(BundleError) as excinfo:
+        _check_toc_refs(bundle)
+    assert "bogus" in excinfo.value.problems[0]
+
+
+# ---------------------------------------------------------------------------
+# Orphan detection — narrative docs not reachable from the toc.
+# ---------------------------------------------------------------------------
+
+
+def test_find_orphan_docs_detects_unreachable() -> None:
+    """A narrative doc that no toc entry points at is an orphan."""
+    from papyri.nodes import LocalRef, TocTree
+
+    bundle = _make_bundle_node(
+        narrative={
+            "index": _minimal_narrative_doc(),
+            "page": _minimal_narrative_doc(),
+            "stranded": _minimal_narrative_doc(),
+        },
+        toc=[
+            TocTree(
+                children=(
+                    TocTree(children=(), title="Page", ref=LocalRef("docs", "page")),
+                ),
+                title="Root",
+                ref=LocalRef("docs", "index"),
+            )
+        ],
+    )
+    assert find_orphan_docs(bundle) == ["stranded"]
+
+
+def test_find_orphan_docs_empty_when_all_reachable() -> None:
+    """Every narrative doc reachable (incl. nested) → no orphans."""
+    from papyri.nodes import LocalRef, TocTree
+
+    bundle = _make_bundle_node(
+        narrative={
+            "index": _minimal_narrative_doc(),
+            "guide": _minimal_narrative_doc(),
+            "guide:install": _minimal_narrative_doc(),
+        },
+        toc=[
+            TocTree(
+                children=(
+                    TocTree(
+                        children=(
+                            TocTree(
+                                children=(),
+                                title="Install",
+                                ref=LocalRef("docs", "guide:install"),
+                            ),
+                        ),
+                        title="Guide",
+                        ref=LocalRef("docs", "guide"),
+                    ),
+                ),
+                title="Root",
+                ref=LocalRef("docs", "index"),
+            )
+        ],
+    )
+    assert find_orphan_docs(bundle) == []
+
+
+def test_find_orphan_docs_all_when_no_toc() -> None:
+    """An empty toc strands every narrative doc."""
+    bundle = _make_bundle_node(
+        narrative={
+            "a": _minimal_narrative_doc(),
+            "b": _minimal_narrative_doc(),
+        },
+        toc=[],
+    )
+    assert find_orphan_docs(bundle) == ["a", "b"]
+
+
+def test_read_bundle_dir_warns_on_orphan_docs(tmp_path: Any, caplog: Any) -> None:
+    """Reading a bundle with an unreachable doc logs a warning (not fatal)."""
+    from papyri.nodes import LocalRef, TocTree
+
+    bundle_dir = _make_minimal_bundle_dir(tmp_path / "mypkg_1.0")
+    (bundle_dir / "docs").mkdir()
+    for name in ("index", "stranded"):
+        (bundle_dir / "docs" / name).write_bytes(_minimal_narrative_doc().to_json())
+    _write_toc(
+        bundle_dir,
+        [TocTree(children=(), title="Root", ref=LocalRef("docs", "index"))],
+    )
+    with caplog.at_level("WARNING", logger="papyri"):
+        bundle = read_bundle_dir(bundle_dir)
+    # Reading still succeeds — orphans are a warning, not a hard error.
+    assert "stranded" in bundle.narrative
+    assert any("orphan" in r.getMessage() for r in caplog.records)
+    assert any("stranded" in r.getMessage() for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# numpy toc smoke test — guards against narrative collection silently
+# dropping most pages (which leaves the rendered toc nearly empty).
+#
+# numpy's doc/source isn't available in unit-test CI, so this exercises a
+# real `papyri gen examples/numpy.toml` bundle when one is present under
+# ~/.papyri/data/ and skips otherwise. The maintainer (who builds numpy
+# locally / in the numpy-build CI) gets the coverage; everyone else skips.
+# ---------------------------------------------------------------------------
+
+# numpy's narrative tree has hundreds of pages; a healthy build is in the
+# hundreds. A regression that drops most docs collapses the toc to a
+# handful. 50 sits comfortably between the two so the test flags breakage
+# without being brittle across numpy versions.
+_NUMPY_MIN_TOC_ITEMS = 50
+
+
+def _count_toc_items(nodes: list[Any]) -> int:
+    """Total number of TocTree entries, counting nested children."""
+    total = 0
+    for node in nodes:
+        total += 1
+        total += _count_toc_items(node.get("children", []))
+    return total
+
+
+def _toc_doc_refs(nodes: list[Any]) -> set[str]:
+    """All ``docs``-kind ref paths anywhere in the toc tree."""
+    refs: set[str] = set()
+    for node in nodes:
+        ref = node.get("ref", {})
+        if ref.get("kind") == "docs":
+            refs.add(ref.get("path", ""))
+        refs |= _toc_doc_refs(node.get("children", []))
+    return refs
+
+
+def _latest_numpy_bundle_dir() -> Path:
+    data_dir = Path("~/.papyri/data").expanduser()
+    bundle_dirs = sorted(data_dir.glob("numpy_*")) if data_dir.is_dir() else []
+    if not bundle_dirs:
+        pytest.skip("no generated numpy bundle under ~/.papyri/data/")
+    return bundle_dirs[-1]
+
+
+def test_numpy_toc_has_enough_items() -> None:
+    bundle_dir = _latest_numpy_bundle_dir()
+    toc_path = bundle_dir / "toc.json"
+    assert toc_path.is_file(), f"{bundle_dir.name} has no toc.json"
+
+    toc = json.loads(toc_path.read_text())
+    count = _count_toc_items(toc)
+    assert count >= _NUMPY_MIN_TOC_ITEMS, (
+        f"{bundle_dir.name} toc has only {count} entries "
+        f"(expected >= {_NUMPY_MIN_TOC_ITEMS}); narrative collection likely "
+        f"dropped most pages"
+    )
+
+
+def test_numpy_narrative_docs_mostly_reachable() -> None:
+    """Most of numpy's narrative docs must be reachable from the toc.
+
+    A doc present in docs/ but listed under no toctree is an orphan: it
+    renders at its URL but is invisible in navigation. A few intentional
+    orphans are fine; a large crop means a toctree root was lost, which is
+    the "narrative docs appear mostly empty" symptom.
+    """
+    bundle_dir = _latest_numpy_bundle_dir()
+    docs_dir = bundle_dir / "docs"
+    toc_path = bundle_dir / "toc.json"
+    if not docs_dir.is_dir() or not toc_path.is_file():
+        pytest.skip(f"{bundle_dir.name} has no narrative docs/toc")
+
+    doc_keys = {e.name for e in docs_dir.iterdir() if e.is_file()}
+    if not doc_keys:
+        pytest.skip(f"{bundle_dir.name} has no narrative docs")
+
+    reachable = _toc_doc_refs(json.loads(toc_path.read_text()))
+    orphans = doc_keys - reachable
+    orphan_ratio = len(orphans) / len(doc_keys)
+    assert orphan_ratio <= 0.25, (
+        f"{bundle_dir.name}: {len(orphans)}/{len(doc_keys)} narrative docs are "
+        f"orphaned (>{orphan_ratio:.0%}); a toctree root was likely dropped. "
+        f"Examples: {sorted(orphans)[:10]}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -375,6 +725,7 @@ def test_explode_bundle_to_dir_round_trips(tmp_path: Any) -> None:
         aliases={"np": "numpy"},
         extra={"pypi": "numpy"},
         assets={"logo.png": b"\x89PNG\r\n"},
+        narrative={"index": _minimal_narrative_doc()},
         toc=[TocTree(children=(), title="Root", ref=LocalRef("docs", "index"))],
     )
     out = tmp_path / "numpy_2.4.4"
@@ -571,6 +922,8 @@ def test_toc_bundle_field_is_tuple(tmp_path):
 
     bundle_dir = _make_minimal_bundle_dir(tmp_path / "mypkg_1.0")
     (bundle_dir / "docs").mkdir()
+    (bundle_dir / "docs" / "index").write_bytes(_minimal_narrative_doc().to_json())
+    (bundle_dir / "docs" / "page").write_bytes(_minimal_narrative_doc().to_json())
     root_toc = TocTree(
         children=(TocTree(children=(), title="Page", ref=LocalRef("docs", "page")),),
         title="Root",

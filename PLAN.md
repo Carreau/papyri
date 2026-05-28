@@ -232,6 +232,17 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   - `rubric` — unnumbered section heading (`.. rubric:: References`). Used
     in all three packages for headings that must not appear in the TOC. Should
     produce a lightweight `Section`-like node or an `Admonition`.
+  - sphinx-design (`grid`, `grid-item`, `grid-item-card`, `card`,
+    `card-carousel`, `tab-set`, `tab-item`, `dropdown`, `button-link`,
+    `button-ref`) — *landed as silent drops.* numpy / scipy build their root
+    `doc/source/index.rst` as a PyData-theme landing page out of these, and
+    losing the root index page collapses the entire toc to a single fallback
+    leaf via `make_tree`'s root-not-found path. Added to
+    `_SPHINX_ONLY_DIRECTIVES`. If a hosted DocBundle ever needs to render
+    these (probably not — they are pure layout around links the toctree
+    already provides), revisit with proper IR nodes.
+  - `automodule` — was missing from the autodoc family in
+    `_SPHINX_ONLY_DIRECTIVES`; now added next to `autofunction` / `autoclass`.
 
   *Medium priority* (structural / ref-resolution impact):
   - `only` — conditional content (`.. only:: html`). Content inside should be
@@ -406,6 +417,49 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   resolved, empty module-docstrings holding a sentinel placeholder rather than
   a parse failure marker. A `--strict --lint` step in maintainer CI gives fast
   feedback before upload.
+
+  *Partial landing — silent-drop → hard pack failure:* lenient `papyri gen`
+  used to swallow per-object failures (a narrative page that failed to
+  validate, an API qa whose introspection raised) with a `log.warning` and
+  produce a quietly-degraded bundle. Now every such failure is recorded
+  under `errors` in `papyri.json` (`Gen._record_error` / `_gen_errors` in
+  `papyri/gen.py`, mirroring `ErrorCollector._unexpected_errors` for the API
+  side), and `papyri pack`'s `_check_no_gen_errors` refuses to produce an
+  artifact while any are present. CI sees a non-zero pack and fails. This
+  is what would have caught the numpy toc-collapse regression at the
+  *moment* of breakage instead of at "narrative docs look mostly empty"
+  later. The remaining `--strict`/`--lint` items above (unresolved refs,
+  missing assets, …) are still open.
+
+- **Toc ↔ narrative consistency checks.**
+  *Forward direction landed:* `papyri pack` now fails (via `_check_toc_refs`
+  in `pack.py`, run from `read_bundle_dir`) if any toc entry points at a
+  document that isn't in the bundle — a dangling toc ref leaves the rendered
+  page empty and the nav full of dead links. A regression in narrative
+  collection (e.g. fail-fast on an unhandled directive dropping most numpy
+  pages) is what motivated it. `papyri/tests/test_pack.py` covers the check
+  plus a skip-guarded `test_numpy_toc_has_enough_items` smoke test that flags
+  a numpy build whose toc has collapsed to a handful of entries.
+
+  *Reverse direction landed (as a warning):* `find_orphan_docs` /
+  `_warn_orphan_docs` in `pack.py` (run from `read_bundle_dir`) flag every
+  narrative doc no toc entry points at. An orphaned doc — present in
+  `narrative/` but listed under no toctree root — renders fine at its URL but
+  is invisible in navigation, so the bundle looks "mostly empty" even though
+  the pages exist (a large crop usually means a toctree root failed to parse,
+  stranding everything it would have linked). It is a *warning*, not a hard
+  pack error, because papyri's IR does not yet capture Sphinx `:orphan:`
+  markers, so an intentionally-unlisted page can't be told apart from an
+  accidental one. `test_numpy_narrative_docs_mostly_reachable` (skip-guarded,
+  like the toc-count test) asserts the orphan ratio of a real numpy build
+  stays low.
+
+  *Still open:* once the IR carries an `:orphan:` flag (gen would read the
+  Sphinx field-list metadata at the top of a page), promote accidental
+  orphans to a hard pack error and exclude the flagged ones. Until then,
+  decide whether the canonical-`index`-root vs. any-root distinction matters
+  (today reachability is "appears anywhere in the toc tree", which is
+  equivalent since the toc is a validated tree).
 
 - Static export hardening for `viewer/dist/` deployment.
 - Dark-adapted Shiki theme + dark-mode-aware KaTeX glyphs.

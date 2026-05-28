@@ -12,15 +12,21 @@ from __future__ import annotations
 import gzip
 import io
 import json
+import logging
 import re
 from collections.abc import Callable, Iterator
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .bundle import IR_SCHEMA_VERSION, PACK_FORMAT_VERSION, Bundle, BundleManifest
 from .node_base import Node
 from .nodes import Image, Link, encoder
 from .serde import get_type_hints
+
+if TYPE_CHECKING:
+    from .nodes import TocTree
+
+log = logging.getLogger("papyri")
 
 _ALLOWED_TOPLEVEL = {"papyri.json", "toc.json", "module", "docs", "examples", "assets"}
 _OPTIONAL_DIRS = ("docs", "examples", "assets")
@@ -145,6 +151,46 @@ def _check_layout(path: Path) -> None:
             raise BundleError(f"unexpected top-level entry: {entry.name}")
 
 
+def _check_no_gen_errors(raw: dict[str, Any]) -> None:
+    """Refuse to pack a bundle whose gen step swallowed errors.
+
+    ``papyri gen`` (in lenient mode) records every per-object failure under
+    ``errors`` in ``papyri.json`` instead of producing a degraded bundle in
+    silence. Pack treats any such record as fatal: the maintainer must fix
+    or explicitly suppress (e.g. register a handler for the offending
+    directive, add the qa to ``exclude`` or ``[global.expected_errors]``)
+    before the bundle can ship. CI sees a non-zero ``papyri pack`` and fails.
+
+    Every error is listed on its own line so the maintainer can copy qas
+    straight into their config; the qa column is grouped by error type so
+    common failure modes stand out.
+    """
+    errors = raw.get("errors")
+    if not errors:
+        return
+    if not isinstance(errors, list):
+        raise BundleError(
+            f"papyri.json 'errors' must be a list, got {type(errors).__name__}"
+        )
+    grouped: dict[str, list[str]] = {}
+    malformed: list[str] = []
+    for e in errors:
+        if not isinstance(e, dict):
+            malformed.append(repr(e))
+            continue
+        key = f"{e.get('kind', '?')} {e.get('error_type', '?')}"
+        grouped.setdefault(key, []).append(str(e.get("path", "?")))
+    lines: list[str] = []
+    for key in sorted(grouped):
+        lines.append(f"  [{key}]")
+        lines.extend(f"    - {path}" for path in sorted(grouped[key]))
+    lines.extend(f"  (malformed) {entry}" for entry in malformed)
+    raise BundleError(
+        f"bundle records {len(errors)} gen error(s) — refusing to pack:\n"
+        + "\n".join(lines)
+    )
+
+
 def _read_meta(path: Path) -> BundleManifest:
     try:
         raw: Any = json.loads((path / "papyri.json").read_text())
@@ -152,6 +198,7 @@ def _read_meta(path: Path) -> BundleManifest:
         raise BundleError(f"papyri.json is not valid JSON: {exc}") from exc
     if not isinstance(raw, dict):
         raise BundleError("papyri.json is not a JSON object")
+    _check_no_gen_errors(raw)
     for key in ("module", "version"):
         if key not in raw:
             raise BundleError(f"papyri.json is missing required key {key!r}")
@@ -201,6 +248,105 @@ def _decode_dir(
             key = key[: -len(strip_suffix)]
         out[key] = value
     return out
+
+
+def _check_toc_refs(bundle: Bundle) -> None:
+    """Every toc entry must point at a document present in the bundle.
+
+    ``LocalRef`` promises its target exists, and gen is meant to guarantee
+    that before writing the toc — but a regression in narrative collection
+    can leave the toc pointing at docs that were dropped (e.g. a page that
+    failed to parse). That produces a toc full of dead links and pages that
+    render empty. Catch it at pack time, fail-fast, so a broken bundle never
+    ships.
+    """
+    targets: dict[str, dict[str, Any]] = {
+        "docs": bundle.narrative,
+        "module": bundle.api,
+        "examples": bundle.examples,
+    }
+
+    def walk(node: TocTree) -> None:
+        store = targets.get(node.ref.kind)
+        if store is None:
+            raise BundleError(
+                f"toc entry {node.ref.path!r} has unknown ref kind "
+                f"{node.ref.kind!r} (expected one of {sorted(targets)})"
+            )
+        if node.ref.path not in store:
+            raise BundleError(
+                f"toc entry {node.ref.path!r} (kind {node.ref.kind!r}) has no "
+                f"corresponding document in the bundle"
+            )
+        for child in node.children:
+            walk(child)
+
+    for node in bundle.toc:
+        walk(node)
+
+
+def find_orphan_docs(bundle: Bundle) -> list[str]:
+    """Narrative docs that no toc entry points at, sorted.
+
+    The toc is a tree and ``_check_toc_refs`` already guarantees every node
+    resolves, so "reachable via the toc" reduces to "the doc's key appears
+    as some entry's ``docs`` ref anywhere in the tree". A doc that is present
+    in ``narrative`` but missing from that set is an orphan: it renders fine
+    at its own URL but is invisible in navigation. A large crop of orphans
+    usually means narrative collection lost a toctree root (e.g. an index
+    page failed to parse), stranding everything it would have linked.
+
+    An empty toc makes every narrative doc an orphan — that *is* the failure
+    mode here (no navigation at all), so it is reported rather than special-cased.
+    """
+    referenced: set[str] = set()
+
+    def walk(node: TocTree) -> None:
+        if node.ref.kind == "docs":
+            referenced.add(node.ref.path)
+        for child in node.children:
+            walk(child)
+
+    for node in bundle.toc:
+        walk(node)
+
+    return sorted(k for k in bundle.narrative if k not in referenced)
+
+
+def _warn_orphan_docs(bundle: Bundle) -> None:
+    """Log a warning if narrative docs are unreachable from the toc.
+
+    Not fatal: papyri's IR does not yet track Sphinx ``:orphan:`` markers, so
+    an intentionally-unlisted page can't be told apart from an accidental
+    one. Surfacing a count + sample lets a maintainer notice the regression
+    (e.g. "200 orphaned docs") without blocking bundles that orphan pages on
+    purpose.
+    """
+    orphans = find_orphan_docs(bundle)
+    if not orphans:
+        return
+    sample = ", ".join(orphans[:10])
+    more = f" (+{len(orphans) - 10} more)" if len(orphans) > 10 else ""
+    if not bundle.toc:
+        log.warning(
+            "bundle %s %s has %d narrative doc(s) but an empty toc — none are "
+            "reachable via navigation: %s%s",
+            bundle.module,
+            bundle.version,
+            len(orphans),
+            sample,
+            more,
+        )
+    else:
+        log.warning(
+            "bundle %s %s has %d narrative doc(s) not reachable from the toc "
+            "(orphans): %s%s",
+            bundle.module,
+            bundle.version,
+            len(orphans),
+            sample,
+            more,
+        )
 
 
 def read_bundle_dir(path: Path, log: Callable[[str], None] | None = None) -> Bundle:
@@ -286,6 +432,8 @@ def read_bundle_dir(path: Path, log: Callable[[str], None] | None = None) -> Bun
         toc=toc,
     )
     bundle.validate()
+    _check_toc_refs(bundle)
+    _warn_orphan_docs(bundle)
     return bundle
 
 

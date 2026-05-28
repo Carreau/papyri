@@ -119,10 +119,15 @@ IncorrectInternalDocsLen = [
     "scipy.optimize._trustregion_constr.tr_interior_point:tr_interior_point",
     "scipy.sparse._bsr:_bsr_base.check_format",
     "scipy.optimize._trustregion_constr.tr_interior_point:BarrierSubproblem.gradient_and_jacobian",
+    "scipy.integrate._rules._base:_split_subregion",
+    "scipy.integrate._cubature:_VariableTransform.inv",
+    "scipy.integrate._cubature:_VariableTransform.__call__",
+    "scipy._lib._docscrape:NumpyDocString._parse_see_also",
 ]
 AssertionError = [
     "scipy.optimize._linprog_ip:_ip_hsd",
     "scipy.special._orthogonal:_compute_tauk",
+    "scipy.special._multiufuncs:MultiUFunc",
 ]
 WrongTypeAtField = [
                         "scipy.signal._ltisys:StateSpace",
@@ -298,6 +303,7 @@ WrongTypeAtField = [
                         "scipy.cluster.hierarchy:to_tree",
                         "scipy.cluster.vq:kmeans2",
                         "scipy.spatial.transform._rotation:Rotation.random",
+                        "scipy.stats._morestats:anderson_ksamp",
                     ]
 NumpydocParseError = [
     "scipy.optimize._linprog_highs:_linprog_highs",
@@ -315,4 +321,22 @@ NumpydocParseError = [
     "scipy.optimize._qap:_quadratic_assignment_faq",
     "scipy.stats._discrete_distns:geom_gen",
     "scipy.stats._discrete_distns:planck_gen",
+    "scipy.special._specfun:jdzo",
+    "scipy.stats._discrete_distns:betanbinom_gen",
+    "scipy._lib._docscrape:NumpyDocString._parse_index",
+]
+SpaceAfterBlockDirectiveError = [
+    "scipy.stats._morestats:anderson",
+]
+TreeSitterParseError = [
+    "scipy.sparse.linalg._isolve._gcrotmk:gcrotmk",
+    "scipy.sparse.linalg._isolve.lgmres:lgmres",
+    "scipy.sparse.linalg._isolve.tfqmr:tfqmr",
+    "scipy.spatial.transform._rigid_transform:RigidTransform",
+    "scipy.stats._multivariate:matrix_t_frozen.logpdf",
+    "scipy.stats._multivariate:matrix_t_gen.logpdf",
+]
+ExampleError1 = [
+    "scipy.stats._mstats_basic:tmax",
+    "scipy.stats._mstats_basic:tmean",
 ]

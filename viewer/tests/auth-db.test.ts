@@ -100,6 +100,74 @@ describe("AuthDb users", () => {
   });
 });
 
+describe("AuthDb changePassword", () => {
+  let auth: AuthDb;
+  beforeEach(() => {
+    auth = makeAuth();
+  });
+  afterEach(() => auth.close());
+
+  it("changes the password when the current one is correct", async () => {
+    const u = await auth.createUser("mallory", "password123");
+    expect(await auth.changePassword(u.id, "password123", "newpassword456")).toEqual({ ok: true });
+    expect(await auth.verifyLogin("mallory", "password123")).toBeNull();
+    expect((await auth.verifyLogin("mallory", "newpassword456"))?.id).toBe(u.id);
+  });
+
+  it("rejects a wrong current password and leaves the old one intact", async () => {
+    const u = await auth.createUser("niaj", "password123");
+    expect(await auth.changePassword(u.id, "wrongpass1", "newpassword456")).toEqual({
+      ok: false,
+      reason: "wrong-current",
+    });
+    expect((await auth.verifyLogin("niaj", "password123"))?.id).toBe(u.id);
+  });
+
+  it("rejects a too-short new password", async () => {
+    const u = await auth.createUser("olivia", "password123");
+    expect(await auth.changePassword(u.id, "password123", "short")).toEqual({
+      ok: false,
+      reason: "weak-new",
+    });
+    expect((await auth.verifyLogin("olivia", "password123"))?.id).toBe(u.id);
+  });
+
+  it("reports no-user for an unknown id", async () => {
+    expect(await auth.changePassword(9999, "password123", "newpassword456")).toEqual({
+      ok: false,
+      reason: "no-user",
+    });
+  });
+});
+
+describe("AuthDb deleteOtherSessions", () => {
+  let auth: AuthDb;
+  beforeEach(() => {
+    auth = makeAuth();
+  });
+  afterEach(() => auth.close());
+
+  it("revokes a user's other sessions but keeps the current one", async () => {
+    const u = await auth.createUser("peggy", "password123");
+    const keep = auth.createSession(u.id).token;
+    const other1 = auth.createSession(u.id).token;
+    const other2 = auth.createSession(u.id).token;
+    expect(auth.deleteOtherSessions(u.id, keep)).toBe(2);
+    expect(auth.resolveSession(keep)?.id).toBe(u.id);
+    expect(auth.resolveSession(other1)).toBeNull();
+    expect(auth.resolveSession(other2)).toBeNull();
+  });
+
+  it("does not touch another user's sessions", async () => {
+    const a = await auth.createUser("quentin", "password123");
+    const b = await auth.createUser("rupert", "password123");
+    const aKeep = auth.createSession(a.id).token;
+    const bToken = auth.createSession(b.id).token;
+    expect(auth.deleteOtherSessions(a.id, aKeep)).toBe(0);
+    expect(auth.resolveSession(bToken)?.id).toBe(b.id);
+  });
+});
+
 describe("AuthDb sessions", () => {
   let auth: AuthDb;
   beforeEach(() => {

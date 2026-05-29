@@ -1468,6 +1468,14 @@ section.backrefs ul.qualnames {
   margin-bottom: 14px;
   font-size: 13px;
 }
+.lf-success {
+  color: #1b5e20;
+  background: #e8f5e9;
+  padding: 8px 10px;
+  border-radius: 6px;
+  margin-bottom: 14px;
+  font-size: 13px;
+}
 .lf-submit {
   width: 100%;
   padding: 10px;

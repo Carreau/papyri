@@ -197,6 +197,45 @@ export class AuthDb {
   }
 
   /**
+   * Change a user's own password. Verifies the current password first so a
+   * hijacked but still-active session cannot silently re-key the account, then
+   * re-hashes and stores the new one. Returns a tagged result so the caller can
+   * surface the precise reason without leaking it through exception strings.
+   * The minimum-length rule mirrors `createUser`.
+   */
+  async changePassword(
+    userId: number,
+    currentPassword: string,
+    newPassword: string
+  ): Promise<{ ok: true } | { ok: false; reason: "no-user" | "wrong-current" | "weak-new" }> {
+    if (typeof newPassword !== "string" || newPassword.length < 8) {
+      return { ok: false, reason: "weak-new" };
+    }
+    const row = this.db.prepare("SELECT password_hash FROM users WHERE id = ?").get(userId) as
+      | { password_hash: string }
+      | undefined;
+    if (!row) return { ok: false, reason: "no-user" };
+    if (!(await verifyPassword(currentPassword, row.password_hash))) {
+      return { ok: false, reason: "wrong-current" };
+    }
+    const passwordHash = await hashPassword(newPassword);
+    this.db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(passwordHash, userId);
+    return { ok: true };
+  }
+
+  /**
+   * Revoke every session for `userId` except `keepToken`; returns the number
+   * removed. Used after a password change so any other (possibly leaked)
+   * sessions are forced to re-authenticate while the caller's stays alive.
+   */
+  deleteOtherSessions(userId: number, keepToken: string): number {
+    const info = this.db
+      .prepare("DELETE FROM sessions WHERE user_id = ? AND token != ?")
+      .run(userId, keepToken);
+    return info.changes;
+  }
+
+  /**
    * Verify a login. Returns the matching user row on success, else null.
    * Always performs a scrypt comparison (against a decoy hash when the user
    * is unknown) so timing does not reveal whether the username exists.

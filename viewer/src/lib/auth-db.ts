@@ -14,8 +14,9 @@
  *   sessions        — token (random), user_id, created_at, expires_at
  *   projects        — id, name (unique package/module name), created_at
  *   project_members — (project_id, user_id) — who may upload which project
- *   upload_tokens   — id, user_id, token_hash (unique), name, created_at,
- *                     last_used_at, expires_at — per-user personal upload tokens
+ *   upload_tokens   — id, user_id, token_hash (unique), name, project_id,
+ *                     created_at, last_used_at, expires_at — per-user personal
+ *                     upload tokens
  *
  * Authorization model: a `project` is a package/module name. An admin
  * (`users.is_admin`) creates projects and assigns users to them. A user mints
@@ -24,6 +25,11 @@
  * user is a member of (admins may upload any project). Authority is resolved
  * dynamically from current membership, so revoking a membership takes effect
  * immediately without touching the token.
+ *
+ * A token may optionally be scoped to a single project (`upload_tokens.project_id`):
+ * when set, that token may upload only that one project (subject to the same
+ * live membership check), narrowing the user's full authority. A null
+ * `project_id` means "any project the user may upload" — the default.
  *
  * Passwords are hashed with Argon2id (`@node-rs/argon2`, the OWASP-recommended
  * password hash) using its built-in per-hash random salt; the encoded
@@ -124,9 +130,23 @@ export interface PublicUploadToken {
   id: number;
   user_id: number;
   name: string | null;
+  /** Project this token is scoped to, or null when it may upload any project. */
+  project_id: number | null;
+  /** Name of the scoped project (joined for display), or null when unscoped. */
+  project_name: string | null;
   created_at: number;
   last_used_at: number | null;
   expires_at: number | null;
+}
+
+/**
+ * A successfully resolved upload token: its owning user plus the project it is
+ * scoped to (null = any project the user may upload). The upload endpoint uses
+ * `projectName` to reject uploads that target a different project.
+ */
+export interface ResolvedUploadToken {
+  user: PublicUser;
+  projectName: string | null;
 }
 
 /** Map a raw users row (with 0/1 is_admin) to the public boolean-typed view. */
@@ -257,6 +277,7 @@ export class AuthDb {
         user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         token_hash   TEXT    NOT NULL UNIQUE,
         name         TEXT,
+        project_id   INTEGER REFERENCES projects(id) ON DELETE CASCADE,
         created_at   INTEGER NOT NULL,
         last_used_at INTEGER,
         expires_at   INTEGER
@@ -275,6 +296,18 @@ export class AuthDb {
     if (!userCols.some((c) => c.name === "is_admin")) {
       this.db.exec("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0");
       this.db.exec("UPDATE users SET is_admin = 1");
+    }
+
+    // Per-project token scoping was added after the first deployments. An older
+    // auth.db has `upload_tokens` without `project_id`; add it (nullable, so
+    // existing tokens stay "any project the user may upload").
+    const tokenCols = this.db.prepare("PRAGMA table_info(upload_tokens)").all() as {
+      name: string;
+    }[];
+    if (!tokenCols.some((c) => c.name === "project_id")) {
+      this.db.exec(
+        "ALTER TABLE upload_tokens ADD COLUMN project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE"
+      );
     }
   }
 
@@ -601,11 +634,17 @@ export class AuthDb {
    * Mint a personal upload token for `userId`. Returns the public record plus
    * the plaintext secret — the ONLY time the plaintext is available; only its
    * SHA-256 is persisted. `ttlSeconds` null/undefined means no expiry.
+   *
+   * `projectId` null/undefined leaves the token unscoped (it may upload any
+   * project its user may); a non-null id scopes it to that single project. The
+   * caller is responsible for checking the user may upload that project — the
+   * scope only ever narrows the user's standing authority, never widens it.
    */
   createUploadToken(
     userId: number,
     name: string | null = null,
-    ttlSeconds: number | null = null
+    ttlSeconds: number | null = null,
+    projectId: number | null = null
   ): { token: PublicUploadToken; secret: string } {
     const secret = generateUploadToken();
     const tokenHash = hashUploadToken(secret);
@@ -613,15 +652,25 @@ export class AuthDb {
     const expires_at = ttlSeconds != null ? created_at + ttlSeconds : null;
     const info = this.db
       .prepare(
-        "INSERT INTO upload_tokens (user_id, token_hash, name, created_at, expires_at) " +
-          "VALUES (?, ?, ?, ?, ?)"
+        "INSERT INTO upload_tokens (user_id, token_hash, name, project_id, created_at, expires_at) " +
+          "VALUES (?, ?, ?, ?, ?, ?)"
       )
-      .run(userId, tokenHash, name, created_at, expires_at);
+      .run(userId, tokenHash, name, projectId, created_at, expires_at);
+    const project_name =
+      projectId != null
+        ? ((
+            this.db.prepare("SELECT name FROM projects WHERE id = ?").get(projectId) as
+              | { name: string }
+              | undefined
+          )?.name ?? null)
+        : null;
     return {
       token: {
         id: Number(info.lastInsertRowid),
         user_id: userId,
         name,
+        project_id: projectId,
+        project_name,
         created_at,
         last_used_at: null,
         expires_at,
@@ -634,8 +683,10 @@ export class AuthDb {
   listUploadTokens(userId: number): PublicUploadToken[] {
     return this.db
       .prepare(
-        "SELECT id, user_id, name, created_at, last_used_at, expires_at FROM upload_tokens " +
-          "WHERE user_id = ? ORDER BY created_at DESC"
+        "SELECT t.id, t.user_id, t.name, t.project_id, p.name AS project_name, " +
+          "t.created_at, t.last_used_at, t.expires_at FROM upload_tokens t " +
+          "LEFT JOIN projects p ON p.id = t.project_id " +
+          "WHERE t.user_id = ? ORDER BY t.created_at DESC"
       )
       .all(userId) as PublicUploadToken[];
   }
@@ -649,16 +700,22 @@ export class AuthDb {
   }
 
   /**
-   * Resolve a plaintext upload token to its owning user, enforcing expiry, and
-   * stamp `last_used_at`. Returns null when the token is unknown, expired, or
-   * its user has been removed.
+   * Resolve a plaintext upload token to its owning user and project scope,
+   * enforcing expiry, and stamp `last_used_at`. Returns null when the token is
+   * unknown, expired, or its user has been removed. `projectName` is null for
+   * an unscoped token (any project the user may upload).
    */
-  resolveUploadToken(secret: string): PublicUser | null {
+  resolveUploadToken(secret: string): ResolvedUploadToken | null {
     if (typeof secret !== "string" || !secret.startsWith(UPLOAD_TOKEN_PREFIX)) return null;
     const tokenHash = hashUploadToken(secret);
     const row = this.db
-      .prepare("SELECT id, user_id, expires_at FROM upload_tokens WHERE token_hash = ?")
-      .get(tokenHash) as { id: number; user_id: number; expires_at: number | null } | undefined;
+      .prepare(
+        "SELECT t.id, t.user_id, t.expires_at, p.name AS project_name FROM upload_tokens t " +
+          "LEFT JOIN projects p ON p.id = t.project_id WHERE t.token_hash = ?"
+      )
+      .get(tokenHash) as
+      | { id: number; user_id: number; expires_at: number | null; project_name: string | null }
+      | undefined;
     if (!row) return null;
     if (row.expires_at != null && row.expires_at <= nowSeconds()) {
       this.db.prepare("DELETE FROM upload_tokens WHERE id = ?").run(row.id);
@@ -667,7 +724,9 @@ export class AuthDb {
     this.db
       .prepare("UPDATE upload_tokens SET last_used_at = ? WHERE id = ?")
       .run(nowSeconds(), row.id);
-    return this.getUser(row.user_id);
+    const user = this.getUser(row.user_id);
+    if (!user) return null;
+    return { user, projectName: row.project_name };
   }
 
   close(): void {

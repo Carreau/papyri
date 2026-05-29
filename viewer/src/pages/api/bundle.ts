@@ -48,13 +48,15 @@ export const prerender = false;
 //   - global: presented the deployment-wide PAPYRI_UPLOAD_TOKEN (CI / admin
 //     escape hatch). May upload any project.
 //   - user:   presented a personal upload token resolving to an account. May
-//     upload the projects that account is a member of (admins: any).
+//     upload the projects that account is a member of (admins: any). When the
+//     token is scoped to a single project, `scopedProject` names it and the
+//     token may upload only that project.
 //   - open:   no token required and none presented, on a fresh install with no
 //     users — the local-dev "everything open" mode.
 type UploadPrincipal =
   | { kind: "global" }
   | { kind: "open" }
-  | { kind: "user"; userId: number; isAdmin: boolean };
+  | { kind: "user"; userId: number; isAdmin: boolean; scopedProject: string | null };
 
 /** Constant-time string compare that tolerates length differences. */
 function timingSafeEqualStr(a: string, b: string): boolean {
@@ -90,8 +92,14 @@ async function authenticateUpload(request: Request): Promise<UploadPrincipal | R
     if (globalToken && timingSafeEqualStr(bearer, globalToken)) {
       return { kind: "global" };
     }
-    const user = (await getAuthDb()).resolveUploadToken(bearer);
-    if (user) return { kind: "user", userId: user.id, isAdmin: user.is_admin };
+    const resolved = (await getAuthDb()).resolveUploadToken(bearer);
+    if (resolved)
+      return {
+        kind: "user",
+        userId: resolved.user.id,
+        isAdmin: resolved.user.is_admin,
+        scopedProject: resolved.projectName,
+      };
     return UNAUTHORIZED();
   }
 
@@ -113,6 +121,17 @@ async function authorizeUploadProject(
   project: string
 ): Promise<Response | null> {
   if (principal.kind === "global" || principal.kind === "open") return null;
+  // A project-scoped token may upload only that one project — this narrows the
+  // user's standing authority and applies even to admins.
+  if (principal.scopedProject !== null && principal.scopedProject !== project) {
+    return respond(
+      {
+        ok: false,
+        error: `this token is scoped to project "${principal.scopedProject}", not "${project}"`,
+      },
+      403
+    );
+  }
   if (principal.isAdmin) return null;
   if ((await getAuthDb()).canUserUploadProject(principal.userId, project)) return null;
   return respond({ ok: false, error: `not authorized to upload project "${project}"` }, 403);

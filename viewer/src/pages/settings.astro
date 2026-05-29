@@ -18,7 +18,11 @@ if (!user) {
 
 const auth = await getAuthDb();
 const tokens = auth.listUploadTokens(user.id);
-const projects = auth.listUserProjects(user.id);
+// Projects the user may scope a token to: admins may scope to any project,
+// everyone else to the projects they are a member of.
+const projects = user.is_admin
+  ? auth.listProjects().map((p) => p.name)
+  : auth.listUserProjects(user.id);
 ---
 
 <BaseLayout title="Account settings — Papyri">

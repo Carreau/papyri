@@ -4,6 +4,8 @@ export interface PanelToken {
   id: number;
   user_id: number;
   name: string | null;
+  project_id: number | null;
+  project_name: string | null;
   created_at: number;
   last_used_at: number | null;
   expires_at: number | null;
@@ -11,7 +13,7 @@ export interface PanelToken {
 
 interface Props {
   initial: PanelToken[];
-  /** Project names the user may upload (admins see a note instead). */
+  /** Project names the user may scope a token to (admins: every project). */
   projects: string[];
   isAdmin: boolean;
 }
@@ -25,6 +27,8 @@ export default function UploadTokenPanel({ initial, projects, isAdmin }: Props) 
   const [tokens, setTokens] = useState<PanelToken[]>(initial);
   const [name, setName] = useState("");
   const [ttlDays, setTtlDays] = useState("");
+  // "" means unscoped (any project the user may upload).
+  const [project, setProject] = useState("");
   const [creating, setCreating] = useState(false);
   const [revoking, setRevoking] = useState<number | null>(null);
   const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
@@ -38,9 +42,10 @@ export default function UploadTokenPanel({ initial, projects, isAdmin }: Props) 
     setResult(null);
     setNewSecret(null);
     try {
-      const payload: { name?: string; ttlDays?: number } = {};
+      const payload: { name?: string; ttlDays?: number; project?: string } = {};
       if (name.trim()) payload.name = name.trim();
       if (ttlDays.trim()) payload.ttlDays = Number(ttlDays);
+      if (project) payload.project = project;
       const resp = await fetch("/api/account/tokens", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -60,6 +65,7 @@ export default function UploadTokenPanel({ initial, projects, isAdmin }: Props) 
         setNewSecret(body.secret);
         setName("");
         setTtlDays("");
+        setProject("");
       }
     } catch (err) {
       setResult({ ok: false, msg: `network error: ${err}` });
@@ -109,6 +115,9 @@ export default function UploadTokenPanel({ initial, projects, isAdmin }: Props) 
             You are not assigned to any project yet, so a token cannot upload anything until an
             admin assigns you to one.
           </>
+        )}{" "}
+        {projects.length > 0 && (
+          <>Scope a token to a single project to limit it to just that one.</>
         )}
       </p>
 
@@ -133,6 +142,19 @@ export default function UploadTokenPanel({ initial, projects, isAdmin }: Props) 
             min={1}
           />
         </label>
+        {projects.length > 0 && (
+          <label>
+            Scope to project (optional)
+            <select value={project} onChange={(e) => setProject(e.target.value)}>
+              <option value="">{isAdmin ? "Any project" : "All my projects"}</option>
+              {projects.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <button className="ext-inv-btn" type="submit" disabled={locked}>
           {creating ? "Creating…" : "Create token"}
         </button>
@@ -160,6 +182,7 @@ export default function UploadTokenPanel({ initial, projects, isAdmin }: Props) 
           <thead>
             <tr>
               <th>Label</th>
+              <th>Scope</th>
               <th>Created</th>
               <th>Last used</th>
               <th>Expires</th>
@@ -171,6 +194,13 @@ export default function UploadTokenPanel({ initial, projects, isAdmin }: Props) 
               <tr key={t.id}>
                 <td>
                   {t.name ? <code>{t.name}</code> : <em className="ext-inv-muted">(unnamed)</em>}
+                </td>
+                <td>
+                  {t.project_name ? (
+                    <code>{t.project_name}</code>
+                  ) : (
+                    <em className="ext-inv-muted">all projects</em>
+                  )}
                 </td>
                 <td>{fmtDate(t.created_at)}</td>
                 <td>{fmtDate(t.last_used_at)}</td>

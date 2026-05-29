@@ -1,4 +1,5 @@
 import { defineMiddleware } from "astro:middleware";
+import { getAuthDb, SESSION_COOKIE } from "./lib/auth-db.ts";
 
 // Routes that must remain reachable without a session (login form, auth
 // endpoints, bundle upload). Any new pre-auth route needs an entry here.
@@ -23,6 +24,7 @@ const ADMIN_ONLY_PREFIXES = [
   "/api/reingest",
   "/api/inventory",
   "/api/stats",
+  "/api/users",
 ] as const;
 
 /** True when `pathname` equals `prefix`, `prefix + "/"`, or any deeper path. */
@@ -34,7 +36,7 @@ function matchesAny(prefixes: readonly string[], pathname: string): boolean {
   return prefixes.some((p) => matchesPrefix(p, pathname));
 }
 
-export const onRequest = defineMiddleware((context, next) => {
+export const onRequest = defineMiddleware(async (context, next) => {
   const { pathname } = context.url;
 
   // Public routes bypass all auth checks.
@@ -42,10 +44,13 @@ export const onRequest = defineMiddleware((context, next) => {
     return next();
   }
 
-  // Admin-only routes require an active session.
+  // Admin-only routes require an active, unexpired session. We validate the
+  // token against the auth store (not just its presence) so a stale, forged,
+  // or revoked cookie is rejected.
   if (matchesAny(ADMIN_ONLY_PREFIXES, pathname)) {
-    const session = context.cookies.get("papyri_session_token");
-    if (!session?.value) {
+    const token = context.cookies.get(SESSION_COOKIE)?.value;
+    const user = token ? (await getAuthDb()).resolveSession(token) : null;
+    if (!user) {
       // API callers receive a JSON 403 instead of an HTML redirect.
       if (pathname.startsWith("/api/")) {
         return new Response(JSON.stringify({ error: "Authentication required" }), {

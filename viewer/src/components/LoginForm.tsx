@@ -72,13 +72,6 @@ export default function LoginForm() {
           {loading ? "Signing in…" : "Sign in"}
         </button>
       </form>
-
-      <div className="lf-hint">
-        <div className="lf-hint-title">Demo credentials</div>
-        <div>
-          <code>admin</code> / <code>password</code>
-        </div>
-      </div>
     </div>
   );
 }

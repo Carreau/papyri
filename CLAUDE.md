@@ -335,8 +335,9 @@ the graphstore and blob store is rebuildable via `POST /api/reingest`.
 | `PAPYRI_UPLOAD_TOKEN` | `papyri upload`, viewer | Bearer token for `PUT /api/bundle` |
 | `PAPYRI_INGEST_DIR` | viewer | Bundle data root (default `~/.papyri/ingest`) |
 | `PAPYRI_INGEST_DB` | viewer | SQLite graph DB (default `~/.papyri/ingest/papyri.db`) |
+| `PAPYRI_AUTH_DB` | viewer | SQLite auth DB — users + sessions, separate from the graph store (default `~/.papyri/auth.db`) |
 | `PAPYRI_SITE` | viewer build | Canonical external origin for canonical-URL generation behind a reverse proxy |
-| `PAPYRI_USERNAME` / `PAPYRI_PASSWORD` | viewer middleware | Credentials for the session-cookie auth gate |
+| `PAPYRI_USERNAME` / `PAPYRI_PASSWORD` | viewer | Seed an initial admin user into the auth DB on first run (only when no users exist) |
 | `PAPYRI_VERSION` | `papyri upload` | Overrides the `papyri-upload/<version>` User-Agent string |
 | `PAPYRI_BUILD_COMMIT` | viewer build | Git commit surfaced on the admin panel |
 | `PAPYRI_BUILD_ADAPTER` | viewer build | Build adapter name surfaced on the admin panel |

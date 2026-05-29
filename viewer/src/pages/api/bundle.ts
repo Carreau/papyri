@@ -35,25 +35,87 @@
 //   downstream failure is reported as an `error` event in the body.
 
 import type { APIRoute } from "astro";
+import { timingSafeEqual } from "node:crypto";
 import { Ingester, decode, type TypedNode } from "papyri-ingest";
 import { isSafeSegment } from "../../lib/paths.ts";
 import { getBackends, getUploadToken } from "../../lib/backends.ts";
 import { respond, sha256Hex } from "../../lib/api-utils.ts";
+import { getAuthDb } from "../../lib/auth-db.ts";
 
 export const prerender = false;
 
-// Shared bearer-token gate for both PUT (upload) and GET (existence check).
-// When PAPYRI_UPLOAD_TOKEN is unset the check is skipped — intentional for
-// local development. Returns a 401 Response when the token is required and
-// missing/wrong, or null when the request may proceed.
-async function checkAuth(request: Request): Promise<Response | null> {
-  const expectedToken = await getUploadToken();
-  if (!expectedToken) return null;
-  const auth = request.headers.get("Authorization") ?? "";
-  if (auth !== `Bearer ${expectedToken}`) {
-    return respond({ ok: false, error: "unauthorized" }, 401, { "WWW-Authenticate": "Bearer" });
+// Who is making an upload request, established before any project-scope check.
+//   - global: presented the deployment-wide PAPYRI_UPLOAD_TOKEN (CI / admin
+//     escape hatch). May upload any project.
+//   - user:   presented a personal upload token resolving to an account. May
+//     upload the projects that account is a member of (admins: any).
+//   - open:   no token required and none presented, on a fresh install with no
+//     users — the local-dev "everything open" mode.
+type UploadPrincipal =
+  | { kind: "global" }
+  | { kind: "open" }
+  | { kind: "user"; userId: number; isAdmin: boolean };
+
+/** Constant-time string compare that tolerates length differences. */
+function timingSafeEqualStr(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ab.length !== bb.length) return false;
+  return timingSafeEqual(ab, bb);
+}
+
+const UNAUTHORIZED = () =>
+  respond({ ok: false, error: "unauthorized" }, 401, { "WWW-Authenticate": "Bearer" });
+
+/**
+ * Authenticate an upload request to a principal, WITHOUT yet checking which
+ * project it targets. Returns a 401 Response when the caller cannot be
+ * authenticated. Auth policy (see PLAN.md "per-user authorization scopes"):
+ *
+ *   - A bearer that matches PAPYRI_UPLOAD_TOKEN (timing-safe) → global.
+ *   - A bearer that resolves as a personal upload token        → user.
+ *   - A bearer that matches neither                            → 401.
+ *   - No bearer, PAPYRI_UPLOAD_TOKEN set                       → 401.
+ *   - No bearer, no global token, and zero users (fresh local
+ *     install)                                                 → open.
+ *   - No bearer, no global token, but users exist (a real
+ *     deployment) → 401: production must use a per-user token.
+ */
+async function authenticateUpload(request: Request): Promise<UploadPrincipal | Response> {
+  const globalToken = await getUploadToken();
+  const header = request.headers.get("Authorization") ?? "";
+  const bearer = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
+
+  if (bearer) {
+    if (globalToken && timingSafeEqualStr(bearer, globalToken)) {
+      return { kind: "global" };
+    }
+    const user = (await getAuthDb()).resolveUploadToken(bearer);
+    if (user) return { kind: "user", userId: user.id, isAdmin: user.is_admin };
+    return UNAUTHORIZED();
   }
-  return null;
+
+  // No bearer presented.
+  if (globalToken) return UNAUTHORIZED();
+  // Local-dev convenience: only open when the deployment has no accounts at
+  // all. Once any user exists, uploads require a per-user token.
+  if ((await getAuthDb()).userCount() === 0) return { kind: "open" };
+  return UNAUTHORIZED();
+}
+
+/**
+ * Authorize an already-authenticated principal to upload `project` (the
+ * bundle's module name). Returns a 403 Response when not permitted, or null to
+ * proceed.
+ */
+async function authorizeUploadProject(
+  principal: UploadPrincipal,
+  project: string
+): Promise<Response | null> {
+  if (principal.kind === "global" || principal.kind === "open") return null;
+  if (principal.isAdmin) return null;
+  if ((await getAuthDb()).canUserUploadProject(principal.userId, project)) return null;
+  return respond({ ok: false, error: `not authorized to upload project "${project}"` }, 403);
 }
 
 // Existence check for `papyri upload`'s dedup step. The client computes the
@@ -62,8 +124,8 @@ async function checkAuth(request: Request): Promise<Response | null> {
 // does, the client skips the upload entirely. Failing open (any error → the
 // client uploads anyway) is the responsibility of the client.
 export const GET: APIRoute = async ({ request, url }) => {
-  const authFail = await checkAuth(request);
-  if (authFail) return authFail;
+  const principal = await authenticateUpload(request);
+  if (principal instanceof Response) return principal;
 
   const module = url.searchParams.get("module");
   const version = url.searchParams.get("version");
@@ -71,6 +133,10 @@ export const GET: APIRoute = async ({ request, url }) => {
   if (!module || !version) {
     return respond({ ok: false, error: "module and version query params required" }, 400);
   }
+  // The dedup check leaks whether a bundle exists, so scope it like the upload:
+  // a user may only probe projects they could upload.
+  const authzFail = await authorizeUploadProject(principal, module);
+  if (authzFail) return authzFail;
 
   let backends: Awaited<ReturnType<typeof getBackends>>;
   try {
@@ -92,11 +158,11 @@ export const GET: APIRoute = async ({ request, url }) => {
 };
 
 export const PUT: APIRoute = async ({ request }) => {
-  // Token auth: if PAPYRI_UPLOAD_TOKEN is configured, every PUT must carry
-  // "Authorization: Bearer <token>".  When the env var is absent the check is
-  // skipped entirely — that's intentional for local development.
-  const authFail = await checkAuth(request);
-  if (authFail) return authFail;
+  // Authenticate the caller to a principal first. The project-scope check
+  // happens after decoding, once we know which project (bundle.module) this
+  // artifact targets.
+  const principal = await authenticateUpload(request);
+  if (principal instanceof Response) return principal;
 
   if (!request.body) {
     return respond({ ok: false, error: "request body required (.papyri artifact)" }, 400);
@@ -152,6 +218,11 @@ export const PUT: APIRoute = async ({ request }) => {
       400
     );
   }
+
+  // Project-scope authorization: now that we know the target project
+  // (bundle.module), confirm the authenticated principal may upload it.
+  const authzFail = await authorizeUploadProject(principal, rawPkg);
+  if (authzFail) return authzFail;
 
   // Streaming response: ingest is potentially long-running. Open an NDJSON
   // stream now and emit progress events as the ingest walks the bundle; the

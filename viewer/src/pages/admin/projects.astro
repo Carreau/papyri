@@ -1,0 +1,21 @@
+---
+// Admin: project management. A "project" is a package/module name; assigning a
+// user to one grants them upload rights for that package via their personal
+// upload tokens (admins may upload anything).
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import ProjectManagementPanel from "../../components/ProjectManagementPanel.tsx";
+import { getAuthDb } from "../../lib/auth-db.ts";
+
+export const prerender = false;
+
+const auth = await getAuthDb();
+const projects = auth.listProjects().map((p) => ({ ...p, members: auth.listMembers(p.id) }));
+const users = auth.listUsers();
+---
+
+<AdminLayout title="Admin · Projects — Papyri" active="projects">
+  <section class="admin-section">
+    <h2>Projects</h2>
+    <ProjectManagementPanel client:load initialProjects={projects} users={users} />
+  </section>
+</AdminLayout>

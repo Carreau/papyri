@@ -814,20 +814,25 @@ in the one-time synchronous `loadSchemaFromDisk` DB-init path.)
   (note / warning / tip / seealso / …). Look at
   https://sphinx-immaterial.readthedocs.io/en/latest/admonitions.html for
   per-kind color tokens and icons to model richer admonition styling on.
-- **Auth is intentional but minimal.** `middleware.ts` uses a two-tier model:
+- **Auth is intentional but minimal.** `middleware.ts` uses a three-tier model:
   - *Always public*: `/login`, `/api/auth/`, `/api/bundle` (upload endpoint uses
     its own bearer-token check).
-  - *Admin-only* (requires session): `/admin`, `/nodes`, `/ir-stats`, and their
-    backing API endpoints (`/api/nodes.json`, `/api/ir-stats.json`, `/api/clear`,
-    `/api/clear-raw`, `/api/reingest`, `/api/inventory`, `/api/stats`,
-    `/api/users`). These are gated because they are computationally expensive
-    (full corpus walks), destructive, or manage accounts. Unauthenticated page
-    requests redirect to `/login`; API requests get a JSON 403. The middleware
-    *validates* the session token against the auth store (looks it up and
-    checks expiry), not merely its presence.
+  - *Admin-only* (requires a session whose user has `is_admin`): `/admin`,
+    `/nodes`, `/ir-stats`, and their backing API endpoints (`/api/nodes.json`,
+    `/api/ir-stats.json`, `/api/clear`, `/api/clear-raw`, `/api/reingest`,
+    `/api/inventory`, `/api/stats`, `/api/users`, `/api/projects`). These are
+    gated because they are computationally expensive (full corpus walks),
+    destructive, or manage accounts / project membership. A signed-in non-admin
+    is redirected (`/`) or gets a JSON 403.
+  - *Signed-in (any role)*: `/settings`, `/api/account/*` — self-service account
+    management (change password, mint/revoke personal upload tokens).
   - *Guest-accessible*: everything else — bundle index, all qualname/doc/example
     pages, text search, assets. Guests can browse documentation without an
     account.
+
+  Unauthenticated page requests redirect to `/login`; API requests get a JSON
+  403. The middleware *validates* the session token against the auth store
+  (looks it up and checks expiry), not merely its presence.
 
   **User/session store (landed).** Accounts and sessions live in a real SQLite
   database (`viewer/src/lib/auth-db.ts`), separate from the graph store so the
@@ -846,10 +851,23 @@ in the one-time synchronous `loadSchemaFromDisk` DB-init path.)
   (`UserManagementPanel.tsx` → `/api/users`). This resolves the three "auth
   hardening" TBD items below (default creds, unsigned/never-expiring session,
   constant-time compare) for the login path; the upload bearer-token compare in
-  `PUT /api/bundle` is still a plain `!==` and remains to be switched to
-  `crypto.timingSafeEqual`. Per-user authorization scopes (who may upload /
-  view which bundles) are still out of scope — track when the multi-tenant
-  hosting design firms up.
+  `PUT /api/bundle` now also uses `crypto.timingSafeEqual` (see below).
+
+  **Per-user upload authorization (landed).** Users carry an `is_admin` flag
+  (`users.is_admin`); a logged-in non-admin can manage their own account but
+  not the admin tools (`middleware.ts` gates `ADMIN_ONLY_PREFIXES` on the
+  role). An admin creates *projects* — a project is a package/module name —
+  and assigns users to them (`projects` / `project_members` tables, managed via
+  `/api/projects` and `/admin/projects`). Each user mints personal upload
+  tokens (`upload_tokens`, shown once, only the SHA-256 stored) from
+  `/settings` via `/api/account/tokens`. `PUT /api/bundle` authenticates the
+  bearer to a principal (global `PAPYRI_UPLOAD_TOKEN` → any project; personal
+  token → its user; no token + no global token + zero users → open local-dev)
+  and then authorizes it for the bundle's `module`: admins and the global token
+  may upload anything, a user only the projects they are a member of (resolved
+  live, so revoking membership takes effect immediately). The global
+  `PAPYRI_UPLOAD_TOKEN` is retained as a CI / local-dev escape hatch. Viewing
+  bundles remains open to guests; only the *upload* scope is enforced per user.
 
 ### Cross-cutting
 
@@ -900,11 +918,13 @@ pass; the rest are recorded here as TBD so the next PR can pick them up.
   rejected and pruned; logout / user-delete revoke them. (An HMAC-signed
   stateless cookie was the original suggestion, but a server-side session table
   was chosen so sessions can be revoked and audited.)
-- **Constant-time comparison.** *Login: done* — password verification uses
+- **Constant-time comparison.** *Done.* Login password verification uses
   Argon2's constant-time verify, with a decoy hash compared on unknown
-  usernames so timing does not leak account existence. *Still open:* the
-  bundle upload bearer-token check (`!==` in `PUT /api/bundle`) is still
-  timing-variable; switch it to `crypto.timingSafeEqual`.
+  usernames so timing does not leak account existence. The bundle upload
+  bearer-token check in `PUT /api/bundle` now compares the global
+  `PAPYRI_UPLOAD_TOKEN` with `crypto.timingSafeEqual` (`timingSafeEqualStr` in
+  `api/bundle.ts`); personal upload tokens are looked up by SHA-256 hash, not
+  string-compared.
 
 ### TBD — upload / ingest robustness
 

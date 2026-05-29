@@ -11,8 +11,10 @@ const PUBLIC_PREFIXES = ["/login", "/api/auth/", "/api/bundle"] as const;
 // not in PUBLIC_PREFIXES) is accessible to guests so they can browse docs
 // without logging in.
 //
-// Admin-only routes are computationally expensive (full corpus walks) or
-// carry destructive write operations; guests have no need for them.
+// Admin-only routes are computationally expensive (full corpus walks), carry
+// destructive write operations, or manage accounts / project membership;
+// guests and non-admin users have no need for them. These require a session
+// whose user has `is_admin` set.
 const ADMIN_ONLY_PREFIXES = [
   "/admin",
   "/nodes",
@@ -25,12 +27,12 @@ const ADMIN_ONLY_PREFIXES = [
   "/api/inventory",
   "/api/stats",
   "/api/users",
+  "/api/projects",
 ] as const;
 
 // Routes any signed-in user may reach but guests may not — self-service
-// account management. There is no admin/user role distinction today, so the
-// session check below is identical to the admin one; the lists are kept apart
-// so the intent stays clear once roles exist.
+// account management (change password, mint/revoke personal upload tokens).
+// These require a session but NOT admin.
 const AUTH_REQUIRED_PREFIXES = ["/settings", "/api/account"] as const;
 
 /** True when `pathname` equals `prefix`, `prefix + "/"`, or any deeper path. */
@@ -53,18 +55,31 @@ export const onRequest = defineMiddleware(async (context, next) => {
   // Admin-only and signed-in-user routes both require an active, unexpired
   // session. We validate the token against the auth store (not just its
   // presence) so a stale, forged, or revoked cookie is rejected.
-  if (matchesAny(ADMIN_ONLY_PREFIXES, pathname) || matchesAny(AUTH_REQUIRED_PREFIXES, pathname)) {
+  const adminOnly = matchesAny(ADMIN_ONLY_PREFIXES, pathname);
+  if (adminOnly || matchesAny(AUTH_REQUIRED_PREFIXES, pathname)) {
     const token = context.cookies.get(SESSION_COOKIE)?.value;
     const user = token ? (await getAuthDb()).resolveSession(token) : null;
+    const isApi = pathname.startsWith("/api/");
     if (!user) {
       // API callers receive a JSON 403 instead of an HTML redirect.
-      if (pathname.startsWith("/api/")) {
+      if (isApi) {
         return new Response(JSON.stringify({ error: "Authentication required" }), {
           status: 403,
           headers: { "Content-Type": "application/json" },
         });
       }
       return context.redirect("/login");
+    }
+    // Admin-only routes additionally require the admin role. A signed-in but
+    // non-admin user is forbidden (API) or bounced to the bundle index (page).
+    if (adminOnly && !user.is_admin) {
+      if (isApi) {
+        return new Response(JSON.stringify({ error: "Admin privileges required" }), {
+          status: 403,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return context.redirect("/");
     }
   }
 

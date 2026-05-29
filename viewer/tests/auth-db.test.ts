@@ -5,7 +5,11 @@ import {
   hashPassword,
   verifyPassword,
   isValidUsername,
+  isValidProjectName,
   demoSeedActive,
+  generateUploadToken,
+  hashUploadToken,
+  UPLOAD_TOKEN_PREFIX,
   DEMO_USERNAME,
   DEMO_PASSWORD,
   SESSION_TTL_SECONDS,
@@ -56,6 +60,32 @@ describe("isValidUsername", () => {
   });
 });
 
+describe("isValidProjectName", () => {
+  it("accepts package-like names", () => {
+    expect(isValidProjectName("numpy")).toBe(true);
+    expect(isValidProjectName("scikit-learn")).toBe(true);
+    expect(isValidProjectName("a.b_c-1")).toBe(true);
+  });
+
+  it("rejects path separators, traversal, and odd input", () => {
+    expect(isValidProjectName("")).toBe(false);
+    expect(isValidProjectName("..")).toBe(false);
+    expect(isValidProjectName("a/b")).toBe(false);
+    expect(isValidProjectName("../etc")).toBe(false);
+    expect(isValidProjectName(123)).toBe(false);
+  });
+});
+
+describe("upload token helpers", () => {
+  it("mints prefixed tokens that hash deterministically", () => {
+    const t = generateUploadToken();
+    expect(t.startsWith(UPLOAD_TOKEN_PREFIX)).toBe(true);
+    expect(generateUploadToken()).not.toBe(t);
+    expect(hashUploadToken(t)).toBe(hashUploadToken(t));
+    expect(hashUploadToken(t)).toMatch(/^[0-9a-f]{64}$/);
+  });
+});
+
 describe("AuthDb users", () => {
   let auth: AuthDb;
   beforeEach(() => {
@@ -71,9 +101,19 @@ describe("AuthDb users", () => {
   it("creates and lists users without exposing the hash", async () => {
     const u = await auth.createUser("alice", "password123");
     expect(u.username).toBe("alice");
+    expect(u.is_admin).toBe(false);
     const listed = auth.listUsers();
     expect(listed).toHaveLength(1);
     expect(listed[0]).not.toHaveProperty("password_hash");
+    expect(listed[0].is_admin).toBe(false);
+  });
+
+  it("creates an admin user when requested and exposes the flag", async () => {
+    const u = await auth.createUser("root", "password123", true);
+    expect(u.is_admin).toBe(true);
+    expect(auth.getUser(u.id)?.is_admin).toBe(true);
+    const { token } = auth.createSession(u.id);
+    expect(auth.resolveSession(token)?.is_admin).toBe(true);
   });
 
   it("rejects short passwords and duplicate / invalid usernames", async () => {
@@ -234,7 +274,10 @@ describe("seed", () => {
     process.env.PAPYRI_PASSWORD = "password123";
     const auth = makeAuth();
     await auth.seed();
-    expect((await auth.verifyLogin("rootadmin", "password123"))?.username).toBe("rootadmin");
+    const seeded = await auth.verifyLogin("rootadmin", "password123");
+    expect(seeded?.username).toBe("rootadmin");
+    // The bootstrapped account must be an admin, or nobody can manage the site.
+    expect(auth.getUser(seeded!.id)?.is_admin).toBe(true);
     auth.close();
   });
 
@@ -277,6 +320,155 @@ describe("seed", () => {
     expect(auth.userCount()).toBe(1);
     expect(await auth.verifyLogin("rootadmin", "password123")).toBeNull();
     auth.close();
+  });
+});
+
+describe("AuthDb admin roles", () => {
+  let auth: AuthDb;
+  beforeEach(() => {
+    auth = makeAuth();
+  });
+  afterEach(() => auth.close());
+
+  it("promotes and demotes users", async () => {
+    const a = await auth.createUser("alice", "password123", true);
+    const b = await auth.createUser("bob", "password123");
+    expect(auth.adminCount()).toBe(1);
+    expect(auth.setAdmin(b.id, true)).toEqual({ ok: true });
+    expect(auth.adminCount()).toBe(2);
+    expect(auth.setAdmin(b.id, false)).toEqual({ ok: true });
+    expect(auth.getUser(b.id)?.is_admin).toBe(false);
+    expect(auth.getUser(a.id)?.is_admin).toBe(true);
+  });
+
+  it("refuses to demote the last admin", async () => {
+    const a = await auth.createUser("alice", "password123", true);
+    await auth.createUser("bob", "password123");
+    expect(auth.setAdmin(a.id, false)).toEqual({ ok: false, reason: "last-admin" });
+    expect(auth.adminCount()).toBe(1);
+  });
+
+  it("reports no-user for an unknown id", () => {
+    expect(auth.setAdmin(9999, true)).toEqual({ ok: false, reason: "no-user" });
+  });
+});
+
+describe("AuthDb projects and membership", () => {
+  let auth: AuthDb;
+  beforeEach(() => {
+    auth = makeAuth();
+  });
+  afterEach(() => auth.close());
+
+  it("creates, lists, looks up, and deletes projects", () => {
+    const p = auth.createProject("numpy");
+    expect(p.name).toBe("numpy");
+    expect(auth.listProjects().map((x) => x.name)).toEqual(["numpy"]);
+    expect(auth.getProjectByName("numpy")?.id).toBe(p.id);
+    expect(auth.getProjectByName("scipy")).toBeNull();
+    expect(() => auth.createProject("numpy")).toThrow();
+    expect(() => auth.createProject("../etc")).toThrow();
+    expect(auth.deleteProject(p.id)).toBe(true);
+    expect(auth.listProjects()).toEqual([]);
+  });
+
+  it("assigns and removes members (idempotently) and lists both directions", async () => {
+    const p = auth.createProject("numpy");
+    const u = await auth.createUser("alice", "password123");
+    auth.addMember(p.id, u.id);
+    auth.addMember(p.id, u.id); // idempotent
+    expect(auth.listMembers(p.id).map((m) => m.username)).toEqual(["alice"]);
+    expect(auth.listUserProjects(u.id)).toEqual(["numpy"]);
+    expect(auth.removeMember(p.id, u.id)).toBe(true);
+    expect(auth.listMembers(p.id)).toEqual([]);
+    expect(auth.removeMember(p.id, u.id)).toBe(false);
+  });
+
+  it("authorizes uploads only for members, and admins for everything", async () => {
+    const np = auth.createProject("numpy");
+    auth.createProject("scipy");
+    const member = await auth.createUser("alice", "password123");
+    const admin = await auth.createUser("root", "password123", true);
+    auth.addMember(np.id, member.id);
+
+    expect(auth.canUserUploadProject(member.id, "numpy")).toBe(true);
+    expect(auth.canUserUploadProject(member.id, "scipy")).toBe(false);
+    expect(auth.canUserUploadProject(member.id, "unknown")).toBe(false);
+    // Admin may upload any project, even one with no project row at all.
+    expect(auth.canUserUploadProject(admin.id, "scipy")).toBe(true);
+    expect(auth.canUserUploadProject(admin.id, "brand-new")).toBe(true);
+    expect(auth.canUserUploadProject(9999, "numpy")).toBe(false);
+  });
+
+  it("cascades memberships when a project or user is deleted", async () => {
+    const p = auth.createProject("numpy");
+    const u = await auth.createUser("alice", "password123");
+    auth.addMember(p.id, u.id);
+    auth.deleteProject(p.id);
+    expect(auth.listUserProjects(u.id)).toEqual([]);
+
+    const p2 = auth.createProject("scipy");
+    auth.addMember(p2.id, u.id);
+    auth.deleteUser(u.id);
+    expect(auth.listMembers(p2.id)).toEqual([]);
+  });
+});
+
+describe("AuthDb upload tokens", () => {
+  let auth: AuthDb;
+  beforeEach(() => {
+    auth = makeAuth();
+  });
+  afterEach(() => {
+    auth.close();
+    vi.useRealTimers();
+  });
+
+  it("mints a token, resolves it to its owner, and stamps last_used_at", async () => {
+    const u = await auth.createUser("alice", "password123");
+    const { token, secret } = auth.createUploadToken(u.id, "ci");
+    expect(token.name).toBe("ci");
+    expect(token.last_used_at).toBeNull();
+    expect(secret.startsWith(UPLOAD_TOKEN_PREFIX)).toBe(true);
+
+    const resolved = auth.resolveUploadToken(secret);
+    expect(resolved?.id).toBe(u.id);
+    // last_used_at is stamped on resolve.
+    expect(auth.listUploadTokens(u.id)[0].last_used_at).not.toBeNull();
+  });
+
+  it("rejects unknown, malformed, and revoked tokens", async () => {
+    const u = await auth.createUser("alice", "password123");
+    const { token, secret } = auth.createUploadToken(u.id);
+    expect(auth.resolveUploadToken("not-a-papyri-token")).toBeNull();
+    expect(auth.resolveUploadToken(UPLOAD_TOKEN_PREFIX + "deadbeef")).toBeNull();
+    expect(auth.revokeUploadToken(token.id, u.id)).toBe(true);
+    expect(auth.resolveUploadToken(secret)).toBeNull();
+    expect(auth.revokeUploadToken(token.id, u.id)).toBe(false);
+  });
+
+  it("does not let one user revoke another's token", async () => {
+    const a = await auth.createUser("alice", "password123");
+    const b = await auth.createUser("bob", "password123");
+    const { token } = auth.createUploadToken(a.id);
+    expect(auth.revokeUploadToken(token.id, b.id)).toBe(false);
+    expect(auth.listUploadTokens(a.id)).toHaveLength(1);
+  });
+
+  it("rejects and purges an expired token", async () => {
+    const u = await auth.createUser("alice", "password123");
+    const { secret } = auth.createUploadToken(u.id, "short-lived", 1);
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.now() + 2000);
+    expect(auth.resolveUploadToken(secret)).toBeNull();
+    expect(auth.listUploadTokens(u.id)).toEqual([]);
+  });
+
+  it("cascades tokens when the user is deleted", async () => {
+    const u = await auth.createUser("alice", "password123");
+    const { secret } = auth.createUploadToken(u.id);
+    auth.deleteUser(u.id);
+    expect(auth.resolveUploadToken(secret)).toBeNull();
   });
 });
 

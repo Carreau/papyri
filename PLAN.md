@@ -832,8 +832,8 @@ in the one-time synchronous `loadSchemaFromDisk` DB-init path.)
   **User/session store (landed).** Accounts and sessions live in a real SQLite
   database (`viewer/src/lib/auth-db.ts`), separate from the graph store so the
   derived-cache wipe/reingest never touches them (`PAPYRI_AUTH_DB`, default
-  `~/.papyri/auth.db`). Passwords are scrypt-hashed with a per-user salt and
-  verified in constant time; sessions are opaque random tokens stored
+  `~/.papyri/auth.db`). Passwords are hashed with Argon2id (`@node-rs/argon2`)
+  and verified in constant time; sessions are opaque random tokens stored
   server-side with `created_at` + `expires_at` (7-day TTL), so logout and user
   deletion revoke them and expired tokens are rejected and pruned. On first run
   an initial admin is seeded from `PAPYRI_USERNAME`/`PAPYRI_PASSWORD` *only when
@@ -897,8 +897,8 @@ pass; the rest are recorded here as TBD so the next PR can pick them up.
   stateless cookie was the original suggestion, but a server-side session table
   was chosen so sessions can be revoked and audited.)
 - **Constant-time comparison.** *Login: done* — password verification uses
-  `crypto.timingSafeEqual` over scrypt hashes, with a decoy hash compared on
-  unknown usernames so timing does not leak account existence. *Still open:* the
+  Argon2's constant-time verify, with a decoy hash compared on unknown
+  usernames so timing does not leak account existence. *Still open:* the
   bundle upload bearer-token check (`!==` in `PUT /api/bundle`) is still
   timing-variable; switch it to `crypto.timingSafeEqual`.
 

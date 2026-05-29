@@ -6,7 +6,7 @@
 //
 // Auth: an admin action — gated by the session-cookie middleware (the route is
 // listed in middleware.ts's ADMIN_ONLY_PREFIXES, so only a logged-in admin can
-// reach it). Passwords are hashed with scrypt in the auth store; this endpoint
+// reach it). Passwords are hashed with Argon2id in the auth store; this endpoint
 // never returns a password hash.
 
 import type { APIRoute } from "astro";
@@ -38,7 +38,7 @@ export const POST: APIRoute = async ({ request }) => {
 
   const auth = await getAuthDb();
   try {
-    const user = auth.createUser(username, password);
+    const user = await auth.createUser(username, password);
     return respond({ ok: true, user }, 201);
   } catch (err) {
     // Most likely a UNIQUE violation on username; log server-side, keep the

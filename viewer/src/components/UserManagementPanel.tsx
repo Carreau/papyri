@@ -80,8 +80,8 @@ export default function UserManagementPanel({ initial }: Props) {
   return (
     <div className="ext-inv">
       <p className="ext-inv-desc">
-        Accounts that can sign in to the admin tools. Passwords are hashed (scrypt) and never shown.
-        Deleting a user immediately revokes their sessions. The last remaining user cannot be
+        Accounts that can sign in to the admin tools. Passwords are hashed (Argon2id) and never
+        shown. Deleting a user immediately revokes their sessions. The last remaining user cannot be
         deleted.
       </p>
 

@@ -13,24 +13,28 @@ function makeAuth(): AuthDb {
 }
 
 describe("password hashing", () => {
-  it("round-trips a correct password", () => {
-    const h = hashPassword("correct horse battery staple");
-    expect(verifyPassword("correct horse battery staple", h)).toBe(true);
+  it("produces an Argon2id-encoded hash", async () => {
+    expect(await hashPassword("password123")).toMatch(/^\$argon2id\$/);
   });
 
-  it("rejects a wrong password", () => {
-    const h = hashPassword("hunter2hunter2");
-    expect(verifyPassword("Hunter2hunter2", h)).toBe(false);
-    expect(verifyPassword("", h)).toBe(false);
+  it("round-trips a correct password", async () => {
+    const h = await hashPassword("correct horse battery staple");
+    expect(await verifyPassword("correct horse battery staple", h)).toBe(true);
   });
 
-  it("produces a distinct salt per call", () => {
-    expect(hashPassword("samepassword")).not.toBe(hashPassword("samepassword"));
+  it("rejects a wrong password", async () => {
+    const h = await hashPassword("hunter2hunter2");
+    expect(await verifyPassword("Hunter2hunter2", h)).toBe(false);
+    expect(await verifyPassword("", h)).toBe(false);
   });
 
-  it("rejects malformed stored hashes", () => {
-    expect(verifyPassword("x", "not-a-hash")).toBe(false);
-    expect(verifyPassword("x", "scrypt$deadbeef")).toBe(false);
+  it("produces a distinct salt per call", async () => {
+    expect(await hashPassword("samepassword")).not.toBe(await hashPassword("samepassword"));
+  });
+
+  it("rejects malformed stored hashes", async () => {
+    expect(await verifyPassword("x", "not-a-hash")).toBe(false);
+    expect(await verifyPassword("x", "$argon2id$garbage")).toBe(false);
   });
 });
 
@@ -61,30 +65,30 @@ describe("AuthDb users", () => {
     expect(auth.listUsers()).toEqual([]);
   });
 
-  it("creates and lists users without exposing the hash", () => {
-    const u = auth.createUser("alice", "password123");
+  it("creates and lists users without exposing the hash", async () => {
+    const u = await auth.createUser("alice", "password123");
     expect(u.username).toBe("alice");
     const listed = auth.listUsers();
     expect(listed).toHaveLength(1);
     expect(listed[0]).not.toHaveProperty("password_hash");
   });
 
-  it("rejects short passwords and duplicate / invalid usernames", () => {
-    expect(() => auth.createUser("bob", "short")).toThrow();
-    expect(() => auth.createUser("bad name", "password123")).toThrow();
-    auth.createUser("carol", "password123");
-    expect(() => auth.createUser("carol", "password123")).toThrow();
+  it("rejects short passwords and duplicate / invalid usernames", async () => {
+    await expect(auth.createUser("bob", "short")).rejects.toThrow();
+    await expect(auth.createUser("bad name", "password123")).rejects.toThrow();
+    await auth.createUser("carol", "password123");
+    await expect(auth.createUser("carol", "password123")).rejects.toThrow();
   });
 
-  it("verifies login only with correct credentials", () => {
-    auth.createUser("dave", "password123");
-    expect(auth.verifyLogin("dave", "password123")?.username).toBe("dave");
-    expect(auth.verifyLogin("dave", "wrongpass1")).toBeNull();
-    expect(auth.verifyLogin("nobody", "password123")).toBeNull();
+  it("verifies login only with correct credentials", async () => {
+    await auth.createUser("dave", "password123");
+    expect((await auth.verifyLogin("dave", "password123"))?.username).toBe("dave");
+    expect(await auth.verifyLogin("dave", "wrongpass1")).toBeNull();
+    expect(await auth.verifyLogin("nobody", "password123")).toBeNull();
   });
 
-  it("deletes users and cascades their sessions", () => {
-    const u = auth.createUser("erin", "password123");
+  it("deletes users and cascades their sessions", async () => {
+    const u = await auth.createUser("erin", "password123");
     const { token } = auth.createSession(u.id);
     expect(auth.resolveSession(token)?.username).toBe("erin");
     expect(auth.deleteUser(u.id)).toBe(true);
@@ -103,15 +107,15 @@ describe("AuthDb sessions", () => {
     vi.useRealTimers();
   });
 
-  it("resolves a fresh session to its user", () => {
-    const u = auth.createUser("frank", "password123");
+  it("resolves a fresh session to its user", async () => {
+    const u = await auth.createUser("frank", "password123");
     const { token, createdAt, expiresAt } = auth.createSession(u.id);
     expect(expiresAt - createdAt).toBe(SESSION_TTL_SECONDS);
     expect(auth.resolveSession(token)?.id).toBe(u.id);
   });
 
-  it("rejects and removes an expired session", () => {
-    const u = auth.createUser("grace", "password123");
+  it("rejects and removes an expired session", async () => {
+    const u = await auth.createUser("grace", "password123");
     const { token } = auth.createSession(u.id, 1);
     vi.useFakeTimers();
     vi.setSystemTime(Date.now() + 2000);
@@ -120,15 +124,15 @@ describe("AuthDb sessions", () => {
     expect(auth.resolveSession(token)).toBeNull();
   });
 
-  it("revokes a session on logout (deleteSession)", () => {
-    const u = auth.createUser("heidi", "password123");
+  it("revokes a session on logout (deleteSession)", async () => {
+    const u = await auth.createUser("heidi", "password123");
     const { token } = auth.createSession(u.id);
     auth.deleteSession(token);
     expect(auth.resolveSession(token)).toBeNull();
   });
 
-  it("prunes expired sessions in bulk", () => {
-    const u = auth.createUser("ivan", "password123");
+  it("prunes expired sessions in bulk", async () => {
+    const u = await auth.createUser("ivan", "password123");
     auth.createSession(u.id, 1);
     auth.createSession(u.id, SESSION_TTL_SECONDS);
     vi.useFakeTimers();
@@ -149,33 +153,33 @@ describe("seedFromEnv", () => {
     vi.restoreAllMocks();
   });
 
-  it("seeds an admin from env when empty", () => {
+  it("seeds an admin from env when empty", async () => {
     process.env.PAPYRI_USERNAME = "rootadmin";
     process.env.PAPYRI_PASSWORD = "password123";
     const auth = makeAuth();
-    auth.seedFromEnv();
-    expect(auth.verifyLogin("rootadmin", "password123")?.username).toBe("rootadmin");
+    await auth.seedFromEnv();
+    expect((await auth.verifyLogin("rootadmin", "password123"))?.username).toBe("rootadmin");
     auth.close();
   });
 
-  it("fails closed (no user) when env is unset", () => {
+  it("fails closed (no user) when env is unset", async () => {
     delete process.env.PAPYRI_USERNAME;
     delete process.env.PAPYRI_PASSWORD;
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const auth = makeAuth();
-    auth.seedFromEnv();
+    await auth.seedFromEnv();
     expect(auth.userCount()).toBe(0);
     auth.close();
   });
 
-  it("does not re-seed when users already exist", () => {
+  it("does not re-seed when users already exist", async () => {
     process.env.PAPYRI_USERNAME = "rootadmin";
     process.env.PAPYRI_PASSWORD = "password123";
     const auth = makeAuth();
-    auth.createUser("existing", "password123");
-    auth.seedFromEnv();
+    await auth.createUser("existing", "password123");
+    await auth.seedFromEnv();
     expect(auth.userCount()).toBe(1);
-    expect(auth.verifyLogin("rootadmin", "password123")).toBeNull();
+    expect(await auth.verifyLogin("rootadmin", "password123")).toBeNull();
     auth.close();
   });
 });

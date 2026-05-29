@@ -18,7 +18,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   }
 
   const auth = await getAuthDb();
-  const user = auth.verifyLogin(username, password);
+  const user = await auth.verifyLogin(username, password);
   if (!user) {
     // Fail closed: unknown user, wrong password, or no users configured at all
     // all return the same generic 401 (verifyLogin is constant-time).

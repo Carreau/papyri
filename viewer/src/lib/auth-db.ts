@@ -13,15 +13,19 @@
  *   users    — id, username (unique), password_hash, created_at
  *   sessions — token (random), user_id, created_at, expires_at
  *
- * Passwords are hashed with scrypt (node:crypto, no extra dependency) using a
- * per-user random salt; verification is constant-time. Sessions are opaque
- * random tokens stored server-side with an explicit expiry, so a session can
- * be revoked (logout, user delete) and is rejected once expired — unlike the
- * previous unsigned, never-verified `base64(user:timestamp)` cookie.
+ * Passwords are hashed with Argon2id (`@node-rs/argon2`, the OWASP-recommended
+ * password hash) using its built-in per-hash random salt; the encoded
+ * `$argon2id$…` string carries its own parameters and is verified in constant
+ * time. Sessions are opaque random tokens stored server-side with an explicit
+ * expiry, so a session can be revoked (logout, user delete) and is rejected
+ * once expired — unlike the previous unsigned, never-verified
+ * `base64(user:timestamp)` cookie.
  */
-import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
-// Type-only; erased at compile time. The concrete module is loaded lazily in
-// `getAuthDb()` via dynamic import, matching `backends.ts`.
+import { randomBytes } from "node:crypto";
+// Type-only; erased at compile time. Both this and `better-sqlite3` ship native
+// bindings, so the concrete modules are loaded lazily via dynamic import (see
+// `argon2()` / `openAuthDb()`) rather than statically bundled by Vite.
+import type * as Argon2 from "@node-rs/argon2";
 import type BetterSqlite3 from "better-sqlite3";
 
 /** Cookie name carrying the session token. */
@@ -30,11 +34,22 @@ export const SESSION_COOKIE = "papyri_session_token";
 /** Session lifetime in seconds (7 days). */
 export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 
-const SCRYPT_KEYLEN = 64;
-// A valid scrypt hash for an empty-ish password, used as a constant-time decoy
-// when the requested username does not exist so login timing does not reveal
-// account existence. Computed once at module load.
-const DECOY_HASH = hashPassword(randomBytes(16).toString("hex"));
+// `@node-rs/argon2` carries a native binding; load it lazily so Vite leaves it
+// external instead of trying to bundle the `.node` file.
+let _argon2: Promise<typeof Argon2> | null = null;
+function argon2(): Promise<typeof Argon2> {
+  if (!_argon2) _argon2 = import(/* @vite-ignore */ "@node-rs/argon2");
+  return _argon2;
+}
+
+// A valid Argon2 hash of a random string, used as a constant-time decoy when
+// the requested username does not exist so login timing does not reveal account
+// existence. Computed once, lazily.
+let _decoyHash: Promise<string> | null = null;
+function decoyHash(): Promise<string> {
+  if (!_decoyHash) _decoyHash = hashPassword(randomBytes(16).toString("hex"));
+  return _decoyHash;
+}
 
 /** Row shape stored in `users` (including the secret hash). */
 interface UserRow {
@@ -58,22 +73,21 @@ export interface SessionRow {
   expires_at: number;
 }
 
-/** Hash a plaintext password as `scrypt$<saltHex>$<derivedHex>`. */
-export function hashPassword(password: string): string {
-  const salt = randomBytes(16);
-  const derived = scryptSync(password, salt, SCRYPT_KEYLEN);
-  return `scrypt$${salt.toString("hex")}$${derived.toString("hex")}`;
+/** Hash a plaintext password into an encoded Argon2id string. */
+export async function hashPassword(password: string): Promise<string> {
+  return (await argon2()).hash(password);
 }
 
-/** Constant-time verification of a plaintext password against a stored hash. */
-export function verifyPassword(password: string, stored: string): boolean {
-  const parts = stored.split("$");
-  if (parts.length !== 3 || parts[0] !== "scrypt") return false;
-  const salt = Buffer.from(parts[1]!, "hex");
-  const expected = Buffer.from(parts[2]!, "hex");
-  if (expected.length === 0) return false;
-  const derived = scryptSync(password, salt, expected.length);
-  return derived.length === expected.length && timingSafeEqual(derived, expected);
+/**
+ * Constant-time verification of a plaintext password against a stored Argon2
+ * hash. Returns false (rather than throwing) on a malformed stored hash.
+ */
+export async function verifyPassword(password: string, stored: string): Promise<boolean> {
+  try {
+    return await (await argon2()).verify(stored, password);
+  } catch {
+    return false;
+  }
 }
 
 function nowSeconds(): number {
@@ -120,7 +134,7 @@ export class AuthDb {
   }
 
   /** Create a user; throws if the username already exists or is invalid. */
-  createUser(username: string, password: string): PublicUser {
+  async createUser(username: string, password: string): Promise<PublicUser> {
     if (!isValidUsername(username)) {
       throw new Error("invalid username");
     }
@@ -128,9 +142,10 @@ export class AuthDb {
       throw new Error("password must be at least 8 characters");
     }
     const created_at = nowSeconds();
+    const passwordHash = await hashPassword(password);
     const info = this.db
       .prepare("INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)")
-      .run(username, hashPassword(password), created_at);
+      .run(username, passwordHash, created_at);
     return { id: Number(info.lastInsertRowid), username, created_at };
   }
 
@@ -151,15 +166,17 @@ export class AuthDb {
    * Always performs a scrypt comparison (against a decoy hash when the user
    * is unknown) so timing does not reveal whether the username exists.
    */
-  verifyLogin(username: string, password: string): UserRow | null {
+  async verifyLogin(username: string, password: string): Promise<UserRow | null> {
     const user = this.db
       .prepare("SELECT id, username, password_hash, created_at FROM users WHERE username = ?")
       .get(username) as UserRow | undefined;
     if (!user) {
-      verifyPassword(password, DECOY_HASH);
+      // Compare against a decoy hash so an unknown username costs the same as a
+      // wrong password — login timing must not reveal account existence.
+      await verifyPassword(password, await decoyHash());
       return null;
     }
-    if (!verifyPassword(password, user.password_hash)) return null;
+    if (!(await verifyPassword(password, user.password_hash))) return null;
     return user;
   }
 
@@ -213,13 +230,13 @@ export class AuthDb {
    * credentials the store stays empty and every login fails closed (a warning
    * is logged so the operator knows why).
    */
-  seedFromEnv(): void {
+  async seedFromEnv(): Promise<void> {
     if (this.userCount() > 0) return;
     const username = process.env.PAPYRI_USERNAME;
     const password = process.env.PAPYRI_PASSWORD;
     if (username && password) {
       try {
-        this.createUser(username, password);
+        await this.createUser(username, password);
         console.log(`[auth] seeded initial admin user "${username}" from environment`);
       } catch (err) {
         console.warn(`[auth] failed to seed admin from environment: ${String(err)}`);
@@ -259,7 +276,7 @@ async function openAuthDb(): Promise<AuthDb> {
   db.pragma("synchronous = NORMAL");
 
   const auth = new AuthDb(db);
-  auth.seedFromEnv();
+  await auth.seedFromEnv();
   auth.pruneExpiredSessions();
   return auth;
 }

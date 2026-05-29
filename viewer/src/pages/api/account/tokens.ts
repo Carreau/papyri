@@ -1,7 +1,7 @@
 // SSR endpoint: a signed-in user manages their own personal upload tokens.
 //
 // GET    /api/account/tokens   — list the caller's tokens (never the secret).
-// POST   /api/account/tokens   — mint one. body: { name?, ttlDays? }.
+// POST   /api/account/tokens   — mint one. body: { name?, ttlDays?, project? }.
 //                                The plaintext secret is returned ONCE here.
 // DELETE /api/account/tokens   — revoke one. body: { id }.
 //
@@ -12,7 +12,9 @@
 //
 // A token authorizes `papyri upload` for any project its owner is a member of
 // (admins: any project). Authority is resolved live from membership at upload
-// time, so a token does not need re-issuing when assignments change.
+// time, so a token does not need re-issuing when assignments change. A token
+// may optionally be scoped to a single `project` at creation, narrowing it to
+// just that project (the caller must already be able to upload it).
 
 import type { APIRoute } from "astro";
 import { getAuthDb, SESSION_COOKIE } from "../../../lib/auth-db.ts";
@@ -30,13 +32,22 @@ async function requireUser(cookies: { get(name: string): { value: string } | und
   return { auth, user };
 }
 
+// Projects the caller may scope a token to: an admin may scope to any project,
+// everyone else to the projects they are a member of.
+function scopableProjects(
+  auth: Awaited<ReturnType<typeof getAuthDb>>,
+  user: { id: number; is_admin: boolean }
+): string[] {
+  return user.is_admin ? auth.listProjects().map((p) => p.name) : auth.listUserProjects(user.id);
+}
+
 export const GET: APIRoute = async ({ cookies }) => {
   const { auth, user } = await requireUser(cookies);
   if (!user) return respond({ ok: false, error: "authentication required" }, 401);
   return respond({
     ok: true,
     tokens: auth.listUploadTokens(user.id),
-    projects: auth.listUserProjects(user.id),
+    projects: scopableProjects(auth, user),
     is_admin: user.is_admin,
   });
 };
@@ -45,7 +56,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   const { auth, user } = await requireUser(cookies);
   if (!user) return respond({ ok: false, error: "authentication required" }, 401);
 
-  let body: { name?: unknown; ttlDays?: unknown };
+  let body: { name?: unknown; ttlDays?: unknown; project?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -72,7 +83,28 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     ttlSeconds = d * 24 * 60 * 60;
   }
 
-  const { token, secret } = auth.createUploadToken(user.id, name, ttlSeconds);
+  // Optional single-project scope. The project must exist and the caller must
+  // already be allowed to upload it, so scoping can only narrow, never widen,
+  // the user's standing authority.
+  let projectId: number | null = null;
+  if (body.project !== undefined && body.project !== null && body.project !== "") {
+    if (typeof body.project !== "string") {
+      return respond({ ok: false, error: "project must be a string" }, 400);
+    }
+    const project = auth.getProjectByName(body.project);
+    if (!project) {
+      return respond({ ok: false, error: `no such project "${body.project}"` }, 400);
+    }
+    if (!auth.canUserUploadProject(user.id, project.name)) {
+      return respond(
+        { ok: false, error: `not authorized to scope a token to "${project.name}"` },
+        403
+      );
+    }
+    projectId = project.id;
+  }
+
+  const { token, secret } = auth.createUploadToken(user.id, name, ttlSeconds, projectId);
   // `secret` is returned exactly once — the client must store it now.
   return respond({ ok: true, token, secret }, 201);
 };

@@ -432,9 +432,37 @@ describe("AuthDb upload tokens", () => {
     expect(secret.startsWith(UPLOAD_TOKEN_PREFIX)).toBe(true);
 
     const resolved = auth.resolveUploadToken(secret);
-    expect(resolved?.id).toBe(u.id);
+    expect(resolved?.user.id).toBe(u.id);
+    // An unscoped token resolves with a null project.
+    expect(resolved?.projectName).toBeNull();
+    expect(token.project_id).toBeNull();
+    expect(token.project_name).toBeNull();
     // last_used_at is stamped on resolve.
     expect(auth.listUploadTokens(u.id)[0].last_used_at).not.toBeNull();
+  });
+
+  it("scopes a token to a single project and reflects it on resolve and list", async () => {
+    const u = await auth.createUser("alice", "password123");
+    const numpy = auth.createProject("numpy");
+    const { token, secret } = auth.createUploadToken(u.id, "ci", null, numpy.id);
+    expect(token.project_id).toBe(numpy.id);
+    expect(token.project_name).toBe("numpy");
+
+    const resolved = auth.resolveUploadToken(secret);
+    expect(resolved?.user.id).toBe(u.id);
+    expect(resolved?.projectName).toBe("numpy");
+
+    expect(auth.listUploadTokens(u.id)[0].project_name).toBe("numpy");
+  });
+
+  it("cascades a scoped token when its project is deleted", async () => {
+    const u = await auth.createUser("alice", "password123");
+    const scipy = auth.createProject("scipy");
+    const { secret } = auth.createUploadToken(u.id, "ci", null, scipy.id);
+    expect(auth.deleteProject(scipy.id)).toBe(true);
+    // The token is gone (FK ON DELETE CASCADE), so it no longer resolves.
+    expect(auth.resolveUploadToken(secret)).toBeNull();
+    expect(auth.listUploadTokens(u.id)).toEqual([]);
   });
 
   it("rejects unknown, malformed, and revoked tokens", async () => {

@@ -323,6 +323,12 @@ the graphstore and blob store is rebuildable via `POST /api/reingest`.
   `papyri --help` should stay fast.
 - `ruff` (lint + format, config in `pyproject.toml` under `[tool.ruff]`) +
   `mypy` are wired in `.github/workflows/lint.yml`. Don't break them.
+- Prefer offloading work to well-maintained third-party libraries over
+  hand-rolling it. If a new external dependency would let you reuse an existing
+  solution instead of writing and maintaining bespoke code, that is usually the
+  right call — but **stop and ask the user before adding one**, naming the
+  library and what it replaces, and confirm it's OK to add. Only proceed once
+  the user agrees.
 - No new runtime dependencies without a note in the PR body explaining why.
 - `ir-reader.ts` is the designated shock absorber for IR changes — when the
   IR format changes, the fix lands there first, not spread across components.

@@ -1,30 +1,37 @@
 import type { APIRoute } from "astro";
+import { getAuthDb, SESSION_COOKIE, SESSION_TTL_SECONDS } from "../../../lib/auth-db.ts";
+import { respond } from "../../../lib/api-utils.ts";
 
-const PAPYRI_USERNAME = process.env.PAPYRI_USERNAME || "admin";
-const PAPYRI_PASSWORD = process.env.PAPYRI_PASSWORD || "password";
-const SESSION_TOKEN = "papyri_session_token";
+export const prerender = false;
 
 export const POST: APIRoute = async ({ request, cookies }) => {
-  const data = await request.json();
-  const { username, password } = data;
-
-  if (username === PAPYRI_USERNAME && password === PAPYRI_PASSWORD) {
-    const token = Buffer.from(`${username}:${Date.now()}`).toString("base64");
-    cookies.set(SESSION_TOKEN, token, {
-      httpOnly: true,
-      sameSite: "strict",
-      maxAge: 60 * 60 * 24 * 7, // 7 days
-      path: "/",
-    });
-
-    return new Response(JSON.stringify({ success: true, message: "Login successful" }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
+  let data: { username?: unknown; password?: unknown };
+  try {
+    data = await request.json();
+  } catch {
+    return respond({ success: false, message: "Invalid request body" }, 400);
   }
 
-  return new Response(JSON.stringify({ success: false, message: "Invalid credentials" }), {
-    status: 401,
-    headers: { "Content-Type": "application/json" },
+  const { username, password } = data;
+  if (typeof username !== "string" || typeof password !== "string") {
+    return respond({ success: false, message: "Username and password are required" }, 400);
+  }
+
+  const auth = await getAuthDb();
+  const user = await auth.verifyLogin(username, password);
+  if (!user) {
+    // Fail closed: unknown user, wrong password, or no users configured at all
+    // all return the same generic 401 (verifyLogin is constant-time).
+    return respond({ success: false, message: "Invalid credentials" }, 401);
+  }
+
+  const { token } = auth.createSession(user.id);
+  cookies.set(SESSION_COOKIE, token, {
+    httpOnly: true,
+    sameSite: "strict",
+    maxAge: SESSION_TTL_SECONDS,
+    path: "/",
   });
+
+  return respond({ success: true, message: "Login successful" });
 };

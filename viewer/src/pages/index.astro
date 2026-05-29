@@ -11,7 +11,7 @@ export const prerender = false;
 const { graphDb } = await getBackends();
 const packages = await listIngestedPackages(graphDb);
 
-const authenticated = isAuthenticated(Astro);
+const authenticated = await isAuthenticated(Astro);
 
 const bundlesForFilter = packages.map((p) => ({
   pkg: p.pkg,

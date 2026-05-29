@@ -1,11 +1,19 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 import LoginForm from "../components/LoginForm.tsx";
+import { isAuthenticated } from "../lib/auth.ts";
+import { demoSeedActive, DEMO_USERNAME, DEMO_PASSWORD } from "../lib/auth-db.ts";
 
-const sessionToken = Astro.cookies.get("papyri_session_token");
-if (sessionToken) {
+export const prerender = false;
+
+// Already signed in (valid, unexpired session) → no reason to show the form.
+if (await isAuthenticated(Astro)) {
   return Astro.redirect("/");
 }
+
+// Surface the dev demo credentials on the form only when they are actually
+// seeded (local development with no real admin configured).
+const demo = demoSeedActive() ? { username: DEMO_USERNAME, password: DEMO_PASSWORD } : null;
 ---
 
 <BaseLayout title="Login - Papyri Viewer">
@@ -16,7 +24,7 @@ if (sessionToken) {
         <h1>Sign in to Papyri</h1>
         <p>Sign in to access admin tools, or <a href="/">browse docs as a guest</a>.</p>
       </header>
-      <LoginForm client:load />
+      <LoginForm client:load demo={demo} />
     </div>
   </div>
 </BaseLayout>

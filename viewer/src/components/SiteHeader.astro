@@ -7,7 +7,7 @@ import VisibilityToggle from "./VisibilityToggle.tsx";
 import UserMenu from "./UserMenu.tsx";
 import { isAuthenticated } from "../lib/auth.ts";
 
-const authenticated = isAuthenticated(Astro);
+const authenticated = await isAuthenticated(Astro);
 ---
 
 <header class="site-header">

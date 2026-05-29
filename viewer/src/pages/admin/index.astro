@@ -8,11 +8,15 @@ import DropRawBundlesButton from "../../components/DropRawBundlesButton.tsx";
 import ExternalInventoryPanel, {
   type ExternalProject,
 } from "../../components/ExternalInventoryPanel.tsx";
+import UserManagementPanel from "../../components/UserManagementPanel.tsx";
+import { getAuthDb } from "../../lib/auth-db.ts";
 
 export const prerender = false;
 
 const { rawStore, graphDb } = await getBackends();
 const rawEntries = await rawStore.list();
+
+const users = (await getAuthDb()).listUsers();
 
 const tableNames = ["nodes", "links", "bundles"] as const;
 const tableStats: Array<{ name: string; rows: number }> = [];
@@ -164,6 +168,11 @@ if (probePath) {
         </tbody>
       </table>
       <ClearGraphstoreButton client:load rawCount={rawEntries.length} />
+    </section>
+
+    <section class="admin-section">
+      <h2>Users</h2>
+      <UserManagementPanel client:load initial={users} />
     </section>
 
     <section class="admin-section">

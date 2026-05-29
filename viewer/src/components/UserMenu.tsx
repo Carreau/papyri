@@ -33,6 +33,20 @@ export default function UserMenu() {
       >
         Admin
       </a>
+      <a
+        href="/settings"
+        style={{
+          padding: "6px 12px",
+          backgroundColor: "transparent",
+          border: "1px solid #ddd",
+          borderRadius: "4px",
+          fontSize: "14px",
+          textDecoration: "none",
+          color: "inherit",
+        }}
+      >
+        Settings
+      </a>
       <button
         onClick={handleLogout}
         disabled={loading}

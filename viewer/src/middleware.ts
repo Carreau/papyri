@@ -27,6 +27,12 @@ const ADMIN_ONLY_PREFIXES = [
   "/api/users",
 ] as const;
 
+// Routes any signed-in user may reach but guests may not — self-service
+// account management. There is no admin/user role distinction today, so the
+// session check below is identical to the admin one; the lists are kept apart
+// so the intent stays clear once roles exist.
+const AUTH_REQUIRED_PREFIXES = ["/settings", "/api/account"] as const;
+
 /** True when `pathname` equals `prefix`, `prefix + "/"`, or any deeper path. */
 function matchesPrefix(prefix: string, pathname: string): boolean {
   return pathname === prefix || pathname === prefix + "/" || pathname.startsWith(prefix + "/");
@@ -44,10 +50,10 @@ export const onRequest = defineMiddleware(async (context, next) => {
     return next();
   }
 
-  // Admin-only routes require an active, unexpired session. We validate the
-  // token against the auth store (not just its presence) so a stale, forged,
-  // or revoked cookie is rejected.
-  if (matchesAny(ADMIN_ONLY_PREFIXES, pathname)) {
+  // Admin-only and signed-in-user routes both require an active, unexpired
+  // session. We validate the token against the auth store (not just its
+  // presence) so a stale, forged, or revoked cookie is rejected.
+  if (matchesAny(ADMIN_ONLY_PREFIXES, pathname) || matchesAny(AUTH_REQUIRED_PREFIXES, pathname)) {
     const token = context.cookies.get(SESSION_COOKIE)?.value;
     const user = token ? (await getAuthDb()).resolveSession(token) : null;
     if (!user) {

@@ -1,0 +1,41 @@
+---
+// Admin: destructive maintenance — clear the derived graphstore, drop the raw
+// archive, and replay raw archives back into the graph (reingest).
+import { getBackends } from "../../lib/backends.ts";
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import ReingestPanel from "../../components/ReingestPanel.tsx";
+import ClearGraphstoreButton from "../../components/ClearGraphstoreButton.tsx";
+import DropRawBundlesButton from "../../components/DropRawBundlesButton.tsx";
+
+export const prerender = false;
+
+const { rawStore } = await getBackends();
+const rawEntries = await rawStore.list();
+---
+
+<AdminLayout title="Admin · Maintenance — Papyri" active="maintenance">
+  <section class="admin-section">
+    <ReingestPanel client:load entries={rawEntries} />
+  </section>
+
+  <section class="admin-section">
+    <h2>Graph database</h2>
+    <ClearGraphstoreButton client:load rawCount={rawEntries.length} />
+  </section>
+
+  <section class="admin-section">
+    <h2>Raw archive</h2>
+    {
+      rawEntries.length === 0 ? (
+        <p class="admin-empty">
+          No bundles in the raw archive yet. Upload a bundle with <code>papyri upload</code> first.
+        </p>
+      ) : (
+        <p class="admin-archive-count">
+          {rawEntries.length} bundle{rawEntries.length !== 1 ? "s" : ""} archived.
+        </p>
+      )
+    }
+    <DropRawBundlesButton client:load rawCount={rawEntries.length} />
+  </section>
+</AdminLayout>

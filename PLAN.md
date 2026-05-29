@@ -838,7 +838,11 @@ in the one-time synchronous `loadSchemaFromDisk` DB-init path.)
   deletion revoke them and expired tokens are rejected and pruned. On first run
   an initial admin is seeded from `PAPYRI_USERNAME`/`PAPYRI_PASSWORD` *only when
   no users exist*; with neither set, login fails closed (no `admin`/`password`
-  fallback). Admins manage accounts from the admin panel
+  fallback) — except under `pnpm dev`, where a throwaway demo admin
+  (`admin`/`password`, surfaced on the login page) is seeded for convenience.
+  That dev seed is gated by `PAPYRI_DEV_SEED` (`1` forces it on even in a
+  build, `0` disables it; unset defaults to `import.meta.env.DEV`) and never
+  fires in a production build by default. Admins manage accounts from the admin panel
   (`UserManagementPanel.tsx` → `/api/users`). This resolves the three "auth
   hardening" TBD items below (default creds, unsigned/never-expiring session,
   constant-time compare) for the login path; the upload bearer-token compare in

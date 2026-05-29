@@ -5,6 +5,9 @@ import {
   hashPassword,
   verifyPassword,
   isValidUsername,
+  demoSeedActive,
+  DEMO_USERNAME,
+  DEMO_PASSWORD,
   SESSION_TTL_SECONDS,
 } from "../src/lib/auth-db.ts";
 
@@ -145,11 +148,16 @@ describe("AuthDb sessions", () => {
   });
 });
 
-describe("seedFromEnv", () => {
-  const saved = { u: process.env.PAPYRI_USERNAME, p: process.env.PAPYRI_PASSWORD };
+describe("seed", () => {
+  const saved = {
+    u: process.env.PAPYRI_USERNAME,
+    p: process.env.PAPYRI_PASSWORD,
+    d: process.env.PAPYRI_DEV_SEED,
+  };
   afterEach(() => {
     process.env.PAPYRI_USERNAME = saved.u;
     process.env.PAPYRI_PASSWORD = saved.p;
+    process.env.PAPYRI_DEV_SEED = saved.d;
     vi.restoreAllMocks();
   });
 
@@ -157,18 +165,38 @@ describe("seedFromEnv", () => {
     process.env.PAPYRI_USERNAME = "rootadmin";
     process.env.PAPYRI_PASSWORD = "password123";
     const auth = makeAuth();
-    await auth.seedFromEnv();
+    await auth.seed();
     expect((await auth.verifyLogin("rootadmin", "password123"))?.username).toBe("rootadmin");
     auth.close();
   });
 
-  it("fails closed (no user) when env is unset", async () => {
+  it("env admin takes priority over the demo seed", async () => {
+    process.env.PAPYRI_USERNAME = "rootadmin";
+    process.env.PAPYRI_PASSWORD = "password123";
+    const auth = makeAuth();
+    await auth.seed({ allowDemoSeed: true });
+    expect(auth.userCount()).toBe(1);
+    expect(await auth.verifyLogin(DEMO_USERNAME, DEMO_PASSWORD)).toBeNull();
+    auth.close();
+  });
+
+  it("fails closed (no user) when env is unset and demo disabled", async () => {
     delete process.env.PAPYRI_USERNAME;
     delete process.env.PAPYRI_PASSWORD;
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const auth = makeAuth();
-    await auth.seedFromEnv();
+    await auth.seed();
     expect(auth.userCount()).toBe(0);
+    auth.close();
+  });
+
+  it("seeds the demo admin when allowDemoSeed is set", async () => {
+    delete process.env.PAPYRI_USERNAME;
+    delete process.env.PAPYRI_PASSWORD;
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const auth = makeAuth();
+    await auth.seed({ allowDemoSeed: true });
+    expect((await auth.verifyLogin(DEMO_USERNAME, DEMO_PASSWORD))?.username).toBe(DEMO_USERNAME);
     auth.close();
   });
 
@@ -177,9 +205,46 @@ describe("seedFromEnv", () => {
     process.env.PAPYRI_PASSWORD = "password123";
     const auth = makeAuth();
     await auth.createUser("existing", "password123");
-    await auth.seedFromEnv();
+    await auth.seed();
     expect(auth.userCount()).toBe(1);
     expect(await auth.verifyLogin("rootadmin", "password123")).toBeNull();
     auth.close();
+  });
+});
+
+describe("demoSeedActive policy", () => {
+  const saved = {
+    u: process.env.PAPYRI_USERNAME,
+    p: process.env.PAPYRI_PASSWORD,
+    d: process.env.PAPYRI_DEV_SEED,
+  };
+  afterEach(() => {
+    process.env.PAPYRI_USERNAME = saved.u;
+    process.env.PAPYRI_PASSWORD = saved.p;
+    process.env.PAPYRI_DEV_SEED = saved.d;
+  });
+
+  it("is off when real env credentials are configured", () => {
+    process.env.PAPYRI_USERNAME = "rootadmin";
+    process.env.PAPYRI_PASSWORD = "password123";
+    process.env.PAPYRI_DEV_SEED = "1";
+    expect(demoSeedActive()).toBe(false);
+  });
+
+  it("honours an explicit PAPYRI_DEV_SEED flag", () => {
+    delete process.env.PAPYRI_USERNAME;
+    delete process.env.PAPYRI_PASSWORD;
+    process.env.PAPYRI_DEV_SEED = "0";
+    expect(demoSeedActive()).toBe(false);
+    process.env.PAPYRI_DEV_SEED = "1";
+    expect(demoSeedActive()).toBe(true);
+  });
+
+  it("defaults to dev mode when no flag is set", () => {
+    delete process.env.PAPYRI_USERNAME;
+    delete process.env.PAPYRI_PASSWORD;
+    delete process.env.PAPYRI_DEV_SEED;
+    // Vitest runs under Vite, so import.meta.env.DEV is true here.
+    expect(demoSeedActive()).toBe(true);
   });
 });

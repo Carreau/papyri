@@ -51,6 +51,14 @@ Defaults to <http://localhost:4321>. Hot-reloads on source changes.
 If you ingest a new bundle while the dev server is running, refresh
 the page — the IR and SQLite store are read at request time.
 
+Browsing docs needs no account. The admin panel (`/admin`) requires a
+login; in dev the server seeds a throwaway demo admin (`admin` /
+`password`, shown on the `/login` page) so you can sign in immediately.
+Disable it with `PAPYRI_DEV_SEED=0`, or set real credentials with
+`PAPYRI_USERNAME`/`PAPYRI_PASSWORD`. See
+[`DEPLOY.md` → Admin login](DEPLOY.md#admin-login-users--sessions) for the
+production story (fail-closed, seeding the first admin, managing accounts).
+
 ## Build a static site
 
 ```sh
@@ -164,10 +172,14 @@ viewer (`http://localhost:4321/api/bundle`); point it elsewhere with
 
 ## Environment variables
 
-| Variable            | Default                      | Purpose                     |
-| ------------------- | ---------------------------- | --------------------------- |
-| `PAPYRI_INGEST_DIR` | `~/.papyri/ingest`           | Root of the ingested store. |
-| `PAPYRI_INGEST_DB`  | `~/.papyri/ingest/papyri.db` | SQLite graph database.      |
+| Variable                            | Default                      | Purpose                                                              |
+| ----------------------------------- | ---------------------------- | -------------------------------------------------------------------- |
+| `PAPYRI_INGEST_DIR`                 | `~/.papyri/ingest`           | Root of the ingested store.                                          |
+| `PAPYRI_INGEST_DB`                  | `~/.papyri/ingest/papyri.db` | SQLite graph database.                                               |
+| `PAPYRI_AUTH_DB`                    | `~/.papyri/auth.db`          | SQLite auth database (users + sessions), separate from the graph.    |
+| `PAPYRI_USERNAME` / `PAPYRI_PASSWORD` | _(unset)_                  | Seed the first admin on startup, only when no users exist.           |
+| `PAPYRI_DEV_SEED`                   | _(unset → dev only)_         | Seed the demo admin (`admin`/`password`): `1` forces, `0` disables.  |
+| `PAPYRI_UPLOAD_TOKEN`               | _(unset → no auth)_          | Bearer token required on `PUT /api/bundle` when set.                 |
 
 If `PAPYRI_INGEST_DB` points at a missing file, the viewer still
 builds and serves: xrefs render as muted "unresolved" spans and the

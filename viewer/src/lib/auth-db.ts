@@ -102,6 +102,41 @@ export function isValidUsername(name: unknown): name is string {
 }
 
 /**
+ * Demo admin credentials seeded only for local development (see
+ * `demoSeedActive`). Never used when real `PAPYRI_USERNAME`/`PAPYRI_PASSWORD`
+ * credentials are set, and never in a production build unless explicitly
+ * forced with `PAPYRI_DEV_SEED=1`.
+ */
+export const DEMO_USERNAME = "admin";
+export const DEMO_PASSWORD = "password";
+
+/** Parse a boolean-ish env var; returns undefined when unset/unrecognised. */
+function envFlag(v: string | undefined): boolean | undefined {
+  if (!v) return undefined;
+  if (/^(1|true|yes|on)$/i.test(v)) return true;
+  if (/^(0|false|no|off)$/i.test(v)) return false;
+  return undefined;
+}
+
+/**
+ * Whether the demo admin (`DEMO_USERNAME`/`DEMO_PASSWORD`) should be seeded
+ * when the store is empty. Policy:
+ *   - Real `PAPYRI_USERNAME`+`PAPYRI_PASSWORD` set → never (they take priority).
+ *   - Else `PAPYRI_DEV_SEED` set → honour it explicitly (`1`/`0`).
+ *   - Else default to dev mode: on under `pnpm dev`, off in a production build.
+ *
+ * `import.meta.env.DEV` is statically replaced by Vite at build time (`false`
+ * in the Node server bundle, `true` under `astro dev`), so a built deployment
+ * fails closed unless `PAPYRI_DEV_SEED=1` is set deliberately.
+ */
+export function demoSeedActive(): boolean {
+  if (process.env.PAPYRI_USERNAME && process.env.PAPYRI_PASSWORD) return false;
+  const flag = envFlag(process.env.PAPYRI_DEV_SEED);
+  if (flag !== undefined) return flag;
+  return import.meta.env.DEV === true;
+}
+
+/**
  * Thin wrapper over a better-sqlite3 handle holding the auth schema. All
  * methods are synchronous (better-sqlite3 is sync); the app obtains a shared
  * instance via the async `getAuthDb()` singleton, while tests construct one
@@ -225,12 +260,17 @@ export class AuthDb {
   }
 
   /**
-   * One-time bootstrap: if there are no users yet and both PAPYRI_USERNAME
-   * and PAPYRI_PASSWORD are set, create that admin. With no users and no env
-   * credentials the store stays empty and every login fails closed (a warning
-   * is logged so the operator knows why).
+   * One-time bootstrap, run when the store has no users. Priority:
+   *   1. `PAPYRI_USERNAME` + `PAPYRI_PASSWORD` set → seed that admin (any env).
+   *   2. `allowDemoSeed` true → seed the well-known dev demo admin, logged
+   *      loudly. Intended for local `pnpm dev` only (see `demoSeedActive`).
+   *   3. otherwise → leave empty; every login fails closed (warning logged).
+   *
+   * `allowDemoSeed` is an explicit argument (not read from the environment
+   * here) so the policy lives in one place (`demoSeedActive`) and tests stay
+   * deterministic.
    */
-  async seedFromEnv(): Promise<void> {
+  async seed({ allowDemoSeed = false }: { allowDemoSeed?: boolean } = {}): Promise<void> {
     if (this.userCount() > 0) return;
     const username = process.env.PAPYRI_USERNAME;
     const password = process.env.PAPYRI_PASSWORD;
@@ -241,12 +281,26 @@ export class AuthDb {
       } catch (err) {
         console.warn(`[auth] failed to seed admin from environment: ${String(err)}`);
       }
-    } else {
-      console.warn(
-        "[auth] no users exist and PAPYRI_USERNAME/PAPYRI_PASSWORD are unset — " +
-          "all logins will fail until a user is created"
-      );
+      return;
     }
+    if (allowDemoSeed) {
+      try {
+        await this.createUser(DEMO_USERNAME, DEMO_PASSWORD);
+        console.warn(
+          `[auth] DEV demo admin seeded: "${DEMO_USERNAME}" / "${DEMO_PASSWORD}" — ` +
+            "local development only. Set PAPYRI_USERNAME/PAPYRI_PASSWORD for a real " +
+            "admin, or PAPYRI_DEV_SEED=0 to disable this."
+        );
+      } catch (err) {
+        console.warn(`[auth] failed to seed demo admin: ${String(err)}`);
+      }
+      return;
+    }
+    console.warn(
+      "[auth] no users exist and PAPYRI_USERNAME/PAPYRI_PASSWORD are unset — " +
+        "all logins will fail until a user is created (set PAPYRI_DEV_SEED=1 to " +
+        "seed a demo admin for local development)"
+    );
   }
 
   close(): void {
@@ -276,7 +330,7 @@ async function openAuthDb(): Promise<AuthDb> {
   db.pragma("synchronous = NORMAL");
 
   const auth = new AuthDb(db);
-  await auth.seedFromEnv();
+  await auth.seed({ allowDemoSeed: demoSeedActive() });
   auth.pruneExpiredSessions();
   return auth;
 }

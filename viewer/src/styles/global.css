@@ -1483,6 +1483,18 @@ section.backrefs ul.qualnames {
   background-color: #9bbfe6;
   cursor: not-allowed;
 }
+.lf-hint {
+  margin-top: 20px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--fg-muted, #666);
+}
+.lf-hint-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
 
 /* --------------------------------------------------------------------------
  * Prev / next navigation for narrative doc pages

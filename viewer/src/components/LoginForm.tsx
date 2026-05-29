@@ -1,7 +1,12 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 
-export default function LoginForm() {
+interface Props {
+  /** Dev demo credentials to surface as a hint; null in production. */
+  demo?: { username: string; password: string } | null;
+}
+
+export default function LoginForm({ demo = null }: Props) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -72,6 +77,15 @@ export default function LoginForm() {
           {loading ? "Signing in…" : "Sign in"}
         </button>
       </form>
+
+      {demo && (
+        <div className="lf-hint">
+          <div className="lf-hint-title">Dev demo credentials</div>
+          <div>
+            <code>{demo.username}</code> / <code>{demo.password}</code>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

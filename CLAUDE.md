@@ -338,6 +338,7 @@ the graphstore and blob store is rebuildable via `POST /api/reingest`.
 | `PAPYRI_AUTH_DB` | viewer | SQLite auth DB — users + sessions, separate from the graph store (default `~/.papyri/auth.db`) |
 | `PAPYRI_SITE` | viewer build | Canonical external origin for canonical-URL generation behind a reverse proxy |
 | `PAPYRI_USERNAME` / `PAPYRI_PASSWORD` | viewer | Seed an initial admin user into the auth DB on first run (only when no users exist) |
+| `PAPYRI_DEV_SEED` | viewer | Seed a demo admin (`admin`/`password`) when the auth DB is empty: `1` forces (even in a build), `0` disables; unset = on under `pnpm dev` only |
 | `PAPYRI_VERSION` | `papyri upload` | Overrides the `papyri-upload/<version>` User-Agent string |
 | `PAPYRI_BUILD_COMMIT` | viewer build | Git commit surfaced on the admin panel |
 | `PAPYRI_BUILD_ADAPTER` | viewer build | Build adapter name surfaced on the admin panel |

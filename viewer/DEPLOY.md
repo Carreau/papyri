@@ -59,6 +59,7 @@ default account. Seed the first admin from the environment on first start
 ```sh
 export PAPYRI_USERNAME=alice
 export PAPYRI_PASSWORD='a-strong-password'   # min 8 characters
+# export HOST=127.0.0.1  # if conda-activate
 pnpm serve
 ```
 

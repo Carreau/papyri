@@ -802,30 +802,7 @@ class Section(Node):
     """
 
     children: tuple[
-        DefList
-        | FieldList
-        | Figure
-        | Admonition
-        | Blockquote
-        | Code
-        | Comment
-        | BulletList
-        | Math
-        | Directive
-        | UnprocessedDirective
-        | Paragraph
-        | Target
-        | Text
-        | ThematicBreak
-        | Options
-        | Parameters
-        | SubstitutionDef
-        | SubstitutionRef
-        | Unimplemented
-        | UnimplementedInline
-        | Citation
-        | Footnote
-        | Table,
+        SectionContent,
         ...,
     ]
     # Inline content (Text, InlineCode, InlineRole, Link, ...).  Empty tuple
@@ -1203,6 +1180,7 @@ SectionContent: TypeAlias = (
     DefList
     | FieldList
     | Figure
+    | Image
     | Admonition
     | Blockquote
     | Code

@@ -48,22 +48,22 @@ const passkeys = auth.listPasskeyCredentials(user.id).map((c) => ({
       <h2 class="settings-section-title">GitHub</h2>
       <GithubSettingsPanel client:load initialGithubUsername={user.github_username} />
 
-      {
-        user.must_change_password && (
-          <div class="settings-must-change" role="alert">
-            An administrator reset your password to a temporary one. Please choose a new password
-            below before continuing.
-          </div>
-        )
-      }
-      <h2 class="settings-section-title">Change password</h2>
-      <AccountSettingsPanel client:load username={user.username} />
-
       <h2 class="settings-section-title">Passkeys</h2>
       <PasskeyPanel client:load initial={passkeys} />
 
       <h2 class="settings-section-title">Upload tokens</h2>
       <UploadTokenPanel client:load initial={tokens} projects={projects} isAdmin={user.is_admin} />
+
+      <h2 class="settings-section-title">Password</h2>
+      {
+        user.must_change_password && (
+          <div class="settings-must-change" role="alert">
+            An administrator reset your password to a temporary one. Please choose a new password
+            before continuing.
+          </div>
+        )
+      }
+      <AccountSettingsPanel client:load mustChange={user.must_change_password} />
     </div>
   </div>
 </BaseLayout>
@@ -109,5 +109,26 @@ const passkeys = auth.listPasskeyCredentials(user.id).map((c) => ({
     color: var(--warning-text, #8a6d00);
     border-radius: 8px;
     font-size: 13px;
+  }
+  :global(.acct-collapsed) {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  :global(.acct-change-btn) {
+    align-self: flex-start;
+  }
+  :global(.acct-actions) {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  :global(.acct-cancel-btn) {
+    background: var(--surface, #fff);
+    color: var(--text, #333);
+    border: 1px solid var(--border, #ccc);
+  }
+  :global(.acct-cancel-btn:hover:not(:disabled)) {
+    background: var(--hover-bg, #f5f5f5);
   }
 </style>

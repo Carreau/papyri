@@ -39,7 +39,6 @@ export const IR_TYPE_NAMES: readonly string[] = [
   "SignatureNode",
   "SigParam",
   "Empty",
-  "ParamRef",
   "DefList",
   "Options",
   "FieldList",
@@ -64,11 +63,12 @@ export const IR_TYPE_NAMES: readonly string[] = [
   "Image",
   "CitationReference",
   "Citation",
+  "Table",
   "FootnoteReference",
   "Footnote",
-  "Table",
   "TableRow",
   "TableCell",
+  "ParamRef",
 ] as const;
 
 /** Lower-cased slug for a type name, e.g. "Paragraph" → "paragraph". */

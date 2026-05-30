@@ -2,7 +2,7 @@
 import BaseLayout from "../layouts/BaseLayout.astro";
 import LoginForm from "../components/LoginForm.tsx";
 import { isAuthenticated } from "../lib/auth.ts";
-import { demoSeedActive, DEMO_USERNAME, DEMO_PASSWORD } from "../lib/auth-db.ts";
+import { demoSeedActive, DEMO_USERNAME, DEMO_PASSWORD, getAuthDb } from "../lib/auth-db.ts";
 
 export const prerender = false;
 
@@ -11,9 +11,17 @@ if (await isAuthenticated(Astro)) {
   return Astro.redirect("/");
 }
 
-// Surface the dev demo credentials on the form only when they are actually
-// seeded (local development with no real admin configured).
-const demo = demoSeedActive() ? { username: DEMO_USERNAME, password: DEMO_PASSWORD } : null;
+// Surface the dev demo credentials only when the demo user was actually seeded.
+// demoSeedActive() is necessary but not sufficient: seed() skips the demo user
+// when any user already exists, so after a real admin is created the demo user
+// is absent even in dev mode.
+let demo = null;
+if (demoSeedActive()) {
+  const authDb = await getAuthDb();
+  if (authDb.listUsers().some((u) => u.username === DEMO_USERNAME)) {
+    demo = { username: DEMO_USERNAME, password: DEMO_PASSWORD };
+  }
+}
 ---
 
 <BaseLayout title="Login - Papyri Viewer">

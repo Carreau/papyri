@@ -526,6 +526,7 @@ export const IR_SCHEMA: IRSchema = {
         "FieldList",
         "Figure",
         "Footnote",
+        "Image",
         "Math",
         "Options",
         "Paragraph",

@@ -180,6 +180,55 @@ describe("AuthDb changePassword", () => {
   });
 });
 
+describe("AuthDb adminResetPassword", () => {
+  let auth: AuthDb;
+  beforeEach(() => {
+    auth = makeAuth();
+  });
+  afterEach(() => auth.close());
+
+  it("issues a working temporary password and flags must_change_password", async () => {
+    const u = await auth.createUser("trent", "password123");
+    expect(auth.getUser(u.id)?.must_change_password).toBe(false);
+
+    const result = await auth.adminResetPassword(u.id);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    // The old password no longer works; the temporary one does.
+    expect(await auth.verifyLogin("trent", "password123")).toBeNull();
+    expect((await auth.verifyLogin("trent", result.tempPassword))?.id).toBe(u.id);
+    expect(auth.getUser(u.id)?.must_change_password).toBe(true);
+    expect(result.tempPassword.length).toBeGreaterThanOrEqual(8);
+  });
+
+  it("revokes the target's existing sessions", async () => {
+    const u = await auth.createUser("victor", "password123");
+    const { token } = auth.createSession(u.id);
+    expect(auth.resolveSession(token)?.id).toBe(u.id);
+    await auth.adminResetPassword(u.id);
+    expect(auth.resolveSession(token)).toBeNull();
+  });
+
+  it("clears the flag once the user changes their password", async () => {
+    const u = await auth.createUser("wendy", "password123");
+    const reset = await auth.adminResetPassword(u.id);
+    expect(reset.ok).toBe(true);
+    if (!reset.ok) return;
+    expect(auth.getUser(u.id)?.must_change_password).toBe(true);
+
+    expect(await auth.changePassword(u.id, reset.tempPassword, "brandnewpass1")).toEqual({
+      ok: true,
+    });
+    expect(auth.getUser(u.id)?.must_change_password).toBe(false);
+    expect((await auth.verifyLogin("wendy", "brandnewpass1"))?.id).toBe(u.id);
+  });
+
+  it("reports no-user for an unknown id", async () => {
+    expect(await auth.adminResetPassword(9999)).toEqual({ ok: false, reason: "no-user" });
+  });
+});
+
 describe("AuthDb deleteOtherSessions", () => {
   let auth: AuthDb;
   beforeEach(() => {

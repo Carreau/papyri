@@ -1,6 +1,7 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 import AccountSettingsPanel from "../components/AccountSettingsPanel.tsx";
+import GithubSettingsPanel from "../components/GithubSettingsPanel.tsx";
 import UploadTokenPanel from "../components/UploadTokenPanel.tsx";
 import { getSessionUser } from "../lib/auth.ts";
 import { getAuthDb } from "../lib/auth-db.ts";
@@ -35,6 +36,9 @@ const projects = user.is_admin
           <a href="/admin/users">admin panel</a>.
         </p>
       </header>
+      <h2 class="settings-section-title">GitHub</h2>
+      <GithubSettingsPanel client:load initialGithubUsername={user.github_username} />
+
       <h2 class="settings-section-title">Change password</h2>
       <AccountSettingsPanel client:load username={user.username} />
 

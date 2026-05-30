@@ -2,11 +2,12 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 
 interface Props {
-  /** The signed-in user's name, shown read-only for context. */
-  username: string;
+  /** When true the form opens immediately (admin-forced password reset). */
+  mustChange?: boolean;
 }
 
-export default function AccountSettingsPanel({ username }: Props) {
+export default function AccountSettingsPanel({ mustChange = false }: Props) {
+  const [open, setOpen] = useState(mustChange);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -48,6 +49,7 @@ export default function AccountSettingsPanel({ username }: Props) {
         setCurrentPassword("");
         setNewPassword("");
         setConfirmPassword("");
+        setOpen(false);
       }
     } catch {
       setError("A network error occurred. Please try again.");
@@ -56,15 +58,27 @@ export default function AccountSettingsPanel({ username }: Props) {
     }
   };
 
+  const handleCancel = () => {
+    setOpen(false);
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setError("");
+  };
+
+  if (!open) {
+    return (
+      <div className="acct-collapsed">
+        {success && <div className="lf-success">{success}</div>}
+        <button type="button" className="lf-submit acct-change-btn" onClick={() => setOpen(true)}>
+          Change password
+        </button>
+      </div>
+    );
+  }
+
   return (
     <form onSubmit={handleSubmit}>
-      <div className="lf-field">
-        <label htmlFor="acct-username" className="lf-label">
-          Username
-        </label>
-        <input id="acct-username" type="text" value={username} className="lf-input" disabled />
-      </div>
-
       <div className="lf-field">
         <label htmlFor="acct-current" className="lf-label">
           Current password
@@ -79,6 +93,7 @@ export default function AccountSettingsPanel({ username }: Props) {
           disabled={saving}
           autoComplete="current-password"
           required
+          autoFocus
         />
       </div>
 
@@ -119,11 +134,22 @@ export default function AccountSettingsPanel({ username }: Props) {
       </div>
 
       {error && <div className="lf-error">{error}</div>}
-      {success && <div className="lf-success">{success}</div>}
 
-      <button type="submit" disabled={saving} className="lf-submit">
-        {saving ? "Updating…" : "Update password"}
-      </button>
+      <div className="acct-actions">
+        <button type="submit" disabled={saving} className="lf-submit">
+          {saving ? "Updating…" : "Update password"}
+        </button>
+        {!mustChange && (
+          <button
+            type="button"
+            disabled={saving}
+            className="lf-submit acct-cancel-btn"
+            onClick={handleCancel}
+          >
+            Cancel
+          </button>
+        )}
+      </div>
     </form>
   );
 }

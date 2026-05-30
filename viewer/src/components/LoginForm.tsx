@@ -28,10 +28,47 @@ export default function LoginForm({ demo = null }: Props) {
         window.location.href = "/";
       } else {
         const data = await response.json();
-        setError(data.message || "Login failed");
+        setError((data as { message?: string }).message || "Login failed");
       }
     } catch {
       setError("An error occurred. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePasskeyLogin = async () => {
+    setError("");
+    setLoading(true);
+    try {
+      const { startAuthentication } = await import("@simplewebauthn/browser");
+
+      const optResp = await fetch("/api/auth/passkey/login-options", { method: "POST" });
+      if (!optResp.ok) {
+        const e = (await optResp.json()) as { error?: string };
+        throw new Error(e.error ?? "failed to get authentication options");
+      }
+      const options = await optResp.json();
+
+      let credential;
+      try {
+        credential = await startAuthentication({ optionsJSON: options });
+      } catch (err) {
+        if (err instanceof Error && err.name === "NotAllowedError") return; // user cancelled
+        throw err;
+      }
+
+      const verResp = await fetch("/api/auth/passkey/login-verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ response: credential }),
+      });
+      const result = (await verResp.json()) as { ok: boolean; error?: string };
+      if (!result.ok) throw new Error(result.error ?? "authentication failed");
+
+      window.location.href = "/";
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Passkey login failed");
     } finally {
       setLoading(false);
     }
@@ -77,6 +114,34 @@ export default function LoginForm({ demo = null }: Props) {
           {loading ? "Signing in…" : "Sign in"}
         </button>
       </form>
+
+      <div className="lf-divider">
+        <span>or</span>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => void handlePasskeyLogin()}
+        disabled={loading}
+        className="lf-passkey-btn"
+      >
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <circle cx="12" cy="8" r="4" />
+          <path d="M20 21a8 8 0 1 0-16 0" />
+          <path d="m18 14 2 2 4-4" />
+        </svg>
+        Sign in with a passkey
+      </button>
 
       {demo && (
         <div className="lf-hint">

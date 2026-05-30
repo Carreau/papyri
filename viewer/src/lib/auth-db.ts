@@ -91,6 +91,32 @@ function decoyHash(): Promise<string> {
   return _decoyHash;
 }
 
+// ---------------------------------------------------------------------------
+// Passkey credential types
+// ---------------------------------------------------------------------------
+
+/** Row as stored in `passkey_credentials`. */
+export interface PasskeyCredential {
+  id: number;
+  user_id: number;
+  credential_id: string; // Base64URLString
+  public_key: Buffer; // COSE-encoded public key, stored as BLOB
+  counter: number;
+  backed_up: boolean;
+  transports: string[] | null; // null when unknown
+  name: string | null;
+  created_at: number;
+  last_used_at: number | null;
+}
+
+/** Row as stored in `passkey_challenges`. */
+interface PasskeyChallengeRow {
+  challenge: string;
+  type: string;
+  user_id: number | null;
+  expires_at: number;
+}
+
 /** Row shape stored in `users` (including the secret hash). */
 interface UserRow {
   id: number;
@@ -282,10 +308,29 @@ export class AuthDb {
         last_used_at INTEGER,
         expires_at   INTEGER
       );
+      CREATE TABLE IF NOT EXISTS passkey_credentials (
+        id            INTEGER PRIMARY KEY,
+        user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        credential_id TEXT    NOT NULL UNIQUE,
+        public_key    BLOB    NOT NULL,
+        counter       INTEGER NOT NULL DEFAULT 0,
+        backed_up     INTEGER NOT NULL DEFAULT 0,
+        transports    TEXT,
+        name          TEXT,
+        created_at    INTEGER NOT NULL,
+        last_used_at  INTEGER
+      );
+      CREATE TABLE IF NOT EXISTS passkey_challenges (
+        challenge  TEXT    PRIMARY KEY,
+        type       TEXT    NOT NULL,
+        user_id    INTEGER,
+        expires_at INTEGER NOT NULL
+      );
       CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions (user_id);
       CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions (expires_at);
       CREATE INDEX IF NOT EXISTS idx_members_user ON project_members (user_id);
       CREATE INDEX IF NOT EXISTS idx_tokens_user ON upload_tokens (user_id);
+      CREATE INDEX IF NOT EXISTS idx_passkey_creds_user ON passkey_credentials (user_id);
     `);
 
     // Roles were added after the first deployments. If an older auth.db
@@ -729,6 +774,201 @@ export class AuthDb {
     return { user, projectName: row.project_name };
   }
 
+  // -------------------------------------------------------------------------
+  // Passkey credentials
+  // -------------------------------------------------------------------------
+
+  /** Store a pending WebAuthn challenge (registration or authentication). */
+  storePasskeyChallenge(
+    challenge: string,
+    type: "register" | "authenticate",
+    userId: number | null,
+    ttlSeconds = 300
+  ): void {
+    const expires_at = nowSeconds() + ttlSeconds;
+    this.db
+      .prepare(
+        "INSERT OR REPLACE INTO passkey_challenges (challenge, type, user_id, expires_at) VALUES (?, ?, ?, ?)"
+      )
+      .run(challenge, type, userId, expires_at);
+  }
+
+  /**
+   * Consume a challenge — looks it up, validates type and expiry, deletes it,
+   * and returns `{ userId }`. Returns null when unknown, expired, or wrong type.
+   * Challenges are single-use to prevent replay attacks.
+   */
+  consumePasskeyChallenge(
+    challenge: string,
+    type: "register" | "authenticate"
+  ): { userId: number | null } | null {
+    const row = this.db
+      .prepare(
+        "SELECT challenge, type, user_id, expires_at FROM passkey_challenges WHERE challenge = ?"
+      )
+      .get(challenge) as PasskeyChallengeRow | undefined;
+    this.db.prepare("DELETE FROM passkey_challenges WHERE challenge = ?").run(challenge);
+    if (!row) return null;
+    if (row.type !== type) return null;
+    if (row.expires_at <= nowSeconds()) return null;
+    return { userId: row.user_id };
+  }
+
+  /** Delete all expired challenges; returns the number removed. */
+  pruneExpiredChallenges(): number {
+    const info = this.db
+      .prepare("DELETE FROM passkey_challenges WHERE expires_at <= ?")
+      .run(nowSeconds());
+    return info.changes;
+  }
+
+  /** Persist a verified passkey credential for `userId`. */
+  createPasskeyCredential(
+    userId: number,
+    credentialId: string,
+    publicKey: Uint8Array,
+    counter: number,
+    backedUp: boolean,
+    transports: string[] | null,
+    name: string | null = null
+  ): PasskeyCredential {
+    const created_at = nowSeconds();
+    const info = this.db
+      .prepare(
+        "INSERT INTO passkey_credentials " +
+          "(user_id, credential_id, public_key, counter, backed_up, transports, name, created_at) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+      )
+      .run(
+        userId,
+        credentialId,
+        Buffer.from(publicKey),
+        counter,
+        backedUp ? 1 : 0,
+        transports ? JSON.stringify(transports) : null,
+        name,
+        created_at
+      );
+    return {
+      id: Number(info.lastInsertRowid),
+      user_id: userId,
+      credential_id: credentialId,
+      public_key: Buffer.from(publicKey),
+      counter,
+      backed_up: backedUp,
+      transports,
+      name,
+      created_at,
+      last_used_at: null,
+    };
+  }
+
+  listPasskeyCredentials(userId: number): PasskeyCredential[] {
+    const rows = this.db
+      .prepare(
+        "SELECT id, user_id, credential_id, public_key, counter, backed_up, transports, name, created_at, last_used_at " +
+          "FROM passkey_credentials WHERE user_id = ? ORDER BY created_at ASC"
+      )
+      .all(userId) as Array<{
+      id: number;
+      user_id: number;
+      credential_id: string;
+      public_key: Buffer;
+      counter: number;
+      backed_up: number;
+      transports: string | null;
+      name: string | null;
+      created_at: number;
+      last_used_at: number | null;
+    }>;
+    return rows.map((r) => ({
+      ...r,
+      backed_up: !!r.backed_up,
+      transports: r.transports ? (JSON.parse(r.transports) as string[]) : null,
+    }));
+  }
+
+  /**
+   * Look up a credential by its Base64URL ID and return it with its owning
+   * user. Used during authentication to find who is signing the challenge.
+   */
+  getPasskeyCredentialByCredentialId(
+    credentialId: string
+  ): { user: PublicUser; credential: PasskeyCredential } | null {
+    const row = this.db
+      .prepare(
+        "SELECT c.id, c.user_id, c.credential_id, c.public_key, c.counter, c.backed_up, " +
+          "c.transports, c.name, c.created_at, c.last_used_at, " +
+          "u.id AS uid, u.username, u.is_admin, u.created_at AS u_created_at " +
+          "FROM passkey_credentials c JOIN users u ON u.id = c.user_id " +
+          "WHERE c.credential_id = ?"
+      )
+      .get(credentialId) as
+      | {
+          id: number;
+          user_id: number;
+          credential_id: string;
+          public_key: Buffer;
+          counter: number;
+          backed_up: number;
+          transports: string | null;
+          name: string | null;
+          created_at: number;
+          last_used_at: number | null;
+          uid: number;
+          username: string;
+          is_admin: number;
+          u_created_at: number;
+        }
+      | undefined;
+    if (!row) return null;
+    return {
+      user: {
+        id: row.uid,
+        username: row.username,
+        is_admin: !!row.is_admin,
+        created_at: row.u_created_at,
+      },
+      credential: {
+        id: row.id,
+        user_id: row.user_id,
+        credential_id: row.credential_id,
+        public_key: row.public_key,
+        counter: row.counter,
+        backed_up: !!row.backed_up,
+        transports: row.transports ? (JSON.parse(row.transports) as string[]) : null,
+        name: row.name,
+        created_at: row.created_at,
+        last_used_at: row.last_used_at,
+      },
+    };
+  }
+
+  /** Update counter (and backed-up flag) after a successful authentication. */
+  updatePasskeyCounter(credentialId: string, counter: number, backedUp: boolean): void {
+    this.db
+      .prepare(
+        "UPDATE passkey_credentials SET counter = ?, backed_up = ?, last_used_at = ? WHERE credential_id = ?"
+      )
+      .run(counter, backedUp ? 1 : 0, nowSeconds(), credentialId);
+  }
+
+  /** Rename a passkey credential (scoped to its owner). */
+  renamePasskeyCredential(id: number, userId: number, name: string): boolean {
+    const info = this.db
+      .prepare("UPDATE passkey_credentials SET name = ? WHERE id = ? AND user_id = ?")
+      .run(name, id, userId);
+    return info.changes > 0;
+  }
+
+  /** Delete a passkey credential (scoped to its owner). */
+  deletePasskeyCredential(id: number, userId: number): boolean {
+    const info = this.db
+      .prepare("DELETE FROM passkey_credentials WHERE id = ? AND user_id = ?")
+      .run(id, userId);
+    return info.changes > 0;
+  }
+
   close(): void {
     this.db.close();
   }
@@ -758,6 +998,7 @@ async function openAuthDb(): Promise<AuthDb> {
   const auth = new AuthDb(db);
   await auth.seed({ allowDemoSeed: demoSeedActive() });
   auth.pruneExpiredSessions();
+  auth.pruneExpiredChallenges();
   return auth;
 }
 

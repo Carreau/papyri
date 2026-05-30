@@ -21,7 +21,7 @@ const authenticated = user !== null;
     <slot name="tools" />
     {
       authenticated ? (
-        <UserMenu client:load isAdmin={user.is_admin} />
+        <UserMenu client:load isAdmin={user.is_admin} githubUsername={user.github_username} />
       ) : (
         <a href="/login" class="site-login-link">
           Login

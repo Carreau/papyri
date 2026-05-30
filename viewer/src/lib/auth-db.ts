@@ -10,7 +10,8 @@
  * Location: `PAPYRI_AUTH_DB`, defaulting to `~/.papyri/auth.db`.
  *
  * Schema (created on open, idempotent):
- *   users           — id, username (unique), password_hash, is_admin, created_at
+ *   users           — id, username (unique), password_hash, is_admin, created_at,
+ *                     github_username (nullable)
  *   sessions        — token (random), user_id, created_at, expires_at
  *   projects        — id, name (unique package/module name), created_at
  *   project_members — (project_id, user_id) — who may upload which project
@@ -98,6 +99,7 @@ interface UserRow {
   password_hash: string;
   is_admin: number;
   created_at: number;
+  github_username: string | null;
 }
 
 /** Public user view — never carries the password hash. */
@@ -106,6 +108,7 @@ export interface PublicUser {
   username: string;
   is_admin: boolean;
   created_at: number;
+  github_username: string | null;
 }
 
 export interface SessionRow {
@@ -155,12 +158,14 @@ function toPublicUser(row: {
   username: string;
   is_admin: number;
   created_at: number;
+  github_username?: string | null;
 }): PublicUser {
   return {
     id: row.id,
     username: row.username,
     is_admin: !!row.is_admin,
     created_at: row.created_at,
+    github_username: row.github_username ?? null,
   };
 }
 
@@ -249,11 +254,12 @@ export class AuthDb {
     this.db.pragma("foreign_keys = ON");
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS users (
-        id            INTEGER PRIMARY KEY,
-        username      TEXT    NOT NULL UNIQUE,
-        password_hash TEXT    NOT NULL,
-        is_admin      INTEGER NOT NULL DEFAULT 0,
-        created_at    INTEGER NOT NULL
+        id              INTEGER PRIMARY KEY,
+        username        TEXT    NOT NULL UNIQUE,
+        password_hash   TEXT    NOT NULL,
+        is_admin        INTEGER NOT NULL DEFAULT 0,
+        created_at      INTEGER NOT NULL,
+        github_username TEXT
       );
       CREATE TABLE IF NOT EXISTS sessions (
         token      TEXT    PRIMARY KEY,
@@ -309,6 +315,11 @@ export class AuthDb {
         "ALTER TABLE upload_tokens ADD COLUMN project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE"
       );
     }
+
+    // GitHub username was added after early deployments.
+    if (!userCols.some((c) => c.name === "github_username")) {
+      this.db.exec("ALTER TABLE users ADD COLUMN github_username TEXT");
+    }
   }
 
   adminCount(): number {
@@ -338,24 +349,55 @@ export class AuthDb {
         "INSERT INTO users (username, password_hash, is_admin, created_at) VALUES (?, ?, ?, ?)"
       )
       .run(username, passwordHash, isAdmin ? 1 : 0, created_at);
-    return { id: Number(info.lastInsertRowid), username, is_admin: isAdmin, created_at };
+    return {
+      id: Number(info.lastInsertRowid),
+      username,
+      is_admin: isAdmin,
+      created_at,
+      github_username: null,
+    };
   }
 
   listUsers(): PublicUser[] {
     return (
       this.db
-        .prepare("SELECT id, username, is_admin, created_at FROM users ORDER BY username")
-        .all() as Array<{ id: number; username: string; is_admin: number; created_at: number }>
+        .prepare(
+          "SELECT id, username, is_admin, created_at, github_username FROM users ORDER BY username"
+        )
+        .all() as Array<{
+        id: number;
+        username: string;
+        is_admin: number;
+        created_at: number;
+        github_username: string | null;
+      }>
     ).map(toPublicUser);
   }
 
   getUser(id: number): PublicUser | null {
     const row = this.db
-      .prepare("SELECT id, username, is_admin, created_at FROM users WHERE id = ?")
+      .prepare("SELECT id, username, is_admin, created_at, github_username FROM users WHERE id = ?")
       .get(id) as
-      | { id: number; username: string; is_admin: number; created_at: number }
+      | {
+          id: number;
+          username: string;
+          is_admin: number;
+          created_at: number;
+          github_username: string | null;
+        }
       | undefined;
     return row ? toPublicUser(row) : null;
+  }
+
+  /**
+   * Set or clear a user's linked GitHub username. Pass null to unlink.
+   * Returns false when the user does not exist.
+   */
+  setGithubUsername(userId: number, githubUsername: string | null): boolean {
+    const info = this.db
+      .prepare("UPDATE users SET github_username = ? WHERE id = ?")
+      .run(githubUsername, userId);
+    return info.changes > 0;
   }
 
   /**
@@ -430,7 +472,7 @@ export class AuthDb {
   async verifyLogin(username: string, password: string): Promise<UserRow | null> {
     const user = this.db
       .prepare(
-        "SELECT id, username, password_hash, is_admin, created_at FROM users WHERE username = ?"
+        "SELECT id, username, password_hash, is_admin, created_at, github_username FROM users WHERE username = ?"
       )
       .get(username) as UserRow | undefined;
     if (!user) {

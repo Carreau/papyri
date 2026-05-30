@@ -6,11 +6,6 @@ interface Props {
   username: string;
 }
 
-/**
- * Self-service account settings for the signed-in user. Today this is just the
- * change-password form; further fields (email, display name, …) hang off the
- * same panel as the account model grows.
- */
 export default function AccountSettingsPanel({ username }: Props) {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");

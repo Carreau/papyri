@@ -10,8 +10,8 @@
  * Location: `PAPYRI_AUTH_DB`, defaulting to `~/.papyri/auth.db`.
  *
  * Schema (created on open, idempotent):
- *   users           — id, username (unique), password_hash, is_admin, created_at,
- *                     github_username (nullable)
+ *   users           — id, username (unique), password_hash, is_admin,
+ *                     must_change_password, created_at, github_username (nullable)
  *   sessions        — token (random), user_id, created_at, expires_at
  *   projects        — id, name (unique package/module name), created_at
  *   project_members — (project_id, user_id) — who may upload which project
@@ -98,6 +98,7 @@ interface UserRow {
   username: string;
   password_hash: string;
   is_admin: number;
+  must_change_password: number;
   created_at: number;
   github_username: string | null;
 }
@@ -107,6 +108,12 @@ export interface PublicUser {
   id: number;
   username: string;
   is_admin: boolean;
+  /**
+   * True when an admin has reset this user's password to a temporary one and
+   * the user has not yet chosen their own. Surfaced as a banner on `/settings`;
+   * cleared the next time the user changes their password.
+   */
+  must_change_password: boolean;
   created_at: number;
   github_username: string | null;
 }
@@ -152,21 +159,35 @@ export interface ResolvedUploadToken {
   projectName: string | null;
 }
 
-/** Map a raw users row (with 0/1 is_admin) to the public boolean-typed view. */
-function toPublicUser(row: {
+/** A raw `users` row as selected for the public view (0/1 integer flags). */
+interface PublicUserRow {
   id: number;
   username: string;
   is_admin: number;
+  must_change_password: number;
   created_at: number;
-  github_username?: string | null;
-}): PublicUser {
+  github_username: string | null;
+}
+
+/** Columns selected to build a `PublicUser` (never the password hash). */
+const PUBLIC_USER_COLS =
+  "id, username, is_admin, must_change_password, created_at, github_username";
+
+/** Map a raw users row (with 0/1 integer flags) to the public boolean view. */
+function toPublicUser(row: PublicUserRow): PublicUser {
   return {
     id: row.id,
     username: row.username,
     is_admin: !!row.is_admin,
+    must_change_password: !!row.must_change_password,
     created_at: row.created_at,
     github_username: row.github_username ?? null,
   };
+}
+
+/** Generate a random temporary password (URL-safe, comfortably above the min). */
+export function generateTempPassword(): string {
+  return randomBytes(9).toString("base64url");
 }
 
 /** Hash a plaintext password into an encoded Argon2id string. */
@@ -254,12 +275,13 @@ export class AuthDb {
     this.db.pragma("foreign_keys = ON");
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS users (
-        id              INTEGER PRIMARY KEY,
-        username        TEXT    NOT NULL UNIQUE,
-        password_hash   TEXT    NOT NULL,
-        is_admin        INTEGER NOT NULL DEFAULT 0,
-        created_at      INTEGER NOT NULL,
-        github_username TEXT
+        id                   INTEGER PRIMARY KEY,
+        username             TEXT    NOT NULL UNIQUE,
+        password_hash        TEXT    NOT NULL,
+        is_admin             INTEGER NOT NULL DEFAULT 0,
+        must_change_password INTEGER NOT NULL DEFAULT 0,
+        created_at           INTEGER NOT NULL,
+        github_username      TEXT
       );
       CREATE TABLE IF NOT EXISTS sessions (
         token      TEXT    PRIMARY KEY,
@@ -302,6 +324,12 @@ export class AuthDb {
     if (!userCols.some((c) => c.name === "is_admin")) {
       this.db.exec("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0");
       this.db.exec("UPDATE users SET is_admin = 1");
+    }
+
+    // Admin-initiated password resets were added later. An older auth.db has no
+    // `must_change_password` column; add it (default 0 = no pending reset).
+    if (!userCols.some((c) => c.name === "must_change_password")) {
+      this.db.exec("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0");
     }
 
     // Per-project token scoping was added after the first deployments. An older
@@ -353,6 +381,7 @@ export class AuthDb {
       id: Number(info.lastInsertRowid),
       username,
       is_admin: isAdmin,
+      must_change_password: false,
       created_at,
       github_username: null,
     };
@@ -361,30 +390,14 @@ export class AuthDb {
   listUsers(): PublicUser[] {
     return (
       this.db
-        .prepare(
-          "SELECT id, username, is_admin, created_at, github_username FROM users ORDER BY username"
-        )
-        .all() as Array<{
-        id: number;
-        username: string;
-        is_admin: number;
-        created_at: number;
-        github_username: string | null;
-      }>
+        .prepare(`SELECT ${PUBLIC_USER_COLS} FROM users ORDER BY username`)
+        .all() as PublicUserRow[]
     ).map(toPublicUser);
   }
 
   getUser(id: number): PublicUser | null {
-    const row = this.db
-      .prepare("SELECT id, username, is_admin, created_at, github_username FROM users WHERE id = ?")
-      .get(id) as
-      | {
-          id: number;
-          username: string;
-          is_admin: number;
-          created_at: number;
-          github_username: string | null;
-        }
+    const row = this.db.prepare(`SELECT ${PUBLIC_USER_COLS} FROM users WHERE id = ?`).get(id) as
+      | PublicUserRow
       | undefined;
     return row ? toPublicUser(row) : null;
   }
@@ -448,8 +461,34 @@ export class AuthDb {
       return { ok: false, reason: "wrong-current" };
     }
     const passwordHash = await hashPassword(newPassword);
-    this.db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(passwordHash, userId);
+    // Clear any pending admin-reset flag: the user has now chosen their own
+    // password, so the "must change" prompt should no longer appear.
+    this.db
+      .prepare("UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?")
+      .run(passwordHash, userId);
     return { ok: true };
+  }
+
+  /**
+   * Admin-initiated password reset. Generates a fresh temporary password,
+   * stores its hash, flags the account so the user is prompted to choose their
+   * own (`must_change_password`), and revokes all of the target's sessions so
+   * any existing login must re-authenticate with the temporary password. The
+   * plaintext temporary password is returned ONCE for the admin to relay; it is
+   * never stored or recoverable afterwards. Returns a tagged result so the
+   * caller can surface the precise reason.
+   */
+  async adminResetPassword(
+    userId: number
+  ): Promise<{ ok: true; tempPassword: string } | { ok: false; reason: "no-user" }> {
+    if (!this.getUser(userId)) return { ok: false, reason: "no-user" };
+    const tempPassword = generateTempPassword();
+    const passwordHash = await hashPassword(tempPassword);
+    this.db
+      .prepare("UPDATE users SET password_hash = ?, must_change_password = 1 WHERE id = ?")
+      .run(passwordHash, userId);
+    this.db.prepare("DELETE FROM sessions WHERE user_id = ?").run(userId);
+    return { ok: true, tempPassword };
   }
 
   /**
@@ -472,7 +511,8 @@ export class AuthDb {
   async verifyLogin(username: string, password: string): Promise<UserRow | null> {
     const user = this.db
       .prepare(
-        "SELECT id, username, password_hash, is_admin, created_at, github_username FROM users WHERE username = ?"
+        "SELECT id, username, password_hash, is_admin, must_change_password, created_at, " +
+          "github_username FROM users WHERE username = ?"
       )
       .get(username) as UserRow | undefined;
     if (!user) {
@@ -626,15 +666,11 @@ export class AuthDb {
     return (
       this.db
         .prepare(
-          "SELECT u.id, u.username, u.is_admin, u.created_at FROM project_members m " +
-            "JOIN users u ON u.id = m.user_id WHERE m.project_id = ? ORDER BY u.username"
+          "SELECT u.id, u.username, u.is_admin, u.must_change_password, u.created_at, " +
+            "u.github_username FROM project_members m JOIN users u ON u.id = m.user_id " +
+            "WHERE m.project_id = ? ORDER BY u.username"
         )
-        .all(projectId) as Array<{
-        id: number;
-        username: string;
-        is_admin: number;
-        created_at: number;
-      }>
+        .all(projectId) as PublicUserRow[]
     ).map(toPublicUser);
   }
 

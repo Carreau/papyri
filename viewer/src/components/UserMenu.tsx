@@ -3,9 +3,11 @@ import { useState } from "react";
 interface Props {
   /** Whether the signed-in user is an admin; gates the Admin link. */
   isAdmin?: boolean;
+  /** Linked GitHub username for avatar display, if set. */
+  githubUsername?: string | null;
 }
 
-export default function UserMenu({ isAdmin = false }: Props) {
+export default function UserMenu({ isAdmin = false, githubUsername = null }: Props) {
   const [loading, setLoading] = useState(false);
 
   const handleLogout = async () => {
@@ -22,8 +24,27 @@ export default function UserMenu({ isAdmin = false }: Props) {
     }
   };
 
+  const avatarSrc = githubUsername
+    ? `https://avatars.githubusercontent.com/${encodeURIComponent(githubUsername)}?size=64`
+    : null;
+
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+      {avatarSrc && (
+        <a
+          href="/settings"
+          title="Account settings"
+          style={{ display: "flex", alignItems: "center" }}
+        >
+          <img
+            src={avatarSrc}
+            alt="avatar"
+            width={28}
+            height={28}
+            style={{ borderRadius: "50%", display: "block" }}
+          />
+        </a>
+      )}
       {isAdmin && (
         <a
           href="/admin"

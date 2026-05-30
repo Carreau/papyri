@@ -23,17 +23,20 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     return respond({ ok: false, error: "response is required" }, 400);
   }
 
+  // @simplewebauthn/browser's AuthenticationResponseJSON keeps id/rawId at the
+  // top level but nests clientDataJSON under `.response`.
   const resp = body.response as {
     id?: string;
     rawId?: string;
-    clientDataJSON?: string;
+    response?: { clientDataJSON?: string };
   };
 
-  if (!resp.clientDataJSON) return respond({ ok: false, error: "missing clientDataJSON" }, 400);
+  const clientDataJSON = resp.response?.clientDataJSON;
+  if (!clientDataJSON) return respond({ ok: false, error: "missing clientDataJSON" }, 400);
 
   let parsedChallenge: string;
   try {
-    const decoded = JSON.parse(Buffer.from(resp.clientDataJSON, "base64url").toString("utf8")) as {
+    const decoded = JSON.parse(Buffer.from(clientDataJSON, "base64url").toString("utf8")) as {
       challenge?: string;
     };
     if (!decoded.challenge) throw new Error("no challenge");

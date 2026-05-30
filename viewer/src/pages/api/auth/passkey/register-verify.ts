@@ -33,7 +33,10 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   }
 
   // The response carries the challenge that was presented to the authenticator.
-  const clientData = (body.response as { clientDataJSON?: string }).clientDataJSON;
+  // @simplewebauthn/browser's RegistrationResponseJSON nests the authenticator
+  // output under `.response`, so clientDataJSON lives at response.response.clientDataJSON.
+  const clientData = (body.response as { response?: { clientDataJSON?: string } }).response
+    ?.clientDataJSON;
   if (!clientData) return respond({ ok: false, error: "missing clientDataJSON" }, 400);
 
   let parsedChallenge: string;

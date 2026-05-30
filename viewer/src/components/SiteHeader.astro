@@ -5,9 +5,10 @@
 import ThemeToggle from "./ThemeToggle.tsx";
 import VisibilityToggle from "./VisibilityToggle.tsx";
 import UserMenu from "./UserMenu.tsx";
-import { isAuthenticated } from "../lib/auth.ts";
+import { getSessionUser } from "../lib/auth.ts";
 
-const authenticated = isAuthenticated(Astro);
+const user = await getSessionUser(Astro);
+const authenticated = user !== null;
 ---
 
 <header class="site-header">
@@ -20,7 +21,7 @@ const authenticated = isAuthenticated(Astro);
     <slot name="tools" />
     {
       authenticated ? (
-        <UserMenu client:load />
+        <UserMenu client:load isAdmin={user.is_admin} />
       ) : (
         <a href="/login" class="site-login-link">
           Login

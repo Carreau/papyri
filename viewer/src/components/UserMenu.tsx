@@ -1,6 +1,11 @@
 import { useState } from "react";
 
-export default function UserMenu() {
+interface Props {
+  /** Whether the signed-in user is an admin; gates the Admin link. */
+  isAdmin?: boolean;
+}
+
+export default function UserMenu({ isAdmin = false }: Props) {
   const [loading, setLoading] = useState(false);
 
   const handleLogout = async () => {
@@ -19,8 +24,24 @@ export default function UserMenu() {
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+      {isAdmin && (
+        <a
+          href="/admin"
+          style={{
+            padding: "6px 12px",
+            backgroundColor: "transparent",
+            border: "1px solid #ddd",
+            borderRadius: "4px",
+            fontSize: "14px",
+            textDecoration: "none",
+            color: "inherit",
+          }}
+        >
+          Admin
+        </a>
+      )}
       <a
-        href="/admin"
+        href="/settings"
         style={{
           padding: "6px 12px",
           backgroundColor: "transparent",
@@ -31,7 +52,7 @@ export default function UserMenu() {
           color: "inherit",
         }}
       >
-        Admin
+        Settings
       </a>
       <button
         onClick={handleLogout}

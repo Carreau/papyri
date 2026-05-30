@@ -1,0 +1,80 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import AccountSettingsPanel from "../components/AccountSettingsPanel.tsx";
+import UploadTokenPanel from "../components/UploadTokenPanel.tsx";
+import { getSessionUser } from "../lib/auth.ts";
+import { getAuthDb } from "../lib/auth-db.ts";
+import "../styles/admin.css";
+
+export const prerender = false;
+
+// Self-service account settings — requires a signed-in user. The middleware
+// already redirects guests (route is in AUTH_REQUIRED_PREFIXES); this resolves
+// the user for the form and fails safe if the session vanished mid-request.
+const user = await getSessionUser(Astro);
+if (!user) {
+  return Astro.redirect("/login");
+}
+
+const auth = await getAuthDb();
+const tokens = auth.listUploadTokens(user.id);
+// Projects the user may scope a token to: admins may scope to any project,
+// everyone else to the projects they are a member of.
+const projects = user.is_admin
+  ? auth.listProjects().map((p) => p.name)
+  : auth.listUserProjects(user.id);
+---
+
+<BaseLayout title="Account settings — Papyri">
+  <div class="settings-page">
+    <div class="settings-card">
+      <header class="settings-card-header">
+        <h1>Account settings</h1>
+        <p>
+          Manage your account. To change other accounts, use the
+          <a href="/admin/users">admin panel</a>.
+        </p>
+      </header>
+      <h2 class="settings-section-title">Change password</h2>
+      <AccountSettingsPanel client:load username={user.username} />
+
+      <h2 class="settings-section-title">Upload tokens</h2>
+      <UploadTokenPanel client:load initial={tokens} projects={projects} isAdmin={user.is_admin} />
+    </div>
+  </div>
+</BaseLayout>
+
+<style>
+  .settings-page {
+    display: flex;
+    justify-content: center;
+    padding: 32px 16px;
+  }
+  .settings-card {
+    width: 100%;
+    max-width: 640px;
+    background: var(--surface, #fff);
+    border: 1px solid var(--border, #e5e5e5);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+    padding: 28px;
+  }
+  .settings-card-header {
+    margin-bottom: 20px;
+  }
+  .settings-card-header h1 {
+    font-size: 20px;
+    margin: 0 0 6px 0;
+  }
+  .settings-card-header p {
+    font-size: 13px;
+    color: var(--muted, #666);
+    margin: 0;
+  }
+  .settings-section-title {
+    font-size: 15px;
+    margin: 0 0 14px 0;
+    padding-top: 16px;
+    border-top: 1px solid var(--border, #eee);
+  }
+</style>

@@ -25,6 +25,82 @@ The server listens on port `4321` by default. Put a reverse proxy
 
 ## Authentication
 
+The viewer has **two independent auth mechanisms**:
+
+1. **Admin login** — a user/password + session-cookie gate over the admin
+   panel and its expensive/destructive API routes (see "Admin login" below).
+2. **Bundle upload token** — a bearer token over `PUT /api/bundle`, the
+   ingest endpoint hit by `papyri upload` (see "Bundle upload token" below).
+
+They are separate on purpose: a CI uploader holds only the upload token and
+never a login, while a human admin logs in with a password and never needs
+the upload token.
+
+## Admin login (users & sessions)
+
+Accounts and login sessions live in their own SQLite database
+(`PAPYRI_AUTH_DB`, default `~/.papyri/auth.db`) — kept apart from the graph
+store so clearing or re-ingesting the cache never drops accounts. Passwords
+are hashed with Argon2id; sessions are random tokens stored server-side with
+a creation time and a 7-day expiry, so logout and account deletion revoke
+them immediately and expired tokens are rejected.
+
+Gated routes redirect to `/login` (pages) or return `403` (API). Browsing
+documentation needs no account; only the admin panel, the node/IR-stats
+explorers, account management (`/api/users`), and the destructive
+graph/reingest endpoints require a session.
+
+### Seeding the first admin
+
+The store starts empty and **login fails closed** — there is no built-in
+default account. Seed the first admin from the environment on first start
+(it is created only when no users exist):
+
+```sh
+export PAPYRI_USERNAME=alice
+export PAPYRI_PASSWORD='a-strong-password'   # min 8 characters
+# export HOST=127.0.0.1  # if conda-activate
+pnpm serve
+```
+
+The server logs `seeded initial admin user "alice" from environment` once.
+After that, add or remove further accounts from the **Users** section of the
+admin panel (`/admin`) — the env vars are only a bootstrap, not a live
+credential check, and changing them later has no effect once a user exists.
+
+If neither variable is set and demo seeding is off (the default for a
+production build), every login is rejected and the server logs a warning
+explaining why. To recover a locked-out instance, set
+`PAPYRI_USERNAME`/`PAPYRI_PASSWORD` and restart with an empty auth DB (delete
+`~/.papyri/auth.db`).
+
+### Local development demo account
+
+For local `pnpm dev` you usually don't want to set credentials at all. When
+the auth store is empty and no `PAPYRI_USERNAME`/`PAPYRI_PASSWORD` is set, the
+dev server seeds a throwaway demo admin:
+
+```
+admin / password
+```
+
+The login page shows this hint, and the server logs the credentials loudly on
+startup. This happens **only in dev mode** (`astro dev`); a production build
+(`pnpm build` + `pnpm serve`) never seeds it unless you opt in.
+
+Control it explicitly with `PAPYRI_DEV_SEED`:
+
+| `PAPYRI_DEV_SEED` | Effect                                                        |
+| ----------------- | ------------------------------------------------------------- |
+| _unset_           | Default: demo admin in dev (`astro dev`), nothing in a build. |
+| `1` / `true`      | Force-seed the demo admin even from a production build.       |
+| `0` / `false`     | Disable demo seeding even under `pnpm dev` (fail closed).     |
+
+Real `PAPYRI_USERNAME`/`PAPYRI_PASSWORD` credentials always take priority over
+the demo account.
+
+## Bundle upload token
+
 `PUT /api/bundle` is the **only endpoint that mutates state** (the graph
 DB and blob store). All other routes are read-only. A simple
 bearer-token guard protects it; the check is opt-in so local development

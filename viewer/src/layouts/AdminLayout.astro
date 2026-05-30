@@ -1,0 +1,43 @@
+---
+// Shared shell for every /admin/* page: BaseLayout + a tab strip linking the
+// admin sub-pages, with the current one highlighted. Each page loads only the
+// data its own section needs, so the heavier queries (graph stats, inventory
+// search) no longer run on every admin visit.
+import BaseLayout from "./BaseLayout.astro";
+import "../styles/admin.css";
+
+interface Props {
+  title: string;
+  active: "overview" | "users" | "projects" | "inventories" | "maintenance";
+}
+
+const { title, active } = Astro.props;
+
+const tabs = [
+  { id: "overview", href: "/admin", label: "Overview" },
+  { id: "users", href: "/admin/users", label: "Users" },
+  { id: "projects", href: "/admin/projects", label: "Projects" },
+  { id: "inventories", href: "/admin/inventories", label: "Inventories" },
+  { id: "maintenance", href: "/admin/maintenance", label: "Maintenance" },
+] as const;
+---
+
+<BaseLayout title={title}>
+  <div class="admin-page">
+    <h1>Admin</h1>
+    <nav class="admin-nav" aria-label="Admin sections">
+      {
+        tabs.map((tab) => (
+          <a
+            class:list={["admin-nav-tab", { "admin-nav-tab--active": tab.id === active }]}
+            href={tab.href}
+            aria-current={tab.id === active ? "page" : undefined}
+          >
+            {tab.label}
+          </a>
+        ))
+      }
+    </nav>
+    <slot />
+  </div>
+</BaseLayout>

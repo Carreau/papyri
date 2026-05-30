@@ -814,23 +814,60 @@ in the one-time synchronous `loadSchemaFromDisk` DB-init path.)
   (note / warning / tip / seealso / …). Look at
   https://sphinx-immaterial.readthedocs.io/en/latest/admonitions.html for
   per-kind color tokens and icons to model richer admonition styling on.
-- **Auth is intentional but minimal.** `middleware.ts` uses a two-tier model:
+- **Auth is intentional but minimal.** `middleware.ts` uses a three-tier model:
   - *Always public*: `/login`, `/api/auth/`, `/api/bundle` (upload endpoint uses
     its own bearer-token check).
-  - *Admin-only* (requires session): `/admin`, `/nodes`, `/ir-stats`, and their
-    backing API endpoints (`/api/nodes.json`, `/api/ir-stats.json`, `/api/clear`,
-    `/api/clear-raw`, `/api/reingest`, `/api/inventory`, `/api/stats`). These
-    are gated because they are computationally expensive (full corpus walks) or
-    destructive. Unauthenticated page requests redirect to `/login`; API
-    requests get a JSON 403.
+  - *Admin-only* (requires a session whose user has `is_admin`): `/admin`,
+    `/nodes`, `/ir-stats`, and their backing API endpoints (`/api/nodes.json`,
+    `/api/ir-stats.json`, `/api/clear`, `/api/clear-raw`, `/api/reingest`,
+    `/api/inventory`, `/api/stats`, `/api/users`, `/api/projects`). These are
+    gated because they are computationally expensive (full corpus walks),
+    destructive, or manage accounts / project membership. A signed-in non-admin
+    is redirected (`/`) or gets a JSON 403.
+  - *Signed-in (any role)*: `/settings`, `/api/account/*` — self-service account
+    management (change password, mint/revoke personal upload tokens).
   - *Guest-accessible*: everything else — bundle index, all qualname/doc/example
     pages, text search, assets. Guests can browse documentation without an
     account.
 
-  Credentials come from `PAPYRI_USERNAME` / `PAPYRI_PASSWORD` env vars
-  (see `api/auth/login.ts`). The hardcoded-single-user model is not the
-  long-term answer for a multi-tenant hosted service. Track when the hosting
-  design firms up.
+  Unauthenticated page requests redirect to `/login`; API requests get a JSON
+  403. The middleware *validates* the session token against the auth store
+  (looks it up and checks expiry), not merely its presence.
+
+  **User/session store (landed).** Accounts and sessions live in a real SQLite
+  database (`viewer/src/lib/auth-db.ts`), separate from the graph store so the
+  derived-cache wipe/reingest never touches them (`PAPYRI_AUTH_DB`, default
+  `~/.papyri/auth.db`). Passwords are hashed with Argon2id (`@node-rs/argon2`)
+  and verified in constant time; sessions are opaque random tokens stored
+  server-side with `created_at` + `expires_at` (7-day TTL), so logout and user
+  deletion revoke them and expired tokens are rejected and pruned. On first run
+  an initial admin is seeded from `PAPYRI_USERNAME`/`PAPYRI_PASSWORD` *only when
+  no users exist*; with neither set, login fails closed (no `admin`/`password`
+  fallback) — except under `pnpm dev`, where a throwaway demo admin
+  (`admin`/`password`, surfaced on the login page) is seeded for convenience.
+  That dev seed is gated by `PAPYRI_DEV_SEED` (`1` forces it on even in a
+  build, `0` disables it; unset defaults to `import.meta.env.DEV`) and never
+  fires in a production build by default. Admins manage accounts from the admin panel
+  (`UserManagementPanel.tsx` → `/api/users`). This resolves the three "auth
+  hardening" TBD items below (default creds, unsigned/never-expiring session,
+  constant-time compare) for the login path; the upload bearer-token compare in
+  `PUT /api/bundle` now also uses `crypto.timingSafeEqual` (see below).
+
+  **Per-user upload authorization (landed).** Users carry an `is_admin` flag
+  (`users.is_admin`); a logged-in non-admin can manage their own account but
+  not the admin tools (`middleware.ts` gates `ADMIN_ONLY_PREFIXES` on the
+  role). An admin creates *projects* — a project is a package/module name —
+  and assigns users to them (`projects` / `project_members` tables, managed via
+  `/api/projects` and `/admin/projects`). Each user mints personal upload
+  tokens (`upload_tokens`, shown once, only the SHA-256 stored) from
+  `/settings` via `/api/account/tokens`. `PUT /api/bundle` authenticates the
+  bearer to a principal (global `PAPYRI_UPLOAD_TOKEN` → any project; personal
+  token → its user; no token + no global token + zero users → open local-dev)
+  and then authorizes it for the bundle's `module`: admins and the global token
+  may upload anything, a user only the projects they are a member of (resolved
+  live, so revoking membership takes effect immediately). The global
+  `PAPYRI_UPLOAD_TOKEN` is retained as a CI / local-dev escape hatch. Viewing
+  bundles remains open to guests; only the *upload* scope is enforced per user.
 
 ### Cross-cutting
 
@@ -870,14 +907,24 @@ pass; the rest are recorded here as TBD so the next PR can pick them up.
 
 ### TBD — auth hardening (viewer)
 
-- **Default credentials.** `viewer/src/pages/api/auth/login.ts` falls back to
-  `admin`/`password` when `PAPYRI_USERNAME`/`PAPYRI_PASSWORD` are unset. Fail
-  closed (refuse login + warn) instead of shipping known creds.
-- **Session token is unsigned and never expires server-side.** The cookie is
-  `base64(user:timestamp)` and the middleware only checks it is *present*. Sign
-  it (HMAC with a server secret) and verify signature + embedded expiry.
-- **Constant-time comparison.** Login (`===`) and the bundle upload bearer-token
-  check (`!==`) are timing-variable; switch to `crypto.timingSafeEqual`.
+- **Default credentials.** *Done.* Login no longer ships `admin`/`password`.
+  Auth is backed by a real user store (`viewer/src/lib/auth-db.ts`); with no
+  users and no `PAPYRI_USERNAME`/`PAPYRI_PASSWORD` seed, every login fails
+  closed and a warning is logged.
+- **Session token is unsigned and never expires server-side.** *Done.* Sessions
+  are now opaque random tokens persisted server-side with `created_at` +
+  `expires_at`; the middleware looks the token up and enforces expiry (instead
+  of the old unverified `base64(user:timestamp)` cookie). Expired tokens are
+  rejected and pruned; logout / user-delete revoke them. (An HMAC-signed
+  stateless cookie was the original suggestion, but a server-side session table
+  was chosen so sessions can be revoked and audited.)
+- **Constant-time comparison.** *Done.* Login password verification uses
+  Argon2's constant-time verify, with a decoy hash compared on unknown
+  usernames so timing does not leak account existence. The bundle upload
+  bearer-token check in `PUT /api/bundle` now compares the global
+  `PAPYRI_UPLOAD_TOKEN` with `crypto.timingSafeEqual` (`timingSafeEqualStr` in
+  `api/bundle.ts`); personal upload tokens are looked up by SHA-256 hash, not
+  string-compared.
 
 ### TBD — upload / ingest robustness
 

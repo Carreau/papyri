@@ -6,6 +6,13 @@ submodules = [ "morphology", "color", "data", "draw", "exposure", "io", "graph",
 exclude = [
           ]
 exclude_jedi = ['skimage.viewer.plugins.base.Plugin']
+docs_path = '~/dev/scikit-image/doc/source'
+source = 'https://github.com/scikit-image/scikit-image'
+homepage = 'https://scikit-image.org'
+docs = 'https://scikit-image.org/docs/stable/'
+narrative_exclude = [
+    'doc/source/skips/2-values.rst'
+]
 [global.expected_errors]
 WrongTypeAtField = [
     "skimage.morphology._skeletonize:medial_axis",
@@ -16,3 +23,14 @@ VisitCitationReferenceNotImplementedError = [
     "skimage.morphology._skeletonize:skeletonize_2d",
     "skimage.morphology._skeletonize_3d_cy",
 ]
+
+[global.directives]
+
+
+autofunction   = 'papyri.directives:drop'
+autoclass   = 'papyri.directives:drop'
+currentmodule   = 'papyri.directives:drop'
+minigallery   = 'papyri.directives:drop'
+table   = 'papyri.directives:drop'
+contents   = 'papyri.directives:drop'
+naturalsortedtoctree   = 'papyri.directives:drop'

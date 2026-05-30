@@ -109,6 +109,16 @@ jobs:
               "gen_flags": "",
               "install_cmd": "",
               "pypi_name": "traitlets"
+            },
+            {
+              "lib": "scikit-image",
+              "repo": "https://github.com/scikit-image/scikit-image.git",
+              "tags": ["main"],
+              "clone_dir": "scikit-image",
+              "config": "examples/skimage.toml",
+              "gen_flags": "",
+              "install_cmd": "uv pip install --system meson-python ninja cython pythran numpy && uv pip install --system --no-build-isolation \"$CLONE_DIR\"",
+              "pypi_name": "scikit-image"
             }
           ]'
           matrix=$(echo "$libs" | jq -c '{

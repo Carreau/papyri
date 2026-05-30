@@ -1,0 +1,17 @@
+---
+// Admin: account management.
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import UserManagementPanel from "../../components/UserManagementPanel.tsx";
+import { getAuthDb } from "../../lib/auth-db.ts";
+
+export const prerender = false;
+
+const users = (await getAuthDb()).listUsers();
+---
+
+<AdminLayout title="Admin · Users — Papyri" active="users">
+  <section class="admin-section">
+    <h2>Users</h2>
+    <UserManagementPanel client:load initial={users} />
+  </section>
+</AdminLayout>

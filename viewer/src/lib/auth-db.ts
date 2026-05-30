@@ -977,7 +977,7 @@ export class AuthDb {
       .prepare(
         "SELECT c.id, c.user_id, c.credential_id, c.public_key, c.counter, c.backed_up, " +
           "c.transports, c.name, c.created_at, c.last_used_at, " +
-          "u.id AS uid, u.username, u.is_admin, u.created_at AS u_created_at " +
+          "u.id AS uid, u.username, u.is_admin, u.must_change_password, u.created_at AS u_created_at, u.github_username " +
           "FROM passkey_credentials c JOIN users u ON u.id = c.user_id " +
           "WHERE c.credential_id = ?"
       )
@@ -996,7 +996,9 @@ export class AuthDb {
           uid: number;
           username: string;
           is_admin: number;
+          must_change_password: number;
           u_created_at: number;
+          github_username: string | null;
         }
       | undefined;
     if (!row) return null;
@@ -1005,7 +1007,9 @@ export class AuthDb {
         id: row.uid,
         username: row.username,
         is_admin: !!row.is_admin,
+        must_change_password: !!row.must_change_password,
         created_at: row.u_created_at,
+        github_username: row.github_username ?? null,
       },
       credential: {
         id: row.id,

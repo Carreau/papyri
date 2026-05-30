@@ -1,8 +1,11 @@
 // SSR endpoint: user account management.
 //
-// GET    /api/users   — list users (id, username, is_admin, created_at).
+// GET    /api/users   — list users (id, username, is_admin, must_change_password, created_at).
 // POST   /api/users   — create a user. body: { username, password, isAdmin? }.
-// PATCH  /api/users   — toggle admin. body: { id, isAdmin }.
+// PATCH  /api/users   — toggle admin (body: { id, isAdmin }) or reset a user's
+//                       password to a temporary one (body: { id, resetPassword: true }).
+//                       A reset returns the one-time temporary password and flags
+//                       the account so the user is prompted to choose a new one.
 // DELETE /api/users   — delete a user. body: { id }.
 //
 // Auth: an admin action — gated by the session-cookie middleware (the route is
@@ -53,22 +56,34 @@ export const POST: APIRoute = async ({ request }) => {
 };
 
 export const PATCH: APIRoute = async ({ request }) => {
-  let body: { id?: unknown; isAdmin?: unknown };
+  let body: { id?: unknown; isAdmin?: unknown; resetPassword?: unknown };
   try {
     body = await request.json();
   } catch {
     return respond({ ok: false, error: "invalid JSON body" }, 400);
   }
 
-  const { id, isAdmin } = body;
+  const { id, isAdmin, resetPassword } = body;
   if (typeof id !== "number" || !Number.isInteger(id)) {
     return respond({ ok: false, error: "id must be an integer" }, 400);
   }
+
+  const auth = await getAuthDb();
+
+  // Password reset: generate a one-time temporary password and flag the account
+  // so the user is prompted to choose their own on next visit to /settings.
+  if (resetPassword === true) {
+    const reset = await auth.adminResetPassword(id);
+    if (!reset.ok) {
+      return respond({ ok: false, error: "no such user" }, 404);
+    }
+    return respond({ ok: true, tempPassword: reset.tempPassword });
+  }
+
   if (typeof isAdmin !== "boolean") {
     return respond({ ok: false, error: "isAdmin must be a boolean" }, 400);
   }
 
-  const auth = await getAuthDb();
   const result = auth.setAdmin(id, isAdmin);
   if (!result.ok) {
     if (result.reason === "no-user") {

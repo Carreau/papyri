@@ -39,6 +39,14 @@ const projects = user.is_admin
       <h2 class="settings-section-title">GitHub</h2>
       <GithubSettingsPanel client:load initialGithubUsername={user.github_username} />
 
+      {
+        user.must_change_password && (
+          <div class="settings-must-change" role="alert">
+            An administrator reset your password to a temporary one. Please choose a new password
+            below before continuing.
+          </div>
+        )
+      }
       <h2 class="settings-section-title">Change password</h2>
       <AccountSettingsPanel client:load username={user.username} />
 
@@ -80,5 +88,14 @@ const projects = user.is_admin
     margin: 0 0 14px 0;
     padding-top: 16px;
     border-top: 1px solid var(--border, #eee);
+  }
+  .settings-must-change {
+    margin-bottom: 20px;
+    padding: 12px 14px;
+    border: 1px solid var(--warning-border, #f0c36d);
+    background: var(--warning-bg, #fdf6e3);
+    color: var(--warning-text, #8a6d00);
+    border-radius: 8px;
+    font-size: 13px;
   }
 </style>

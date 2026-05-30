@@ -1491,6 +1491,43 @@ section.backrefs ul.qualnames {
   background-color: #9bbfe6;
   cursor: not-allowed;
 }
+.lf-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0;
+  color: var(--muted, #999);
+  font-size: 12px;
+}
+.lf-divider::before,
+.lf-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border, #e5e5e5);
+}
+.lf-passkey-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px;
+  background: var(--surface, #fff);
+  color: var(--fg, #333);
+  border: 1px solid var(--border, #ccc);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+}
+.lf-passkey-btn:hover:not(:disabled) {
+  background: var(--surface-raised, #f5f5f5);
+}
+.lf-passkey-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 .lf-hint {
   margin-top: 20px;
   padding: 12px;

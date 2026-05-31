@@ -739,6 +739,11 @@ class DirectiveVisiter(TreeReplacer):
             "container": container_handler,
         }
 
+        # Handlers that close over ``self`` — registered here so the dict is
+        # the sole dispatch mechanism (no getattr fallback needed).
+        self._handlers["toctree"] = self._toctree_handler
+        self._handlers["autosummary"] = self._autosummary_handler
+
         for k, v in (config or {}).items():
             if isinstance(v, str):
                 self._handlers[k] = obj_from_qualname(v)
@@ -978,9 +983,7 @@ class DirectiveVisiter(TreeReplacer):
     def replace_UnprocessedDirective(
         self, directive: UnprocessedDirective
     ) -> list[Any]:
-        meth = getattr(self, "_" + directive.name + "_handler", None)
-        if meth is None:
-            meth = self._handlers.get(directive.name, None)
+        meth = self._handlers.get(directive.name, None)
         if meth:
             # TODO: we may want to recurse here on returned items.
             res = meth(

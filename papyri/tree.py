@@ -1042,6 +1042,20 @@ class DirectiveVisiter(TreeReplacer):
             target_qa = full_qual(_obj_from_path(parts))
             if target_qa is not None:
                 return target_qa
+
+        # Builtin fallback: names like True, False, None, repr, KeyError, dict
+        # that belong to the `builtins` module.  full_qual() returns None for
+        # singletons (True/False/None) so we special-case those.  We emit the
+        # "builtins:<name>" path; resolveExternalRefs in graph.ts strips the
+        # "builtins." prefix to match Python's objects.inv, which registers
+        # bare names (repr, not builtins.repr).
+        if len(parts) == 1:
+            import builtins as _builtins
+
+            if hasattr(_builtins, parts[0]):
+                obj = getattr(_builtins, parts[0])
+                fq = full_qual(obj)
+                return fq if fq is not None else FullQual(f"builtins:{parts[0]}")
         return None
 
     def replace_InlineRole(self, directive: InlineRole) -> list[Any]:
@@ -1168,14 +1182,26 @@ class DirectiveVisiter(TreeReplacer):
                 assert None not in r, r
                 self._targets.add(r)
             return [self._ref_to_crossref(text, r, exists)]
-        if (directive.domain, directive.role) in [
-            (None, None),
-            (None, "mod"),
-            (None, "func"),
-            (None, "any"),
-            (None, "meth"),
-            (None, "class"),
-        ]:
+        # Roles that name a Python object and should be resolved via the import
+        # solver when the local-ref lookup above produced no match.  The domain
+        # must be None (role written without a domain prefix, e.g. :func:`…`)
+        # or "py" (explicit Python domain, e.g. :py:func:`…`).
+        _PYTHON_OBJECT_ROLES = frozenset(
+            {
+                None,
+                "mod",
+                "func",
+                "any",
+                "meth",
+                "class",
+                "exc",
+                "data",
+                "attr",
+                "obj",
+                "const",
+            }
+        )
+        if directive.role in _PYTHON_OBJECT_ROLES and directive.domain in (None, "py"):
             text = directive.value
             tqa = directive.value
 
@@ -1203,8 +1229,6 @@ class DirectiveVisiter(TreeReplacer):
                     path=target_qa,
                 )
                 return [CrossRef(text, ri, "module")]
-        else:
-            pass
         return [directive]
 
 

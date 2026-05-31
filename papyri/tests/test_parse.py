@@ -914,3 +914,56 @@ def test_backtick_quoted_hyperlink_target_with_url_recorded() -> None:
     assert len(targets) == 1
     assert targets[0].label == "(X)Emacs"
     assert targets[0].url == "http://www.gnu.org/software/emacs/"
+
+
+@pytest.mark.parametrize(
+    "role,value,expected_path",
+    [
+        # Builtin functions
+        ("func", "repr", "builtins:repr"),
+        ("func", "print", "builtins:print"),
+        ("func", "dir", "builtins:dir"),
+        # Builtin exceptions
+        ("exc", "KeyError", "builtins:KeyError"),
+        ("exc", "AttributeError", "builtins:AttributeError"),
+        # Builtin types
+        ("class", "dict", "builtins:dict"),
+        ("class", "list", "builtins:list"),
+        # Singleton constants — full_qual returns None so we use the fallback path
+        ("data", "None", "builtins:None"),
+        ("data", "True", "builtins:True"),
+        ("data", "False", "builtins:False"),
+        # bare interpreted text (domain=None, role=None) — treated as implicit ref
+        (None, "repr", "builtins:repr"),
+    ],
+)
+def test_builtins_resolve_to_crossref(
+    role: Any, value: str, expected_path: str
+) -> None:
+    """
+    Unqualified references to Python builtins (repr, KeyError, True, …) must
+    resolve to a CrossRef pointing at module="builtins" so the viewer can link
+    them against the Python stdlib intersphinx inventory.
+    """
+    from papyri.nodes import CrossRef, InlineRole
+    from papyri.tree import DirectiveVisiter
+
+    visitor = DirectiveVisiter(
+        "IPython.core.hooks",
+        frozenset(),
+        frozenset(),
+        {},
+        "1.0",
+        module="IPython",
+    )
+    out = visitor.replace_InlineRole(InlineRole(value, domain=None, role=role))
+    assert len(out) == 1, f"Expected 1 node, got {out!r}"
+    assert isinstance(out[0], CrossRef), (
+        f"Expected CrossRef, got {type(out[0]).__name__}"
+    )
+    ref = out[0].reference
+    assert hasattr(ref, "module"), f"reference has no module: {ref!r}"
+    assert ref.module == "builtins", f"Expected module='builtins', got {ref.module!r}"
+    assert ref.path == expected_path, (
+        f"Expected path={expected_path!r}, got {ref.path!r}"
+    )

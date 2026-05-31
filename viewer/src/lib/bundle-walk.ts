@@ -47,7 +47,11 @@ export async function walkBundle(
     let doc;
     try {
       doc = await loadModule(blobStore, pkg, ver, qa);
-    } catch {
+    } catch (err) {
+      // A listed key that won't load means a corrupt/missing blob — the graph
+      // and blob store have drifted. Skip it so one bad doc doesn't abort the
+      // whole walk, but log: silently dropping it hides real corruption.
+      console.warn(`walkBundle: skipping unreadable module ${pkg}/${ver} ${qa}:`, err);
       continue;
     }
     if (!visitor(doc, { label: qa, href: linkForQualname(pkg, uv, qa) })) return;
@@ -58,7 +62,8 @@ export async function walkBundle(
     let section;
     try {
       section = await loadCbor(blobStore, pkg, ver, "docs", docPath);
-    } catch {
+    } catch (err) {
+      console.warn(`walkBundle: skipping unreadable doc ${pkg}/${ver} ${docPath}:`, err);
       continue;
     }
     if (!visitor(section, { label: docPath, href: linkForDoc(pkg, uv, docPath) })) return;
@@ -69,7 +74,8 @@ export async function walkBundle(
     let section;
     try {
       section = await loadCbor(blobStore, pkg, ver, "examples", exPath);
-    } catch {
+    } catch (err) {
+      console.warn(`walkBundle: skipping unreadable example ${pkg}/${ver} ${exPath}:`, err);
       continue;
     }
     if (!visitor(section, { label: exPath, href: linkForExample(pkg, uv, exPath) })) return;

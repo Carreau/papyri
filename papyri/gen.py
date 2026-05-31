@@ -10,6 +10,7 @@ likely be separated into a separate module at some point.
 
 from __future__ import annotations
 
+import contextlib
 import doctest
 import inspect
 import io
@@ -1700,9 +1701,10 @@ class Gen:
 
         """
         item_docstring: str = target_item.__doc__
+        clinic_sig: str | None = None
         if item_docstring is not None:
             item_docstring = dedent_but_first(item_docstring)
-            item_docstring = strip_clinic_signature(item_docstring)
+            clinic_sig, item_docstring = strip_clinic_signature(item_docstring)
         builtin_function_or_method = type(sum)
 
         if isinstance(target_item, ModuleType):
@@ -1717,6 +1719,9 @@ class Gen:
                 sig = ObjectSignature(target_item)
             except (ValueError, TypeError):
                 sig = None
+            if sig is None and isinstance(target_item, type) and clinic_sig is not None:
+                with contextlib.suppress(TextSignatureParsingFailed):
+                    sig = ObjectSignature.from_str(clinic_sig)
             try:
                 api_object = APIObjectInfo(
                     "function", item_docstring, sig, target_item.__name__, qa

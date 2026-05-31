@@ -361,35 +361,107 @@ def test_normalize_see_also_real_description() -> None:
 
 def test_strip_clinic_signature_strips_prefix() -> None:
     doc = "MyClass(x, y=1)\n--\n\nDescription here."
-    assert strip_clinic_signature(doc) == "Description here."
+    assert strip_clinic_signature(doc) == ("MyClass(x, y=1)", "Description here.")
 
 
 def test_strip_clinic_signature_no_prefix() -> None:
     doc = "Just a plain docstring.\n\nNo clinic header."
-    assert strip_clinic_signature(doc) == doc
+    assert strip_clinic_signature(doc) == (None, doc)
 
 
 def test_strip_clinic_signature_double_dash_not_on_line2() -> None:
     # '--' appearing later in the doc must not be stripped
     doc = "First line.\nSecond line.\n--\n\nBody."
-    assert strip_clinic_signature(doc) == doc
+    assert strip_clinic_signature(doc) == (None, doc)
 
 
 def test_strip_clinic_signature_empty() -> None:
-    assert strip_clinic_signature("") == ""
+    assert strip_clinic_signature("") == (None, "")
 
 
 def test_strip_clinic_signature_only_header_no_body() -> None:
     doc = "Func()\n--\n"
-    assert strip_clinic_signature(doc) == ""
+    assert strip_clinic_signature(doc) == ("Func()", "")
 
 
 def test_strip_clinic_signature_leading_blank_stripped() -> None:
     # Body typically starts with a blank line after '--'; that blank is removed.
     doc = "Func(a, b)\n--\n\nActual body."
-    result = strip_clinic_signature(doc)
-    assert not result.startswith("\n")
-    assert result == "Actual body."
+    clinic_sig, body = strip_clinic_signature(doc)
+    assert clinic_sig == "Func(a, b)"
+    assert not body.startswith("\n")
+    assert body == "Actual body."
+
+
+def test_clinic_signature_used_as_class_sig(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Clinic prefix is parsed via Signature.from_str and used as the class sig.
+
+    Types always enter the callable branch, where inspect.signature() is tried
+    first.  When that raises (C extension types), the stripped clinic prefix is
+    attempted via Signature.from_str and the result stored on the APIObjectInfo.
+    """
+    import inspect as _inspect
+
+    class _FakeClinicType:
+        """_FakeClinicType(x, y=1)
+        --
+
+        A fake type mimicking a C-extension type with a clinic signature.
+        """
+
+    _orig = _inspect.signature
+
+    def _failing_sig(obj: Any, **kwargs: Any) -> Any:
+        if obj is _FakeClinicType:
+            raise ValueError("no signature for C extension type")
+        return _orig(obj, **kwargs)
+
+    monkeypatch.setattr(_inspect, "signature", _failing_sig)
+
+    config = Config(execute_doctests=False, infer=False)
+    gen = Gen(dummy_progress=True, config=config)
+
+    _, _, api_object = gen.extract_docstring(
+        qa="test:_FakeClinicType", target_item=_FakeClinicType
+    )
+    assert api_object.signature is not None, (
+        "clinic sig must be used as fallback when inspect.signature fails for a type"
+    )
+    node = api_object.signature.to_node()
+    param_names = [p.name for p in node.parameters]
+    assert "x" in param_names
+    assert "y" in param_names
+
+
+def test_clinic_signature_malformed_falls_back_to_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Malformed clinic prefix must not crash; sig falls back to None."""
+    import inspect as _inspect
+
+    class _BadClinicType:
+        """not_valid_python([broken
+        --
+
+        Body text.
+        """
+
+    _orig = _inspect.signature
+
+    def _failing_sig(obj: Any, **kwargs: Any) -> Any:
+        if obj is _BadClinicType:
+            raise ValueError("no signature for C extension type")
+        return _orig(obj, **kwargs)
+
+    monkeypatch.setattr(_inspect, "signature", _failing_sig)
+
+    config = Config(execute_doctests=False, infer=False)
+    gen = Gen(dummy_progress=True, config=config)
+
+    _, _, api_object = gen.extract_docstring(
+        qa="test:_BadClinicType", target_item=_BadClinicType
+    )
+    assert api_object.signature is None
 
 
 # ---------------------------------------------------------------------------

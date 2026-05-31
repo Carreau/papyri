@@ -1,0 +1,69 @@
+---
+// Shared rendering of the doc-body sections that appear on both the full
+// qualname page ([...slug].astro) and inline member cards (InlineMemberDoc.astro).
+// Covers: named sections (Parameters, Returns, …), arbitrary subsections,
+// and the Examples block. The caller handles the header, signature,
+// see-also, aliases, and backrefs because those differ between contexts.
+import type { QualnamePageView } from "../lib/qualname-page.ts";
+import type { XRefResolver } from "../lib/render-node.ts";
+import { sectionChildren, sectionTitleNodes } from "../lib/ir-reader.ts";
+import IrNode from "./IrNode.astro";
+
+interface Props {
+  view: QualnamePageView;
+  resolveXref: XRefResolver;
+  /** Heading level used for section titles (default 2). Subsection headings
+   *  inside arbitrary sections use headingLevel + 1. */
+  headingLevel?: 2 | 3 | 4;
+}
+
+const { view, resolveXref, headingLevel = 2 } = Astro.props;
+// Dynamic heading tags. Astro treats a capitalised string variable as an
+// intrinsic HTML element in JSX, so <H> renders as e.g. <h2>.
+const H = `h${headingLevel}` as unknown as "h2";
+const HSub = `h${headingLevel + 1}` as unknown as "h3";
+---
+
+{
+  view.sections.map(({ title, section }) => (
+    <section class={`doc-section doc-section-${title.toLowerCase().replace(/\s+/g, "-")}`}>
+      <H>{title}</H>
+      {sectionChildren(section).map((c) => (
+        <IrNode node={c} resolveXref={resolveXref} />
+      ))}
+    </section>
+  ))
+}
+
+{
+  view.arbitrary.length > 0 ? (
+    <section class="doc-section doc-section-arbitrary">
+      <H>Additional content</H>
+      {view.arbitrary.map((s) => (
+        <div>
+          {sectionTitleNodes(s).length > 0 ? (
+            <HSub>
+              {sectionTitleNodes(s).map((n) => (
+                <IrNode node={n} resolveXref={resolveXref} />
+              ))}
+            </HSub>
+          ) : null}
+          {sectionChildren(s).map((c) => (
+            <IrNode node={c} resolveXref={resolveXref} />
+          ))}
+        </div>
+      ))}
+    </section>
+  ) : null
+}
+
+{
+  view.exampleSection ? (
+    <section class="doc-section doc-section-examples">
+      <H>{view.exampleSection.title}</H>
+      {view.exampleSection.children.map((c) => (
+        <IrNode node={c} resolveXref={resolveXref} />
+      ))}
+    </section>
+  ) : null
+}

@@ -405,3 +405,6 @@ See `viewer/PLAN.md` for the detailed milestone tracker.
 - PR descriptions: be concise. Two to four bullet points covering what
   changed and why. Do not describe how you verified the change — that is
   CI's job. No "I ran X and saw Y" narratives.
+- Running steps: no "Now I'll do X… now Y" narration. State what is
+  happening in a single short phrase: "Linting TypeScript; verifying
+  ir-reader.ts". One sentence, present tense, then do it.

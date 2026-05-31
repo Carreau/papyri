@@ -36,27 +36,16 @@ function collectNodes(
 const FORWARD_REF_TYPES = new Set(["RefInfo", "Figure"]);
 
 /**
- * Extract all forward-reference Keys from a decoded IngestedDoc (or any
- * decoded IR subtree).  Mirrors Python's IngestedDoc.all_forward_refs().
- *
- * - RefInfo nodes with kind != "local" are included as-is.
- * - Figure nodes whose embedded RefInfo has kind == "assets" are included.
+ * Turn a flat list of collected forward-ref nodes into a deduped, sorted Key
+ * list.  `collectNodes(_, FORWARD_REF_TYPES)` only yields nodes whose `__type`
+ * is in FORWARD_REF_TYPES, so this loop must have a branch for every member of
+ * that set.  The final `else` is a completeness guard: a type added to
+ * FORWARD_REF_TYPES without a matching branch here would otherwise be collected
+ * and then silently dropped, losing every graph edge it should contribute (the
+ * bug class behind the missing-Figure-branch drift). Failing loud beats
+ * silently dropping edges.
  */
-export function collectForwardRefs(doc: IRNode): Key[] {
-  // Walk the same sub-trees as Python: _content values, example_section_data,
-  // arbitrary, see_also.
-  const d = doc as TypedNode;
-
-  const subtrees: AnyValue[] = [];
-  if (d._content && typeof d._content === "object") {
-    subtrees.push(...Object.values(d._content as Record<string, AnyValue>));
-  }
-  if (d.example_section_data) subtrees.push(d.example_section_data);
-  if (Array.isArray(d.arbitrary)) subtrees.push(...d.arbitrary);
-  if (Array.isArray(d.see_also)) subtrees.push(...d.see_also);
-
-  const nodes = collectNodes(subtrees, FORWARD_REF_TYPES);
-
+function refsFromNodes(nodes: TypedNode[]): Key[] {
   const keys = new Map<string, Key>();
 
   for (const n of nodes) {
@@ -88,6 +77,11 @@ export function collectForwardRefs(doc: IRNode): Key[] {
         path: (ref.path as string) ?? "",
       };
       keys.set(keyStr(key), key);
+    } else {
+      throw new Error(
+        `collectForwardRefs: no handler for forward-ref type ${n.__type} — ` +
+          "it is in FORWARD_REF_TYPES but refsFromNodes would drop it.",
+      );
     }
   }
 
@@ -99,33 +93,32 @@ export function collectForwardRefs(doc: IRNode): Key[] {
 }
 
 /**
+ * Extract all forward-reference Keys from a decoded IngestedDoc (or any
+ * decoded IR subtree).  Mirrors Python's IngestedDoc.all_forward_refs().
+ *
+ * - RefInfo nodes with kind != "local" are included as-is.
+ * - Figure nodes whose embedded RefInfo has kind == "assets" are included.
+ */
+export function collectForwardRefs(doc: IRNode): Key[] {
+  // Walk the same sub-trees as Python: _content values, example_section_data,
+  // arbitrary, see_also.
+  const d = doc as TypedNode;
+
+  const subtrees: AnyValue[] = [];
+  if (d._content && typeof d._content === "object") {
+    subtrees.push(...Object.values(d._content as Record<string, AnyValue>));
+  }
+  if (d.example_section_data) subtrees.push(d.example_section_data);
+  if (Array.isArray(d.arbitrary)) subtrees.push(...d.arbitrary);
+  if (Array.isArray(d.see_also)) subtrees.push(...d.see_also);
+
+  return refsFromNodes(collectNodes(subtrees, FORWARD_REF_TYPES));
+}
+
+/**
  * Extract forward refs from a bare Section blob (used for examples/).
- * Identical to collectForwardRefs but accepts any IR subtree.
+ * Identical to collectForwardRefs but walks the whole section subtree.
  */
 export function collectForwardRefsFromSection(section: IRNode): Key[] {
-  const nodes = collectNodes(section, FORWARD_REF_TYPES);
-  const keys = new Map<string, Key>();
-
-  for (const n of nodes) {
-    if (n.__type === "RefInfo") {
-      let kind = n.kind as string | null;
-      if (kind === "local") continue;
-      if (kind === "api") kind = "module";
-      const rawVersion = (n.version as string) ?? "?";
-      const version = rawVersion === "*" ? "?" : rawVersion;
-      const key: Key = {
-        module: (n.module as string) ?? "",
-        version,
-        kind: kind ?? "module",
-        path: (n.path as string) ?? "",
-      };
-      keys.set(keyStr(key), key);
-    }
-  }
-
-  return [...keys.values()].sort((a, b) => {
-    const sa = keyStr(a);
-    const sb = keyStr(b);
-    return sa < sb ? -1 : sa > sb ? 1 : 0;
-  });
+  return refsFromNodes(collectNodes(section, FORWARD_REF_TYPES));
 }

@@ -233,4 +233,18 @@ describe("collectForwardRefsFromSection", () => {
     const sec = section([paragraph([ref])]);
     expect(collectForwardRefsFromSection(sec)).toEqual([]);
   });
+
+  it("collects Figure asset refs nested in a section", () => {
+    // Regression: example sections embed Figures, and their asset refs must
+    // become graph edges (this function previously gathered Figure nodes but
+    // had no branch to emit them, silently dropping the edges).
+    const sec = section([figure("numpy", "2.0", "fig_example.png")]);
+    const refs = collectForwardRefsFromSection(sec);
+    expect(refs).toHaveLength(1);
+    expect(refs[0]).toMatchObject({
+      module: "numpy",
+      kind: "assets",
+      path: "fig_example.png",
+    });
+  });
 });

@@ -5,6 +5,7 @@ import BundleLayout from "../../../../layouts/BundleLayout.astro";
 import { resolveVersion } from "../../../../lib/ir-reader.ts";
 import { getBackends } from "../../../../lib/backends.ts";
 import { getBrokenBackrefs, type BrokenBackref } from "../../../../lib/graph.ts";
+import { linkForRef } from "../../../../lib/links.ts";
 
 const { pkg, ver } = Astro.params;
 if (!pkg || !ver) return new Response(null, { status: 404 });
@@ -72,15 +73,29 @@ groups.sort((a, b) => `${a.srcPkg}/${a.srcVer}`.localeCompare(`${b.srcPkg}/${b.s
                 </a>
               </h2>
               <ul>
-                {items.map((row) => (
-                  <li>
-                    <span class="diag-src-path">{row.srcPath}</span>
-                    <span class="diag-arrow">&#x2192;</span>
-                    <code class="xref unresolved">
-                      {row.destKind}/{row.destPath}
-                    </code>
-                  </li>
-                ))}
+                {items.map((row) => {
+                  const srcHref = linkForRef({
+                    pkg: row.srcPkg,
+                    ver: row.srcVer,
+                    kind: row.srcKind,
+                    path: row.srcPath,
+                  });
+                  return (
+                    <li>
+                      {srcHref ? (
+                        <a class="diag-src-path" href={srcHref}>
+                          {row.srcPath}
+                        </a>
+                      ) : (
+                        <span class="diag-src-path">{row.srcPath}</span>
+                      )}
+                      <span class="diag-arrow">&#x2192;</span>
+                      <code class="xref unresolved">
+                        {row.destKind}/{row.destPath}
+                      </code>
+                    </li>
+                  );
+                })}
               </ul>
             </section>
           ))}
@@ -130,6 +145,13 @@ groups.sort((a, b) => `${a.srcPkg}/${a.srcVer}`.localeCompare(`${b.srcPkg}/${b.s
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  a.diag-src-path {
+    color: var(--accent);
+    text-decoration: none;
+  }
+  a.diag-src-path:hover {
+    text-decoration: underline;
   }
   .diag-arrow {
     color: var(--fg-muted);

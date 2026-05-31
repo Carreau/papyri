@@ -1,9 +1,8 @@
 ---
 // Top strip shared by every page. Wordmark on the left links back to the
-// bundle index. Right side is reserved for utilities (theme toggle today;
-// global search later).
-import ThemeToggle from "./ThemeToggle.tsx";
-import VisibilityToggle from "./VisibilityToggle.tsx";
+// bundle index. Right side holds the display-settings cog (all localStorage
+// prefs) followed by the account avatar menu, or a login link for guests.
+import SettingsMenu from "./SettingsMenu.tsx";
 import UserMenu from "./UserMenu.tsx";
 import { getSessionUser } from "../lib/auth.ts";
 
@@ -19,16 +18,20 @@ const authenticated = user !== null;
   <div class="site-header-spacer"></div>
   <div class="site-header-tools">
     <slot name="tools" />
+    <SettingsMenu client:load />
     {
       authenticated ? (
-        <UserMenu client:load isAdmin={user.is_admin} githubUsername={user.github_username} />
+        <UserMenu
+          client:load
+          username={user.username}
+          isAdmin={user.is_admin}
+          githubUsername={user.github_username}
+        />
       ) : (
         <a href="/login" class="site-login-link">
           Login
         </a>
       )
     }
-    <VisibilityToggle client:load />
-    <ThemeToggle client:load />
   </div>
 </header>

@@ -499,7 +499,7 @@ li > p:only-child {
    Two data-attributes on <html> drive these via attribute selectors so the
    feature works with zero JS re-render — just a CSS class toggle. The
    attributes are applied by the inline head script (no flash) and kept in
-   sync by VisibilityToggle.tsx.
+   sync by SettingsMenu.tsx.
 --------------------------------------------------------------------------- */
 
 /* Hide type annotations: the colon+type span, the arrow+return span. */

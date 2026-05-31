@@ -725,10 +725,9 @@ file are cross-referenced rather than duplicated.
   change under `python -O`. (While here: `_invalidate` at `node_base.py:199`
   builds its error path as `f"{k}.{sub}." + sub`, interpolating `sub` twice —
   inconsistent with the dict/list branches that use `ii`; looks like a bug.)
-- **Fix stale `papyri ingest` reference.** `describe.py:85` tells the user
-  "Have you run `papyri ingest` yet?" — but there is no `papyri ingest` CLI
-  (it was removed; CLAUDE.md forbids re-adding it). Point the message at
-  `papyri upload` / the viewer's ingest endpoint instead.
+- **Fix stale `papyri ingest` reference.** *Landed.* `describe.py` now points
+  at `papyri upload` and `POST /api/reingest` instead of the removed
+  `papyri ingest` CLI.
 
 (Resolved and removed: "Document the two serialization paths" — both
 `node_serializer.py` and `serde.py` now carry module-level docstrings that
@@ -748,11 +747,10 @@ directory-ingest path. "Async fs in `ingest()`" is also resolved — the
 directory `ingest()` pipeline was deleted; the surviving `readFileSync` is only
 in the one-time synchronous `loadSchemaFromDisk` DB-init path.)
 
-- **Type-safe key parsing.** `visitor.ts` still hand-builds key strings
-  (`${module}/${version}/${kind}/${path}`) with silent `?? ""` fallbacks
-  (`visitor.ts:73–96, 117–127`) instead of reusing `keyStr` (`keys.ts:16`), and
-  there is no inverse. Reuse `keyStr` and add a `parseKeyStr(s) → Key` helper so
-  any key containing `/` fails loudly instead of silently truncating.
+- **Type-safe key parsing.** *Landed.* `visitor.ts` now uses `keyStr` from
+  `keys.ts` for all key-string construction. `parseKeyStr(s) → Key` added to
+  `keys.ts` as a validated inverse that fails loudly if the string has fewer
+  than four `/`-separated segments; `path` may itself contain `/`.
 - **Unify forward-ref collection.** `collectForwardRefs` (`visitor.ts:45`) and
   `collectForwardRefsFromSection` (`visitor.ts:105`) walk the same node types
   with slight differences. Parameterize the input subtrees so the walker is
@@ -926,11 +924,9 @@ pass; the rest are recorded here as TBD so the next PR can pick them up.
 
 ### TBD — minor
 
-- **Dead `Signature` properties** (`papyri/signature.py`). `is_generator`,
-  `is_async_generator`, `is_async_function` are unused; `is_generator` also
-  calls `inspect.isgenerator` (always false on a function object) where
-  `isgeneratorfunction` was meant. Either wire them up correctly or delete
-  them per the repo's delete-dead-code rule.
+- **Dead `Signature` properties** (`papyri/signature.py`). *Resolved — not
+  present.* `is_generator`, `is_async_generator`, `is_async_function` were
+  absent from the code when audited; no change needed.
 - **`removedRefStrs` reparses keys by `/`-split** (`ingest/src/ingest.ts`).
-  Fragile if a path component ever contains `/`; keep the original `Key`
-  object in `existingRefs` instead of reparsing the string.
+  *Resolved — not present.* `existingRefs` already stores `Key` objects as
+  values; `removedRefs` is `Key[]` with no string re-parsing needed.

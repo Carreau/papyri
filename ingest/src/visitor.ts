@@ -8,7 +8,7 @@
  */
 
 import type { IRNode, TypedNode } from "./encoder.js";
-import type { Key } from "./keys.js";
+import { keyStr, type Key } from "./keys.js";
 
 type AnyValue = unknown;
 
@@ -75,7 +75,7 @@ export function collectForwardRefs(doc: IRNode): Key[] {
         kind: kind ?? "module",
         path: (n.path as string) ?? "",
       };
-      keys.set(`${key.module}/${key.version}/${key.kind}/${key.path}`, key);
+      keys.set(keyStr(key), key);
     } else if (n.__type === "Figure") {
       // Figure.value is a RefInfo-shaped node.
       const ref = n.value as TypedNode | null;
@@ -87,13 +87,13 @@ export function collectForwardRefs(doc: IRNode): Key[] {
         kind: "assets",
         path: (ref.path as string) ?? "",
       };
-      keys.set(`${key.module}/${key.version}/${key.kind}/${key.path}`, key);
+      keys.set(keyStr(key), key);
     }
   }
 
   return [...keys.values()].sort((a, b) => {
-    const sa = `${a.module}/${a.version}/${a.kind}/${a.path}`;
-    const sb = `${b.module}/${b.version}/${b.kind}/${b.path}`;
+    const sa = keyStr(a);
+    const sb = keyStr(b);
     return sa < sb ? -1 : sa > sb ? 1 : 0;
   });
 }
@@ -119,13 +119,13 @@ export function collectForwardRefsFromSection(section: IRNode): Key[] {
         kind: kind ?? "module",
         path: (n.path as string) ?? "",
       };
-      keys.set(`${key.module}/${key.version}/${key.kind}/${key.path}`, key);
+      keys.set(keyStr(key), key);
     }
   }
 
   return [...keys.values()].sort((a, b) => {
-    const sa = `${a.module}/${a.version}/${a.kind}/${a.path}`;
-    const sb = `${b.module}/${b.version}/${b.kind}/${b.path}`;
+    const sa = keyStr(a);
+    const sb = keyStr(b);
     return sa < sb ? -1 : sa > sb ? 1 : 0;
   });
 }

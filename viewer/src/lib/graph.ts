@@ -16,6 +16,7 @@
 //   2. getBackrefs — return blob-backed documents that link to a target.
 
 import type { GraphDb } from "papyri-ingest";
+import { compareVersionsDesc } from "./ir-reader.ts";
 
 export interface RefTuple {
   pkg: string;
@@ -67,7 +68,10 @@ export async function resolveRef(graphDb: GraphDb, ref: RefTuple): Promise<RefTu
     [ref.pkg, kind, ref.path]
   );
   if (rows.length === 0) return null;
-  rows.sort((a, b) => b.version.localeCompare(a.version));
+  // Numeric-aware version sort (so 10.0.0 > 2.0.0); localeCompare would order
+  // these lexically and pick the wrong "latest". compareVersionsDesc puts the
+  // newest first.
+  rows.sort((a, b) => compareVersionsDesc(a.version, b.version));
   const best = rows[0]!;
   return { pkg: best.package, ver: best.version, kind: best.category, path: best.identifier };
 }

@@ -82,7 +82,8 @@ def describe(
         typer.echo(
             f"no IR entry found for {qualname!r} "
             f"(package={package!r}, version={version!r}, kind={kind!r}). "
-            "Have you run `papyri ingest` yet?",
+            "Have you run `papyri upload` yet? "
+            "(or re-ingested via the viewer's `POST /api/reingest`)",
             err=True,
         )
         raise typer.Exit(1)

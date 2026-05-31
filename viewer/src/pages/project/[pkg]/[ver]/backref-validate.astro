@@ -1,0 +1,138 @@
+---
+export const prerender = false;
+
+import BundleLayout from "../../../../layouts/BundleLayout.astro";
+import { resolveVersion } from "../../../../lib/ir-reader.ts";
+import { getBackends } from "../../../../lib/backends.ts";
+import { getBrokenBackrefs, type BrokenBackref } from "../../../../lib/graph.ts";
+
+const { pkg, ver } = Astro.params;
+if (!pkg || !ver) return new Response(null, { status: 404 });
+
+const { graphDb } = await getBackends();
+const actualVer = await resolveVersion(graphDb, pkg, ver);
+if (!actualVer) return new Response(`Package ${pkg} not found`, { status: 404 });
+
+const broken = await getBrokenBackrefs(graphDb, pkg, actualVer);
+const capped = broken.length === 500;
+
+// Group by source bundle (pkg + ver).
+const bySource = new Map<string, BrokenBackref[]>();
+for (const row of broken) {
+  const key = `${row.srcPkg}\0${row.srcVer}`;
+  const arr = bySource.get(key) ?? [];
+  arr.push(row);
+  bySource.set(key, arr);
+}
+interface SourceGroup {
+  srcPkg: string;
+  srcVer: string;
+  items: BrokenBackref[];
+}
+const groups: SourceGroup[] = [];
+for (const [key, items] of bySource) {
+  const [srcPkg, srcVer] = key.split("\0") as [string, string];
+  groups.push({ srcPkg, srcVer, items });
+}
+groups.sort((a, b) => `${a.srcPkg}/${a.srcVer}`.localeCompare(`${b.srcPkg}/${b.srcVer}`));
+---
+
+<BundleLayout
+  pkg={pkg}
+  ver={ver}
+  actualVer={actualVer}
+  title={`Broken incoming refs — ${pkg} ${ver} — Papyri viewer`}
+>
+  <p class="crumb"><a href={`/project/${pkg}/${ver}/`}>&larr; {pkg} {ver}</a></p>
+  <h1>Broken incoming references</h1>
+  <p class="lede">
+    Incoming cross-references that point at identifiers missing from{" "}
+    <strong>{pkg} {ver}</strong>. Covers two cases: links that pin this exact version (rendered as
+    unresolved since version fallback only applies to <code>?</code> refs), and wildcard-version links
+    whose target is also absent from this version.
+  </p>
+
+  {
+    broken.length === 0 ? (
+      <p class="diag-ok">&#x2713; No broken incoming references.</p>
+    ) : (
+      <>
+        <p class="diag-summary">
+          {broken.length}
+          {capped ? "+" : ""} broken reference
+          {broken.length !== 1 ? "s" : ""} from {groups.length} bundle
+          {groups.length !== 1 ? "s" : ""}.{capped ? " (capped at 500 — there may be more)" : ""}
+        </p>
+        <div class="diag-list">
+          {groups.map(({ srcPkg, srcVer, items }) => (
+            <section class="diag-source">
+              <h2>
+                <a href={`/project/${srcPkg}/${srcVer}/`}>
+                  {srcPkg} {srcVer}
+                </a>
+              </h2>
+              <ul>
+                {items.map((row) => (
+                  <li>
+                    <span class="diag-src-path">{row.srcPath}</span>
+                    <span class="diag-arrow">&#x2192;</span>
+                    <code class="xref unresolved">
+                      {row.destKind}/{row.destPath}
+                    </code>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
+      </>
+    )
+  }
+</BundleLayout>
+
+<style>
+  .diag-ok {
+    color: var(--ok-fg, #2d7a2d);
+    font-weight: 600;
+    margin-top: 1.5rem;
+  }
+  .diag-summary {
+    color: var(--warn-fg, #b05800);
+    font-weight: 600;
+    margin-top: 0.5rem;
+  }
+  .diag-list {
+    margin-top: 1.5rem;
+  }
+  .diag-source h2 {
+    font-size: 1rem;
+    margin-top: 1.5rem;
+    margin-bottom: 0.25rem;
+  }
+  .diag-source ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  .diag-source li {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.15rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .diag-src-path {
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    color: var(--fg-muted);
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .diag-arrow {
+    color: var(--fg-muted);
+    flex-shrink: 0;
+  }
+</style>

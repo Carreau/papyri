@@ -319,6 +319,14 @@ the graphstore and blob store is rebuildable via `POST /api/reingest`.
 
 ## Code conventions
 
+- **Use `assert` for invariants; never replace them with `raise`.** `assert`
+  statements document conditions that *must* hold inside the codebase — they are
+  the right tool for internal invariants, preconditions, and postconditions.
+  They can be stripped with `python -O` for performance, which is a feature, not
+  a bug. Do not convert an `assert` into a `TypeError`/`ValueError`/`raise`;
+  if anything, add *more* asserts to make invariants explicit. Reserve explicit
+  `raise` for input validation at system boundaries (user input, external APIs,
+  untrusted data) where the condition genuinely can happen in production.
 - Keep imports lazy inside CLI command functions (the existing pattern).
   `papyri --help` should stay fast.
 - `ruff` (lint + format, config in `pyproject.toml` under `[tool.ruff]`) +

@@ -1007,11 +1007,11 @@ class TSVisitor:
                 assert classsifier.type == "classifier"
                 assert _.type == ":"
                 _dd = self.visit(definition)
-                # TODO missing type
+                # TODO missing type (the classifier is currently dropped).
                 acc.append(
                     DefListItem(
                         dt=Paragraph(compress_word(self.visit(term))),
-                        dd=self.visit_paragraph(term),
+                        dd=_dd,
                     )
                 )
             else:

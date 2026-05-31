@@ -99,7 +99,7 @@ def dedent_but_first(text: str) -> str:
     return dedent(a) + "\n" + dedent("\n".join(b))
 
 
-def strip_clinic_signature(text: str) -> str:
+def strip_clinic_signature(text: str) -> tuple[str | None, str]:
     """Strip Python C clinic signature lines from a docstring.
 
     C extension __doc__ strings often start with:
@@ -109,11 +109,18 @@ def strip_clinic_signature(text: str) -> str:
     The ``--`` is a clinic separator, not RST. Tree-sitter RST misreads it as
     a section underline (which fails because the underline is shorter than the
     title). Strip those two lines so the RST parser sees only the body.
+
+    Returns
+    -------
+    (clinic_sig, body)
+        ``clinic_sig`` is the extracted signature line (e.g. ``"MyClass(x, y=1)"``),
+        or ``None`` if no clinic prefix was found.  ``body`` is the remaining
+        docstring text.
     """
     lines = text.split("\n")
     if len(lines) >= 2 and lines[1] == "--":
-        return "\n".join(lines[2:]).lstrip("\n")
-    return text
+        return lines[0], "\n".join(lines[2:]).lstrip("\n")
+    return None, text
 
 
 def pos_to_nl(script: str, pos: int) -> tuple[int, int]:

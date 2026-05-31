@@ -131,12 +131,24 @@ export async function resolveExternalRefs(
   const out = new Map<string, string>();
   await Promise.all(
     refs.map(async (r) => {
-      const name = r.path.replace(/:/g, ".");
-      const row = await graphDb.get<ExternalRow>(
-        "SELECT uri FROM external_objects WHERE name=? " +
-          "ORDER BY (project=?) DESC, (domain='py') DESC, (priority>=0) DESC, priority ASC LIMIT 1",
-        [name, r.pkg]
-      );
+      const dotName = r.path.replace(/:/g, ".");
+      // Python's stdlib objects.inv uses bare names for builtins: "repr" not
+      // "builtins.repr", "True" not "builtins.True".  Gen emits the full
+      // "builtins:name" path so the module field is correct; here we also
+      // probe the bare form so a registered "python" inventory resolves them.
+      const bareName = dotName.startsWith("builtins.") ? dotName.slice("builtins.".length) : null;
+      const row =
+        bareName !== null
+          ? await graphDb.get<ExternalRow>(
+              "SELECT uri FROM external_objects WHERE name IN (?,?) " +
+                "ORDER BY (project=?) DESC, (domain='py') DESC, (priority>=0) DESC, priority ASC LIMIT 1",
+              [dotName, bareName, r.pkg]
+            )
+          : await graphDb.get<ExternalRow>(
+              "SELECT uri FROM external_objects WHERE name=? " +
+                "ORDER BY (project=?) DESC, (domain='py') DESC, (priority>=0) DESC, priority ASC LIMIT 1",
+              [dotName, r.pkg]
+            );
       if (row?.uri) out.set(refKey(r), row.uri);
     })
   );

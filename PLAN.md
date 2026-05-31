@@ -288,6 +288,26 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
 - **Per-reference version resolution.** Local references should carry
   explicit versions; the invariant needs an enforcement point once
   cross-package version data is threaded through.
+- **Unify the "version unknown" cross-package ref marker (`"*"` vs `"?"`).**
+  Today an unresolved cross-package ref is spelled two different ways for the
+  same concept: gen emits `RefInfo(version="*", kind="api")` for module refs it
+  can't pin to a version (`papyri/tree.py:1199`), and ingest then rewrites that
+  to `version="?", kind="module"` to match the on-disk node schema
+  (`ingest/src/visitor.ts`, both `collectForwardRefs` and
+  `collectForwardRefsFromSection`). The viewer copes by matching
+  `version IN ('?','*')` and defaulting a missing version to `"?"`
+  (`viewer/src/lib/graph.ts` `getBackrefs`/`resolveRef`, `viewer/src/lib/xref.ts`).
+  Carrying two spellings for one idea forces every consumer to special-case both
+  and is a recurring source of "why didn't this link resolve" confusion. Pick a
+  single sentinel for "version unknown, resolve to whatever exists" and use it
+  end-to-end. Per the storage invariant, the IR in the raw archive is the
+  contract, so the right fix is to make gen emit the canonical form directly
+  (and drop the `kind="api"` → `kind="module"` rewrite), then delete the
+  `"*"`-handling branches in visitor/graph/xref rather than leaving compat
+  shims. Decide whether the canonical kind should be `"module"` and whether the
+  sentinel should be `"?"` or `"*"` before touching code; this overlaps with the
+  "Per-reference version resolution" item above and the "gen owns all ref
+  classification" invariant below.
 - **Configurable doctest `optionflags`.** `ExampleBlockExecutor` hardcodes
   `doctest.ELLIPSIS`. A `[global].doctest_optionflags` config key would suffice.
 - **Module-docstring parse failures.** A sentinel distinguishing "unparseable"

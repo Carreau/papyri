@@ -37,11 +37,12 @@ describe("graph.ts", () => {
     await rm(dir, { recursive: true, force: true });
   });
 
-  it("resolveRef: exact hit, pkg-only fallback (lex-max version), no match", async () => {
+  it("resolveRef: exact hit, wildcard fallback (lex-max version), no match", async () => {
     const dbPath = join(dir, "papyri.db");
     seedDb(dbPath);
     const graphDb = new SqliteGraphDb(new Database(dbPath) as Parameters<typeof SqliteGraphDb>[0]);
 
+    // Exact version present → exact match.
     expect(
       await resolveRef(graphDb, {
         pkg: "numpy",
@@ -50,16 +51,30 @@ describe("graph.ts", () => {
         path: "numpy.fft:fft",
       })
     ).toEqual({ pkg: "numpy", ver: "1.0.0", kind: "module", path: "numpy.fft:fft" });
+
+    // Pinned version not ingested → null (no silent cross-version fallback).
+    expect(
+      await resolveRef(graphDb, {
+        pkg: "numpy",
+        ver: "9.9.9",
+        kind: "module",
+        path: "numpy.fft:fft",
+      })
+    ).toBeNull();
+
+    // Wildcard '?' → falls back to lexicographic-max version.
     expect(
       (
         await resolveRef(graphDb, {
           pkg: "numpy",
-          ver: "9.9.9",
+          ver: "?",
           kind: "module",
           path: "numpy.fft:fft",
         })
       )?.ver
     ).toBe("2.0.0");
+
+    // Unknown package → null.
     expect(
       await resolveRef(graphDb, { pkg: "scipy", ver: "1.0.0", kind: "module", path: "x" })
     ).toBeNull();

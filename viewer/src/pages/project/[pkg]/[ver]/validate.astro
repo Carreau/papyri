@@ -1,0 +1,146 @@
+---
+export const prerender = false;
+
+import BundleLayout from "../../../../layouts/BundleLayout.astro";
+import { resolveVersion } from "../../../../lib/ir-reader.ts";
+import { getBackends } from "../../../../lib/backends.ts";
+import { resolveRefs, resolveExternalRefs, refKey, type RefTuple } from "../../../../lib/graph.ts";
+import { collectXrefsDetailed, type DetailedXref } from "../../../../lib/xref.ts";
+import { walkBundle, type PageRef } from "../../../../lib/bundle-walk.ts";
+
+const { pkg, ver } = Astro.params;
+if (!pkg || !ver) return new Response(null, { status: 404 });
+
+const { blobStore, graphDb } = await getBackends();
+const actualVer = await resolveVersion(graphDb, pkg, ver);
+if (!actualVer) return new Response(`Package ${pkg} not found`, { status: 404 });
+
+// Walk every doc in the bundle, collecting all CrossRef nodes per page.
+interface PageEntry {
+  page: PageRef;
+  refs: DetailedXref[];
+}
+const entries: PageEntry[] = [];
+const allRefs: RefTuple[] = [];
+
+await walkBundle(
+  blobStore,
+  pkg,
+  actualVer,
+  (doc, page) => {
+    const refs = collectXrefsDetailed(doc);
+    if (refs.length > 0) {
+      entries.push({ page, refs });
+      allRefs.push(...refs.map((d) => d.ref));
+    }
+    return true; // never stop early
+  },
+  ver
+);
+
+// Batch-resolve all refs in one pass.
+const resolved = await resolveRefs(graphDb, allRefs);
+const stillUnresolved = allRefs.filter((r) => !resolved.has(refKey(r)));
+const external = await resolveExternalRefs(graphDb, stillUnresolved);
+
+// Build per-page lists of truly unresolved refs.
+interface UnresolvedEntry {
+  page: PageRef;
+  items: DetailedXref[];
+}
+const unresolvedPages: UnresolvedEntry[] = [];
+for (const { page, refs } of entries) {
+  const items = refs.filter((d) => {
+    const k = refKey(d.ref);
+    return !resolved.has(k) && !external.has(k);
+  });
+  if (items.length > 0) unresolvedPages.push({ page, items });
+}
+
+const totalUnresolved = unresolvedPages.reduce((s, p) => s + p.items.length, 0);
+---
+
+<BundleLayout
+  pkg={pkg}
+  ver={ver}
+  actualVer={actualVer}
+  title={`Unresolved outgoing refs — ${pkg} ${ver} — Papyri viewer`}
+>
+  <p class="crumb"><a href={`/project/${pkg}/${ver}/`}>&larr; {pkg} {ver}</a></p>
+  <h1>Unresolved outgoing references</h1>
+  <p class="lede">
+    Cross-references emitted by <strong>{pkg} {ver}</strong> that could not be resolved to any ingested
+    bundle or registered external inventory.
+  </p>
+
+  {
+    totalUnresolved === 0 ? (
+      <p class="diag-ok">&#x2713; No unresolved outgoing references.</p>
+    ) : (
+      <>
+        <p class="diag-summary">
+          {totalUnresolved} unresolved reference{totalUnresolved !== 1 ? "s" : ""} across{" "}
+          {unresolvedPages.length} page{unresolvedPages.length !== 1 ? "s" : ""}.
+        </p>
+        <div class="diag-list">
+          {unresolvedPages.map(({ page, items }) => (
+            <section class="diag-page">
+              <h2>
+                <a href={page.href}>{page.label}</a>
+              </h2>
+              <ul>
+                {items.map((d) => (
+                  <li>
+                    <code class="xref unresolved">{d.value}</code>
+                    <span class="diag-ref-target">
+                      {d.ref.pkg}:{d.ref.path}
+                      {d.ref.ver !== "?" ? <> ({d.ref.ver})</> : null}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
+      </>
+    )
+  }
+</BundleLayout>
+
+<style>
+  .diag-ok {
+    color: var(--ok-fg, #2d7a2d);
+    font-weight: 600;
+    margin-top: 1.5rem;
+  }
+  .diag-summary {
+    color: var(--warn-fg, #b05800);
+    font-weight: 600;
+    margin-top: 0.5rem;
+  }
+  .diag-list {
+    margin-top: 1.5rem;
+  }
+  .diag-page h2 {
+    font-size: 1rem;
+    margin-top: 1.5rem;
+    margin-bottom: 0.25rem;
+  }
+  .diag-page ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  .diag-page li {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.15rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .diag-ref-target {
+    font-size: 0.8rem;
+    color: var(--fg-muted);
+    font-family: var(--mono);
+  }
+</style>

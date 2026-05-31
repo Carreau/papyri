@@ -1,8 +1,6 @@
 ---
 import {
   loadModule,
-  sectionChildren,
-  sectionTitleNodes,
   slugToQualname,
   resolveVersion,
   type IngestedDoc,
@@ -16,6 +14,8 @@ import { loadBundleNav } from "../../../../lib/nav.ts";
 import { qualnameAncestors, qualnameLabel } from "../../../../lib/qualname.ts";
 import IrNode from "../../../../components/IrNode.astro";
 import Signature from "../../../../components/Signature.astro";
+import InlineMemberDoc from "../../../../components/InlineMemberDoc.astro";
+import QualnameDocSections from "../../../../components/QualnameDocSections.astro";
 import BundleLayout from "../../../../layouts/BundleLayout.astro";
 
 export const prerender = false;
@@ -107,6 +107,14 @@ const memberGroups: MemberGroup[] = isClassPage
     ];
 const hasMembers = memberGroups.some((g) => g.items.length > 0);
 
+// Inlinable = non-private members from all groups except Submodules.
+// The server:defer islands on InlineMemberDoc fetch these individually in the
+// background after the parent page has responded.
+const inlineItems = memberGroups
+  .filter((g) => g.title !== "Submodules")
+  .flatMap((g) => g.items)
+  .filter((m) => !m.label.startsWith("_"));
+
 const crumbs = qualnameAncestors(qualname).map((qa) => ({
   qualname: qa,
   label: qualnameLabel(qa),
@@ -197,20 +205,27 @@ const crumbs = qualnameAncestors(qualname).map((qa) => ({
             </Fragment>
           ) : null
         )}
+        {inlineItems.length > 0 ? (
+          <div class="inline-members-list">
+            {inlineItems.map((item) => (
+              <InlineMemberDoc
+                server:defer
+                pkg={pkg}
+                ver={actualVer}
+                qualname={item.qualname}
+                label={item.label}
+                href={item.href}
+                githubSlug={githubSlug}
+                sourceRef={sourceRef}
+              />
+            ))}
+          </div>
+        ) : null}
       </section>
     ) : null
   }
 
-  {
-    view.sections.map(({ title, section }) => (
-      <section class={`doc-section doc-section-${title.toLowerCase().replace(/\s+/g, "-")}`}>
-        <h2>{title}</h2>
-        {sectionChildren(section).map((c) => (
-          <IrNode node={c} resolveXref={resolveXref} />
-        ))}
-      </section>
-    ))
-  }
+  <QualnameDocSections view={view} resolveXref={resolveXref} />
 
   {
     view.seeAlso.length > 0 ? (
@@ -221,39 +236,6 @@ const crumbs = qualnameAncestors(qualname).map((qa) => ({
             <IrNode node={item} resolveXref={resolveXref} />
           ))}
         </dl>
-      </section>
-    ) : null
-  }
-
-  {
-    view.arbitrary.length > 0 ? (
-      <section class="doc-section doc-section-arbitrary">
-        <h2>Additional content</h2>
-        {view.arbitrary.map((s) => (
-          <div>
-            {sectionTitleNodes(s).length > 0 ? (
-              <h3>
-                {sectionTitleNodes(s).map((n) => (
-                  <IrNode node={n} resolveXref={resolveXref} />
-                ))}
-              </h3>
-            ) : null}
-            {sectionChildren(s).map((c) => (
-              <IrNode node={c} resolveXref={resolveXref} />
-            ))}
-          </div>
-        ))}
-      </section>
-    ) : null
-  }
-
-  {
-    view.exampleSection ? (
-      <section class="doc-section doc-section-examples">
-        <h2>{view.exampleSection.title}</h2>
-        {view.exampleSection.children.map((c) => (
-          <IrNode node={c} resolveXref={resolveXref} />
-        ))}
       </section>
     ) : null
   }

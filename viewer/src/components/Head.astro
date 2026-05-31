@@ -9,7 +9,7 @@
 // The inline script is intentionally hand-rolled so it doesn't need to ship
 // through a bundler — Astro emits it verbatim with `is:inline`.
 import { THEME_STORAGE_KEY } from "../lib/theme.ts";
-import { HIDE_TYPES_KEY, HIDE_PRIVATE_KEY } from "../lib/visibility.ts";
+import { HIDE_TYPES_KEY, HIDE_PRIVATE_KEY, INLINE_MEMBERS_KEY } from "../lib/visibility.ts";
 
 export interface Props {
   title: string;
@@ -25,6 +25,7 @@ try {
   var r = document.documentElement;
   if (localStorage.getItem(${JSON.stringify(HIDE_TYPES_KEY)}) === '1') r.setAttribute('data-hide-types', '');
   if (localStorage.getItem(${JSON.stringify(HIDE_PRIVATE_KEY)}) === '1') r.setAttribute('data-hide-private', '');
+  if (localStorage.getItem(${JSON.stringify(INLINE_MEMBERS_KEY)}) === '1') r.setAttribute('data-inline-members', '');
 } catch (e) {}
 `.trim();
 ---

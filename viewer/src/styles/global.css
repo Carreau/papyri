@@ -576,15 +576,18 @@ nav.page-toc li.page-toc-level-4 .page-toc-link {
 
 /* Structured signature: each parameter and annotation lives in its own
    element so the renderer can style, link, or otherwise enrich them without
-   re-parsing a flat string. */
-section.signature .sig {
+   re-parsing a flat string. The `.sig*` classes are emitted only by the
+   Signature component, so these rules are unscoped — they apply identically
+   on the full qualname page (section.signature) and inside inline member
+   cards (.inline-member-signature). */
+.sig {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 0.75rem 1rem;
   overflow-x: auto;
 }
-section.signature .sig-code {
+.sig-code {
   background: transparent;
   padding: 0;
   font-family: var(--mono);
@@ -594,41 +597,41 @@ section.signature .sig-code {
   flex-wrap: wrap;
   align-items: baseline;
 }
-section.signature .sig-name {
+.sig-name {
   color: var(--fg);
   font-weight: 600;
 }
-section.signature .sig-param {
+.sig-param {
   /* Keep a parameter's name/annotation/default together when wrapping. */
   display: flex;
   align-items: baseline;
 }
-section.signature .sig-param-name {
+.sig-param-name {
   color: var(--fg);
 }
-section.signature .sig-annotation,
-section.signature .sig-return {
+.sig-annotation,
+.sig-return {
   color: var(--accent);
 }
-section.signature .sig-default {
+.sig-default {
   color: var(--fg-muted);
 }
-section.signature .sig-marker,
-section.signature .sig-stars {
+.sig-marker,
+.sig-stars {
   color: var(--fg-muted);
 }
-section.signature .sig-punct,
-section.signature .sig-arrow {
+.sig-punct,
+.sig-arrow {
   color: var(--fg-muted);
 }
-section.signature .sig-qualifier {
+.sig-qualifier {
   color: var(--sig-keyword);
   font-style: italic;
 }
-section.signature .sig-qualifier-space {
+.sig-qualifier-space {
   /* non-breaking space between qualifier and function name */
 }
-section.signature .sig-kind-badge {
+.sig-kind-badge {
   display: inline-block;
   font-family: var(--mono);
   font-size: 0.72rem;
@@ -777,6 +780,86 @@ section.backrefs ul.qualnames {
 .theme-toggle:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------------------
+   Inline member doc cards (shown when html[data-inline-members] is set).
+--------------------------------------------------------------------------- */
+
+/* Hidden by default; VisibilityToggle sets data-inline-members on <html>. */
+.inline-members-list {
+  display: none;
+}
+html[data-inline-members] .inline-members-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  margin-top: 1.5rem;
+}
+
+/* Individual inline member card. */
+.inline-member {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1rem 1.25rem;
+  background: var(--surface);
+  scroll-margin-top: 1rem;
+}
+
+.inline-member-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.inline-member-heading {
+  margin: 0;
+  font-size: 1rem;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.inline-member-link {
+  text-decoration: none;
+  color: var(--fg);
+}
+.inline-member-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.inline-member-kind {
+  font-size: 0.75rem;
+}
+
+.inline-member-source {
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  text-decoration: none;
+  flex-shrink: 0;
+}
+.inline-member-source:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.inline-member-signature {
+  margin: 0.5rem 0 0.75rem;
+}
+
+/* Section headings inside inline member cards are smaller than on the full
+   page; they inherit from the card's h3 context, so h4 renders as a label. */
+.inline-member .doc-section h4 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--fg-muted);
+  margin: 0.75rem 0 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 /* Bundle search error message (shown in sidebar if index fails to load) */

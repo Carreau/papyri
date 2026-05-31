@@ -1,0 +1,73 @@
+---
+// Self-contained server island: loads a single member's IngestedDoc and
+// renders it inline. Declared with `server:defer` at the call site so the
+// parent page responds immediately and each card is fetched in the background.
+import { loadModule } from "../lib/ir-reader.ts";
+import { buildQualnamePageView } from "../lib/qualname-page.ts";
+import { buildXrefResolver } from "../lib/xref.ts";
+import { getBackends } from "../lib/backends.ts";
+import Signature from "./Signature.astro";
+import QualnameDocSections from "./QualnameDocSections.astro";
+
+interface Props {
+  pkg: string;
+  ver: string;
+  qualname: string;
+  label: string;
+  href: string;
+  githubSlug: string | null;
+  sourceRef: string;
+}
+
+const { pkg, ver, qualname, label, href, githubSlug, sourceRef } = Astro.props;
+
+const { blobStore, graphDb } = await getBackends();
+
+let doc = null;
+try {
+  doc = await loadModule(blobStore, pkg, ver, qualname);
+} catch {
+  // member blob not found — render nothing below
+}
+
+const resolveXref = doc ? await buildXrefResolver(graphDb, doc, pkg, ver) : null;
+const view = doc ? buildQualnamePageView(doc, [], "") : null;
+const sourceUrl =
+  doc && githubSlug && doc.item_file
+    ? `https://github.com/${githubSlug}/blob/${sourceRef}/${doc.item_file}${doc.item_line != null ? `#L${doc.item_line}` : ""}`
+    : null;
+---
+
+{
+  doc && view && resolveXref ? (
+    <article class="inline-member" id={`member-${label}`}>
+      <header class="inline-member-header">
+        <h3 class="inline-member-heading">
+          <a href={href} class="inline-member-link" title={doc.qa}>
+            <code>{label}</code>
+          </a>
+          {doc.item_type ? <span class="kind inline-member-kind">{doc.item_type}</span> : null}
+        </h3>
+        {sourceUrl ? (
+          <a
+            href={sourceUrl}
+            class="inline-member-source"
+            target="_blank"
+            rel="noopener noreferrer"
+            title={`View source for ${label}`}
+          >
+            [source]
+          </a>
+        ) : null}
+      </header>
+
+      {doc.signature ? (
+        <div class="inline-member-signature">
+          <Signature signature={doc.signature} itemType={doc.item_type} />
+        </div>
+      ) : null}
+
+      <QualnameDocSections view={view} resolveXref={resolveXref} headingLevel={4} />
+    </article>
+  ) : null
+}

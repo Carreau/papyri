@@ -41,7 +41,7 @@
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
-/* Dark theme overrides. Toggled by ThemeToggle.tsx writing data-theme="dark"
+/* Dark theme overrides. Toggled by SettingsMenu.tsx writing data-theme="dark"
    on <html>. Only surface/background/text/border tokens change — the accent
    hue stays stable so links and XRef underlines keep their identity across
    themes. Shiki/KaTeX output carries its own colors (github-light, KaTeX
@@ -733,36 +733,16 @@ section.backrefs ul.qualnames {
   color: var(--accent);
 }
 
-.visibility-toggles {
+/* ---------------------------------------------------------------------------
+   Display-settings cog: a button in the header opening a dropdown with every
+   client-side preference (theme, hide types, hide private, inline members).
+--------------------------------------------------------------------------- */
+.settings-menu {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.25rem 0.5rem;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  font-size: 0.8rem;
-  font-family: var(--sans);
-  color: var(--fg-muted);
 }
-.visibility-label {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  cursor: pointer;
-  white-space: nowrap;
-  user-select: none;
-}
-.visibility-label input[type="checkbox"] {
-  margin: 0;
-  cursor: pointer;
-  accent-color: var(--accent);
-}
-.visibility-label:hover span {
-  color: var(--fg);
-}
-
-.theme-toggle {
+.settings-menu-trigger {
   background: var(--surface);
   color: var(--fg);
   border: 1px solid var(--border);
@@ -773,20 +753,160 @@ section.backrefs ul.qualnames {
   cursor: pointer;
   font-family: var(--sans);
 }
-.theme-toggle:hover {
+.settings-menu-trigger:hover {
   border-color: var(--accent);
   color: var(--accent);
 }
-.theme-toggle:focus-visible {
+.settings-menu-trigger:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+.settings-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  z-index: 20;
+  min-width: 10rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.35rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 18%);
+  font-family: var(--sans);
+  font-size: 0.85rem;
+  color: var(--fg-muted);
+}
+.settings-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+.settings-menu-item:hover {
+  background: var(--surface-alt);
+  color: var(--fg);
+}
+.settings-menu-item input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
+/* ---------------------------------------------------------------------------
+   Account menu: avatar button at the far right of the header, opening a
+   dropdown with the account links (Settings, Admin) and Logout.
+--------------------------------------------------------------------------- */
+.user-menu {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.user-menu-trigger {
+  display: flex;
+  align-items: center;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  line-height: 0;
+}
+.user-menu-trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.user-menu-avatar {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  display: block;
+  border: 1px solid var(--border);
+}
+.user-menu-trigger:hover .user-menu-avatar {
+  border-color: var(--accent);
+}
+/* Generated placeholder shown when no GitHub avatar is linked. */
+.user-menu-avatar-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-family: var(--sans);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  user-select: none;
+}
+.user-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  z-index: 20;
+  min-width: 11rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.35rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 18%);
+  font-family: var(--sans);
+}
+.user-menu-name {
+  padding: 0.3rem 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.user-menu-divider {
+  height: 1px;
+  margin: 0.25rem 0;
+  background: var(--border);
+}
+.user-menu-item {
+  display: block;
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  text-decoration: none;
+  color: var(--fg);
+  cursor: pointer;
+}
+.user-menu-item:hover,
+.user-menu-item:focus-visible {
+  background: var(--surface-alt);
+  color: var(--accent);
+  outline: none;
+}
+.user-menu-logout {
+  color: var(--math-error-fg);
+}
+.user-menu-item:disabled {
+  color: var(--fg-muted);
+  cursor: not-allowed;
 }
 
 /* ---------------------------------------------------------------------------
    Inline member doc cards (shown when html[data-inline-members] is set).
 --------------------------------------------------------------------------- */
 
-/* Hidden by default; VisibilityToggle sets data-inline-members on <html>. */
+/* Hidden by default; SettingsMenu sets data-inline-members on <html>. */
 .inline-members-list {
   display: none;
 }

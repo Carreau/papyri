@@ -720,11 +720,6 @@ file are cross-referenced rather than duplicated.
   and `_autosummary_handler` / `_toctree_handler` still rely on it. Finish the
   job by removing the getattr dispatch so the dict is the only mechanism.
   Combine with the "no global state" / `DirectiveContext` work above.
-- **Replace assertion-based arg validation in `Node.__init__`**
-  (`node_base.py:53`). Use `TypeError`/`ValueError` so behaviour does not
-  change under `python -O`. (While here: `_invalidate` at `node_base.py:199`
-  builds its error path as `f"{k}.{sub}." + sub`, interpolating `sub` twice —
-  inconsistent with the dict/list branches that use `ii`; looks like a bug.)
 - **Fix stale `papyri ingest` reference.** *Landed.* `describe.py` now points
   at `papyri upload` and `POST /api/reingest` instead of the removed
   `papyri ingest` CLI.

@@ -3,6 +3,7 @@ import { loadBundleNav } from "../../../../lib/nav.ts";
 import { resolveVersion } from "../../../../lib/ir-reader.ts";
 import { getBackends } from "../../../../lib/backends.ts";
 import { linkForQualname } from "../../../../lib/links.ts";
+import { countBrokenBackrefs } from "../../../../lib/graph.ts";
 import BundleLayout from "../../../../layouts/BundleLayout.astro";
 
 export const prerender = false;
@@ -13,7 +14,10 @@ if (!pkg || !ver) return new Response(null, { status: 404 });
 const { blobStore, graphDb } = await getBackends();
 const actualVer = await resolveVersion(graphDb, pkg, ver);
 if (!actualVer) return new Response(`Package ${pkg} not found`, { status: 404 });
-const nav = await loadBundleNav(blobStore, pkg, actualVer, ver);
+const [nav, brokenBackrefCount] = await Promise.all([
+  loadBundleNav(blobStore, pkg, actualVer, ver),
+  countBrokenBackrefs(graphDb, pkg, actualVer),
+]);
 
 const hasDocs = nav.toc.length > 0 || nav.docs.length > 0;
 const hasExamples = nav.examples.length > 0;
@@ -66,4 +70,47 @@ const apiHref = nav.qualnames.includes(pkg)
       ) : null
     }
   </div>
+
+  <div class="diag-links">
+    <a class="diag-link" href={`/project/${pkg}/${ver}/validate`}> Unresolved outgoing refs </a>
+    <a
+      class:list={["diag-link", brokenBackrefCount > 0 && "diag-link-warn"]}
+      href={`/project/${pkg}/${ver}/backref-validate`}
+    >
+      {
+        brokenBackrefCount > 0
+          ? `${brokenBackrefCount} broken incoming ref${brokenBackrefCount !== 1 ? "s" : ""}`
+          : "Broken incoming refs"
+      }
+    </a>
+  </div>
 </BundleLayout>
+
+<style>
+  .diag-links {
+    margin-top: 1.5rem;
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+  .diag-link {
+    font-size: 0.85rem;
+    color: var(--fg-muted);
+    text-decoration: none;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.2rem 0.6rem;
+  }
+  .diag-link:hover {
+    color: var(--accent);
+    border-color: currentColor;
+  }
+  .diag-link-warn {
+    color: var(--warn-fg, #b05800);
+    border-color: currentColor;
+  }
+  .diag-link-warn:hover {
+    color: var(--error-fg, #cc0000);
+    border-color: currentColor;
+  }
+</style>

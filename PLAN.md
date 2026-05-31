@@ -522,29 +522,15 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   *Out of scope for the first PR:* PEP 440 pre-release exclusion (item 1),
   precomputed table (item 5). Land the render-time filter + tests first.
 
-- **Viewer: Unresolved link warnings** (designed 2026-05-04; banner half done).
-  The version status banner (`viewer/src/components/VersionBanner.astro`,
-  `viewer/src/lib/version-utils.ts`) is already shipped. What remains is the
-  outgoing unresolved-ref surface:
-
-  - **Inline warnings**: Display special styling (strikethrough, error color)
-    on `CrossRef` nodes where `.exists === false`.
-  - **Report page** (`/[pkg]/[ver]/validate`): List all unresolved refs in a
-    bundle grouped by location and kind.
-
-  *Design notes:*
-  - Link validation leverages `CrossRef.exists` property computed by gen.
-  - Reuses existing `.admonition` styling patterns and warn/error color tokens.
-  - Render-time only; defer CLI/background validation tooling.
-
-  *Files to create/modify (when implemented):*
-  - CrossRef rendering lives in `viewer/src/lib/render-node.ts` (string
-    helpers), not a `CrossRef.tsx` component — add the unresolved styling there.
-  - `viewer/src/styles/ir-nodes.css` — the `.xref.unresolved` class already
-    exists (`ir-nodes.css:172,186`); wire `render-node.ts` to emit it when
-    `.exists === false`.
-  - `viewer/src/pages/[pkg]/[ver]/validate.astro` — report page (does not exist
-    yet).
+- **Viewer: Unresolved link warnings** *Landed.*
+  - **Inline warnings**: `render-node.ts` already emits `<span class="xref
+    unresolved" ...>` when the xref resolver returns null; `.xref.unresolved`
+    styling is in `ir-nodes.css`. No further change needed.
+  - **Report page** (`/project/[pkg]/[ver]/validate`): *Landed.* Walks every
+    doc in the bundle, batch-resolves all CrossRefs (papyri graph + external
+    inventory), and groups the still-unresolved ones by page. Added
+    `collectXrefsDetailed` to `xref.ts` to carry display values alongside
+    ref tuples.
 
 - **Bundle staging area** (captured 2026-05-20).
   Support uploading a bundle into a *staging* zone that is isolated from the
@@ -595,57 +581,17 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   - `viewer/src/pages/[pkg]/[ver]/index.astro` — staging banner
   - `viewer/src/pages/staging.astro` — list of all staged bundles (admin view)
 
-- **Incoming broken-link report page** (captured 2026-05-20).
-  A per-bundle report page at `/[pkg]/[ver]/backref-validate` (or similar)
-  that lists every *incoming* cross-reference from other bundles that no
-  longer resolves — i.e. another package links to an identifier or page that
-  this bundle no longer exports.
+- **Incoming broken-link report page** *Landed.*
+  `/project/[pkg]/[ver]/backref-validate` lists every incoming cross-reference
+  from other bundles that points at a node in `(pkg, ver)` with `has_blob=0`
+  (a placeholder that was never ingested — i.e. the symbol no longer exists).
+  Results are grouped by source bundle and capped at 500 rows. The bundle
+  index page (`/project/[pkg]/[ver]/`) shows a count badge for broken incoming
+  refs (via `countBrokenBackrefs`) and links to both diagnostic pages.
+  `getBrokenBackrefs` / `countBrokenBackrefs` live in `graph.ts`.
 
-  *Why this matters:*
-  - When a maintainer renames or removes a public API symbol, all other bundles
-    that referenced the old name now have dangling links. Today this is silent.
-  - The report lets maintainers audit the real-world breakage before releasing,
-    and lets downstream maintainers discover that the API they depend on has
-    moved.
-
-  *Data model:*
-  - At ingest time the graph already stores `(source_pkg, source_ver,
-    source_path, dest_pkg, dest_ver, dest_kind, dest_identifier)` in the
-    `links` table (or per-bundle refs table if that design lands).
-  - A broken incoming link is one where `dest_identifier` no longer exists in
-    the current `nodes` table for `(dest_pkg, dest_ver)`.
-  - The query is straightforward: `SELECT * FROM links WHERE dest_pkg = ? AND
-    dest_ver = ? AND NOT EXISTS (SELECT 1 FROM nodes WHERE pkg = dest_pkg AND
-    ver = dest_ver AND identifier = dest_identifier)`.
-  - Results are grouped by `(source_pkg, source_ver)` and by kind
-    (module-level ref vs. parameter ref vs. narrative-doc ref).
-
-  *Design notes:*
-  - This is a read-only, render-time query — no IR changes needed.
-  - The page is linked from the bundle's index page (e.g. a small
-    "N unresolved incoming refs" badge) so maintainers can find it without
-    knowing the URL.
-  - Distinct from the *outgoing* unresolved-ref report (`/validate`) which
-    shows links this bundle makes to others that don't resolve. Both pages
-    are useful; they answer different questions (am I breaking others? vs. am
-    I referring to something that no longer exists?).
-  - For staging bundles, run the same query against the staging graph —
-    useful for verifying that a PR's doc changes don't introduce new broken
-    incoming links before merging.
-  - Pagination or truncation at ~500 rows for large packages (e.g. numpy) to
-    avoid unbounded page loads.
-
-  *Open questions:*
-  - Whether to surface the report in the main navigation or only via the badge
-    link — start with badge-only to keep noise down.
-  - Whether ingest should eagerly precompute the broken-backref count and
-    store it as a `bundle_stats` row so the badge renders without an
-    additional query per page load.
-
-  *Files to create/modify (when implemented):*
-  - `viewer/src/lib/graph.ts` — `getBrokenBackrefs(pkg, ver)` query
-  - `viewer/src/pages/[pkg]/[ver]/backref-validate.astro` — report page
-  - `viewer/src/pages/[pkg]/[ver]/index.astro` — broken-backref count badge
+  *Still open:* precompute the count at ingest time into a `bundle_stats` row
+  so the badge is a single row lookup rather than a COUNT query on startup.
 
 ### Gen-time diagnostics
 

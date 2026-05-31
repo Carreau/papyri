@@ -57,6 +57,10 @@ export async function resolveRef(graphDb: GraphDb, ref: RefTuple): Promise<RefTu
       path: exact.identifier,
     };
   }
+  // Only fall back to any version when the ref itself didn't pin one.
+  // A ref with an explicit version that is missing from this viewer should
+  // render as unresolved — silently landing on the wrong version is confusing.
+  if (ref.ver !== "?" && ref.ver !== "*") return null;
   const rows = await graphDb.all<NodeRow>(
     "SELECT package, version, category, identifier FROM nodes " +
       "WHERE has_blob=1 AND package=? AND category=? AND identifier=?",
@@ -131,12 +135,24 @@ export async function resolveExternalRefs(
   const out = new Map<string, string>();
   await Promise.all(
     refs.map(async (r) => {
-      const name = r.path.replace(/:/g, ".");
-      const row = await graphDb.get<ExternalRow>(
-        "SELECT uri FROM external_objects WHERE name=? " +
-          "ORDER BY (project=?) DESC, (domain='py') DESC, (priority>=0) DESC, priority ASC LIMIT 1",
-        [name, r.pkg]
-      );
+      const dotName = r.path.replace(/:/g, ".");
+      // Python's stdlib objects.inv uses bare names for builtins: "repr" not
+      // "builtins.repr", "True" not "builtins.True".  Gen emits the full
+      // "builtins:name" path so the module field is correct; here we also
+      // probe the bare form so a registered "python" inventory resolves them.
+      const bareName = dotName.startsWith("builtins.") ? dotName.slice("builtins.".length) : null;
+      const row =
+        bareName !== null
+          ? await graphDb.get<ExternalRow>(
+              "SELECT uri FROM external_objects WHERE name IN (?,?) " +
+                "ORDER BY (project=?) DESC, (domain='py') DESC, (priority>=0) DESC, priority ASC LIMIT 1",
+              [dotName, bareName, r.pkg]
+            )
+          : await graphDb.get<ExternalRow>(
+              "SELECT uri FROM external_objects WHERE name=? " +
+                "ORDER BY (project=?) DESC, (domain='py') DESC, (priority>=0) DESC, priority ASC LIMIT 1",
+              [dotName, r.pkg]
+            );
       if (row?.uri) out.set(refKey(r), row.uri);
     })
   );
@@ -177,6 +193,116 @@ export async function getBackrefs(graphDb: GraphDb, target: RefTuple): Promise<R
     `${a.pkg}/${a.ver}/${a.kind}/${a.path}`.localeCompare(`${b.pkg}/${b.ver}/${b.kind}/${b.path}`)
   );
   return out;
+}
+
+export interface BrokenBackref {
+  srcPkg: string;
+  srcVer: string;
+  srcKind: string;
+  srcPath: string;
+  destKind: string;
+  destPath: string;
+}
+
+/**
+ * Return incoming cross-references that do not resolve to `(pkg, ver)`:
+ *
+ *  • Exact-version refs — another bundle linked to `(pkg, ver, identifier)`
+ *    specifically, but that identifier has no blob in this version.
+ *    With the corrected `resolveRef` (no fallback for pinned versions), these
+ *    will render as unresolved `<span class="xref unresolved">`.
+ *
+ *  • Wildcard-version refs — another bundle linked to `(pkg, '?', identifier)`,
+ *    meaning "whatever version is available", but the identifier has no blob in
+ *    `ver`. These will either resolve to a different version (older/newer) or
+ *    stay unresolved if no version has it.
+ *
+ * Both cases tell a maintainer "someone is pointing at an identifier that is
+ * missing from THIS version of my package."
+ *
+ * Capped at 500 rows (PLAN.md recommendation).
+ */
+export async function getBrokenBackrefs(
+  graphDb: GraphDb,
+  pkg: string,
+  ver: string
+): Promise<BrokenBackref[]> {
+  interface Row {
+    src_pkg: string;
+    src_ver: string;
+    src_kind: string;
+    src_path: string;
+    dest_kind: string;
+    dest_path: string;
+  }
+  const rows = await graphDb.all<Row>(
+    "SELECT DISTINCT " +
+      "n_src.package AS src_pkg, n_src.version AS src_ver, " +
+      "n_src.category AS src_kind, n_src.identifier AS src_path, " +
+      "n_dest.category AS dest_kind, n_dest.identifier AS dest_path " +
+      "FROM links l " +
+      "JOIN nodes n_src ON n_src.id = l.source " +
+      "JOIN nodes n_dest ON n_dest.id = l.dest " +
+      "WHERE n_src.has_blob=1 " +
+      "AND n_dest.package=? " +
+      "AND (" +
+      "  (n_dest.version=? AND n_dest.has_blob=0)" +
+      "  OR (n_dest.version IN ('?','*')" +
+      "      AND NOT EXISTS (" +
+      "        SELECT 1 FROM nodes n_ver" +
+      "        WHERE n_ver.package=? AND n_ver.version=?" +
+      "          AND n_ver.category=n_dest.category" +
+      "          AND n_ver.identifier=n_dest.identifier" +
+      "          AND n_ver.has_blob=1" +
+      "      ))" +
+      ") " +
+      "ORDER BY n_src.package, n_src.version, n_src.identifier " +
+      "LIMIT 500",
+    [pkg, ver, pkg, ver]
+  );
+  return rows.map((r) => ({
+    srcPkg: r.src_pkg,
+    srcVer: r.src_ver,
+    srcKind: r.src_kind,
+    srcPath: r.src_path,
+    destKind: r.dest_kind,
+    destPath: r.dest_path,
+  }));
+}
+
+/**
+ * Count of broken incoming backref rows for `(pkg, ver)` — the number shown
+ * on the bundle index badge. Capped at 500 (same as getBrokenBackrefs).
+ */
+export async function countBrokenBackrefs(
+  graphDb: GraphDb,
+  pkg: string,
+  ver: string
+): Promise<number> {
+  const row = await graphDb.get<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM (" +
+      "SELECT DISTINCT n_src.id, n_dest.id " +
+      "FROM links l " +
+      "JOIN nodes n_src ON n_src.id = l.source " +
+      "JOIN nodes n_dest ON n_dest.id = l.dest " +
+      "WHERE n_src.has_blob=1 " +
+      "AND n_dest.package=? " +
+      "AND (" +
+      "  (n_dest.version=? AND n_dest.has_blob=0)" +
+      "  OR (n_dest.version IN ('?','*')" +
+      "      AND NOT EXISTS (" +
+      "        SELECT 1 FROM nodes n_ver" +
+      "        WHERE n_ver.package=? AND n_ver.version=?" +
+      "          AND n_ver.category=n_dest.category" +
+      "          AND n_ver.identifier=n_dest.identifier" +
+      "          AND n_ver.has_blob=1" +
+      "      ))" +
+      ") " +
+      "LIMIT 500" +
+      ")",
+    [pkg, ver, pkg, ver]
+  );
+  return row?.n ?? 0;
 }
 
 /**

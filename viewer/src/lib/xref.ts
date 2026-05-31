@@ -36,6 +36,32 @@ export type XRefResolver = (
   raw: unknown
 ) => { url: string; label: string; external?: boolean } | null;
 
+export interface DetailedXref {
+  value: string;
+  ref: RefTuple;
+}
+
+/**
+ * Walk a decoded doc and return every CrossRef as `{value, ref}`. Includes
+ * the display text alongside the ref-tuple so callers can report unresolved
+ * refs with a human-readable label.
+ */
+export function collectXrefsDetailed(node: unknown): DetailedXref[] {
+  const out: DetailedXref[] = [];
+  for (const n of collectNodes(node, new Set(["CrossRef"]))) {
+    const xn = n as IRNode as XRefShape;
+    const ref = xn.reference;
+    if (!ref || !ref.path || !ref.kind) continue;
+    if (ref.__type === "LocalRef" || !ref.module) continue;
+    if (ref.module === "current-module" || ref.kind === "to-resolve") continue;
+    out.push({
+      value: xn.value ?? ref.path,
+      ref: { pkg: ref.module, ver: ref.version ?? "?", kind: ref.kind, path: ref.path },
+    });
+  }
+  return out;
+}
+
 /** Walk a decoded doc and return every CrossRef ref-tuple it points at. */
 export function collectXrefs(node: unknown): RefTuple[] {
   const out: RefTuple[] = [];

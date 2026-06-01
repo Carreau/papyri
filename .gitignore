@@ -39,3 +39,4 @@ papyri/static/
 
 papyri/app/asset-manifest.json
 papyri/app/index.html
+.claude/

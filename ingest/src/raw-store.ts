@@ -9,6 +9,7 @@
  * maintainers to re-upload.
  *
  * Key: _raw/<pkg>/<ver>.papyri.gz
+ * Metadata (sidecar): _raw/<pkg>/<ver>.meta.json
  *
  *   FsRawStore — Node filesystem, files at <ingest-dir>/_raw/<pkg>/<ver>.papyri.gz
  */
@@ -16,11 +17,18 @@ import { mkdir, writeFile, readFile, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { safeJoin } from "./fs-safe.js";
 
+export interface RawMeta {
+  /** ISO 8601 date string of when the bundle was received (server wall-clock time) */
+  received_at: string;
+}
+
 export interface RawStore {
   /** Archive a raw .papyri.gz bundle (compressed bytes as received off the wire). */
   put(pkg: string, ver: string, bytes: Uint8Array): Promise<void>;
   /** Retrieve a previously archived bundle. Returns null if absent. */
   get(pkg: string, ver: string): Promise<Uint8Array | null>;
+  /** Retrieve metadata for a previously archived bundle. Returns null if absent. */
+  getMeta(pkg: string, ver: string): Promise<RawMeta | null>;
   /** List all archived (pkg, ver) pairs, sorted by pkg then ver. */
   list(): Promise<Array<{ pkg: string; ver: string }>>;
   /**
@@ -41,16 +49,33 @@ export class FsRawStore implements RawStore {
     return safeJoin(this.root, "_raw", pkg, `${ver}.papyri.gz`);
   }
 
+  private metaPath(pkg: string, ver: string): string {
+    return safeJoin(this.root, "_raw", pkg, `${ver}.meta.json`);
+  }
+
   async put(pkg: string, ver: string, bytes: Uint8Array): Promise<void> {
     const p = this.fullPath(pkg, ver);
     await mkdir(safeJoin(this.root, "_raw", pkg), { recursive: true });
     await writeFile(p, bytes);
+    // Write metadata sidecar with received timestamp (server wall-clock time)
+    const meta: RawMeta = { received_at: new Date().toISOString() };
+    await writeFile(this.metaPath(pkg, ver), JSON.stringify(meta));
   }
 
   async get(pkg: string, ver: string): Promise<Uint8Array | null> {
     try {
       const buf = await readFile(this.fullPath(pkg, ver));
       return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw err;
+    }
+  }
+
+  async getMeta(pkg: string, ver: string): Promise<RawMeta | null> {
+    try {
+      const content = await readFile(this.metaPath(pkg, ver), "utf-8");
+      return JSON.parse(content) as RawMeta;
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
       throw err;

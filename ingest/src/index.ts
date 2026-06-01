@@ -26,7 +26,7 @@ export { isSafeUrl } from "./url-safety.js";
 export { collectForwardRefs, collectForwardRefsFromSection } from "./visitor.js";
 
 export { FsRawStore } from "./raw-store.js";
-export type { RawStore } from "./raw-store.js";
+export type { RawStore, RawMeta } from "./raw-store.js";
 
 export {
   parseObjectsInv,

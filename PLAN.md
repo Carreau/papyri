@@ -415,14 +415,11 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   "`normalise_ref` validation could move to gen" above) if still wanted.
 
 - **`papyri pack` strict mode and bundle linting.**
-  Add a `--strict` flag to `papyri pack` that promotes warnings to errors,
-  useful in CI to block publishing a bundle with known issues. Add a `--lint`
-  flag (or a `papyri lint` subcommand) that checks IR consistency without
-  fully packing: unresolved local refs, assets referenced but absent from the
-  asset store, `SubstitutionRef`/`SubstitutionDef` nodes that should have been
-  resolved, empty module-docstrings holding a sentinel placeholder rather than
-  a parse failure marker. A `--strict --lint` step in maintainer CI gives fast
-  feedback before upload.
+  *`papyri lint` subcommand: done.* `papyri/cli/lint.py` + `lint_bundle()` in
+  `pack.py` check SubstitutionRef/SubstitutionDef nodes and missing Figure assets.
+  Tests in `papyri/tests/test_pack.py`. Remaining open:
+  - `--strict` flag on `papyri pack` to promote orphan-doc warnings to errors.
+  - Lint check for empty module-docstring sentinel placeholder.
 
   *Partial landing — silent-drop → hard pack failure:* lenient `papyri gen`
   used to swallow per-object failures (a narrative page that failed to
@@ -431,11 +428,7 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   under `errors` in `papyri.json` (`Gen._record_error` / `_gen_errors` in
   `papyri/gen.py`, mirroring `ErrorCollector._unexpected_errors` for the API
   side), and `papyri pack`'s `_check_no_gen_errors` refuses to produce an
-  artifact while any are present. CI sees a non-zero pack and fails. This
-  is what would have caught the numpy toc-collapse regression at the
-  *moment* of breakage instead of at "narrative docs look mostly empty"
-  later. The remaining `--strict`/`--lint` items above (unresolved refs,
-  missing assets, …) are still open.
+  artifact while any are present.
 
 - **Toc ↔ narrative consistency checks.**
   *Forward direction landed:* `papyri pack` now fails (via `_check_toc_refs`

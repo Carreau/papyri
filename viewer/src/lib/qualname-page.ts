@@ -84,11 +84,24 @@ function unwrapExampleSection(doc: IngestedDoc): ExampleSection | null {
   return { title: titleText || "Examples", children: kids };
 }
 
+// PEP 440 pre-release / dev patterns (mirrors version-utils.ts).
+// Inlined here to avoid pulling that module's heavier imports.
+const _PRE_RE = /(a|alpha|b|beta|rc)\d*$/i;
+const _DEV_RE = /\.dev\d*$/i;
+
+function isPreRelease(ver: string): boolean {
+  return _PRE_RE.test(ver) || _DEV_RE.test(ver);
+}
+
 /**
  * Filter backrefs to keep only the latest linking version per source package.
  * For each unique (pkg, kind, path), keep only the row with the highest version
  * among all versions that actually link here. Rows with wildcard versions ("?" or "*")
  * are always kept since their version cannot be determined.
+ *
+ * When a mix of stable and pre-release versions link to the same target, the
+ * latest stable version is preferred. Pre-release-only groups fall back to the
+ * latest pre-release (same as before this change, just no stable alternative).
  */
 function filterToLatestVersionPerPkg(backrefs: readonly RefTuple[]): RefTuple[] {
   // Group by (pkg, kind, path) → list of versions
@@ -109,10 +122,12 @@ function filterToLatestVersionPerPkg(backrefs: readonly RefTuple[]): RefTuple[] 
     // Keep all wildcard entries as-is
     filtered.push(...wildcards);
 
-    // For real versions, keep only the latest
     if (realVersions.length > 0) {
-      realVersions.sort((a, b) => compareVersionsDesc(a.ver, b.ver));
-      filtered.push(realVersions[0]!);
+      // Prefer stable over pre-release when selecting the "latest" linker.
+      const stable = realVersions.filter((b) => !isPreRelease(b.ver));
+      const candidates = stable.length > 0 ? stable : realVersions;
+      candidates.sort((a, b) => compareVersionsDesc(a.ver, b.ver));
+      filtered.push(candidates[0]!);
     }
   }
   return filtered;

@@ -149,6 +149,59 @@ describe("buildQualnamePageView - backref filtering", () => {
     });
   });
 
+  describe("PEP 440 pre-release exclusion", () => {
+    it("prefers stable over pre-release when both link", () => {
+      const doc = makeMinimalDoc();
+      const backrefs: RefTuple[] = [
+        { pkg: "scipy", ver: "1.10.0", kind: "module", path: "scipy.signal:convolve" },
+        { pkg: "scipy", ver: "1.11.0rc1", kind: "module", path: "scipy.signal:convolve" },
+      ];
+
+      const view = buildQualnamePageView(doc, backrefs, "numpy");
+      expect(view.externalBackrefs).toHaveLength(1);
+      expect(view.externalBackrefs[0]!.url).toContain("1.10.0");
+    });
+
+    it("prefers latest stable when multiple stable + pre-release versions link", () => {
+      const doc = makeMinimalDoc();
+      const backrefs: RefTuple[] = [
+        { pkg: "scipy", ver: "1.9.0", kind: "module", path: "scipy.signal:convolve" },
+        { pkg: "scipy", ver: "1.10.0", kind: "module", path: "scipy.signal:convolve" },
+        { pkg: "scipy", ver: "1.11.0a1", kind: "module", path: "scipy.signal:convolve" },
+        { pkg: "scipy", ver: "1.11.0b2", kind: "module", path: "scipy.signal:convolve" },
+      ];
+
+      const view = buildQualnamePageView(doc, backrefs, "numpy");
+      expect(view.externalBackrefs).toHaveLength(1);
+      expect(view.externalBackrefs[0]!.url).toContain("1.10.0");
+    });
+
+    it("falls back to latest pre-release when no stable version links", () => {
+      const doc = makeMinimalDoc();
+      const backrefs: RefTuple[] = [
+        { pkg: "scipy", ver: "1.11.0a1", kind: "module", path: "scipy.signal:convolve" },
+        { pkg: "scipy", ver: "1.11.0rc1", kind: "module", path: "scipy.signal:convolve" },
+      ];
+
+      const view = buildQualnamePageView(doc, backrefs, "numpy");
+      expect(view.externalBackrefs).toHaveLength(1);
+      // rc1 > a1, so rc1 should be picked
+      expect(view.externalBackrefs[0]!.url).toContain("1.11.0rc1");
+    });
+
+    it("treats .dev versions as pre-release", () => {
+      const doc = makeMinimalDoc();
+      const backrefs: RefTuple[] = [
+        { pkg: "scipy", ver: "1.10.0", kind: "module", path: "scipy.signal:convolve" },
+        { pkg: "scipy", ver: "1.11.0.dev20240101", kind: "module", path: "scipy.signal:convolve" },
+      ];
+
+      const view = buildQualnamePageView(doc, backrefs, "numpy");
+      expect(view.externalBackrefs).toHaveLength(1);
+      expect(view.externalBackrefs[0]!.url).toContain("1.10.0");
+    });
+  });
+
   describe("backref bucketing (internal vs external)", () => {
     it("separates internal and external backrefs", () => {
       const doc = makeMinimalDoc();

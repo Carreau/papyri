@@ -1,11 +1,14 @@
 FROM node:22-slim
 WORKDIR /app
 
-RUN corepack enable && corepack prepare pnpm@10.11.0 --activate
-
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY ingest/package.json ./ingest/
 COPY viewer/package.json ./viewer/
+
+# pnpm version comes from the root package.json "packageManager" field — the
+# single source of truth shared with CI (pnpm/action-setup reads it too).
+# `corepack install` provisions exactly that version (no interactive prompt).
+RUN corepack enable && corepack install
 
 RUN pnpm --filter papyri-ingest install --frozen-lockfile
 COPY ingest/ ./ingest/

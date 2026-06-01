@@ -35,7 +35,7 @@ export type IRNode = TypedNode | UnknownNode;
 // FIELD_ORDER — positional field lists per CBOR tag.
 //
 // Must exactly match Python's typing.get_type_hints(cls) order.
-// Source of truth: papyri/ingested_doc.py (IngestedDoc), papyri/gen.py
+// Source of truth: papyri/crosslink.py (IngestedDoc), papyri/gen.py
 // (GeneratedDoc), papyri/nodes.py (everything else).
 //
 // Compared to viewer/src/lib/ir-reader.ts, this table adds:
@@ -90,6 +90,7 @@ export const FIELD_ORDER: Readonly<Record<number, { name: string; fields: readon
   4016: { name: "DocParam", fields: ["name", "annotation", "desc"] },
   4017: { name: "UnimplementedInline", fields: ["children"] },
   4018: { name: "Unimplemented", fields: ["placeholder", "value"] },
+  4072: { name: "DocstringSentinel", fields: ["message"] },
   4019: { name: "ThematicBreak", fields: [] },
   4021: { name: "TocTree", fields: ["children", "title", "ref"] },
   4022: { name: "LocalRef", fields: ["kind", "path"] },

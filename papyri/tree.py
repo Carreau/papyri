@@ -418,6 +418,7 @@ class TreeReplacer:
                 "Text",
                 "ThematicBreak",
                 "Unimplemented",
+                "DocstringSentinel",
                 "CrossRef",
                 "CitationReference",
                 "FootnoteReference",
@@ -1227,8 +1228,8 @@ class DirectiveVisiter(TreeReplacer):
                 module = target_qa.split(":")[0].split(".")[0]
                 ri = RefInfo(
                     module=module,
-                    version="?",
-                    kind="module",
+                    version="*",
+                    kind="api",
                     path=target_qa,
                 )
                 return [CrossRef(text, ri, "module")]

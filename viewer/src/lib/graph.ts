@@ -6,7 +6,7 @@
 // Operations mirror the ingest tables:
 //   nodes  — one row per known key; has_blob=1 means the blob is on disk,
 //            has_blob=0 means it is a placeholder for a not-yet-ingested ref
-//            target (may carry wildcard version "*" or "?").
+//            target (may carry wildcard version "?").
 //   links  — directed edges (source nodes.id → dest nodes.id)
 //
 // Two reader operations:
@@ -38,16 +38,12 @@ interface NodeRow {
  * (pkg, kind, path) on any version (lexicographic sort, descending).
  * Returns `null` if nothing matches.
  *
- * `kind === "api"` is a gen-time placeholder for unresolved cross-package
- * module refs; it is normalised to `"module"` here since the on-disk node
- * uses `kind = "module"`.
  */
 export async function resolveRef(graphDb: GraphDb, ref: RefTuple): Promise<RefTuple | null> {
-  const kind = ref.kind === "api" ? "module" : ref.kind;
   const exact = await graphDb.get<NodeRow>(
     "SELECT package, version, category, identifier FROM nodes " +
       "WHERE has_blob=1 AND package=? AND version=? AND category=? AND identifier=? LIMIT 1",
-    [ref.pkg, ref.ver, kind, ref.path]
+    [ref.pkg, ref.ver, ref.kind, ref.path]
   );
   if (exact) {
     return {
@@ -60,11 +56,11 @@ export async function resolveRef(graphDb: GraphDb, ref: RefTuple): Promise<RefTu
   // Only fall back to any version when the ref itself didn't pin one.
   // A ref with an explicit version that is missing from this viewer should
   // render as unresolved — silently landing on the wrong version is confusing.
-  if (ref.ver !== "?" && ref.ver !== "*") return null;
+  if (ref.ver !== "?") return null;
   const rows = await graphDb.all<NodeRow>(
     "SELECT package, version, category, identifier FROM nodes " +
       "WHERE has_blob=1 AND package=? AND category=? AND identifier=?",
-    [ref.pkg, kind, ref.path]
+    [ref.pkg, ref.kind, ref.path]
   );
   if (rows.length === 0) return null;
   rows.sort((a, b) => b.version.localeCompare(a.version));
@@ -179,7 +175,7 @@ export async function getBackrefs(graphDb: GraphDb, target: RefTuple): Promise<R
       "AND n_dest.package=? AND n_dest.identifier=? " +
       "AND (" +
       "  (n_dest.version=? AND n_dest.category=?) " +
-      "  OR (n_dest.version IN ('?','*') AND n_dest.category=?)" +
+      "  OR (n_dest.version='?' AND n_dest.category=?)" +
       ")",
     [target.pkg, target.path, target.ver, target.kind, target.kind]
   );
@@ -247,7 +243,7 @@ export async function getBrokenBackrefs(
       "AND n_dest.package=? " +
       "AND (" +
       "  (n_dest.version=? AND n_dest.has_blob=0)" +
-      "  OR (n_dest.version IN ('?','*')" +
+      "  OR (n_dest.version='?'" +
       "      AND NOT EXISTS (" +
       "        SELECT 1 FROM nodes n_ver" +
       "        WHERE n_ver.package=? AND n_ver.version=?" +
@@ -289,7 +285,7 @@ export async function countBrokenBackrefs(
       "AND n_dest.package=? " +
       "AND (" +
       "  (n_dest.version=? AND n_dest.has_blob=0)" +
-      "  OR (n_dest.version IN ('?','*')" +
+      "  OR (n_dest.version='?'" +
       "      AND NOT EXISTS (" +
       "        SELECT 1 FROM nodes n_ver" +
       "        WHERE n_ver.package=? AND n_ver.version=?" +

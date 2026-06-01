@@ -1227,8 +1227,8 @@ class DirectiveVisiter(TreeReplacer):
                 module = target_qa.split(":")[0].split(".")[0]
                 ri = RefInfo(
                     module=module,
-                    version="*",
-                    kind="api",
+                    version="?",
+                    kind="module",
                     path=target_qa,
                 )
                 return [CrossRef(text, ri, "module")]

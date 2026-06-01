@@ -356,13 +356,11 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   into a monolithic app. Track this when the hosting design firms up.
 
 - **Track raw upload timestamps independently of bundle metadata.**
-  The `_raw/<pkg>/<ver>.papyri.gz` archive should record when a bundle was
-  *received* (server wall-clock time), kept separate from any timestamps
-  embedded in the bundle itself (which are controlled by the uploader and
-  cannot be trusted for audit purposes). Store as a lightweight metadata
-  sidecar (e.g. `_raw/<pkg>/<ver>.meta.json`) or a dedicated index table.
-  Enables audit logs, "most-recently-uploaded" sorting, and TTL / eviction
-  policies without trusting generator-side clocks.
+  *Done.* `FsRawStore.put()` writes `_raw/<pkg>/<ver>.meta.json` sidecar
+  immediately after archiving the compressed bundle, capturing server wall-clock
+  time as ISO 8601. `RawStore` interface gains `getMeta(pkg, ver)` returning
+  `RawMeta | null`. Enables audit logs, "most-recently-uploaded" sorting, and
+  TTL / eviction policies without trusting uploader-controlled timestamps.
 
 - **Images are likely a volatile field for bundle hashes.**
   *Partially landed:* `papyri upload` now computes a SHA-256 over the whole
@@ -417,8 +415,11 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
 - **`papyri pack` strict mode and bundle linting.**
   *`papyri lint` subcommand: done.* `papyri/cli/lint.py` + `lint_bundle()` in
   `pack.py` check SubstitutionRef/SubstitutionDef nodes and missing Figure assets.
-  Tests in `papyri/tests/test_pack.py`. Remaining open:
-  - `--strict` flag on `papyri pack` to promote orphan-doc warnings to errors.
+  Tests in `papyri/tests/test_pack.py`.
+  *`--strict` flag: done.* `papyri pack --strict` / `-s` now promotes orphan-doc
+  warnings to hard `BundleError`, gated behind the flag so non-strict mode is
+  unchanged. Useful in CI to catch toctree regressions before publishing. Remaining
+  open:
   - Lint check for empty module-docstring sentinel placeholder.
 
   *Partial landing — silent-drop → hard pack failure:* lenient `papyri gen`

@@ -41,7 +41,6 @@ import traceback
 import warnings
 from collections import defaultdict, deque
 from collections.abc import Callable
-from functools import lru_cache
 from hashlib import sha256
 from pathlib import Path
 from types import FunctionType, ModuleType, TracebackType
@@ -191,42 +190,6 @@ def processed_example_data(example_section_data: Section) -> Section:
     for in_out in example_section_data:
         new_example_section_data.append(in_out)
     return new_example_section_data
-
-
-@lru_cache(maxsize=4096)
-def normalise_ref(ref: str) -> str:
-    """
-    Consistently normalize references.
-
-    Refs are sometime import path, not fully qualified names, tough type
-    inference in examples regularly give us fully qualified names. When visiting
-    a ref, this tries to import it and replace it by the normal full-qualified form.
-
-    This is expensive, and we likely want to move the logic of finding the
-    correct ref earlier in the process and use this as an assertion the refs are
-    normalized.
-
-    It is critical to normalize in order to have the correct information when
-    using interactive ?/??, or similar inspector of live objects;
-
-    """
-    if ref.startswith(("builtins.", "__main__")):
-        return ref
-    try:
-        mod_name, name = ref.rsplit(".", maxsplit=1)
-        mod = __import__(mod_name)
-        for sub in mod_name.split(".")[1:]:
-            mod = getattr(mod, sub)
-        obj = getattr(mod, name)
-        if isinstance(obj, ModuleType):
-            return ref
-        if getattr(obj, "__name__", None) is None:
-            return ref
-
-        return str(obj.__module__) + "." + str(obj.__name__)
-    except Exception:
-        pass
-    return ref
 
 
 def gen_main(

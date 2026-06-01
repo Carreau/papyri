@@ -1,5 +1,5 @@
 /**
- * Ingester — TypeScript equivalent of papyri/crosslink.py's Ingester class.
+ * Ingester — TypeScript ingest engine; IR source of truth: papyri/ingested_doc.py.
  *
  * Accepts a decoded `Bundle` Node from a `.papyri` artifact
  * (`ingestBundle(node)`) and writes its contents into the cross-link graph

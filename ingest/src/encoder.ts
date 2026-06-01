@@ -35,7 +35,7 @@ export type IRNode = TypedNode | UnknownNode;
 // FIELD_ORDER — positional field lists per CBOR tag.
 //
 // Must exactly match Python's typing.get_type_hints(cls) order.
-// Source of truth: papyri/crosslink.py (IngestedDoc), papyri/gen.py
+// Source of truth: papyri/ingested_doc.py (IngestedDoc), papyri/gen.py
 // (GeneratedDoc), papyri/nodes.py (everything else).
 //
 // Compared to viewer/src/lib/ir-reader.ts, this table adds:

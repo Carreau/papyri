@@ -4,7 +4,7 @@ Everything here is part of the IR contract that ``papyri gen`` writes
 out. ``Gen`` (in ``gen.py``) drives the pipeline; this module
 describes the data it produces.
 
-Counterpart to ``IngestedDoc`` (in ``crosslink.py``), which is the
+Counterpart to ``IngestedDoc`` (in ``ingested_doc.py``), which is the
 post-link form of the same shape.
 """
 

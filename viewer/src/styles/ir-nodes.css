@@ -24,6 +24,20 @@ pre.code .shiki-line {
   display: block;
 }
 
+/* Shiki dual-theme: activate dark palette under system dark mode or manual toggle. */
+@media (prefers-color-scheme: dark) {
+  .shiki,
+  .shiki span {
+    color: var(--shiki-dark) !important;
+    background-color: var(--shiki-dark-bg) !important;
+  }
+}
+html[data-theme="dark"] .shiki,
+html[data-theme="dark"] .shiki span {
+  color: var(--shiki-dark) !important;
+  background-color: var(--shiki-dark-bg) !important;
+}
+
 /* Output from code execution (stdout/stderr). */
 pre.code-output {
   background: var(--surface);
@@ -379,6 +393,19 @@ code.math-error {
   color: var(--math-error-fg);
   background: var(--math-error-bg);
   border: 1px dashed var(--math-error-fg);
+}
+
+/* KaTeX dark mode: inherit surrounding text color so math renders in the
+   right palette. KaTeX CSS defaults to black; override in dark contexts. */
+@media (prefers-color-scheme: dark) {
+  .katex,
+  .katex-html {
+    color: inherit;
+  }
+}
+html[data-theme="dark"] .katex,
+html[data-theme="dark"] .katex-html {
+  color: inherit;
 }
 
 /* Inline role markers (like :py:class:`X`). The graph resolves XRef, not

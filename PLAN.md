@@ -334,8 +334,7 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   - Ingest: resolve `LocalRef`s to full keys; record live or dangling
     `RefInfo` links. A two-step ingest (build a ref map from all bundle
     metadata first) is an optimisation, not a correctness requirement.
-- Rename `crosslink.py` to something that reflects its current read-only role
-  (`ingested_doc.py`?), or fold `IngestedDoc` into `nodes.py`.
+- Rename `crosslink.py`. *Done.* Renamed to `ingested_doc.py`.
 - **Audit `papyri/graphstore.py`. *Done.*** Removed write-side methods
   (`put`, `put_meta`, `remove`, `_maybe_insert_node`); `GraphStore` is now
   read-only. TypeScript ingest owns all writes. Schema creation removed from
@@ -469,9 +468,10 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   equivalent since the toc is a validated tree).
 
 - Static export hardening for `viewer/dist/` deployment.
-- Dark-adapted Shiki theme + dark-mode-aware KaTeX glyphs.
+- Dark-adapted Shiki theme + dark-mode-aware KaTeX glyphs. *Largely done — dual
+  Shiki themes already active; KaTeX `.katex-html` `color: inherit` rule added.*
 - Cross-package ingest correctness: TODOs around version resolution for
-  `Figure`/`RefInfo` across packages (see `crosslink.py`).
+  `Figure`/`RefInfo` across packages (see `ingested_doc.py`).
 - **Viewer: crossrefs should default to latest-version-only.** *Done.*
   `bucketBackrefs` in `viewer/src/lib/qualname-page.ts` now filters to the
   latest *linking* version per source package (uses `compareVersionsDesc` from

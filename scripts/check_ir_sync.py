@@ -27,12 +27,12 @@ import sys
 from pathlib import Path
 
 # Import every module that registers IR Node tags so TAG_MAP is complete:
-# IngestedDoc (4010) lives in crosslink, GeneratedDoc (4011) in doc, Bundle
+# IngestedDoc (4010) lives in ingested_doc, GeneratedDoc (4011) in doc, Bundle
 # (4070) in bundle; the content nodes are in nodes. Held in a tuple so the
 # side-effect imports read as used.
 import papyri.bundle
-import papyri.crosslink
 import papyri.doc
+import papyri.ingested_doc
 import papyri.nodes
 from papyri.node_base import TAG_MAP, Node
 
@@ -40,7 +40,7 @@ from papyri.node_base import TAG_MAP, Node
 # unlike typing.get_type_hints), the same helper gen_ir_schema.py uses.
 from papyri.serde import get_type_hints
 
-_REGISTERED = (papyri.nodes, papyri.crosslink, papyri.doc, papyri.bundle)
+_REGISTERED = (papyri.nodes, papyri.ingested_doc, papyri.doc, papyri.bundle)
 
 ROOT = Path(__file__).resolve().parent.parent
 ENCODER_TS = ROOT / "ingest" / "src" / "encoder.ts"

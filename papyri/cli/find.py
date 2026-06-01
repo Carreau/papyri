@@ -31,8 +31,8 @@ def find(
     """
     from papyri import node_base, nodes
     from papyri.config import ingest_dir
-    from papyri.crosslink import IngestedDoc
     from papyri.graphstore import GraphStore
+    from papyri.ingested_doc import IngestedDoc
     from papyri.nodes import encoder
     from papyri.tree import TreeVisitor
 

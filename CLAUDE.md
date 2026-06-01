@@ -182,7 +182,7 @@ papyri/                   Python package (IR producer + CLI)
   serde.py                Generic dataclass round-trip (JSON or CBOR)
   ts.py                   tree-sitter RST parser wrapper
   tree.py                 RST→IR visitor (directive handlers live here)
-  crosslink.py            Read-only access to the ingested graphstore
+  ingested_doc.py         IngestedDoc (CBOR tag 4010) — deserialization for CLI readers
   graphstore.py           Python graphstore (read-only; write side is TS)
   bundle.py               Bundle load/save helpers
   pack.py                 .papyri artifact packing / unpacking
@@ -382,7 +382,7 @@ See `viewer/PLAN.md` for the detailed milestone tracker.
 - RST→IR visitor + directive handlers: `papyri/tree.py`.
 - RST parsing via tree-sitter: `papyri/ts.py`.
 - IR node types: `papyri/nodes.py`, `papyri/node_base.py`.
-- Cross-link read access: `papyri/crosslink.py`, `papyri/graphstore.py`.
+- Cross-link read access: `papyri/ingested_doc.py`, `papyri/graphstore.py`.
 - Ingest engine: `ingest/src/ingest.ts`.
 - Storage abstractions: `ingest/src/blob-store.ts`, `ingest/src/graph-db.ts`,
   `ingest/src/raw-store.ts`.

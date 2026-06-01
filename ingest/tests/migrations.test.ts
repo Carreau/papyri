@@ -45,6 +45,11 @@ describe("applyMigrations", () => {
     expect(hasColumn(db, "bundles", "content_hash")).toBe(true);
     // A representative table + index from the base schema exist.
     expect(hasColumn(db, "nodes", "package")).toBe(true);
+    // node_index table (0006) and its required columns.
+    expect(hasColumn(db, "node_index", "pkg")).toBe(true);
+    expect(hasColumn(db, "node_index", "ver")).toBe(true);
+    expect(hasColumn(db, "node_index", "node_type")).toBe(true);
+    expect(hasColumn(db, "node_index", "content")).toBe(true);
     db.close();
   });
 

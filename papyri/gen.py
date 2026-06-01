@@ -1804,24 +1804,41 @@ class Gen:
 
         set_github_slug(self._meta.get("github_slug"))
 
-    def collect_api_docs(self, root: str, limit_to: list[str]) -> None:
+    def _collect_and_filter_items(
+        self, root: str, limit_to: list[str]
+    ) -> tuple[
+        dict[str, Any],
+        dict[FullQual, Canonical],
+        dict[Canonical, FullQual],
+        frozenset[RefInfo],
+        DFSCollector,
+    ]:
         """
-        Crawl one module and stores resulting DocBundle in json files.
+        Collect API items from the module and apply filtering.
+
+        Performs the initial phase of collect_api_docs: creates a DFSCollector,
+        retrieves all items, applies exclusion/limit_to filtering, and builds
+        alias and reference information.
 
         Parameters
         ----------
         root : str
-            Module name to generate DocBundle for.
-        limit_to : list of string
-            For partial documentation building and testing purposes
-            we may want to generate documentation for only a single item.
-            If this list is non-empty we will collect documentation
-            just for these items.
+            Module name to collect items from.
+        limit_to : list[str]
+            If non-empty, only collect these specific items.
 
-        See Also
-        --------
-        prepare_doc_for_one_object
-
+        Returns
+        -------
+        collected : dict[str, Any]
+            Filtered mapping of fully qualified names to objects.
+        aliases : dict[FullQual, Canonical]
+            Mapping of full qualified names to canonical names.
+        rev_aliases : dict[Canonical, FullQual]
+            Reverse mapping of canonical names to full qualified names.
+        known_refs : frozenset[RefInfo]
+            Set of reference information for all collected items.
+        collector : DFSCollector
+            The collector instance used to gather items.
         """
 
         collector: DFSCollector = self._get_collector()
@@ -1870,209 +1887,285 @@ class Gen:
             }
         )
 
+        return collected, aliases, rev_aliases, known_refs, collector
+
+    def _process_one_api_item(
+        self,
+        qa: str,
+        target_item: Any,
+        known_refs: frozenset[RefInfo],
+        rev_aliases: dict[Canonical, FullQual],
+        error_collector: ErrorCollector,
+        collector_aliases: list[str],
+        failure_collection: dict[str, list[str]],
+    ) -> bool:
+        """
+        Process a single API item: extract, parse, visit, and store documentation.
+
+        This method handles one iteration of the per-object processing loop within
+        collect_api_docs. It extracts the docstring, parses it with NumpyDocString,
+        calls prepare_doc_for_one_object, collects local references, runs GenVisitor,
+        and stores the result.
+
+        Parameters
+        ----------
+        qa : str
+            Fully qualified name of the API object.
+        target_item : Any
+            The actual Python object being documented.
+        known_refs : frozenset[RefInfo]
+            Known references for cross-linking.
+        rev_aliases : dict[Canonical, FullQual]
+            Reverse alias mapping for reference resolution.
+        error_collector : ErrorCollector
+            Shared error collector for tracking errors across items.
+        collector_aliases : list[str]
+            Aliases for this item from the DFSCollector.
+        failure_collection : dict[str, list[str]]
+            Mutable dict accumulating parsing failures (modified in-place).
+
+        Returns
+        -------
+        success : bool
+            True if the item was processed and stored successfully,
+            False if processing was skipped due to error or other condition.
+        """
+
+        self.log.debug("treating %r", qa)
+
+        with error_collector(qa=qa) as ecollector:
+            item_docstring, arbitrary, api_object = self.extract_docstring(
+                qa=qa,
+                target_item=target_item,
+            )
+            self.log.debug("APIOBJECT %r", api_object)
+        if ecollector.errored:
+            if ecollector._unexpected_errors.keys():
+                self.log.warning(
+                    "error with %s %s",
+                    qa,
+                    list(ecollector._unexpected_errors.keys()),
+                )
+            else:
+                self.log.info(
+                    "only expected error with %s, %s",
+                    qa,
+                    list(ecollector._expected_errors.keys()),
+                )
+            return False
+
+        try:
+            if item_docstring is None:
+                ndoc = NumpyDocString(dedent_but_first("No Docstrings"))
+            else:
+                ndoc = NumpyDocString(dedent_but_first(item_docstring))
+                # note currently in ndoc we use:
+                # _parsed_data
+                # direct access to  ["See Also"], and [""]
+                # and :
+                # ndoc.ordered_sections
+        except Exception as e:
+            if not isinstance(target_item, ModuleType):
+                self.log.exception(
+                    "Unexpected error parsing %s - %s",
+                    qa,
+                    target_item.__name__,
+                )
+                failure_collection["NumpydocError-" + str(type(e))].append(qa)
+            if isinstance(target_item, ModuleType):
+                # Module docstrings that numpydoc cannot parse fall
+                # through to the same empty shell we use when a module
+                # has no docstring at all. Previously the placeholder
+                # read ``"To remove in the future -- <qa>"`` which
+                # leaked into the rendered output.
+                self.log.debug(
+                    "numpydoc failed to parse module docstring for %s; "
+                    "using empty placeholder",
+                    qa,
+                )
+                ndoc = NumpyDocString(dedent_but_first("No Docstrings"))
+            else:
+                return False
+        if not isinstance(target_item, ModuleType):
+            arbitrary = []
+        ex = self.config.execute_doctests
+        if self.config.execute_doctests and any(
+            qa.startswith(pat) for pat in self.config.execute_exclude_patterns
+        ):
+            ex = False
+
+        # TODO: ndoc-placeholder : make sure ndoc placeholder handled here.
+        with error_collector(qa=qa) as c:
+            doc_blob, figs = self.prepare_doc_for_one_object(
+                target_item,
+                ndoc,
+                qa=qa,
+                config=self.config.replace(execute_doctests=ex),
+                aliases=collector_aliases,
+                api_object=api_object,
+            )
+        del api_object
+        if c.errored:
+            return False
+        _local_refs: list[str] = []
+
+        sections_ = [
+            "Parameters",
+            "Returns",
+            "Raises",
+            "Yields",
+            "Attributes",
+            "Other Parameters",
+            "Warns",
+            ##"Warnings",
+            "Methods",
+            # "Summary",
+            "Receives",
+        ]
+        for s in sections_:
+            for child in doc_blob.content.get(s, []):
+                if isinstance(child, Parameters):
+                    for param in child.children:
+                        new_ref = [u.strip() for u in param[0].split(",") if u]
+                        if new_ref:
+                            _local_refs.extend(new_ref)
+
+        for lr1 in _local_refs:
+            assert isinstance(lr1, str)
+        lr: frozenset[str] = frozenset(_local_refs)
+        doc_blob.local_refs = tuple(sorted(lr))
+        try:
+            _src_file = find_file(target_item)
+            _doc_path = (
+                Path(_src_file).parent
+                if _src_file and not _src_file.endswith("<string>")
+                else None
+            )
+            _param_names: frozenset[str] = (
+                frozenset(p.name for p in doc_blob.signature.parameters)
+                if doc_blob.signature is not None
+                else frozenset()
+            )
+            dv = GenVisitor(
+                qa,
+                known_refs,
+                local_refs=lr,
+                aliases={},
+                version=self.version,
+                config=self.config.directives,
+                module=self.root,
+                doc_path=_doc_path,
+                asset_store=self.put_raw,
+                execute=self.config.execute_doctests,
+                param_names=_param_names,
+            )
+            dv.collect_substitutions(
+                *arbitrary,
+                *doc_blob._content.values(),
+                *[
+                    doc_blob.content[s]
+                    for s in ["Extended Summary", "Summary", "Notes", *sections_]
+                    if s in doc_blob.content
+                ],
+            )
+            doc_blob.arbitrary = tuple(dv.visit(s) for s in arbitrary)
+            doc_blob.example_section_data = dv.visit(doc_blob.example_section_data)
+            doc_blob._content = {k: dv.visit(v) for (k, v) in doc_blob._content.items()}
+
+            for section in ["Extended Summary", "Summary", "Notes", *sections_]:
+                if section in doc_blob.content:
+                    doc_blob.content[section] = dv.visit(doc_blob.content[section])
+
+            doc_blob.see_also = tuple(
+                sorted(set(doc_blob.see_also), key=lambda sa: sa.name.value)
+            )
+
+            for sa in doc_blob.see_also:
+                from .tree import resolve_
+
+                r = resolve_(
+                    qa,
+                    known_refs,
+                    frozenset(),
+                    sa.name.value,
+                    rev_aliases=rev_aliases,
+                )
+                assert isinstance(r, RefInfo)
+                if r.kind == "module":
+                    # Intra-bundle refs don't need a version stamp — store
+                    # as LocalRef so the bundle digest is independent of
+                    # its own version number. Mirrors GenVisitor._ref_to_crossref.
+                    if r.module == self.root:
+                        sa.name.reference = LocalRef(r.kind, r.path)
+                    else:
+                        sa.name.reference = r
+                else:
+                    imp = GenVisitor._import_solver(sa.name.value)
+                    if imp:
+                        self.log.debug(
+                            "TODO: see also resolve for %s in %s, %s",
+                            sa.name.value,
+                            qa,
+                            imp,
+                        )
+
+            # end processing
+            assert not isinstance(doc_blob._content, str), doc_blob._content
+            doc_blob.validate()
+            self.log.debug(doc_blob.signature)
+            self.put(qa, doc_blob)
+            if figs:
+                self.log.debug("Found %s figures", len(figs))
+            for name, data in figs:
+                self.put_raw(name, data)
+            return True
+        except Exception as _post_err:
+            if self.config.early_error:
+                raise
+            self.log.warning("Error post-processing %s, skipping: %s", qa, _post_err)
+            return False
+
+    def collect_api_docs(self, root: str, limit_to: list[str]) -> None:
+        """
+        Crawl one module and stores resulting DocBundle in json files.
+
+        Parameters
+        ----------
+        root : str
+            Module name to generate DocBundle for.
+        limit_to : list of string
+            For partial documentation building and testing purposes
+            we may want to generate documentation for only a single item.
+            If this list is non-empty we will collect documentation
+            just for these items.
+
+        See Also
+        --------
+        prepare_doc_for_one_object
+
+        """
+
+        collected, aliases, rev_aliases, known_refs, collector = (
+            self._collect_and_filter_items(root, limit_to)
+        )
+
         error_collector = ErrorCollector(self.config, self.log)
         # with self.progress() as p2:
         # just nice display of progression.
         # taskp = p2.add_task(description="parsing", total=len(collected))
 
         failure_collection: dict[str, list[str]] = defaultdict(lambda: [])
-        api_object: APIObjectInfo
         for qa, target_item in collected.items():
-            self.log.debug("treating %r", qa)
+            self._process_one_api_item(
+                qa,
+                target_item,
+                known_refs,
+                rev_aliases,
+                error_collector,
+                collector.aliases[qa],
+                failure_collection,
+            )
 
-            with error_collector(qa=qa) as ecollector:
-                item_docstring, arbitrary, api_object = self.extract_docstring(
-                    qa=qa,
-                    target_item=target_item,
-                )
-                self.log.debug("APIOBJECT %r", api_object)
-            if ecollector.errored:
-                if ecollector._unexpected_errors.keys():
-                    self.log.warning(
-                        "error with %s %s",
-                        qa,
-                        list(ecollector._unexpected_errors.keys()),
-                    )
-                else:
-                    self.log.info(
-                        "only expected error with %s, %s",
-                        qa,
-                        list(ecollector._expected_errors.keys()),
-                    )
-                continue
-
-            try:
-                if item_docstring is None:
-                    ndoc = NumpyDocString(dedent_but_first("No Docstrings"))
-                else:
-                    ndoc = NumpyDocString(dedent_but_first(item_docstring))
-                    # note currently in ndoc we use:
-                    # _parsed_data
-                    # direct access to  ["See Also"], and [""]
-                    # and :
-                    # ndoc.ordered_sections
-            except Exception as e:
-                if not isinstance(target_item, ModuleType):
-                    self.log.exception(
-                        "Unexpected error parsing %s - %s",
-                        qa,
-                        target_item.__name__,
-                    )
-                    failure_collection["NumpydocError-" + str(type(e))].append(qa)
-                if isinstance(target_item, ModuleType):
-                    # Module docstrings that numpydoc cannot parse fall
-                    # through to the same empty shell we use when a module
-                    # has no docstring at all. Previously the placeholder
-                    # read ``"To remove in the future -- <qa>"`` which
-                    # leaked into the rendered output.
-                    self.log.debug(
-                        "numpydoc failed to parse module docstring for %s; "
-                        "using empty placeholder",
-                        qa,
-                    )
-                    ndoc = NumpyDocString(dedent_but_first("No Docstrings"))
-                else:
-                    continue
-            if not isinstance(target_item, ModuleType):
-                arbitrary = []
-            ex = self.config.execute_doctests
-            if self.config.execute_doctests and any(
-                qa.startswith(pat) for pat in self.config.execute_exclude_patterns
-            ):
-                ex = False
-
-            # TODO: ndoc-placeholder : make sure ndoc placeholder handled here.
-            with error_collector(qa=qa) as c:
-                doc_blob, figs = self.prepare_doc_for_one_object(
-                    target_item,
-                    ndoc,
-                    qa=qa,
-                    config=self.config.replace(execute_doctests=ex),
-                    aliases=collector.aliases[qa],
-                    api_object=api_object,
-                )
-            del api_object
-            if c.errored:
-                continue
-            _local_refs: list[str] = []
-
-            sections_ = [
-                "Parameters",
-                "Returns",
-                "Raises",
-                "Yields",
-                "Attributes",
-                "Other Parameters",
-                "Warns",
-                ##"Warnings",
-                "Methods",
-                # "Summary",
-                "Receives",
-            ]
-            for s in sections_:
-                for child in doc_blob.content.get(s, []):
-                    if isinstance(child, Parameters):
-                        for param in child.children:
-                            new_ref = [u.strip() for u in param[0].split(",") if u]
-                            if new_ref:
-                                _local_refs.extend(new_ref)
-
-            for lr1 in _local_refs:
-                assert isinstance(lr1, str)
-            lr: frozenset[str] = frozenset(_local_refs)
-            doc_blob.local_refs = tuple(sorted(lr))
-            try:
-                _src_file = find_file(target_item)
-                _doc_path = (
-                    Path(_src_file).parent
-                    if _src_file and not _src_file.endswith("<string>")
-                    else None
-                )
-                _param_names: frozenset[str] = (
-                    frozenset(p.name for p in doc_blob.signature.parameters)
-                    if doc_blob.signature is not None
-                    else frozenset()
-                )
-                dv = GenVisitor(
-                    qa,
-                    known_refs,
-                    local_refs=lr,
-                    aliases={},
-                    version=self.version,
-                    config=self.config.directives,
-                    module=self.root,
-                    doc_path=_doc_path,
-                    asset_store=self.put_raw,
-                    execute=self.config.execute_doctests,
-                    param_names=_param_names,
-                )
-                dv.collect_substitutions(
-                    *arbitrary,
-                    *doc_blob._content.values(),
-                    *[
-                        doc_blob.content[s]
-                        for s in ["Extended Summary", "Summary", "Notes", *sections_]
-                        if s in doc_blob.content
-                    ],
-                )
-                doc_blob.arbitrary = tuple(dv.visit(s) for s in arbitrary)
-                doc_blob.example_section_data = dv.visit(doc_blob.example_section_data)
-                doc_blob._content = {
-                    k: dv.visit(v) for (k, v) in doc_blob._content.items()
-                }
-
-                for section in ["Extended Summary", "Summary", "Notes", *sections_]:
-                    if section in doc_blob.content:
-                        doc_blob.content[section] = dv.visit(doc_blob.content[section])
-
-                doc_blob.see_also = tuple(
-                    sorted(set(doc_blob.see_also), key=lambda sa: sa.name.value)
-                )
-
-                for sa in doc_blob.see_also:
-                    from .tree import resolve_
-
-                    r = resolve_(
-                        qa,
-                        known_refs,
-                        frozenset(),
-                        sa.name.value,
-                        rev_aliases=rev_aliases,
-                    )
-                    assert isinstance(r, RefInfo)
-                    if r.kind == "module":
-                        # Intra-bundle refs don't need a version stamp — store
-                        # as LocalRef so the bundle digest is independent of
-                        # its own version number. Mirrors GenVisitor._ref_to_crossref.
-                        if r.module == self.root:
-                            sa.name.reference = LocalRef(r.kind, r.path)
-                        else:
-                            sa.name.reference = r
-                    else:
-                        imp = GenVisitor._import_solver(sa.name.value)
-                        if imp:
-                            self.log.debug(
-                                "TODO: see also resolve for %s in %s, %s",
-                                sa.name.value,
-                                qa,
-                                imp,
-                            )
-
-                # end processing
-                assert not isinstance(doc_blob._content, str), doc_blob._content
-                doc_blob.validate()
-                self.log.debug(doc_blob.signature)
-                self.put(qa, doc_blob)
-                if figs:
-                    self.log.debug("Found %s figures", len(figs))
-                for name, data in figs:
-                    self.put_raw(name, data)
-            except Exception as _post_err:
-                if self.config.early_error:
-                    raise
-                self.log.warning(
-                    "Error post-processing %s, skipping: %s", qa, _post_err
-                )
         if error_collector._unexpected_errors:
             self.log.info(
                 "ERRORS:"

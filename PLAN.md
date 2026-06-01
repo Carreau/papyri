@@ -251,9 +251,12 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   for any bundles generated before this change.
 - **Configurable doctest `optionflags`.** *Done.* `config_loader.py` exposes
   `doctest_optionflags: Sequence[str] = ("ELLIPSIS",)` and `gen.py` reads it.
-- **Module-docstring parse failures.** A sentinel distinguishing "unparseable"
-  from "genuinely empty" at render time is needed — the `ndoc-placeholder`
-  TODO in `gen.py` marks where it would plug in.
+- **Module-docstring parse failures.** *Partially done.* The `debug` log
+  for numpydoc parse failures on module docstrings is now a `warning` (with
+  the exception), and failures are recorded in `failure_collection` under
+  `"module_docstring_parse_failure"` so they appear in the error manifest.
+  Still open: a render-time marker (IR sentinel node) so the viewer can display
+  "docstring could not be parsed" rather than a blank page.
 - **Per-bundle → global search.** The current manifest is per-bundle; a
   cross-bundle index would enable "find `linspace` across numpy and scipy".
 - **`normalise_ref` validation could move to gen.** Since `normalise_ref`
@@ -645,13 +648,11 @@ in the one-time synchronous `loadSchemaFromDisk` DB-init path.)
   and node-browser endpoints query this table for the common types (Image, Math, Code,
   Figure, Equation) instead of scanning all blobs. Both endpoints fall back to the
   existing `walkBundle` scan for bundles ingested before this migration.
-- **CSS dead-code audit.** `global.css` has grown to ~1563 lines and
-  `ir-nodes.css` to ~536. The previously-flagged selectors (`.sidebar-flat` /
-  `.sidebar-qualnames`, `.bundle-index-card*`) turned out to be live — all are
-  still referenced by `BundleSidebar.astro` and the bundle index page, so they
-  are NOT dead. A general audit/consolidation pass on the grown stylesheets may
-  still be worthwhile, but start from a fresh unused-selector check rather than
-  the old (now-stale) list.
+- **CSS dead-code audit.** *Largely done.* A full selector-by-selector audit of
+  `global.css` (141 top-level classes) and `ir-nodes.css` (10 top-level classes)
+  found exactly one dead selector (`.sidebar-stub`, removed). All other selectors
+  are either directly referenced in templates or dynamically applied by
+  `render-node.ts` / `[...doc].astro`.
 - **Admonition styling.** *Done.* `render-node.ts` now emits
   `admonition-${kind}` per-kind CSS class; `ir-nodes.css` has per-kind color
   tokens and SVG icons for note, warning, tip, deprecated, versionadded,

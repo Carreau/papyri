@@ -574,3 +574,51 @@ def explode_artifact_to_dir(
     out_dir = _safe_child(dest_parent, f"{bundle.module}_{bundle.version}")
     explode_bundle_to_dir(bundle, out_dir, log=log)
     return out_dir
+
+
+def lint_bundle(bundle: Bundle) -> list[str]:
+    """Check a bundle for IR consistency issues.
+
+    Returns a list of issue strings. Empty list means no issues found.
+
+    Checks performed:
+    - Unresolved SubstitutionRef/SubstitutionDef nodes (should have been replaced)
+    - Referenced assets that are missing from the asset store
+    """
+    from .nodes import Figure, RefInfo, SubstitutionDef, SubstitutionRef
+
+    issues: list[str] = []
+
+    # Collect nodes from all docs, tracking document paths for better error messages
+    all_docs: list[tuple[str, Any]] = []
+    for qa, doc in bundle.api.items():
+        all_docs.append((f"module/{qa}", doc))
+    for name, doc in bundle.narrative.items():
+        all_docs.append((f"docs/{name}", doc))
+    for name, section in bundle.examples.items():
+        all_docs.append((f"examples/{name}", section))
+
+    # Check 1: SubstitutionRef/SubstitutionDef nodes should have been resolved
+    for doc_path, doc in all_docs:
+        for node in _iter_nodes(doc):
+            if isinstance(node, SubstitutionRef):
+                issues.append(f"unresolved SubstitutionRef in {doc_path}")
+            elif isinstance(node, SubstitutionDef):
+                issues.append(f"unresolved SubstitutionDef in {doc_path}")
+
+    # Check 2: Missing assets referenced by Figure nodes
+    asset_keys = set(bundle.assets.keys())
+    for doc_path, doc in all_docs:
+        for node in _iter_nodes(doc):
+            if (
+                isinstance(node, Figure)
+                and isinstance(node.value, RefInfo)
+                and node.value.kind == "assets"
+            ):
+                asset_name = node.value.path
+                if asset_name not in asset_keys:
+                    issues.append(
+                        f"missing asset '{asset_name}' referenced in {doc_path}"
+                    )
+
+    return issues

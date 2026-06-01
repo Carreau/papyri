@@ -425,8 +425,12 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   `bucketBackrefs` in `viewer/src/lib/qualname-page.ts` now filters to the
   latest *linking* version per source package (uses `compareVersionsDesc` from
   `ir-reader.ts`). Wildcard versions (`"?"`, `"*"`) are always kept. Tests in
-  `viewer/tests/qualname-page.test.ts`. Precomputed table and PEP 440
-  pre-release exclusion are still open follow-ups.
+  `viewer/tests/qualname-page.test.ts`.
+
+  *PEP 440 pre-release exclusion: done.* `filterToLatestVersionPerPkg` now
+  prefers the latest stable linker over any pre-release version (alpha/beta/rc/.dev
+  suffix). Falls back to latest pre-release when no stable version links.
+  Precomputed table remains an open optimisation.
 
 - **Viewer: Unresolved link warnings** *Landed.*
   - **Inline warnings**: `render-node.ts` already emits `<span class="xref
@@ -592,9 +596,11 @@ file are cross-referenced rather than duplicated.
   `@functools.lru_cache(maxsize=512)`; public `parse(text, qa=None)` delegates
   to it. Cache key is the raw `bytes` object, which is safe because `validate()`
   (the only caller that looks at the return value post-cache) is read-only.
-- **Decompose `Gen.collect_api_docs`** (`gen.py:1763`, ~315 lines).
-  Split into module-walk / doc-extract / IR-emit so each step is testable in
-  isolation.
+- **Decompose `Gen.collect_api_docs`** — *Done.* Extracted
+  `_collect_and_filter_items` (module walk, exclusion/limit_to filter,
+  aliases/known_refs) and `_process_one_api_item` (per-object extraction →
+  NumpyDoc parse → GenVisitor → store). `collect_api_docs` is now a thin
+  coordinator. All 449 tests pass.
 - **Directive handler registry redesign** — *Done.* `self._handlers` dict is the
   sole dispatch path in `replace_UnprocessedDirective`; the legacy
   `"_" + name + "_handler"` getattr path is removed. `_autosummary_handler`
@@ -634,14 +640,12 @@ in the one-time synchronous `loadSchemaFromDisk` DB-init path.)
 
 ### Viewer (`viewer/`)
 
-- **Precompute bundle indices at ingest time.** The shared `walkBundle` /
-  `walkAllBundles` helper now exists (`viewer/src/lib/bundle-walk.ts`) and is
-  used by `image-index.ts` and the node-browser endpoint, but the `~25s
-  /images/` scan is still a live scan. The remaining work: move it into the
-  ingest pipeline as a `nodes_by_type` table so endpoints query rather than
-  scan. Per the "Storage invariant" section, these tables are free to hold
-  whatever shape the endpoint wants — they need not mirror IR node structure,
-  since re-ingest can rebuild them from the raw archive.
+- **Precompute bundle indices at ingest time.** *Done.* `Ingester._populateNodeIndex()`
+  walks the bundle at ingest time and fills a `node_index(pkg, ver, node_type, content,
+  page_href, page_kind, page_qa)` table (migration `0006_node_index.sql`). The image-index
+  and node-browser endpoints query this table for the common types (Image, Math, Code,
+  Figure, Equation) instead of scanning all blobs. Both endpoints fall back to the
+  existing `walkBundle` scan for bundles ingested before this migration.
 - **CSS dead-code audit.** `global.css` has grown to ~1563 lines and
   `ir-nodes.css` to ~536. The previously-flagged selectors (`.sidebar-flat` /
   `.sidebar-qualnames`, `.bundle-index-card*`) turned out to be live — all are
@@ -775,10 +779,9 @@ pass; the rest are recorded here as TBD so the next PR can pick them up.
 - **`assertBundle` validates shape shallowly.** *Done.* `ingest/src/bundle.ts`
   validates non-empty `module`/`version` strings and all record fields (`api`,
   `narrative`, `examples`, `aliases`, `extra`, `toc`, `assets`) as non-null objects.
-- **`inflateZlib` corrupt-body handling** (`ingest/src/inventory.ts`). A
-  malformed `objects.inv` body rejects the decompression stream and throws to
-  the caller, despite the "skip bad lines" comment. Wrap parse/inflate and
-  surface a clean error.
+- **`inflateZlib` corrupt-body handling** — *Already done.* `parseObjectsInv`
+  wraps `inflateZlib` in a try/catch and throws a descriptive `Error` on failure
+  (`ingest/src/inventory.ts:90-96`). No change needed.
 
 ### TBD — SSRF (viewer, matters for the hosted service)
 

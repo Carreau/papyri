@@ -294,8 +294,8 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   normalization in `ingest/src/visitor.ts` is gone; `viewer/src/lib/graph.ts` now
   uses `version = '?'` (not `IN ('?','*')`). A reingest from raw archive is needed
   for any bundles generated before this change.
-- **Configurable doctest `optionflags`.** `ExampleBlockExecutor` hardcodes
-  `doctest.ELLIPSIS`. A `[global].doctest_optionflags` config key would suffice.
+- **Configurable doctest `optionflags`.** *Done.* `config_loader.py` exposes
+  `doctest_optionflags: Sequence[str] = ("ELLIPSIS",)` and `gen.py` reads it.
 - **Module-docstring parse failures.** A sentinel distinguishing "unparseable"
   from "genuinely empty" at render time is needed — the `ndoc-placeholder`
   TODO in `gen.py` marks where it would plug in.
@@ -304,8 +304,8 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
 - **`normalise_ref` validation could move to gen.** Since `normalise_ref`
   depends only on the qa string (no cross-package data), the check could be
   enforced at gen time so the bundle is self-consistent before upload.
-- **`mod_root == root` assertion could move to gen.** Gen already knows both
-  values; moving the check surfaces mistakes earlier.
+- **`mod_root == root` assertion could move to gen.** *Stale — `mod_root` no
+  longer appears in the codebase; this item is resolved by removal.*
 - **External (intersphinx) linking — landed.** The viewer can now resolve a
   cross-package `RefInfo` that points at a non-papyri project (numpy, the
   stdlib, …) to a real external URL. An admin registers a project by pointing

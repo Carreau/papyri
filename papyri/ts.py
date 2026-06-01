@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import itertools
 import logging
 from collections.abc import Iterator
@@ -1136,20 +1137,33 @@ def _auto_number_footnotes(sections: list[Section]) -> None:
                 n.label = name_map[name]
 
 
+@functools.lru_cache(maxsize=512)
+def _parse_cached(text: bytes) -> list[Section]:
+    """
+    Cached inner function: parse RST text and return nested, auto-numbered sections.
+    Only depends on the text; qa (error context) is metadata and doesn't affect the result.
+    """
+    tree = parser.parse(text)
+    root = Node(tree.root_node)
+    res = TSVisitor(text, "").visit_document(root)
+    ns = nest_sections(res)
+    _auto_number_footnotes(ns)
+    return ns
+
+
 def parse(text: bytes, qa: str | None = None) -> list[Section]:
     """
     Parse text using Tree sitter RST, and return a list of serialised section I guess ?
     """
 
-    tree = parser.parse(text)
-    root = Node(tree.root_node)
     try:
-        res = TSVisitor(text, qa if qa is not None else "").visit_document(root)
+        return _parse_cached(text)
     except errors.SpaceAfterBlockDirectiveError:
         # Deliberate semantic error raised by the visitor; callers (and tests)
         # rely on the specific type, so don't wrap it.
         raise
     except Exception as e:
+        tree = parser.parse(text)
         byte = _visitor_failure_byte(e)
         if byte is None:
             errs = _find_error_nodes(tree.root_node)
@@ -1157,9 +1171,6 @@ def parse(text: bytes, qa: str | None = None) -> list[Section]:
                 byte = errs[0].start_byte
         line = _byte_offset_to_line(text, byte) if byte is not None else 1
         raise TreeSitterParseError(str(e), line=line) from e
-    ns = nest_sections(res)
-    _auto_number_footnotes(ns)
-    return ns
 
 
 class TreeSitterParseError(Exception):

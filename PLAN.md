@@ -336,10 +336,11 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
     metadata first) is an optimisation, not a correctness requirement.
 - Rename `crosslink.py` to something that reflects its current read-only role
   (`ingested_doc.py`?), or fold `IngestedDoc` into `nodes.py`.
-- Audit `papyri/graphstore.py`: the write-side methods are no longer called
-  by the Python side (TypeScript ingest is the sole writer). Slim it to a
-  read-only interface — the viewer's store is a derived cache (see "Storage
-  invariant" above), so the Python side has no reason to write into it.
+- **Audit `papyri/graphstore.py`. *Done.*** Removed write-side methods
+  (`put`, `put_meta`, `remove`, `_maybe_insert_node`); `GraphStore` is now
+  read-only. TypeScript ingest owns all writes. Schema creation removed from
+  `__init__`; the graphstore is a derived cache (see "Storage invariant"
+  above), so the Python side has no reason to write into it.
 - Decide the future of `papyri find` / `describe` / `diff` / `debug`: they
   work against the store written by the TypeScript pipeline, but the viewer
   is the user-facing replacement.

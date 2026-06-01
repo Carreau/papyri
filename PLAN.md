@@ -251,17 +251,15 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   for any bundles generated before this change.
 - **Configurable doctest `optionflags`.** *Done.* `config_loader.py` exposes
   `doctest_optionflags: Sequence[str] = ("ELLIPSIS",)` and `gen.py` reads it.
-- **Module-docstring parse failures.** *Partially done.* The `debug` log
-  for numpydoc parse failures on module docstrings is now a `warning` (with
-  the exception), and failures are recorded in `failure_collection` under
-  `"module_docstring_parse_failure"` so they appear in the error manifest.
-  Still open: a render-time marker (IR sentinel node) so the viewer can display
-  "docstring could not be parsed" rather than a blank page.
+- **Module-docstring parse failures.** *Done.* Parse failures are logged as
+  warnings, recorded in `failure_collection["module_docstring_parse_failure"]`,
+  and a `DocstringSentinel` IR node (tag 4072) is injected into the Summary
+  section so the viewer renders a visible "could not be parsed" admonition
+  instead of a blank page. Encoder, IR types, and renderer all updated.
 - **Per-bundle → global search.** The current manifest is per-bundle; a
   cross-bundle index would enable "find `linspace` across numpy and scipy".
-- **`normalise_ref` validation could move to gen.** Since `normalise_ref`
-  depends only on the qa string (no cross-package data), the check could be
-  enforced at gen time so the bundle is self-consistent before upload.
+- **`normalise_ref` deleted.** The function had no production call sites; removed
+  along with its test file.
 (Resolved by removal: `mod_root` no longer appears in the codebase.)
 - **External (intersphinx) linking — landed.** The viewer can now resolve a
   cross-package `RefInfo` that points at a non-papyri project (numpy, the

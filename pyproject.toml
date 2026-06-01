@@ -41,6 +41,14 @@ markers = [
 [project.urls]
 Home = "https://github.com/carreau/papyri"
 
+# mypy targets 3.14 (the CI/ceiling version), NOT the requires-python 3.13
+# floor, on purpose: signature.py uses version-conditional typed APIs
+# (`annotationlib` / PEP 749) that only exist on 3.14, guarded at runtime by an
+# `annotationlib is None` fallback. With warn_unused_ignores the file can only
+# be checked cleanly under one version — 3.14 types the rich branch, and the
+# 3.13 fallback uses only universal `inspect` calls. Do not lower this to 3.13;
+# it makes the annotation_format call un-typeable. (The 3.13 fallback is
+# therefore not exercised by mypy — CI runs 3.14 only.)
 [tool.mypy]
 python_version = '3.14'
 ignore_missing_imports = true

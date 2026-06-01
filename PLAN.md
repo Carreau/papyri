@@ -193,75 +193,30 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
     rendering component so the inline layout is consistent.
 
 - **C extension (clinic) signatures: use as fallback ObjectSignature for types.**
-  `Gen.extract_docstring` now strips the Python C clinic prefix
-  (`FuncName(args)\n--\n`) before RST/numpydoc parsing (fixed 2026-05-21).
-  The stripped signature string is discarded, but it is the only structured
-  source of parameter information for many C extension types where
-  `inspect.signature()` raises `ValueError`/`TypeError`.
-
-  *What to do:*
-  - Change `strip_clinic_signature` (or add a sibling
-    `extract_clinic_signature`) to return both the clinic signature string
-    (or `None`) and the stripped body, instead of the body alone.
-  - In `extract_docstring`, when the object is a `type` and we stripped a
-    clinic prefix, attempt `Signature.from_str(clinic_sig)` (already exists
-    in `papyri/signature.py`) and use the result as the `sig` argument to
-    `APIObjectInfo` instead of `None`.
-  - Fall back to `sig = None` if `from_str` raises (malformed clinic string).
-  - Note: for numpy.dtype specifically, `inspect.signature()` already works
-    (returns the correct sig), but the class branch in `extract_docstring`
-    hardcodes `sig = None` without calling it. A broader fix would also try
-    `inspect.signature()` for classes and only fall back to the clinic string
-    — but that is a separate, larger change.
-  - Add a test in `papyri/tests/test_gen.py` covering a C-extension type
-    whose docstring starts with a clinic signature.
+  *Done.* `strip_clinic_signature` now returns `(clinic_sig_str | None, body)`;
+  `extract_docstring` uses the clinic string as `ObjectSignature.from_str` fallback
+  when `inspect.signature()` fails and the object is a `type`
+  (`gen.py:1722-1724`).
 
 - **Missing block directives for numpy / scipy / IPython builds.**
-  Audited 2026-04-30. The following directives are encountered when running
-  `papyri gen` against these packages but have no handler. As of the
-  unhandled-directive change, an unregistered directive can no longer be
-  serialized: gen emits a transient `Directive` node carrying the name, and
-  serialization (CBOR or JSON) raises with that name, so the bundle cannot be
-  produced until a handler is registered (`papyri.directives:drop` to discard,
-  `papyri.directives:code_handler` to keep verbatim, or a real handler). The
-  directives below therefore need a handler registered — in `papyri.toml`'s
-  `[global.directives]` table or, for the common ones, as built-in defaults in
-  `tree.py` — before these packages will gen cleanly.
+  Audited 2026-04-30. Most items from this audit are now resolved:
 
-  *High priority* (very common; materially degrades output):
-  - `rubric` — unnumbered section heading (`.. rubric:: References`). Used
-    in all three packages for headings that must not appear in the TOC. Should
-    produce a lightweight `Section`-like node or an `Admonition`.
+  *Resolved:*
+  - `rubric` — *Done.* `rubric_handler` in `papyri/directives.py`; registered
+    in `tree.py`'s `self._handlers["rubric"]`.
   - sphinx-design (`grid`, `grid-item`, `grid-item-card`, `card`,
     `card-carousel`, `tab-set`, `tab-item`, `dropdown`, `button-link`,
-    `button-ref`) — *landed as silent drops.* numpy / scipy build their root
-    `doc/source/index.rst` as a PyData-theme landing page out of these, and
-    losing the root index page collapses the entire toc to a single fallback
-    leaf via `make_tree`'s root-not-found path. Added to
-    `_SPHINX_ONLY_DIRECTIVES`. If a hosted DocBundle ever needs to render
-    these (probably not — they are pure layout around links the toctree
-    already provides), revisit with proper IR nodes.
-  - `automodule` — was missing from the autodoc family in
-    `_SPHINX_ONLY_DIRECTIVES`; now added next to `autofunction` / `autoclass`.
+    `button-ref`) — *Done (silent drop).* Added to `_SPHINX_ONLY_DIRECTIVES`.
+  - `automodule` — *Done.* Added to `_SPHINX_ONLY_DIRECTIVES`.
+  - `only` — *Done.* `only_handler` registered in `self._handlers["only"]`.
+  - `currentmodule` — *Done (silent drop).* Added to `_SPHINX_ONLY_DIRECTIVES`.
+  - `testcleanup` / `testcode` / `testoutput` — *Done (silent drop).* In
+    `_SPHINX_ONLY_DIRECTIVES`.
+  - `highlight` — *Done (silent drop).* In `_SPHINX_ONLY_DIRECTIVES`.
+  - `literalinclude` — *Done.* `literalinclude_handler` registered.
+  - `csv-table` — *Done.* `csv_table_handler` registered.
 
-  *Medium priority* (structural / ref-resolution impact):
-  - `only` — conditional content (`.. only:: html`). Content inside should be
-    included at gen time (papyri targets HTML) or dropped with a log message.
-  - `currentmodule` — `.. currentmodule:: numpy`. Sphinx directive that shifts
-    the implicit module prefix for subsequent cross-refs. Gen has no hook for
-    it; refs in sections that follow it silently fail to resolve.
-  - `testcleanup` / `testcode` / `testoutput` — doctest infrastructure
-    directives used in numpy / scipy narrative docs. Should be added to
-    `_SPHINX_ONLY_DIRECTIVES` (silently dropped), not emitted as IR nodes.
-    (`testsetup` is already handled.)
-
-  *Low priority* (infrequent or render-only):
-  - `highlight` — sets the default code-highlight language for a section.
-    Safe to ignore or silently drop.
-  - `literalinclude` — includes a source file verbatim. Needs filesystem
-    access at gen time; drop with a warning for now.
-  - `csv-table` — structured table directive (scipy). `list-table` now has a
-    full handler and Table IR node; `csv-table` still needs one.
+  *Still open:*
   - `function` / `class` / `method` / `attribute` / `data` / `exception` /
     `module` (Sphinx py-domain, no `auto` prefix) — appear in handwritten
     numpy / scipy API reference `.rst` pages. Could be added to
@@ -633,24 +588,19 @@ file are cross-referenced rather than duplicated.
 
 ### Python (`papyri/`)
 
-- **LRU-cache `ts.parse()` results** (`ts.py:1132`; callers in `gen.py` around
-  lines 557/578/1012/1441/1704). The parser is invoked many times per gen run;
-  even if duplication is rare, an LRU around `ts.parse()` is cheap insurance and
-  removes a per-call cost. Note the contrasting case in `tree.py` where
-  `@lru_cache` was *removed* because mutated nodes broke equality — `ts.parse()`
-  operates on raw strings and produces fresh trees, so it does not have that
-  hazard.
+- **LRU-cache `ts.parse()` results** — *Done.* `_parse_cached(text: bytes)` is
+  `@functools.lru_cache(maxsize=512)`; public `parse(text, qa=None)` delegates
+  to it. Cache key is the raw `bytes` object, which is safe because `validate()`
+  (the only caller that looks at the return value post-cache) is read-only.
 - **Decompose `Gen.collect_api_docs`** (`gen.py:1763`, ~315 lines).
   Split into module-walk / doc-extract / IR-emit so each step is testable in
   isolation.
-- **Directive handler registry redesign** — *partially done.* An explicit
-  registry dict now exists (`tree.py:690` `self._handlers`, keyed by the exact
-  directive name so hyphenated names like `code-block` work). But the legacy
-  `"_" + name + "_handler"` getattr convention is still the *first* dispatch
-  path (`tree.py:958`, falling back to `self._handlers.get(...)` at line 960),
-  and `_autosummary_handler` / `_toctree_handler` still rely on it. Finish the
-  job by removing the getattr dispatch so the dict is the only mechanism.
-  Combine with the "no global state" / `DirectiveContext` work above.
+- **Directive handler registry redesign** — *Done.* `self._handlers` dict is the
+  sole dispatch path in `replace_UnprocessedDirective`; the legacy
+  `"_" + name + "_handler"` getattr path is removed. `_autosummary_handler`
+  and `_toctree_handler` are registered directly at `self._handlers["autosummary"]`
+  and `self._handlers["toctree"]`. Combine with the "no global state" /
+  `DirectiveContext` work above when tackling context injection.
 - **Fix stale `papyri ingest` reference.** *Landed.* `describe.py` now points
   at `papyri upload` and `POST /api/reingest` instead of the removed
   `papyri ingest` CLI.

@@ -1978,11 +1978,12 @@ class Gen:
                 # has no docstring at all. Previously the placeholder
                 # read ``"To remove in the future -- <qa>"`` which
                 # leaked into the rendered output.
-                self.log.debug(
-                    "numpydoc failed to parse module docstring for %s; "
-                    "using empty placeholder",
+                self.log.warning(
+                    "numpydoc failed to parse module docstring for %s: %s",
                     qa,
+                    e,
                 )
+                failure_collection["module_docstring_parse_failure"].append(qa)
                 ndoc = NumpyDocString(dedent_but_first("No Docstrings"))
             else:
                 return False

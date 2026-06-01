@@ -14,7 +14,7 @@ export { FsBlobStore, keyToPath } from "./blob-store.js";
 export type { BlobStore } from "./blob-store.js";
 
 export { SqliteGraphDb } from "./graph-db.js";
-export type { GraphDb, BatchStmt, GraphRow } from "./graph-db.js";
+export type { GraphDb, BatchStmt, GraphRow, NodeIndexRow } from "./graph-db.js";
 
 export { decode, encode, generatedDocToIngested, FIELD_ORDER } from "./encoder.js";
 export type { IRNode, TypedNode, UnknownNode } from "./encoder.js";

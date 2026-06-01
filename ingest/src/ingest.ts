@@ -31,7 +31,7 @@ import { assertBundle, assertSafeUrls } from "./bundle.js";
 import { keyStr, type Key } from "./keys.js";
 import { collectForwardRefs, collectForwardRefsFromSection } from "./visitor.js";
 import { FsBlobStore, type BlobStore } from "./blob-store.js";
-import { SqliteGraphDb, type GraphDb, type BatchStmt } from "./graph-db.js";
+import { SqliteGraphDb, type GraphDb, type BatchStmt, type NodeIndexRow } from "./graph-db.js";
 
 const DIGEST_SIZE = 16;
 
@@ -436,6 +436,10 @@ export class Ingester {
       );
     }
 
+    const tNodeIndex = Date.now();
+    await this._populateNodeIndex(root, version, bundle);
+    console.log(`  [${elapsed()}] node_index populated in ${Date.now() - tNodeIndex}ms`);
+
     console.log(`  [${elapsed()}] ingestBundle: done`);
     return { pkg: root, version };
   }
@@ -588,6 +592,152 @@ export class Ingester {
       }
     };
     await Promise.all(Array.from({ length: Math.min(BLOB_CONCURRENCY, total) }, worker));
+  }
+
+  /**
+   * Populate the node_index table with all IR nodes from the bundle.
+   * Called after ingestBundle completes; deletes prior rows for (pkg, ver)
+   * to handle re-ingest.
+   */
+  private async _populateNodeIndex(
+    pkg: string,
+    version: string,
+    bundle: Record<string, unknown>,
+  ): Promise<void> {
+    // Delete prior rows for this (pkg, ver).
+    await this.graphDb.deleteNodeIndex(pkg, version);
+
+    // Node types to index: the ones the viewer's image-index and node browser care about.
+    const indexedNodeTypes = new Set(["Image", "Math", "Code", "Figure", "Equation"]);
+
+    const rows: NodeIndexRow[] = [];
+
+    // Helper to collect nodes of indexed types from an IR tree.
+    const collectNodes = (node: unknown, types: Set<string>): TypedNode[] => {
+      const out: TypedNode[] = [];
+      if (!node || typeof node !== "object") return out;
+      if (Array.isArray(node)) {
+        for (const item of node) out.push(...collectNodes(item, types));
+        return out;
+      }
+      const n = node as Record<string, unknown>;
+      if (typeof n.__type === "string" && types.has(n.__type)) {
+        out.push(n as TypedNode);
+      }
+      for (const val of Object.values(n)) {
+        if (val && typeof val === "object") {
+          out.push(...collectNodes(val, types));
+        }
+      }
+      return out;
+    };
+
+    // Helper to construct page href for a given key.
+    const pageHrefForKey = (key: Key): string => {
+      if (key.kind === "module") {
+        // API page: /project/<pkg>/<version>/<qualname>/
+        return `/project/${pkg}/${version}/${key.path.replace(/:/g, "$")}/`;
+      } else if (key.kind === "docs") {
+        // Narrative doc: /project/<pkg>/<version>/docs/<path-segments>/
+        const segments = key.path.split(":").map(encodeURIComponent).join("/");
+        return `/project/${pkg}/${version}/docs/${segments}/`;
+      } else if (key.kind === "examples") {
+        // Example: /project/<pkg>/<version>/examples/<path-segments>/
+        const segments = key.path.split("/").map(encodeURIComponent).join("/");
+        return `/project/${pkg}/${version}/examples/${segments}/`;
+      }
+      return "";
+    };
+
+    // Scan API pages (modules).
+    const apiEntries = Object.entries(bundle.api ?? {}) as [string, unknown][];
+    for (const [qa, doc] of apiEntries) {
+      const d = doc as TypedNode | undefined;
+      if (!d || d.__type !== "GeneratedDoc") continue;
+
+      // Get the ingest-ready form so we have all the fields.
+      const ingestedDoc = generatedDocToIngested(d, qa);
+      const collectedNodes = collectNodes(ingestedDoc, indexedNodeTypes);
+
+      const key: Key = {
+        module: pkg.split(".")[0] ?? pkg,
+        version,
+        kind: "module",
+        path: qa,
+      };
+
+      for (const n of collectedNodes) {
+        rows.push({
+          pkg,
+          ver: version,
+          node_type: n.__type,
+          content: JSON.stringify(n),
+          page_href: pageHrefForKey(key),
+          page_kind: "api",
+          page_qa: qa,
+        });
+      }
+    }
+
+    // Scan narrative docs.
+    const docEntries = Object.entries(bundle.narrative ?? {}) as [string, unknown][];
+    for (const [docKey, doc] of docEntries) {
+      const d = doc as TypedNode | undefined;
+      if (!d || d.__type !== "GeneratedDoc") continue;
+
+      const ingestedDoc = generatedDocToIngested(d, docKey);
+      const collectedNodes = collectNodes(ingestedDoc, indexedNodeTypes);
+
+      const key: Key = {
+        module: pkg.split(".")[0] ?? pkg,
+        version,
+        kind: "docs",
+        path: docKey,
+      };
+
+      for (const n of collectedNodes) {
+        rows.push({
+          pkg,
+          ver: version,
+          node_type: n.__type,
+          content: JSON.stringify(n),
+          page_href: pageHrefForKey(key),
+          page_kind: "docs",
+          page_qa: docKey,
+        });
+      }
+    }
+
+    // Scan examples.
+    const exEntries = Object.entries(bundle.examples ?? {}) as [string, unknown][];
+    for (const [exPath, section] of exEntries) {
+      const s = section as TypedNode | undefined;
+      if (!s) continue;
+
+      const collectedNodes = collectNodes(s, indexedNodeTypes);
+
+      const key: Key = {
+        module: pkg.split(".")[0] ?? pkg,
+        version,
+        kind: "examples",
+        path: exPath,
+      };
+
+      for (const n of collectedNodes) {
+        rows.push({
+          pkg,
+          ver: version,
+          node_type: n.__type,
+          content: JSON.stringify(n),
+          page_href: pageHrefForKey(key),
+          page_kind: "example",
+          page_qa: exPath,
+        });
+      }
+    }
+
+    // Batch-insert all rows.
+    await this.graphDb.insertNodeIndexRows(rows);
   }
 }
 

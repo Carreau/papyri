@@ -10,7 +10,7 @@
 //   limit     — optional integer, default 100, capped at 100.
 
 import type { APIRoute } from "astro";
-import type { BlobStore } from "papyri-ingest";
+import type { BlobStore, GraphDb } from "papyri-ingest";
 import {
   collectNodes,
   ALL_NODE_TYPES,
@@ -57,6 +57,7 @@ function dedupKeyFor(n: IRNode): string {
 
 async function collectBundleNodes(
   blobStore: BlobStore,
+  graphDb: GraphDb,
   pkg: string,
   ver: string,
   types: ReadonlySet<string>,
@@ -87,17 +88,55 @@ async function collectBundleNodes(
     }
   }
 
-  await walkBundle(
-    blobStore,
-    pkg,
-    ver,
-    (doc, page) => {
-      if (valueMap.size >= limit) return false;
-      addHits(collectNodes(doc, types), page);
-      return valueMap.size < limit;
-    },
-    urlVer
-  );
+  // Try to use indexed lookup from node_index table.
+  let usedIndex = false;
+  if (types.size === 1) {
+    // Query for a single specific node type.
+    const typeToQuery = [...types][0]!;
+    const rows = await graphDb.queryNodeIndex(pkg, ver, typeToQuery);
+    if (rows.length > 0) {
+      usedIndex = true;
+      for (const row of rows) {
+        if (valueMap.size >= limit) break;
+        const node = JSON.parse(row.content) as IRNode;
+        const page: PageRef = {
+          label: row.page_qa,
+          href: row.page_href.replace(new RegExp(`/${ver}/`), `/${urlVer ?? ver}/`),
+        };
+        addHits([node], page);
+      }
+    }
+  } else if (types === ALL_NODE_TYPES) {
+    // Query all node types from the index; fall back to scan if index is empty.
+    const allRows = await graphDb.queryNodeIndex(pkg, ver);
+    if (allRows.length > 0) {
+      usedIndex = true;
+      for (const row of allRows) {
+        if (valueMap.size >= limit) break;
+        const node = JSON.parse(row.content) as IRNode;
+        const page: PageRef = {
+          label: row.page_qa,
+          href: row.page_href.replace(new RegExp(`/${ver}/`), `/${urlVer ?? ver}/`),
+        };
+        addHits([node], page);
+      }
+    }
+  }
+
+  if (!usedIndex) {
+    // Fallback: walk blobs for bundles without node_index or complex type filters.
+    await walkBundle(
+      blobStore,
+      pkg,
+      ver,
+      (doc, page) => {
+        if (valueMap.size >= limit) return false;
+        addHits(collectNodes(doc, types), page);
+        return valueMap.size < limit;
+      },
+      urlVer
+    );
+  }
 
   const sortedKeys = [...valueMap.keys()].sort((a, b) => {
     const ea = valueMap.get(a)!;
@@ -116,9 +155,10 @@ async function collectBundleNodes(
     })
   );
 
+  const method = usedIndex ? "indexed" : "scanned";
   console.log(
     `[nodes] scan done pkg=${pkg} ver=${ver} total=${valueMap.size} ` +
-      `${(performance.now() - overallStart).toFixed(1)}ms`
+      `${(performance.now() - overallStart).toFixed(1)}ms (${method})`
   );
 
   return { total: valueMap.size, limit, entries };
@@ -144,7 +184,7 @@ export const GET: APIRoute = async ({ params, url }) => {
   const { blobStore, graphDb } = await getBackends();
   const actualVer = await resolveVersion(graphDb, pkg, ver);
   if (!actualVer) return respond({ error: `Package ${pkg} not found` }, 404);
-  const result = await collectBundleNodes(blobStore, pkg, actualVer, types, limit, ver);
+  const result = await collectBundleNodes(blobStore, graphDb, pkg, actualVer, types, limit, ver);
 
   return respond(result, 200, { "Cache-Control": "no-store" });
 };

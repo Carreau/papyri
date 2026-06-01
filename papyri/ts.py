@@ -1145,7 +1145,18 @@ def _parse_cached(text: bytes) -> list[Section]:
     """
     tree = parser.parse(text)
     root = Node(tree.root_node)
-    res = TSVisitor(text, "").visit_document(root)
+    try:
+        res = TSVisitor(text, "").visit_document(root)
+    except errors.SpaceAfterBlockDirectiveError:
+        raise
+    except Exception as e:
+        byte = _visitor_failure_byte(e)
+        if byte is None:
+            errs = _find_error_nodes(tree.root_node)
+            if errs:
+                byte = errs[0].start_byte
+        line = _byte_offset_to_line(text, byte) if byte is not None else 1
+        raise TreeSitterParseError(str(e), line=line) from e
     ns = nest_sections(res)
     _auto_number_footnotes(ns)
     return ns
@@ -1155,22 +1166,7 @@ def parse(text: bytes, qa: str | None = None) -> list[Section]:
     """
     Parse text using Tree sitter RST, and return a list of serialised section I guess ?
     """
-
-    try:
-        return _parse_cached(text)
-    except errors.SpaceAfterBlockDirectiveError:
-        # Deliberate semantic error raised by the visitor; callers (and tests)
-        # rely on the specific type, so don't wrap it.
-        raise
-    except Exception as e:
-        tree = parser.parse(text)
-        byte = _visitor_failure_byte(e)
-        if byte is None:
-            errs = _find_error_nodes(tree.root_node)
-            if errs:
-                byte = errs[0].start_byte
-        line = _byte_offset_to_line(text, byte) if byte is not None else 1
-        raise TreeSitterParseError(str(e), line=line) from e
+    return _parse_cached(text)
 
 
 class TreeSitterParseError(Exception):

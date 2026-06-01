@@ -217,10 +217,10 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   - `csv-table` — *Done.* `csv_table_handler` registered.
 
   *Still open:*
-  - `function` / `class` / `method` / `attribute` / `data` / `exception` /
-    `module` (Sphinx py-domain, no `auto` prefix) — appear in handwritten
-    numpy / scipy API reference `.rst` pages. Could be added to
-    `_SPHINX_ONLY_DIRECTIVES` or given lightweight handlers.
+  - All previously-open directives are now handled. No remaining known missing
+    directives for numpy / scipy / IPython. (py-domain `function`/`class`/etc.
+    and `py:function`/etc. are in `_SPHINX_ONLY_DIRECTIVES` as of the
+    2026-05-01 audit.)
 
 - **Directive handlers should not read global state.** `:ghpull:` and
   `:ghissue:` pull the GitHub slug from a module-level `_GITHUB_SLUG` in

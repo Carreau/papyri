@@ -259,8 +259,7 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
 - **`normalise_ref` validation could move to gen.** Since `normalise_ref`
   depends only on the qa string (no cross-package data), the check could be
   enforced at gen time so the bundle is self-consistent before upload.
-- **`mod_root == root` assertion could move to gen.** *Stale — `mod_root` no
-  longer appears in the codebase; this item is resolved by removal.*
+(Resolved by removal: `mod_root` no longer appears in the codebase.)
 - **External (intersphinx) linking — landed.** The viewer can now resolve a
   cross-package `RefInfo` that points at a non-papyri project (numpy, the
   stdlib, …) to a real external URL. An admin registers a project by pointing

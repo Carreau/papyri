@@ -46,9 +46,9 @@ targets (`:680, :681`), attribution (`:686`), inline targets (`:691`),
 footnotes (`:872`). The viewer renders them as `<span
 class="unimplemented">` / `<div class="unimplemented">`
 (`render-node.ts:263-272`). This is the inline equivalent of #1: a
-debug surface masquerading as a node type. Their sibling class
-`IntermediateNode` (see #4) literally states "should not make it to the
-final Product".
+debug surface masquerading as a node type. The now-removed sibling class
+`IntermediateNode` (see #4) carried the same "should not make it to the
+final Product" note.
 
 ### 3. `Comment` — `nodes.py:352`
 
@@ -58,11 +58,11 @@ always renders to nothing it shouldn't be in the IR — drop in `ts.py`
 instead. Today it wastes bytes on disk and adds noise to `papyri
 describe` output.
 
-### 4. `IntermediateNode` — `nodes.py:421`
+### 4. `IntermediateNode` — REMOVED
 
-Defined, has a docstring saying it should not make it to the final
-product, and is referenced **zero** times anywhere in the repo. Pure
-dead code. Delete it.
+Was a dummy `Node` subclass with a docstring saying it should not make it
+to the final product, referenced **zero** times anywhere in the repo.
+Deleted as pure dead code.
 
 ### 5. `Target` — `nodes.py:376`
 

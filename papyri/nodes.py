@@ -676,14 +676,6 @@ class UnimplementedInline(Node):
         return f"<UnimplementedInline {self.children}>"
 
 
-class IntermediateNode(Node):
-    """
-    This is just a dummy class for Intermediate node that should not make it to the final Product
-    """
-
-    pass
-
-
 @register(4022)
 @dataclass(frozen=True)
 class LocalRef(Node):

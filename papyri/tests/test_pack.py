@@ -527,6 +527,29 @@ def test_read_bundle_dir_warns_on_orphan_docs(tmp_path: Any, caplog: Any) -> Non
     assert any("stranded" in r.getMessage() for r in caplog.records)
 
 
+def test_read_bundle_dir_strict_fails_on_orphan_docs(tmp_path: Any) -> None:
+    """Reading a bundle with an unreachable doc fails in strict mode."""
+    from papyri.nodes import LocalRef, TocTree
+
+    bundle_dir = _make_minimal_bundle_dir(tmp_path / "mypkg_1.0")
+    (bundle_dir / "docs").mkdir()
+    for name in ("index", "stranded"):
+        (bundle_dir / "docs" / name).write_bytes(_minimal_narrative_doc().to_json())
+    _write_toc(
+        bundle_dir,
+        [TocTree(children=(), title="Root", ref=LocalRef("docs", "index"))],
+    )
+    # Without strict mode, reading succeeds.
+    bundle = read_bundle_dir(bundle_dir, strict=False)
+    assert "stranded" in bundle.narrative
+
+    # With strict mode, reading fails.
+    with pytest.raises(BundleError) as exc_info:
+        read_bundle_dir(bundle_dir, strict=True)
+    assert "orphan" in str(exc_info.value).lower()
+    assert "stranded" in str(exc_info.value)
+
+
 # ---------------------------------------------------------------------------
 # numpy toc smoke test — guards against narrative collection silently
 # dropping most pages (which leaves the rendered toc nearly empty).

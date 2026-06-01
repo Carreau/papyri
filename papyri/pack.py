@@ -349,12 +349,43 @@ def _warn_orphan_docs(bundle: Bundle) -> None:
         )
 
 
-def read_bundle_dir(path: Path, log: Callable[[str], None] | None = None) -> Bundle:
+def _check_orphan_docs(bundle: Bundle) -> None:
+    """Fail if narrative docs are unreachable from the toc.
+
+    In strict mode, orphan docs (present in the bundle but not reachable from
+    any toc entry) are treated as a hard error. This is useful in CI to catch
+    toctree regressions. Without strict mode, orphan docs only produce a warning.
+    """
+    orphans = find_orphan_docs(bundle)
+    if not orphans:
+        return
+    sample = ", ".join(orphans[:10])
+    more = f" (+{len(orphans) - 10} more)" if len(orphans) > 10 else ""
+    if not bundle.toc:
+        raise BundleError(
+            f"bundle {bundle.module!r} {bundle.version!r} has {len(orphans)} "
+            f"narrative doc(s) but an empty toc — none are reachable via "
+            f"navigation: {sample}{more}"
+        )
+    else:
+        raise BundleError(
+            f"bundle {bundle.module!r} {bundle.version!r} has {len(orphans)} "
+            f"narrative doc(s) not reachable from the toc (orphans): "
+            f"{sample}{more}"
+        )
+
+
+def read_bundle_dir(
+    path: Path, log: Callable[[str], None] | None = None, strict: bool = False
+) -> Bundle:
     """Read a DocBundle directory and construct a typed ``Bundle``.
 
     Fail-fast: raises ``BundleError`` on the first problem encountered.
     Pass a ``log`` callable to receive fine-grained progress messages
     (one string per step, no trailing newline needed).
+
+    If ``strict=True``, orphan narrative docs (present in the bundle but not
+    reachable from any toc entry) are treated as hard errors instead of warnings.
     """
     from .doc import GeneratedDoc
     from .nodes import Section, TocTree
@@ -433,7 +464,10 @@ def read_bundle_dir(path: Path, log: Callable[[str], None] | None = None) -> Bun
     )
     bundle.validate()
     _check_toc_refs(bundle)
-    _warn_orphan_docs(bundle)
+    if strict:
+        _check_orphan_docs(bundle)
+    else:
+        _warn_orphan_docs(bundle)
     return bundle
 
 
@@ -456,10 +490,14 @@ def make_artifact(bundle: Bundle, log: Callable[[str], None] | None = None) -> b
 
 
 def make_artifact_from_dir(
-    path: Path, log: Callable[[str], None] | None = None
+    path: Path, log: Callable[[str], None] | None = None, strict: bool = False
 ) -> tuple[bytes, Bundle]:
-    """Validate and pack a DocBundle directory. Returns (artifact_bytes, bundle)."""
-    bundle = read_bundle_dir(path, log=log)
+    """Validate and pack a DocBundle directory. Returns (artifact_bytes, bundle).
+
+    If ``strict=True``, orphan narrative docs are treated as hard errors instead
+    of warnings.
+    """
+    bundle = read_bundle_dir(path, log=log, strict=strict)
     return make_artifact(bundle, log=log), bundle
 
 

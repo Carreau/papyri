@@ -1,5 +1,6 @@
 __pycache__
 .pytest_cache/
+*.papyri
 papyri/rst.so
 cache
 htmlcov

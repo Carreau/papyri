@@ -887,21 +887,14 @@ pass; the rest are recorded here as TBD so the next PR can pick them up.
 
 ### TBD — upload / ingest robustness
 
-- **Streaming PUT has no timeout** (`papyri/cli/upload.py`). A finite
-  idle-read timeout needs to be balanced against large-bundle ingests that may
-  have long gaps between progress events, and the read-phase `TimeoutError`
-  must be caught alongside the existing `HTTPError`/`URLError` handlers (it is
-  not a `URLError`). Left as TBD pending a chosen value.
-- **Zip-bomb guard on upload** (`upload.py` `_load_from_zip`). `zf.read()`
-  decompresses the chosen member fully into memory with no cap. The `.papyri`
-  member is itself already gzip-compressed, so expansion is normally ~1×, but a
-  crafted zip could lie. Add a `ZipInfo.file_size` ceiling (and ideally bounded
-  chunked reads) once a sane max bundle size is picked.
-- **`assertBundle` validates shape shallowly** (`ingest/src/bundle.ts`). It
-  checks `__type`/`__tag` only, then narrows to a fully-typed `BundleNode`.
-  A tag-4070 artifact with `module`/`version` as non-strings flows into path
-  joins and DB params. Validate that those are non-empty strings and that the
-  record fields are objects.
+- **Streaming PUT has no timeout.** *Done.* `_UPLOAD_IDLE_TIMEOUT_S = 300` wired
+  into the PUT at `upload.py:363`; `TimeoutError` caught alongside the existing
+  `HTTPError`/`URLError` handlers.
+- **Zip-bomb guard on upload.** *Done.* `_load_from_zip` has a 256 MiB ceiling
+  checked against `ZipInfo.file_size` and the actual read (`read(_MAX_BUNDLE_BYTES + 1)`).
+- **`assertBundle` validates shape shallowly.** *Done.* `ingest/src/bundle.ts`
+  validates non-empty `module`/`version` strings and all record fields (`api`,
+  `narrative`, `examples`, `aliases`, `extra`, `toc`, `assets`) as non-null objects.
 - **`inflateZlib` corrupt-body handling** (`ingest/src/inventory.ts`). A
   malformed `objects.inv` body rejects the decompression stream and throws to
   the caller, despite the "skip bad lines" comment. Wrap parse/inflate and

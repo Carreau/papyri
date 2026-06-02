@@ -29,7 +29,6 @@ export const IR_TYPE_NAMES: readonly string[] = [
   "DocParam",
   "UnimplementedInline",
   "Unimplemented",
-  "DocstringSentinel",
   "ThematicBreak",
   "TocTree",
   "LocalRef",
@@ -70,6 +69,7 @@ export const IR_TYPE_NAMES: readonly string[] = [
   "TableRow",
   "TableCell",
   "ParamRef",
+  "DocstringSentinel",
 ] as const;
 
 /** Lower-cased slug for a type name, e.g. "Paragraph" → "paragraph". */

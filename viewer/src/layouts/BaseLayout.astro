@@ -4,6 +4,7 @@
 // main grid.
 import Head from "../components/Head.astro";
 import SiteHeader from "../components/SiteHeader.astro";
+import SiteFooter from "../components/SiteFooter.astro";
 import "../styles/global.css";
 
 interface Props {
@@ -22,5 +23,6 @@ const { title } = Astro.props;
     <main class="base-main">
       <slot />
     </main>
+    <SiteFooter />
   </body>
 </html>

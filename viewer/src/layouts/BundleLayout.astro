@@ -4,6 +4,7 @@
 // sidebar so callers don't repeat the frontmatter.
 import Head from "../components/Head.astro";
 import SiteHeader from "../components/SiteHeader.astro";
+import SiteFooter from "../components/SiteFooter.astro";
 import BundleSidebar from "../components/BundleSidebar.astro";
 import VersionBanner from "../components/VersionBanner.astro";
 import { loadBundleNav } from "../lib/nav.ts";
@@ -181,6 +182,7 @@ if (versionStatus.kind !== "latest" && versionStatus.latestVersion) {
         )
       }
     </div>
+    <SiteFooter />
   </body>
 </html>
 

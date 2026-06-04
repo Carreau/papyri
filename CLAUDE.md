@@ -356,6 +356,9 @@ the graphstore and blob store is rebuildable via `POST /api/reingest`.
 | `PAPYRI_VERSION` | `papyri upload` | Overrides the `papyri-upload/<version>` User-Agent string |
 | `PAPYRI_BUILD_COMMIT` | viewer build | Git commit surfaced on the admin panel |
 | `PAPYRI_BUILD_ADAPTER` | viewer build | Build adapter name surfaced on the admin panel |
+| `PAPYRI_FOOTER_COPYRIGHT` | viewer build | Copyright line in the site footer (e.g. `© 2025 Acme Corp.`). Footer is hidden when none of the `PAPYRI_FOOTER_*` vars are set. |
+| `PAPYRI_FOOTER_PRIVACY_URL` | viewer build | URL for a "Privacy policy" link in the site footer. |
+| `PAPYRI_FOOTER_TERMS_URL` | viewer build | URL for a "Terms of service" link in the site footer. |
 
 ## Viewer current state
 

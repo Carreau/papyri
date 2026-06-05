@@ -5,6 +5,12 @@ interface ImportMetaEnv {
   readonly PAPYRI_BUILD_COMMIT: string;
   /** Astro adapter baked in at build time (currently always "node"). */
   readonly PAPYRI_BUILD_ADAPTER: string;
+  /** Copyright line in the site footer. Footer hidden when all PAPYRI_FOOTER_* are unset. */
+  readonly PAPYRI_FOOTER_COPYRIGHT: string;
+  /** "Privacy policy" link URL in the site footer. */
+  readonly PAPYRI_FOOTER_PRIVACY_URL: string;
+  /** "Terms of service" link URL in the site footer. */
+  readonly PAPYRI_FOOTER_TERMS_URL: string;
 }
 
 interface ImportMeta {

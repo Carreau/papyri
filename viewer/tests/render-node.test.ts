@@ -118,9 +118,9 @@ const adm = (kind: string, baseType: string): IRNode =>
   }) as unknown as IRNode;
 
 describe("renderNode Admonition", () => {
-  it("emits admonition-<base_type> alongside the raw kind class", async () => {
+  it("emits admonition-<base_type> and admonition-<kind> CSS classes", async () => {
     const html = await renderNode(adm("error", "danger"));
-    expect(html).toContain('class="admonition admonition-danger error"');
+    expect(html).toContain("admonition admonition-danger admonition-error");
     expect(html).toContain("body");
   });
 

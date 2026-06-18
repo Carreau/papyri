@@ -76,6 +76,7 @@ from .errors import (
 from .executors import BlockExecutor
 from .nodes import (
     DocParam,
+    DocstringSentinel,
     Figure,
     GenCode,
     GenToken,
@@ -1901,6 +1902,7 @@ class Gen:
                     )
                 continue
 
+            module_docstring_parse_failed = False
             try:
                 if item_docstring is None:
                     ndoc = NumpyDocString(dedent_but_first("No Docstrings"))
@@ -1925,11 +1927,13 @@ class Gen:
                     # has no docstring at all. Previously the placeholder
                     # read ``"To remove in the future -- <qa>"`` which
                     # leaked into the rendered output.
-                    self.log.debug(
-                        "numpydoc failed to parse module docstring for %s; "
-                        "using empty placeholder",
+                    self.log.warning(
+                        "numpydoc failed to parse module docstring for %s: %s",
                         qa,
+                        e,
                     )
+                    failure_collection["module_docstring_parse_failure"].append(qa)
+                    module_docstring_parse_failed = True
                     ndoc = NumpyDocString(dedent_but_first("No Docstrings"))
                 else:
                     continue
@@ -2056,6 +2060,24 @@ class Gen:
                                 sa.name.value,
                                 qa,
                                 imp,
+                            )
+
+                # Inject a sentinel node if module docstring parsing failed
+                if module_docstring_parse_failed:
+                    sentinel = DocstringSentinel(
+                        message=f"numpydoc could not parse the docstring for {qa}"
+                    )
+                    # Prepend sentinel to Summary section if it exists
+                    if "Summary" in doc_blob._content:
+                        existing = doc_blob._content["Summary"]
+                        if isinstance(existing, Section):
+                            # Create a new Section (don't mutate the existing one in case it's shared)
+                            # Note: use direct _content assignment, not the proxy, because the proxy may be stale
+                            doc_blob._content["Summary"] = Section(
+                                children=(sentinel, *existing.children),
+                                title=existing.title,
+                                level=existing.level,
+                                target=existing.target,
                             )
 
                 # end processing

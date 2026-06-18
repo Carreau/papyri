@@ -418,6 +418,7 @@ class TreeReplacer:
                 "Text",
                 "ThematicBreak",
                 "Unimplemented",
+                "DocstringSentinel",
                 "CrossRef",
                 "CitationReference",
                 "FootnoteReference",

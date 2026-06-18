@@ -1,7 +1,7 @@
 """``papyri diff`` — compare two ingested versions of one package by content digest.
 
-Operates purely on the digest column written by ``GraphStore.put`` at
-ingest time; does not re-decode CBOR blobs.
+Operates purely on the digest column recorded by the TypeScript ingest pipeline
+at ingest time; does not re-decode CBOR blobs.
 """
 
 from __future__ import annotations

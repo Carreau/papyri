@@ -193,79 +193,34 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
     rendering component so the inline layout is consistent.
 
 - **C extension (clinic) signatures: use as fallback ObjectSignature for types.**
-  `Gen.extract_docstring` now strips the Python C clinic prefix
-  (`FuncName(args)\n--\n`) before RST/numpydoc parsing (fixed 2026-05-21).
-  The stripped signature string is discarded, but it is the only structured
-  source of parameter information for many C extension types where
-  `inspect.signature()` raises `ValueError`/`TypeError`.
-
-  *What to do:*
-  - Change `strip_clinic_signature` (or add a sibling
-    `extract_clinic_signature`) to return both the clinic signature string
-    (or `None`) and the stripped body, instead of the body alone.
-  - In `extract_docstring`, when the object is a `type` and we stripped a
-    clinic prefix, attempt `Signature.from_str(clinic_sig)` (already exists
-    in `papyri/signature.py`) and use the result as the `sig` argument to
-    `APIObjectInfo` instead of `None`.
-  - Fall back to `sig = None` if `from_str` raises (malformed clinic string).
-  - Note: for numpy.dtype specifically, `inspect.signature()` already works
-    (returns the correct sig), but the class branch in `extract_docstring`
-    hardcodes `sig = None` without calling it. A broader fix would also try
-    `inspect.signature()` for classes and only fall back to the clinic string
-    — but that is a separate, larger change.
-  - Add a test in `papyri/tests/test_gen.py` covering a C-extension type
-    whose docstring starts with a clinic signature.
+  *Done.* `strip_clinic_signature` now returns `(clinic_sig_str | None, body)`;
+  `extract_docstring` uses the clinic string as `ObjectSignature.from_str` fallback
+  when `inspect.signature()` fails and the object is a `type`
+  (`gen.py:1722-1724`).
 
 - **Missing block directives for numpy / scipy / IPython builds.**
-  Audited 2026-04-30. The following directives are encountered when running
-  `papyri gen` against these packages but have no handler. As of the
-  unhandled-directive change, an unregistered directive can no longer be
-  serialized: gen emits a transient `Directive` node carrying the name, and
-  serialization (CBOR or JSON) raises with that name, so the bundle cannot be
-  produced until a handler is registered (`papyri.directives:drop` to discard,
-  `papyri.directives:code_handler` to keep verbatim, or a real handler). The
-  directives below therefore need a handler registered — in `papyri.toml`'s
-  `[global.directives]` table or, for the common ones, as built-in defaults in
-  `tree.py` — before these packages will gen cleanly.
+  Audited 2026-04-30. Most items from this audit are now resolved:
 
-  *High priority* (very common; materially degrades output):
-  - `rubric` — unnumbered section heading (`.. rubric:: References`). Used
-    in all three packages for headings that must not appear in the TOC. Should
-    produce a lightweight `Section`-like node or an `Admonition`.
+  *Resolved:*
+  - `rubric` — *Done.* `rubric_handler` in `papyri/directives.py`; registered
+    in `tree.py`'s `self._handlers["rubric"]`.
   - sphinx-design (`grid`, `grid-item`, `grid-item-card`, `card`,
     `card-carousel`, `tab-set`, `tab-item`, `dropdown`, `button-link`,
-    `button-ref`) — *landed as silent drops.* numpy / scipy build their root
-    `doc/source/index.rst` as a PyData-theme landing page out of these, and
-    losing the root index page collapses the entire toc to a single fallback
-    leaf via `make_tree`'s root-not-found path. Added to
-    `_SPHINX_ONLY_DIRECTIVES`. If a hosted DocBundle ever needs to render
-    these (probably not — they are pure layout around links the toctree
-    already provides), revisit with proper IR nodes.
-  - `automodule` — was missing from the autodoc family in
-    `_SPHINX_ONLY_DIRECTIVES`; now added next to `autofunction` / `autoclass`.
+    `button-ref`) — *Done (silent drop).* Added to `_SPHINX_ONLY_DIRECTIVES`.
+  - `automodule` — *Done.* Added to `_SPHINX_ONLY_DIRECTIVES`.
+  - `only` — *Done.* `only_handler` registered in `self._handlers["only"]`.
+  - `currentmodule` — *Done (silent drop).* Added to `_SPHINX_ONLY_DIRECTIVES`.
+  - `testcleanup` / `testcode` / `testoutput` — *Done (silent drop).* In
+    `_SPHINX_ONLY_DIRECTIVES`.
+  - `highlight` — *Done (silent drop).* In `_SPHINX_ONLY_DIRECTIVES`.
+  - `literalinclude` — *Done.* `literalinclude_handler` registered.
+  - `csv-table` — *Done.* `csv_table_handler` registered.
 
-  *Medium priority* (structural / ref-resolution impact):
-  - `only` — conditional content (`.. only:: html`). Content inside should be
-    included at gen time (papyri targets HTML) or dropped with a log message.
-  - `currentmodule` — `.. currentmodule:: numpy`. Sphinx directive that shifts
-    the implicit module prefix for subsequent cross-refs. Gen has no hook for
-    it; refs in sections that follow it silently fail to resolve.
-  - `testcleanup` / `testcode` / `testoutput` — doctest infrastructure
-    directives used in numpy / scipy narrative docs. Should be added to
-    `_SPHINX_ONLY_DIRECTIVES` (silently dropped), not emitted as IR nodes.
-    (`testsetup` is already handled.)
-
-  *Low priority* (infrequent or render-only):
-  - `highlight` — sets the default code-highlight language for a section.
-    Safe to ignore or silently drop.
-  - `literalinclude` — includes a source file verbatim. Needs filesystem
-    access at gen time; drop with a warning for now.
-  - `csv-table` — structured table directive (scipy). `list-table` now has a
-    full handler and Table IR node; `csv-table` still needs one.
-  - `function` / `class` / `method` / `attribute` / `data` / `exception` /
-    `module` (Sphinx py-domain, no `auto` prefix) — appear in handwritten
-    numpy / scipy API reference `.rst` pages. Could be added to
-    `_SPHINX_ONLY_DIRECTIVES` or given lightweight handlers.
+  *Still open:*
+  - All previously-open directives are now handled. No remaining known missing
+    directives for numpy / scipy / IPython. (py-domain `function`/`class`/etc.
+    and `py:function`/etc. are in `_SPHINX_ONLY_DIRECTIVES` as of the
+    2026-05-01 audit.)
 
 - **Directive handlers should not read global state.** `:ghpull:` and
   `:ghissue:` pull the GitHub slug from a module-level `_GITHUB_SLUG` in
@@ -289,37 +244,23 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   explicit versions; the invariant needs an enforcement point once
   cross-package version data is threaded through.
 - **Unify the "version unknown" cross-package ref marker (`"*"` vs `"?"`).**
-  Today an unresolved cross-package ref is spelled two different ways for the
-  same concept: gen emits `RefInfo(version="*", kind="api")` for module refs it
-  can't pin to a version (`papyri/tree.py:1199`), and ingest then rewrites that
-  to `version="?", kind="module"` to match the on-disk node schema
-  (`ingest/src/visitor.ts`, both `collectForwardRefs` and
-  `collectForwardRefsFromSection`). The viewer copes by matching
-  `version IN ('?','*')` and defaulting a missing version to `"?"`
-  (`viewer/src/lib/graph.ts` `getBackrefs`/`resolveRef`, `viewer/src/lib/xref.ts`).
-  Carrying two spellings for one idea forces every consumer to special-case both
-  and is a recurring source of "why didn't this link resolve" confusion. Pick a
-  single sentinel for "version unknown, resolve to whatever exists" and use it
-  end-to-end. Per the storage invariant, the IR in the raw archive is the
-  contract, so the right fix is to make gen emit the canonical form directly
-  (and drop the `kind="api"` → `kind="module"` rewrite), then delete the
-  `"*"`-handling branches in visitor/graph/xref rather than leaving compat
-  shims. Decide whether the canonical kind should be `"module"` and whether the
-  sentinel should be `"?"` or `"*"` before touching code; this overlaps with the
-  "Per-reference version resolution" item above and the "gen owns all ref
-  classification" invariant below.
-- **Configurable doctest `optionflags`.** `ExampleBlockExecutor` hardcodes
-  `doctest.ELLIPSIS`. A `[global].doctest_optionflags` config key would suffice.
-- **Module-docstring parse failures.** A sentinel distinguishing "unparseable"
-  from "genuinely empty" at render time is needed — the `ndoc-placeholder`
-  TODO in `gen.py` marks where it would plug in.
+  *Done.* Gen now emits `RefInfo(version="?", kind="module")` directly
+  (`papyri/tree.py`); the `kind="api" + version="*"` → `kind="module" + version="?"`
+  normalization in `ingest/src/visitor.ts` is gone; `viewer/src/lib/graph.ts` now
+  uses `version = '?'` (not `IN ('?','*')`). A reingest from raw archive is needed
+  for any bundles generated before this change.
+- **Configurable doctest `optionflags`.** *Done.* `config_loader.py` exposes
+  `doctest_optionflags: Sequence[str] = ("ELLIPSIS",)` and `gen.py` reads it.
+- **Module-docstring parse failures.** *Done.* Parse failures are logged as
+  warnings, recorded in `failure_collection["module_docstring_parse_failure"]`,
+  and a `DocstringSentinel` IR node (tag 4072) is injected into the Summary
+  section so the viewer renders a visible "could not be parsed" admonition
+  instead of a blank page. Encoder, IR types, and renderer all updated.
 - **Per-bundle → global search.** The current manifest is per-bundle; a
   cross-bundle index would enable "find `linspace` across numpy and scipy".
-- **`normalise_ref` validation could move to gen.** Since `normalise_ref`
-  depends only on the qa string (no cross-package data), the check could be
-  enforced at gen time so the bundle is self-consistent before upload.
-- **`mod_root == root` assertion could move to gen.** Gen already knows both
-  values; moving the check surfaces mistakes earlier.
+- **`normalise_ref` deleted.** The function had no production call sites; removed
+  along with its test file.
+(Resolved by removal: `mod_root` no longer appears in the codebase.)
 - **External (intersphinx) linking — landed.** The viewer can now resolve a
   cross-package `RefInfo` that points at a non-papyri project (numpy, the
   stdlib, …) to a real external URL. An admin registers a project by pointing
@@ -348,12 +289,12 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   - Ingest: resolve `LocalRef`s to full keys; record live or dangling
     `RefInfo` links. A two-step ingest (build a ref map from all bundle
     metadata first) is an optimisation, not a correctness requirement.
-- Rename `crosslink.py` to something that reflects its current read-only role
-  (`ingested_doc.py`?), or fold `IngestedDoc` into `nodes.py`.
-- Audit `papyri/graphstore.py`: the write-side methods are no longer called
-  by the Python side (TypeScript ingest is the sole writer). Slim it to a
-  read-only interface — the viewer's store is a derived cache (see "Storage
-  invariant" above), so the Python side has no reason to write into it.
+- Rename `crosslink.py`. *Done.* Renamed to `ingested_doc.py`.
+- **Audit `papyri/graphstore.py`. *Done.*** Removed write-side methods
+  (`put`, `put_meta`, `remove`, `_maybe_insert_node`); `GraphStore` is now
+  read-only. TypeScript ingest owns all writes. Schema creation removed from
+  `__init__`; the graphstore is a derived cache (see "Storage invariant"
+  above), so the Python side has no reason to write into it.
 - Decide the future of `papyri find` / `describe` / `diff` / `debug`: they
   work against the store written by the TypeScript pipeline, but the viewer
   is the user-facing replacement.
@@ -370,13 +311,11 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   into a monolithic app. Track this when the hosting design firms up.
 
 - **Track raw upload timestamps independently of bundle metadata.**
-  The `_raw/<pkg>/<ver>.papyri.gz` archive should record when a bundle was
-  *received* (server wall-clock time), kept separate from any timestamps
-  embedded in the bundle itself (which are controlled by the uploader and
-  cannot be trusted for audit purposes). Store as a lightweight metadata
-  sidecar (e.g. `_raw/<pkg>/<ver>.meta.json`) or a dedicated index table.
-  Enables audit logs, "most-recently-uploaded" sorting, and TTL / eviction
-  policies without trusting generator-side clocks.
+  *Done.* `FsRawStore.put()` writes `_raw/<pkg>/<ver>.meta.json` sidecar
+  immediately after archiving the compressed bundle, capturing server wall-clock
+  time as ISO 8601. `RawStore` interface gains `getMeta(pkg, ver)` returning
+  `RawMeta | null`. Enables audit logs, "most-recently-uploaded" sorting, and
+  TTL / eviction policies without trusting uploader-controlled timestamps.
 
 - **Images are likely a volatile field for bundle hashes.**
   *Partially landed:* `papyri upload` now computes a SHA-256 over the whole
@@ -429,14 +368,14 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   "`normalise_ref` validation could move to gen" above) if still wanted.
 
 - **`papyri pack` strict mode and bundle linting.**
-  Add a `--strict` flag to `papyri pack` that promotes warnings to errors,
-  useful in CI to block publishing a bundle with known issues. Add a `--lint`
-  flag (or a `papyri lint` subcommand) that checks IR consistency without
-  fully packing: unresolved local refs, assets referenced but absent from the
-  asset store, `SubstitutionRef`/`SubstitutionDef` nodes that should have been
-  resolved, empty module-docstrings holding a sentinel placeholder rather than
-  a parse failure marker. A `--strict --lint` step in maintainer CI gives fast
-  feedback before upload.
+  *`papyri lint` subcommand: done.* `papyri/cli/lint.py` + `lint_bundle()` in
+  `pack.py` check SubstitutionRef/SubstitutionDef nodes and missing Figure assets.
+  Tests in `papyri/tests/test_pack.py`.
+  *`--strict` flag: done.* `papyri pack --strict` / `-s` now promotes orphan-doc
+  warnings to hard `BundleError`, gated behind the flag so non-strict mode is
+  unchanged. Useful in CI to catch toctree regressions before publishing. Remaining
+  open:
+  - Lint check for empty module-docstring sentinel placeholder.
 
   *Partial landing — silent-drop → hard pack failure:* lenient `papyri gen`
   used to swallow per-object failures (a narrative page that failed to
@@ -445,11 +384,7 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   under `errors` in `papyri.json` (`Gen._record_error` / `_gen_errors` in
   `papyri/gen.py`, mirroring `ErrorCollector._unexpected_errors` for the API
   side), and `papyri pack`'s `_check_no_gen_errors` refuses to produce an
-  artifact while any are present. CI sees a non-zero pack and fails. This
-  is what would have caught the numpy toc-collapse regression at the
-  *moment* of breakage instead of at "narrative docs look mostly empty"
-  later. The remaining `--strict`/`--lint` items above (unresolved refs,
-  missing assets, …) are still open.
+  artifact while any are present.
 
 - **Toc ↔ narrative consistency checks.**
   *Forward direction landed:* `papyri pack` now fails (via `_check_toc_refs`
@@ -482,65 +417,20 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   equivalent since the toc is a validated tree).
 
 - Static export hardening for `viewer/dist/` deployment.
-- Dark-adapted Shiki theme + dark-mode-aware KaTeX glyphs.
+- Dark-adapted Shiki theme + dark-mode-aware KaTeX glyphs. *Largely done — dual
+  Shiki themes already active; KaTeX `.katex-html` `color: inherit` rule added.*
 - Cross-package ingest correctness: TODOs around version resolution for
-  `Figure`/`RefInfo` across packages (see `crosslink.py`).
-- **Viewer: crossrefs should default to latest-version-only.**
-  The "Referenced by" section on a qualname page currently lists one row per
-  source `(pkg, ver)` that links here. When several versions of the same
-  package have been uploaded, the same logical reference shows up N times
-  (e.g. numpy 1.26 and numpy 2.0 both linking to a scipy symbol). Users
-  almost always want a single row per source package, pointing at its
-  latest version.
+  `Figure`/`RefInfo` across packages (see `ingested_doc.py`).
+- **Viewer: crossrefs should default to latest-version-only.** *Done.*
+  `bucketBackrefs` in `viewer/src/lib/qualname-page.ts` now filters to the
+  latest *linking* version per source package (uses `compareVersionsDesc` from
+  `ir-reader.ts`). Wildcard versions (`"?"`, `"*"`) are always kept. Tests in
+  `viewer/tests/qualname-page.test.ts`.
 
-  *Where this lives in the code:*
-  - `viewer/src/lib/graph.ts:109` `getBackrefs` — SQL that fetches every
-    incoming `(pkg, ver, kind, path)`. Cheapest place to filter, but the DB
-    doesn't know what "latest" is.
-  - `viewer/src/lib/qualname-page.ts:75` `bucketBackrefs` — view-model layer
-    that already dedupes; the natural place for a render-time filter.
-  - `viewer/src/lib/ir-reader.ts:35,61` already have `compareVersionsDesc`
-    and `listIngestedPackages` (which knows the latest version per package);
-    reuse those rather than reimplementing PEP 440 sort logic.
-
-  *Design — open questions to settle before implementing:*
-  1. **What is "latest"?** Use `listIngestedPackages(...).latest` (latest
-     ingested, including pre-releases) for now. A future refinement could
-     exclude `.dev` / `rc` / `alpha` / `beta` per PEP 440, matching the
-     version-status-banner classifier in the next item.
-  2. **Filter scope.** Group backrefs by source `pkg`, keep only the row
-     whose `ver` equals that package's latest. Cross-package and same-package
-     buckets get the same treatment.
-  3. **What if the link only exists in an older source version?** (e.g.
-     numpy 1.26 references a symbol that numpy 2.0 has dropped.) Two
-     options: (a) drop the ref entirely — clean but hides real signal;
-     (b) keep the latest *version that actually links here* per package —
-     preserves signal at the cost of a slightly fuzzier "latest" rule.
-     Recommendation: (b), since the alternative silently loses information.
-  4. **Toggle.** Add a "show all versions" affordance (querystring
-     `?all-versions=1` or a small toggle) so the raw list is still
-     reachable for debugging and for the validate page.
-  5. **Where to filter.** Render-time in `bucketBackrefs` is simplest and
-     keeps the graphstore generic. A precomputed `latest_backrefs` table is
-     a later optimization once the rule is stable (see "Storage invariant"
-     — derived tables are free to denormalize).
-
-  *Tests to add (`viewer/src/lib/qualname-page.test.ts` or equivalent):*
-  - Same package, two versions both linking → one row, latest version's URL.
-  - Same package, only the older version links → that row is kept (rule b).
-  - Multiple source packages, each with multiple versions → one row per
-    source pkg, each pointing at its latest linking version.
-  - Pre-release vs. stable: `2.0.0rc1` vs. `1.26.4` — document the chosen
-    behaviour and pin it with a test (will need updating when the PEP 440
-    refinement in (1) lands).
-  - Wildcard-version stubs (`?` / `*`) that `getBackrefs` already emits for
-    unresolved cross-package refs: decide whether they count as "latest" or
-    are always shown / always hidden, and lock it in a test.
-  - `?all-versions=1` (or whatever toggle): returns the unfiltered list,
-    matching today's behaviour.
-
-  *Out of scope for the first PR:* PEP 440 pre-release exclusion (item 1),
-  precomputed table (item 5). Land the render-time filter + tests first.
+  *PEP 440 pre-release exclusion: done.* `filterToLatestVersionPerPkg` now
+  prefers the latest stable linker over any pre-release version (alpha/beta/rc/.dev
+  suffix). Falls back to latest pre-release when no stable version links.
+  Precomputed table remains an open optimisation.
 
 - **Viewer: Unresolved link warnings** *Landed.*
   - **Inline warnings**: `render-node.ts` already emits `<span class="xref
@@ -702,24 +592,21 @@ file are cross-referenced rather than duplicated.
 
 ### Python (`papyri/`)
 
-- **LRU-cache `ts.parse()` results** (`ts.py:1132`; callers in `gen.py` around
-  lines 557/578/1012/1441/1704). The parser is invoked many times per gen run;
-  even if duplication is rare, an LRU around `ts.parse()` is cheap insurance and
-  removes a per-call cost. Note the contrasting case in `tree.py` where
-  `@lru_cache` was *removed* because mutated nodes broke equality — `ts.parse()`
-  operates on raw strings and produces fresh trees, so it does not have that
-  hazard.
-- **Decompose `Gen.collect_api_docs`** (`gen.py:1763`, ~315 lines).
-  Split into module-walk / doc-extract / IR-emit so each step is testable in
-  isolation.
-- **Directive handler registry redesign** — *partially done.* An explicit
-  registry dict now exists (`tree.py:690` `self._handlers`, keyed by the exact
-  directive name so hyphenated names like `code-block` work). But the legacy
-  `"_" + name + "_handler"` getattr convention is still the *first* dispatch
-  path (`tree.py:958`, falling back to `self._handlers.get(...)` at line 960),
-  and `_autosummary_handler` / `_toctree_handler` still rely on it. Finish the
-  job by removing the getattr dispatch so the dict is the only mechanism.
-  Combine with the "no global state" / `DirectiveContext` work above.
+- **LRU-cache `ts.parse()` results** — *Done.* `_parse_cached(text: bytes)` is
+  `@functools.lru_cache(maxsize=512)`; public `parse(text, qa=None)` delegates
+  to it. Cache key is the raw `bytes` object, which is safe because `validate()`
+  (the only caller that looks at the return value post-cache) is read-only.
+- **Decompose `Gen.collect_api_docs`** — *Done.* Extracted
+  `_collect_and_filter_items` (module walk, exclusion/limit_to filter,
+  aliases/known_refs) and `_process_one_api_item` (per-object extraction →
+  NumpyDoc parse → GenVisitor → store). `collect_api_docs` is now a thin
+  coordinator. All 449 tests pass.
+- **Directive handler registry redesign** — *Done.* `self._handlers` dict is the
+  sole dispatch path in `replace_UnprocessedDirective`; the legacy
+  `"_" + name + "_handler"` getattr path is removed. `_autosummary_handler`
+  and `_toctree_handler` are registered directly at `self._handlers["autosummary"]`
+  and `self._handlers["toctree"]`. Combine with the "no global state" /
+  `DirectiveContext` work above when tackling context injection.
 - **Fix stale `papyri ingest` reference.** *Landed.* `describe.py` now points
   at `papyri upload` and `POST /api/reingest` instead of the removed
   `papyri ingest` CLI.
@@ -753,26 +640,21 @@ in the one-time synchronous `loadSchemaFromDisk` DB-init path.)
 
 ### Viewer (`viewer/`)
 
-- **Precompute bundle indices at ingest time.** The shared `walkBundle` /
-  `walkAllBundles` helper now exists (`viewer/src/lib/bundle-walk.ts`) and is
-  used by `image-index.ts` and the node-browser endpoint, but the `~25s
-  /images/` scan is still a live scan. The remaining work: move it into the
-  ingest pipeline as a `nodes_by_type` table so endpoints query rather than
-  scan. Per the "Storage invariant" section, these tables are free to hold
-  whatever shape the endpoint wants — they need not mirror IR node structure,
-  since re-ingest can rebuild them from the raw archive.
-- **CSS dead-code audit.** `global.css` has grown to ~1563 lines and
-  `ir-nodes.css` to ~536. The previously-flagged selectors (`.sidebar-flat` /
-  `.sidebar-qualnames`, `.bundle-index-card*`) turned out to be live — all are
-  still referenced by `BundleSidebar.astro` and the bundle index page, so they
-  are NOT dead. A general audit/consolidation pass on the grown stylesheets may
-  still be worthwhile, but start from a fresh unused-selector check rather than
-  the old (now-stale) list.
-- **Admonition styling.** `Admonition` nodes render as a single generic
-  `aside.admonition` (`render-node.ts`, `ir-nodes.css`) regardless of kind
-  (note / warning / tip / seealso / …). Look at
-  https://sphinx-immaterial.readthedocs.io/en/latest/admonitions.html for
-  per-kind color tokens and icons to model richer admonition styling on.
+- **Precompute bundle indices at ingest time.** *Done.* `Ingester._populateNodeIndex()`
+  walks the bundle at ingest time and fills a `node_index(pkg, ver, node_type, content,
+  page_href, page_kind, page_qa)` table (migration `0006_node_index.sql`). The image-index
+  and node-browser endpoints query this table for the common types (Image, Math, Code,
+  Figure, Equation) instead of scanning all blobs. Both endpoints fall back to the
+  existing `walkBundle` scan for bundles ingested before this migration.
+- **CSS dead-code audit.** *Largely done.* A full selector-by-selector audit of
+  `global.css` (141 top-level classes) and `ir-nodes.css` (10 top-level classes)
+  found exactly one dead selector (`.sidebar-stub`, removed). All other selectors
+  are either directly referenced in templates or dynamically applied by
+  `render-node.ts` / `[...doc].astro`.
+- **Admonition styling.** *Done.* `render-node.ts` now emits
+  `admonition-${kind}` per-kind CSS class; `ir-nodes.css` has per-kind color
+  tokens and SVG icons for note, warning, tip, deprecated, versionadded,
+  versionchanged, seealso, danger, caution, hint, etc.
 - **Auth is intentional but minimal.** `middleware.ts` uses a three-tier model:
   - *Always public*: `/login`, `/api/auth/`, `/api/bundle` (upload endpoint uses
     its own bearer-token check).
@@ -887,25 +769,17 @@ pass; the rest are recorded here as TBD so the next PR can pick them up.
 
 ### TBD — upload / ingest robustness
 
-- **Streaming PUT has no timeout** (`papyri/cli/upload.py`). A finite
-  idle-read timeout needs to be balanced against large-bundle ingests that may
-  have long gaps between progress events, and the read-phase `TimeoutError`
-  must be caught alongside the existing `HTTPError`/`URLError` handlers (it is
-  not a `URLError`). Left as TBD pending a chosen value.
-- **Zip-bomb guard on upload** (`upload.py` `_load_from_zip`). `zf.read()`
-  decompresses the chosen member fully into memory with no cap. The `.papyri`
-  member is itself already gzip-compressed, so expansion is normally ~1×, but a
-  crafted zip could lie. Add a `ZipInfo.file_size` ceiling (and ideally bounded
-  chunked reads) once a sane max bundle size is picked.
-- **`assertBundle` validates shape shallowly** (`ingest/src/bundle.ts`). It
-  checks `__type`/`__tag` only, then narrows to a fully-typed `BundleNode`.
-  A tag-4070 artifact with `module`/`version` as non-strings flows into path
-  joins and DB params. Validate that those are non-empty strings and that the
-  record fields are objects.
-- **`inflateZlib` corrupt-body handling** (`ingest/src/inventory.ts`). A
-  malformed `objects.inv` body rejects the decompression stream and throws to
-  the caller, despite the "skip bad lines" comment. Wrap parse/inflate and
-  surface a clean error.
+- **Streaming PUT has no timeout.** *Done.* `_UPLOAD_IDLE_TIMEOUT_S = 300` wired
+  into the PUT at `upload.py:363`; `TimeoutError` caught alongside the existing
+  `HTTPError`/`URLError` handlers.
+- **Zip-bomb guard on upload.** *Done.* `_load_from_zip` has a 256 MiB ceiling
+  checked against `ZipInfo.file_size` and the actual read (`read(_MAX_BUNDLE_BYTES + 1)`).
+- **`assertBundle` validates shape shallowly.** *Done.* `ingest/src/bundle.ts`
+  validates non-empty `module`/`version` strings and all record fields (`api`,
+  `narrative`, `examples`, `aliases`, `extra`, `toc`, `assets`) as non-null objects.
+- **`inflateZlib` corrupt-body handling** — *Already done.* `parseObjectsInv`
+  wraps `inflateZlib` in a try/catch and throws a descriptive `Error` on failure
+  (`ingest/src/inventory.ts:90-96`). No change needed.
 
 ### TBD — SSRF (viewer, matters for the hosted service)
 

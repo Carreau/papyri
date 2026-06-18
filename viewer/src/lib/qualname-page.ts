@@ -9,7 +9,13 @@
 //   3. Resolve and bucket backrefs from the graph store into same-package
 //      vs cross-package rows.
 
-import { sectionTitleText, type IngestedDoc, type IRNode, type SectionNode } from "./ir-reader.ts";
+import {
+  sectionTitleText,
+  type IngestedDoc,
+  type IRNode,
+  type SectionNode,
+  compareVersionsDesc,
+} from "./ir-reader.ts";
 import { linkForRef } from "./links.ts";
 import type { RefTuple } from "./graph.ts";
 
@@ -78,14 +84,64 @@ function unwrapExampleSection(doc: IngestedDoc): ExampleSection | null {
   return { title: titleText || "Examples", children: kids };
 }
 
+// PEP 440 pre-release / dev patterns (mirrors version-utils.ts).
+// Inlined here to avoid pulling that module's heavier imports.
+const _PRE_RE = /(a|alpha|b|beta|rc)\d*$/i;
+const _DEV_RE = /\.dev\d*$/i;
+
+function isPreRelease(ver: string): boolean {
+  return _PRE_RE.test(ver) || _DEV_RE.test(ver);
+}
+
+/**
+ * Filter backrefs to keep only the latest linking version per source package.
+ * For each unique (pkg, kind, path), keep only the row with the highest version
+ * among all versions that actually link here. Rows with wildcard versions ("?" or "*")
+ * are always kept since their version cannot be determined.
+ *
+ * When a mix of stable and pre-release versions link to the same target, the
+ * latest stable version is preferred. Pre-release-only groups fall back to the
+ * latest pre-release (same as before this change, just no stable alternative).
+ */
+function filterToLatestVersionPerPkg(backrefs: readonly RefTuple[]): RefTuple[] {
+  // Group by (pkg, kind, path) → list of versions
+  const byKey = new Map<string, RefTuple[]>();
+  for (const b of backrefs) {
+    const key = `${b.pkg}/${b.kind}/${b.path}`;
+    const arr = byKey.get(key) ?? [];
+    arr.push(b);
+    byKey.set(key, arr);
+  }
+
+  const filtered: RefTuple[] = [];
+  for (const [, items] of byKey) {
+    // Separate wildcard versions (always keep) from real versions
+    const wildcards = items.filter((b) => b.ver === "?" || b.ver === "*");
+    const realVersions = items.filter((b) => b.ver !== "?" && b.ver !== "*");
+
+    // Keep all wildcard entries as-is
+    filtered.push(...wildcards);
+
+    if (realVersions.length > 0) {
+      // Prefer stable over pre-release when selecting the "latest" linker.
+      const stable = realVersions.filter((b) => !isPreRelease(b.ver));
+      const candidates = stable.length > 0 ? stable : realVersions;
+      candidates.sort((a, b) => compareVersionsDesc(a.ver, b.ver));
+      filtered.push(candidates[0]!);
+    }
+  }
+  return filtered;
+}
+
 function bucketBackrefs(
   backrefs: readonly RefTuple[],
   ownPkg: string
 ): { internal: BackrefRow[]; external: BackrefRow[] } {
+  const filtered = filterToLatestVersionPerPkg(backrefs);
   const internal: BackrefRow[] = [];
   const external: BackrefRow[] = [];
   const seen = new Set<string>();
-  for (const b of backrefs) {
+  for (const b of filtered) {
     const url = linkForRef(b);
     if (!url) continue;
     const key = `${b.pkg}/${b.ver}/${b.kind}/${b.path}`;

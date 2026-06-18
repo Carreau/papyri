@@ -35,49 +35,22 @@ function collectNodes(
 
 const FORWARD_REF_TYPES = new Set(["RefInfo", "Figure"]);
 
-/**
- * Extract all forward-reference Keys from a decoded IngestedDoc (or any
- * decoded IR subtree).  Mirrors Python's IngestedDoc.all_forward_refs().
- *
- * - RefInfo nodes with kind != "local" are included as-is.
- * - Figure nodes whose embedded RefInfo has kind == "assets" are included.
- */
-export function collectForwardRefs(doc: IRNode): Key[] {
-  // Walk the same sub-trees as Python: _content values, example_section_data,
-  // arbitrary, see_also.
-  const d = doc as TypedNode;
-
-  const subtrees: AnyValue[] = [];
-  if (d._content && typeof d._content === "object") {
-    subtrees.push(...Object.values(d._content as Record<string, AnyValue>));
-  }
-  if (d.example_section_data) subtrees.push(d.example_section_data);
-  if (Array.isArray(d.arbitrary)) subtrees.push(...d.arbitrary);
-  if (Array.isArray(d.see_also)) subtrees.push(...d.see_also);
-
-  const nodes = collectNodes(subtrees, FORWARD_REF_TYPES);
-
-  const keys = new Map<string, Key>();
-
+/** Shared helper: walk `subtree` and collect RefInfo/Figure keys into `keys`. */
+function collectRefsFromSubtree(subtree: AnyValue, keys: Map<string, Key>): void {
+  const nodes = collectNodes(subtree, FORWARD_REF_TYPES);
   for (const n of nodes) {
     if (n.__type === "RefInfo") {
-      let kind = n.kind as string | null;
+      const kind = n.kind as string | null;
       if (kind === "local") continue;
-      // Gen-time cross-package unresolved stubs have kind="api", version="*".
-      // Normalise to kind="module", version="?" so the stored link target
-      // matches the actual on-disk node (which uses kind="module").
-      if (kind === "api") kind = "module";
-      const rawVersion = (n.version as string) ?? "?";
-      const version = rawVersion === "*" ? "?" : rawVersion;
       const key: Key = {
         module: (n.module as string) ?? "",
-        version,
+        version: (n.version as string) ?? "?",
         kind: kind ?? "module",
         path: (n.path as string) ?? "",
       };
       keys.set(keyStr(key), key);
     } else if (n.__type === "Figure") {
-      // Figure.value is a RefInfo-shaped node.
+      // Figure.value is a RefInfo-shaped node pointing at an asset.
       const ref = n.value as TypedNode | null;
       if (!ref || ref.__type !== "RefInfo") continue;
       if ((ref.kind as string) !== "assets") continue;
@@ -90,7 +63,9 @@ export function collectForwardRefs(doc: IRNode): Key[] {
       keys.set(keyStr(key), key);
     }
   }
+}
 
+function sortKeys(keys: Map<string, Key>): Key[] {
   return [...keys.values()].sort((a, b) => {
     const sa = keyStr(a);
     const sb = keyStr(b);
@@ -99,33 +74,33 @@ export function collectForwardRefs(doc: IRNode): Key[] {
 }
 
 /**
+ * Extract all forward-reference Keys from a decoded IngestedDoc.
+ * Mirrors Python's IngestedDoc.all_forward_refs().
+ *
+ * - RefInfo nodes with kind != "local" are included as-is.
+ * - Figure nodes whose embedded RefInfo has kind == "assets" are included.
+ */
+export function collectForwardRefs(doc: IRNode): Key[] {
+  const d = doc as TypedNode;
+  const subtrees: AnyValue[] = [];
+  if (d._content && typeof d._content === "object") {
+    subtrees.push(...Object.values(d._content as Record<string, AnyValue>));
+  }
+  if (d.example_section_data) subtrees.push(d.example_section_data);
+  if (Array.isArray(d.arbitrary)) subtrees.push(...d.arbitrary);
+  if (Array.isArray(d.see_also)) subtrees.push(...d.see_also);
+
+  const keys = new Map<string, Key>();
+  collectRefsFromSubtree(subtrees, keys);
+  return sortKeys(keys);
+}
+
+/**
  * Extract forward refs from a bare Section blob (used for examples/).
- * Identical to collectForwardRefs but accepts any IR subtree.
+ * Accepts any IR subtree; handles RefInfo and Figure nodes.
  */
 export function collectForwardRefsFromSection(section: IRNode): Key[] {
-  const nodes = collectNodes(section, FORWARD_REF_TYPES);
   const keys = new Map<string, Key>();
-
-  for (const n of nodes) {
-    if (n.__type === "RefInfo") {
-      let kind = n.kind as string | null;
-      if (kind === "local") continue;
-      if (kind === "api") kind = "module";
-      const rawVersion = (n.version as string) ?? "?";
-      const version = rawVersion === "*" ? "?" : rawVersion;
-      const key: Key = {
-        module: (n.module as string) ?? "",
-        version,
-        kind: kind ?? "module",
-        path: (n.path as string) ?? "",
-      };
-      keys.set(keyStr(key), key);
-    }
-  }
-
-  return [...keys.values()].sort((a, b) => {
-    const sa = keyStr(a);
-    const sb = keyStr(b);
-    return sa < sb ? -1 : sa > sb ? 1 : 0;
-  });
+  collectRefsFromSubtree(section, keys);
+  return sortKeys(keys);
 }

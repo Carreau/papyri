@@ -283,6 +283,17 @@ class Unimplemented(Node):
         return f"<Unimplemented {self.placeholder!r} {self.value!r}>"
 
 
+@register(4072)
+class DocstringSentinel(Node):
+    """Sentinel placed in a doc tree when the docstring could not be parsed.
+
+    Emitted when numpydoc fails to parse a module docstring so the viewer
+    renders a visible notice instead of a blank page.
+    """
+
+    message: str
+
+
 @register(4065)
 class Table(Node):
     """Structured table.
@@ -1199,6 +1210,7 @@ SectionContent: TypeAlias = (
     | SubstitutionRef
     | Unimplemented
     | UnimplementedInline
+    | DocstringSentinel
     | Citation
     | Footnote
     | Table

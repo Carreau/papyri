@@ -52,17 +52,11 @@ Splitting into a separate repo remains an option once the IR schema stabilizes.
 
 ### Open follow-ups
 
-- **Bundle-walk shared helper — landed; ingest-time index still open.** The
-  duplicated walk in `lib/image-index.ts` and
-  `pages/api/[pkg]/[ver]/nodes.json.ts` is now consolidated in
-  `lib/bundle-walk.ts` (`walkBundle` / `walkAllBundles`), and the node-search
-  dedup + Image-type bugs are fixed (dedup is keyed by `type\0content` with
-  page-merge in `nodes.json.ts`). What remains is the perf optimisation:
-  precompute a `nodes_by_type` table at ingest time so `/images/` and the node
-  browser do an indexed lookup instead of a full bundle scan (the ~25s scan).
-  Per the "Storage invariant" in the top-level `PLAN.md`, that table is free to
-  hold whatever shape the endpoints want. `bundle-walk.ts` is the place to hang
-  the optimisation once it lands.
+- **Bundle-walk shared helper — done; ingest-time index — done.** Walk logic
+  consolidated in `lib/bundle-walk.ts`; `node_index` table precomputed at ingest
+  time by `Ingester._populateNodeIndex()` (migration `0006_node_index.sql`).
+  Image-index and node-browser endpoints now query `node_index` instead of
+  scanning all blobs; both fall back to `walkBundle` for pre-migration bundles.
 
 ## Tech choices
 

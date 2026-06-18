@@ -138,13 +138,14 @@ describe("collectForwardRefs", () => {
     expect(refs.map((r) => r.path)).toEqual(["numpy.arange", "numpy.zeros"]);
   });
 
-  it("normalises api-kind stubs to module kind", () => {
-    // Gen-time cross-package refs are stored as RefInfo(kind="api", version="*").
-    // The ingest normalises them so the stored link target matches the actual
-    // on-disk node (kind="module").
-    const apiRef = refInfo("numpy", "*", "api", "numpy.linspace");
+  it("collects cross-package refs in canonical form (kind=module, version=?)", () => {
+    // Since the sentinel unification, gen.py emits RefInfo(kind="module",
+    // version="?") directly for cross-package refs — the visitor no longer
+    // normalises the old (kind="api", version="*") form; any bundle still in
+    // that form must be re-ingested from the raw archive.
+    const ref = refInfo("numpy", "?", "module", "numpy.linspace");
     const doc = ingestedDoc({
-      _content: { Summary: section([paragraph([apiRef])]) },
+      _content: { Summary: section([paragraph([ref])]) },
     });
     const refs = collectForwardRefs(doc);
     expect(refs).toHaveLength(1);
@@ -156,13 +157,13 @@ describe("collectForwardRefs", () => {
     });
   });
 
-  it("normalises api-kind stubs nested inside CrossRef.reference", () => {
-    const apiRef = refInfo("numpy", "*", "api", "numpy.linspace");
+  it("collects canonical refs nested inside CrossRef.reference", () => {
+    const canonRef = refInfo("numpy", "?", "module", "numpy.linspace");
     const crossRef: TypedNode = {
       __type: "CrossRef",
       __tag: 4002,
       value: "linspace",
-      reference: apiRef,
+      reference: canonRef,
       kind: "module",
       anchor: null,
     };

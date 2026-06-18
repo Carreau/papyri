@@ -349,12 +349,43 @@ def _warn_orphan_docs(bundle: Bundle) -> None:
         )
 
 
-def read_bundle_dir(path: Path, log: Callable[[str], None] | None = None) -> Bundle:
+def _check_orphan_docs(bundle: Bundle) -> None:
+    """Fail if narrative docs are unreachable from the toc.
+
+    In strict mode, orphan docs (present in the bundle but not reachable from
+    any toc entry) are treated as a hard error. This is useful in CI to catch
+    toctree regressions. Without strict mode, orphan docs only produce a warning.
+    """
+    orphans = find_orphan_docs(bundle)
+    if not orphans:
+        return
+    sample = ", ".join(orphans[:10])
+    more = f" (+{len(orphans) - 10} more)" if len(orphans) > 10 else ""
+    if not bundle.toc:
+        raise BundleError(
+            f"bundle {bundle.module!r} {bundle.version!r} has {len(orphans)} "
+            f"narrative doc(s) but an empty toc — none are reachable via "
+            f"navigation: {sample}{more}"
+        )
+    else:
+        raise BundleError(
+            f"bundle {bundle.module!r} {bundle.version!r} has {len(orphans)} "
+            f"narrative doc(s) not reachable from the toc (orphans): "
+            f"{sample}{more}"
+        )
+
+
+def read_bundle_dir(
+    path: Path, log: Callable[[str], None] | None = None, strict: bool = False
+) -> Bundle:
     """Read a DocBundle directory and construct a typed ``Bundle``.
 
     Fail-fast: raises ``BundleError`` on the first problem encountered.
     Pass a ``log`` callable to receive fine-grained progress messages
     (one string per step, no trailing newline needed).
+
+    If ``strict=True``, orphan narrative docs (present in the bundle but not
+    reachable from any toc entry) are treated as hard errors instead of warnings.
     """
     from .doc import GeneratedDoc
     from .nodes import Section, TocTree
@@ -433,7 +464,10 @@ def read_bundle_dir(path: Path, log: Callable[[str], None] | None = None) -> Bun
     )
     bundle.validate()
     _check_toc_refs(bundle)
-    _warn_orphan_docs(bundle)
+    if strict:
+        _check_orphan_docs(bundle)
+    else:
+        _warn_orphan_docs(bundle)
     return bundle
 
 
@@ -456,10 +490,14 @@ def make_artifact(bundle: Bundle, log: Callable[[str], None] | None = None) -> b
 
 
 def make_artifact_from_dir(
-    path: Path, log: Callable[[str], None] | None = None
+    path: Path, log: Callable[[str], None] | None = None, strict: bool = False
 ) -> tuple[bytes, Bundle]:
-    """Validate and pack a DocBundle directory. Returns (artifact_bytes, bundle)."""
-    bundle = read_bundle_dir(path, log=log)
+    """Validate and pack a DocBundle directory. Returns (artifact_bytes, bundle).
+
+    If ``strict=True``, orphan narrative docs are treated as hard errors instead
+    of warnings.
+    """
+    bundle = read_bundle_dir(path, log=log, strict=strict)
     return make_artifact(bundle, log=log), bundle
 
 
@@ -574,3 +612,51 @@ def explode_artifact_to_dir(
     out_dir = _safe_child(dest_parent, f"{bundle.module}_{bundle.version}")
     explode_bundle_to_dir(bundle, out_dir, log=log)
     return out_dir
+
+
+def lint_bundle(bundle: Bundle) -> list[str]:
+    """Check a bundle for IR consistency issues.
+
+    Returns a list of issue strings. Empty list means no issues found.
+
+    Checks performed:
+    - Unresolved SubstitutionRef/SubstitutionDef nodes (should have been replaced)
+    - Referenced assets that are missing from the asset store
+    """
+    from .nodes import Figure, RefInfo, SubstitutionDef, SubstitutionRef
+
+    issues: list[str] = []
+
+    # Collect nodes from all docs, tracking document paths for better error messages
+    all_docs: list[tuple[str, Any]] = []
+    for qa, doc in bundle.api.items():
+        all_docs.append((f"module/{qa}", doc))
+    for name, doc in bundle.narrative.items():
+        all_docs.append((f"docs/{name}", doc))
+    for name, section in bundle.examples.items():
+        all_docs.append((f"examples/{name}", section))
+
+    # Check 1: SubstitutionRef/SubstitutionDef nodes should have been resolved
+    for doc_path, doc in all_docs:
+        for node in _iter_nodes(doc):
+            if isinstance(node, SubstitutionRef):
+                issues.append(f"unresolved SubstitutionRef in {doc_path}")
+            elif isinstance(node, SubstitutionDef):
+                issues.append(f"unresolved SubstitutionDef in {doc_path}")
+
+    # Check 2: Missing assets referenced by Figure nodes
+    asset_keys = set(bundle.assets.keys())
+    for doc_path, doc in all_docs:
+        for node in _iter_nodes(doc):
+            if (
+                isinstance(node, Figure)
+                and isinstance(node.value, RefInfo)
+                and node.value.kind == "assets"
+            ):
+                asset_name = node.value.path
+                if asset_name not in asset_keys:
+                    issues.append(
+                        f"missing asset '{asset_name}' referenced in {doc_path}"
+                    )
+
+    return issues

@@ -63,6 +63,7 @@ from .cli.describe import describe
 from .cli.diff import diff
 from .cli.find import find
 from .cli.gen import gen
+from .cli.lint import lint
 from .cli.pack import pack
 from .cli.unpack import unpack
 from .cli.upload import upload
@@ -121,6 +122,7 @@ def _app_callback(
 for _cmd in (
     about,
     gen,
+    lint,
     pack,
     unpack,
     bootstrap,

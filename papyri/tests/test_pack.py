@@ -18,6 +18,7 @@ from papyri.pack import (
     explode_artifact_to_dir,
     explode_bundle_to_dir,
     find_orphan_docs,
+    lint_bundle,
     load_artifact,
     make_artifact,
     make_artifact_from_dir,
@@ -526,6 +527,29 @@ def test_read_bundle_dir_warns_on_orphan_docs(tmp_path: Any, caplog: Any) -> Non
     assert any("stranded" in r.getMessage() for r in caplog.records)
 
 
+def test_read_bundle_dir_strict_fails_on_orphan_docs(tmp_path: Any) -> None:
+    """Reading a bundle with an unreachable doc fails in strict mode."""
+    from papyri.nodes import LocalRef, TocTree
+
+    bundle_dir = _make_minimal_bundle_dir(tmp_path / "mypkg_1.0")
+    (bundle_dir / "docs").mkdir()
+    for name in ("index", "stranded"):
+        (bundle_dir / "docs" / name).write_bytes(_minimal_narrative_doc().to_json())
+    _write_toc(
+        bundle_dir,
+        [TocTree(children=(), title="Root", ref=LocalRef("docs", "index"))],
+    )
+    # Without strict mode, reading succeeds.
+    bundle = read_bundle_dir(bundle_dir, strict=False)
+    assert "stranded" in bundle.narrative
+
+    # With strict mode, reading fails.
+    with pytest.raises(BundleError) as exc_info:
+        read_bundle_dir(bundle_dir, strict=True)
+    assert "orphan" in str(exc_info.value).lower()
+    assert "stranded" in str(exc_info.value)
+
+
 # ---------------------------------------------------------------------------
 # numpy toc smoke test — guards against narrative collection silently
 # dropping most pages (which leaves the rendered toc nearly empty).
@@ -939,3 +963,108 @@ def test_toc_bundle_field_is_tuple(tmp_path):
     assert bundle.toc[0].title == "Root"
     assert len(bundle.toc[0].children) == 1
     assert bundle.toc[0].children[0].ref.path == "page"
+
+
+# ---------------------------------------------------------------------------
+# lint_bundle — IR consistency checks without full packing.
+# ---------------------------------------------------------------------------
+
+
+def test_lint_bundle_clean() -> None:
+    """A clean bundle returns no issues."""
+    bundle = _make_bundle_node()
+    issues = lint_bundle(bundle)
+    assert issues == []
+
+
+def test_lint_bundle_detects_unresolved_substitution_ref() -> None:
+    """SubstitutionRef nodes should have been resolved; their presence is an issue."""
+    from papyri.doc import GeneratedDoc
+    from papyri.nodes import Paragraph, Section, SubstitutionRef
+
+    doc = GeneratedDoc.new()
+    doc._content = {"summary": Section([Paragraph([SubstitutionRef("VAR")])], ())}
+    bundle = _make_bundle_node(api={"mod": doc})
+
+    issues = lint_bundle(bundle)
+    assert len(issues) == 1
+    assert "unresolved SubstitutionRef" in issues[0]
+    assert "module/mod" in issues[0]
+
+
+def test_lint_bundle_detects_unresolved_substitution_def() -> None:
+    """SubstitutionDef nodes should have been resolved; their presence is an issue."""
+    from papyri.doc import GeneratedDoc
+    from papyri.nodes import Paragraph, Section, SubstitutionDef
+
+    doc = GeneratedDoc.new()
+    doc._content = {"summary": Section([Paragraph([SubstitutionDef("VAR", [])])], ())}
+    bundle = _make_bundle_node(narrative={"index": doc})
+
+    issues = lint_bundle(bundle)
+    assert len(issues) == 1
+    assert "unresolved SubstitutionDef" in issues[0]
+    assert "docs/index" in issues[0]
+
+
+def test_lint_bundle_detects_missing_asset() -> None:
+    """A Figure node referencing a missing asset is flagged."""
+    from papyri.doc import GeneratedDoc
+    from papyri.nodes import Figure, Paragraph, RefInfo, Section
+
+    doc = GeneratedDoc.new()
+    # Figure with a RefInfo pointing to a nonexistent asset
+    fig = Figure(value=RefInfo(None, None, "assets", "missing.png"))
+    doc._content = {"summary": Section([Paragraph([fig])], ())}
+    bundle = _make_bundle_node(examples={"ex": doc})
+
+    issues = lint_bundle(bundle)
+    assert len(issues) == 1
+    assert "missing asset" in issues[0]
+    assert "missing.png" in issues[0]
+    assert "examples/ex" in issues[0]
+
+
+def test_lint_bundle_accepts_present_asset() -> None:
+    """A Figure node referencing an asset that exists is OK."""
+    from papyri.doc import GeneratedDoc
+    from papyri.nodes import Figure, Paragraph, RefInfo, Section
+
+    doc = GeneratedDoc.new()
+    fig = Figure(value=RefInfo(None, None, "assets", "present.png"))
+    doc._content = {"summary": Section([Paragraph([fig])], ())}
+    bundle = _make_bundle_node(
+        examples={"ex": doc}, assets={"present.png": b"image data"}
+    )
+
+    issues = lint_bundle(bundle)
+    assert issues == []
+
+
+def test_lint_bundle_multiple_issues() -> None:
+    """Multiple issues are all collected and reported."""
+    from papyri.doc import GeneratedDoc
+    from papyri.nodes import Figure, Paragraph, RefInfo, Section, SubstitutionRef
+
+    doc1 = GeneratedDoc.new()
+    doc1._content = {"summary": Section([Paragraph([SubstitutionRef("VAR")])], ())}
+
+    doc2 = GeneratedDoc.new()
+    fig = Figure(value=RefInfo(None, None, "assets", "missing1.png"))
+    doc2._content = {"summary": Section([Paragraph([fig])], ())}
+
+    doc3 = GeneratedDoc.new()
+    fig = Figure(value=RefInfo(None, None, "assets", "missing2.png"))
+    doc3._content = {"summary": Section([Paragraph([fig])], ())}
+
+    bundle = _make_bundle_node(
+        api={"mod": doc1},
+        narrative={"index": doc2},
+        examples={"ex": doc3},
+    )
+
+    issues = lint_bundle(bundle)
+    assert len(issues) == 3
+    assert any("SubstitutionRef" in issue for issue in issues)
+    assert any("missing1.png" in issue for issue in issues)
+    assert any("missing2.png" in issue for issue in issues)

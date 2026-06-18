@@ -1081,14 +1081,6 @@ html[data-inline-members] .inline-members-list {
   margin: 0 0 0.4rem;
 }
 
-/* Placeholder text for sections not yet wired */
-.sidebar-stub {
-  font-size: 0.8rem;
-  color: var(--fg-muted);
-  font-style: italic;
-  margin: 0;
-}
-
 /* API section: search island + compact qualname list */
 .sidebar-api {
   flex: 1;

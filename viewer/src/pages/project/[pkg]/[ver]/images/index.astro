@@ -12,7 +12,7 @@ if (!pkg || !ver) return new Response(null, { status: 404 });
 const { blobStore, graphDb } = await getBackends();
 const actualVer = await resolveVersion(graphDb, pkg, ver);
 if (!actualVer) return new Response(`Package ${pkg} not found`, { status: 404 });
-const entries = await collectBundleImages(blobStore, pkg, actualVer, ver);
+const entries = await collectBundleImages(graphDb, blobStore, pkg, actualVer, ver);
 ---
 
 <BundleLayout

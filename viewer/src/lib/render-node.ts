@@ -270,7 +270,7 @@ export async function renderNode(node: IRNode, opts: RenderOptions = {}): Promis
       const kind = escapeHtml(String(n.kind ?? "note"));
       const baseType = escapeHtml(String(n.base_type ?? "note"));
       const inner = await renderChildren(asArray(n.children), opts);
-      return `<aside class="admonition admonition-${baseType} ${kind}">${inner}</aside>`;
+      return `<aside class="admonition admonition-${baseType} admonition-${kind}">${inner}</aside>`;
     }
 
     case "AdmonitionTitle": {
@@ -378,6 +378,11 @@ export async function renderNode(node: IRNode, opts: RenderOptions = {}): Promis
       const placeholder = n.placeholder ? `<code>${escapeHtml(String(n.placeholder))}</code>` : "";
       const value = n.value ? `<span>${escapeHtml(String(n.value))}</span>` : "";
       return `<div class="unimplemented">${placeholder}${value}</div>`;
+    }
+
+    case "DocstringSentinel": {
+      const message = escapeHtml(String(n.message || "Docstring could not be parsed"));
+      return `<div class="admonition admonition-warning"><p><strong>Warning:</strong> ${message}</p></div>`;
     }
 
     default: {

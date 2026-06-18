@@ -20,6 +20,7 @@
 // can reach it).
 
 import type { APIRoute } from "astro";
+import { isIPv4, isIPv6 } from "node:net";
 import { parseObjectsInv, registerProject, storeInventory, unloadProject } from "papyri-ingest";
 import { getBackends } from "../../lib/backends.ts";
 import { respond } from "../../lib/api-utils.ts";
@@ -35,6 +36,106 @@ function isHttpUrl(s: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Check if a URL is safe to fetch from (not targeting private/loopback/reserved addresses).
+ * Rejects localhost, RFC 1918 private ranges, loopback, link-local, and IPv6 reserved ranges.
+ */
+export function isSafeUrl(rawUrl: string): boolean {
+  // Parse and validate protocol.
+  try {
+    const u = new URL(rawUrl);
+    if (u.protocol !== "http:" && u.protocol !== "https:") {
+      return false;
+    }
+  } catch {
+    return false;
+  }
+
+  const hostname = new URL(rawUrl).hostname;
+  if (!hostname) {
+    return false;
+  }
+
+  // Reject localhost (case-insensitive).
+  if (hostname.toLowerCase() === "localhost") {
+    return false;
+  }
+
+  // Strip IPv6 brackets for IP detection checks (hostname may be "[::1]").
+  let hostForIpCheck = hostname;
+  if (hostname.startsWith("[") && hostname.endsWith("]")) {
+    hostForIpCheck = hostname.slice(1, -1);
+  }
+
+  // Check if it's an IPv4 literal.
+  if (isIPv4(hostForIpCheck)) {
+    const parts = hostForIpCheck.split(".").map((p) => parseInt(p, 10));
+    if (parts.length !== 4) {
+      return false; // Malformed, reject.
+    }
+
+    const [a, b] = parts;
+
+    // Loopback: 127.x.x.x
+    if (a === 127) {
+      return false;
+    }
+
+    // Private: 10.x.x.x
+    if (a === 10) {
+      return false;
+    }
+
+    // Private: 172.16.x.x – 172.31.x.x
+    if (a === 172 && b >= 16 && b <= 31) {
+      return false;
+    }
+
+    // Private: 192.168.x.x
+    if (a === 192 && b === 168) {
+      return false;
+    }
+
+    // Link-local / cloud metadata: 169.254.x.x
+    if (a === 169 && b === 254) {
+      return false;
+    }
+
+    // 0.0.0.0
+    if (a === 0 && b === 0) {
+      return false;
+    }
+
+    return true;
+  }
+
+  // Check if it's an IPv6 literal.
+  if (isIPv6(hostForIpCheck)) {
+    // Loopback: ::1
+    if (hostForIpCheck === "::1") {
+      return false;
+    }
+
+    // Normalize to lowercase for prefix checks.
+    const lower = hostForIpCheck.toLowerCase();
+
+    // Unique Local Addresses (ULA): fc00::/7 and fd00::/8
+    if (lower.startsWith("fc") || lower.startsWith("fd")) {
+      return false;
+    }
+
+    // Link-local: fe80::/10
+    if (lower.startsWith("fe80")) {
+      return false;
+    }
+
+    return true;
+  }
+
+  // Not a literal IP — assume it's a hostname and allow (DNS rebinding is out of scope).
+  return true;
 }
 
 export const POST: APIRoute = async ({ request }) => {
@@ -77,6 +178,13 @@ export const POST: APIRoute = async ({ request }) => {
       : new URL("objects.inv", baseUrl.endsWith("/") ? baseUrl : baseUrl + "/").toString();
   if (!isHttpUrl(invUrl)) {
     return respond({ ok: false, error: "inventory_url must be an http(s) URL" }, 400);
+  }
+
+  if (!isSafeUrl(invUrl)) {
+    return respond(
+      { ok: false, error: "Inventory URL targets a private or reserved address" },
+      400
+    );
   }
 
   let bytes: Uint8Array;

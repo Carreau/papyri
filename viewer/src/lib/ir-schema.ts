@@ -222,6 +222,12 @@ export const IR_SCHEMA: IRSchema = {
       types: ["string"],
     },
   },
+  DocstringSentinel: {
+    message: {
+      array: false,
+      types: ["string"],
+    },
+  },
   Emphasis: {
     children: {
       array: true,
@@ -523,6 +529,7 @@ export const IR_SCHEMA: IRSchema = {
         "Comment",
         "DefList",
         "Directive",
+        "DocstringSentinel",
         "FieldList",
         "Figure",
         "Footnote",

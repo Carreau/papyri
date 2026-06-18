@@ -1068,3 +1068,57 @@ def test_lint_bundle_multiple_issues() -> None:
     assert any("SubstitutionRef" in issue for issue in issues)
     assert any("missing1.png" in issue for issue in issues)
     assert any("missing2.png" in issue for issue in issues)
+
+
+def test_lint_bundle_detects_unresolved_localref() -> None:
+    """LocalRef nodes pointing to nonexistent targets are flagged."""
+    from papyri.doc import GeneratedDoc
+    from papyri.nodes import LocalRef, Paragraph, Section
+
+    doc = GeneratedDoc.new()
+    # LocalRef pointing to a qualname that doesn't exist in the bundle
+    doc._content = {
+        "summary": Section([Paragraph([LocalRef("module", "nonexistent")])], ())
+    }
+    bundle = _make_bundle_node(api={"existing": doc})
+
+    issues = lint_bundle(bundle)
+    assert len(issues) == 1
+    assert "unresolved LocalRef" in issues[0]
+    assert "module/existing" in issues[0]
+    assert "nonexistent" in issues[0]
+
+
+def test_lint_bundle_accepts_resolved_localref() -> None:
+    """LocalRef nodes pointing to existing targets are accepted."""
+    from papyri.doc import GeneratedDoc
+    from papyri.nodes import LocalRef, Paragraph, Section
+
+    doc = GeneratedDoc.new()
+    # LocalRef pointing to an existing module
+    doc._content = {
+        "summary": Section([Paragraph([LocalRef("module", "existing")])], ())
+    }
+    bundle = _make_bundle_node(api={"existing": doc})
+
+    issues = lint_bundle(bundle)
+    assert issues == []
+
+
+def test_lint_bundle_detects_localref_to_missing_doc() -> None:
+    """LocalRef pointing to nonexistent narrative doc is flagged."""
+    from papyri.doc import GeneratedDoc
+    from papyri.nodes import LocalRef, Paragraph, Section
+
+    doc = GeneratedDoc.new()
+    # LocalRef pointing to a narrative doc that doesn't exist
+    doc._content = {
+        "summary": Section([Paragraph([LocalRef("docs", "missing_page")])], ())
+    }
+    bundle = _make_bundle_node(api={"mod": doc})
+
+    issues = lint_bundle(bundle)
+    assert len(issues) == 1
+    assert "unresolved LocalRef" in issues[0]
+    assert "docs" in issues[0]
+    assert "missing_page" in issues[0]

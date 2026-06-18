@@ -622,8 +622,9 @@ def lint_bundle(bundle: Bundle) -> list[str]:
     Checks performed:
     - Unresolved SubstitutionRef/SubstitutionDef nodes (should have been replaced)
     - Referenced assets that are missing from the asset store
+    - Unresolved LocalRef nodes (should only exist if target is present)
     """
-    from .nodes import Figure, RefInfo, SubstitutionDef, SubstitutionRef
+    from .nodes import Figure, LocalRef, RefInfo, SubstitutionDef, SubstitutionRef
 
     issues: list[str] = []
 
@@ -657,6 +658,22 @@ def lint_bundle(bundle: Bundle) -> list[str]:
                 if asset_name not in asset_keys:
                     issues.append(
                         f"missing asset '{asset_name}' referenced in {doc_path}"
+                    )
+
+    # Check 3: Unresolved LocalRef nodes (path must exist in bundle)
+    known_qualnames: dict[str, set[str]] = {
+        "module": set(bundle.api.keys()),
+        "docs": set(bundle.narrative.keys()),
+        "examples": set(bundle.examples.keys()),
+    }
+    for doc_path, doc in all_docs:
+        for node in _iter_nodes(doc):
+            if isinstance(node, LocalRef):
+                targets = known_qualnames.get(node.kind, set())
+                if node.path not in targets:
+                    issues.append(
+                        f"unresolved LocalRef in {doc_path}: "
+                        f"{node.kind!r}:{node.path!r} not found in bundle"
                     )
 
     return issues

@@ -344,8 +344,9 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
 - **`papyri pack` strict mode and bundle linting.**
   *`papyri lint` subcommand: done.* `papyri/cli/lint.py` + `lint_bundle()` in
   `pack.py` check (1) SubstitutionRef/SubstitutionDef nodes, (2) missing Figure
-  assets, and (3) unresolved LocalRef nodes (path absent from bundle.api /
-  narrative / examples). Tests in `papyri/tests/test_pack.py`.
+  assets, (3) unresolved LocalRef nodes (path absent from bundle.api /
+  narrative / examples), and (4) DocstringSentinel nodes (module docstrings
+  that numpydoc could not parse). Tests in `papyri/tests/test_pack.py`.
   *`--strict` flag: done.* `papyri pack --strict` / `-s` now promotes orphan-doc
   warnings to hard `BundleError`, gated behind the flag so non-strict mode is
   unchanged. Useful in CI to catch toctree regressions before publishing.
@@ -477,6 +478,13 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   so the badge is a single row lookup rather than a COUNT query on startup.
 
 ### Gen-time diagnostics
+
+- **`papyri gen` exits non-zero on unexpected errors.** *Done.* The CLI now
+  reads `papyri.json["errors"]` after gen completes and raises `typer.Exit(1)`,
+  skipping pack/upload, when unexpected per-object failures were recorded.
+  Expected errors (absorbed from `[global.expected_errors]` config) are
+  unaffected; dry_run is also unaffected. This gives CI a signal from the gen
+  step itself, not just from the later pack step.
 
 - **Warnings should be promotable to errors, and most should be errors by
   default — configurable per fully-qualified target.**

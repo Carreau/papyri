@@ -15,6 +15,7 @@ import { qualnameAncestors, qualnameLabel } from "../../../../lib/qualname.ts";
 import IrNode from "../../../../components/IrNode.astro";
 import Signature from "../../../../components/Signature.astro";
 import InlineMemberDoc from "../../../../components/InlineMemberDoc.astro";
+import InlineToggle from "../../../../components/InlineToggle.tsx";
 import QualnameDocSections from "../../../../components/QualnameDocSections.astro";
 import BundleLayout from "../../../../layouts/BundleLayout.astro";
 
@@ -192,7 +193,12 @@ const crumbs = qualnameAncestors(qualname).map((qa) => ({
         {memberGroups.map((group) =>
           group.items.length > 0 ? (
             <Fragment>
-              <h2>{group.title}</h2>
+              <div class="members-group-header">
+                <h2>{group.title}</h2>
+                {inlineItems.length > 0 && group.title !== "Submodules" ? (
+                  <InlineToggle client:load toggleType={isClassPage ? "members" : "functions"} />
+                ) : null}
+              </div>
               <ul class="qualnames members-toc">
                 {group.items.map((m) => (
                   <li class={m.label.startsWith("_") ? "member-private" : undefined}>

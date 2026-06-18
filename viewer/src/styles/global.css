@@ -982,6 +982,50 @@ html[data-inline-members] .inline-members-list {
   letter-spacing: 0.03em;
 }
 
+/* Members group header: flexbox container for h2 + inline toggle button. */
+.members-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.members-group-header h2 {
+  margin: 0;
+  flex: 1 0 auto;
+}
+
+/* Inline toggle button (expand/collapse all). */
+.inline-toggle {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.875rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--fg);
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.inline-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--surface-alt);
+}
+
+.inline-toggle:active {
+  transform: scale(0.98);
+}
+
+.inline-toggle-active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--surface-alt);
+}
+
 /* Bundle search error message (shown in sidebar if index fails to load) */
 .bundle-search-error {
   color: var(--math-error-fg);

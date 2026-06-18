@@ -626,3 +626,115 @@ def test_lenient_narrative_skip_records_error_and_pack_refuses(
     with pytest.raises(BundleError) as excinfo:
         make_artifact_from_dir(bundle_dir)
     assert "gen error" in excinfo.value.problems[0]
+
+
+def test_cli_gen_exits_nonzero_on_errors(tmp_path: Any) -> None:
+    """papyri gen CLI should exit with code 1 when errors are recorded in papyri.json.
+
+    This test verifies that when gen records unexpected errors in the manifest,
+    the CLI raises typer.Exit(1) instead of exiting 0, so that CI can detect
+    the failure before the pack step.
+    """
+    import json as _json
+
+    import typer
+
+    from papyri.cli.gen import gen
+
+    # Create a minimal bundle directory with errors in papyri.json
+    bundle_dir = tmp_path / "test_1.0"
+    bundle_dir.mkdir()
+    (bundle_dir / "module").mkdir()
+
+    # Write papyri.json with one error record
+    meta = {
+        "module": "test",
+        "version": "1.0",
+        "errors": [
+            {
+                "kind": "api",
+                "path": "test.foo",
+                "error_type": "SomeError",
+                "message": "Something went wrong",
+            }
+        ],
+    }
+    (bundle_dir / "papyri.json").write_text(_json.dumps(meta))
+
+    # Mock gen_main to return a path with errors; we'll test the CLI's
+    # error-checking logic without actually running gen.
+    from unittest.mock import patch
+
+    with patch("papyri.gen.gen_main") as mock_gen_main:
+        mock_gen_main.return_value = bundle_dir
+
+        # The CLI should raise typer.Exit(1) when errors are present.
+        with pytest.raises(typer.Exit) as excinfo:
+            gen(
+                file="dummy.toml",
+                infer=None,
+                exec=None,
+                debug=False,
+                no_progress=True,
+                dry_run=False,
+                api=True,
+                examples=True,
+                narrative=True,
+                fail=False,
+                fail_early=False,
+                fail_unseen_error=False,
+                only=[],
+                upload=False,
+                pack=False,
+            )
+        assert excinfo.value.exit_code == 1
+
+
+def test_cli_gen_succeeds_without_errors(tmp_path: Any) -> None:
+    """papyri gen CLI should exit normally when no errors are recorded.
+
+    This test verifies that when gen succeeds and records no errors,
+    the CLI completes without raising an exit code.
+    """
+    import json as _json
+
+    from papyri.cli.gen import gen
+
+    # Create a minimal bundle directory without errors in papyri.json
+    bundle_dir = tmp_path / "test_1.0"
+    bundle_dir.mkdir()
+    (bundle_dir / "module").mkdir()
+
+    # Write papyri.json without errors
+    meta = {
+        "module": "test",
+        "version": "1.0",
+    }
+    (bundle_dir / "papyri.json").write_text(_json.dumps(meta))
+
+    # Mock gen_main to return a path without errors
+    from unittest.mock import patch
+
+    with patch("papyri.gen.gen_main") as mock_gen_main:
+        mock_gen_main.return_value = bundle_dir
+
+        # The CLI should not raise when no errors are present.
+        # The function will raise typer.Exit if errors are found, so
+        # returning normally is success.
+        gen(
+            file="dummy.toml",
+            infer=None,
+            exec=None,
+            debug=False,
+            no_progress=True,
+            dry_run=False,
+            api=True,
+            examples=True,
+            narrative=True,
+            fail=False,
+            fail_early=False,
+            fail_unseen_error=False,
+            only=[],
+            upload=False,
+            pack=False,
+        )

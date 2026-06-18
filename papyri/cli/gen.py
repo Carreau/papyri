@@ -71,6 +71,7 @@ def gen(
     for multiple packages may have side effects (for example importing seaborn
     changes matplotlib defaults).
     """
+    import json
     import os
     from os.path import join
 
@@ -96,6 +97,21 @@ def gen(
             fail_unseen_error=fail_unseen_error,
             limit_to=only,
         )
+
+    # Check for gen errors in the manifest (skip if dry_run since no bundle was written)
+    if bundle_path is not None:
+        manifest_path = bundle_path / "papyri.json"
+        if manifest_path.exists():
+            manifest = json.loads(manifest_path.read_text())
+            errors = manifest.get("errors")
+            if errors:
+                error_count = len(errors)
+                typer.echo(
+                    f"papyri gen recorded {error_count} unexpected error(s); "
+                    f"see {bundle_path}/papyri.json",
+                    err=True,
+                )
+                raise typer.Exit(code=1)
 
     if pack and bundle_path:
         from papyri.cli.pack import _pack_one

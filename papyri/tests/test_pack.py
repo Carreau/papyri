@@ -1115,10 +1115,33 @@ def test_lint_bundle_detects_localref_to_missing_doc() -> None:
     doc._content = {
         "summary": Section([Paragraph([LocalRef("docs", "missing_page")])], ())
     }
+
+
+def test_lint_bundle_detects_docstring_sentinel() -> None:
+    """DocstringSentinel nodes indicate unparseable module docstrings."""
+    from papyri.doc import GeneratedDoc
+    from papyri.nodes import DocstringSentinel, Paragraph, Section
+
+    doc = GeneratedDoc.new()
+    sentinel = DocstringSentinel(message="numpydoc failed to parse docstring")
+    doc._content = {"summary": Section([Paragraph([sentinel])], ())}
     bundle = _make_bundle_node(api={"mod": doc})
 
     issues = lint_bundle(bundle)
     assert len(issues) == 1
-    assert "unresolved LocalRef" in issues[0]
-    assert "docs" in issues[0]
-    assert "missing_page" in issues[0]
+    assert "docstring sentinel" in issues[0]
+    assert "module/mod" in issues[0]
+    assert "numpydoc failed to parse docstring" in issues[0]
+
+
+def test_lint_bundle_accepts_no_docstring_sentinel() -> None:
+    """A clean bundle with no DocstringSentinel nodes returns no issues."""
+    from papyri.doc import GeneratedDoc
+    from papyri.nodes import Paragraph, Section
+
+    doc = GeneratedDoc.new()
+    doc._content = {"summary": Section([Paragraph([])], ())}
+    bundle = _make_bundle_node(api={"mod": doc})
+
+    issues = lint_bundle(bundle)
+    assert issues == []

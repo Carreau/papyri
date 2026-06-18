@@ -623,8 +623,16 @@ def lint_bundle(bundle: Bundle) -> list[str]:
     - Unresolved SubstitutionRef/SubstitutionDef nodes (should have been replaced)
     - Referenced assets that are missing from the asset store
     - Unresolved LocalRef nodes (should only exist if target is present)
+    - DocstringSentinel nodes (module docstrings that could not be parsed)
     """
-    from .nodes import Figure, LocalRef, RefInfo, SubstitutionDef, SubstitutionRef
+    from .nodes import (
+        DocstringSentinel,
+        Figure,
+        LocalRef,
+        RefInfo,
+        SubstitutionDef,
+        SubstitutionRef,
+    )
 
     issues: list[str] = []
 
@@ -675,5 +683,12 @@ def lint_bundle(bundle: Bundle) -> list[str]:
                         f"unresolved LocalRef in {doc_path}: "
                         f"{node.kind!r}:{node.path!r} not found in bundle"
                     )
+    # Check 3: DocstringSentinel nodes (unparseable module docstrings)
+    for doc_path, doc in all_docs:
+        for node in _iter_nodes(doc):
+            if isinstance(node, DocstringSentinel):
+                issues.append(  # noqa: PERF401
+                    f"docstring sentinel (unparseable docstring) in {doc_path}: {node.message}"
+                )
 
     return issues

@@ -21,6 +21,7 @@ def lint(
     - Unresolved SubstitutionRef/SubstitutionDef nodes (should have been replaced)
     - Referenced assets that are missing from the asset store
     - Unresolved LocalRef nodes (should only exist if target is present)
+    - DocstringSentinel nodes (module docstrings that could not be parsed)
     """
     from papyri.pack import lint_bundle, read_bundle_dir
 

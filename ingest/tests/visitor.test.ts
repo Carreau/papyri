@@ -138,6 +138,18 @@ describe("collectForwardRefs", () => {
     expect(refs.map((r) => r.path)).toEqual(["numpy.arange", "numpy.zeros"]);
   });
 
+  it("ignores RefInfo nodes outside the walked subtrees", () => {
+    // collectForwardRefs only walks _content / example_section_data /
+    // arbitrary / see_also. A ref planted in any other field (here a
+    // signature-shaped subtree) must not become a forward-ref edge, so
+    // signature type references stay out of the graph.
+    const ref = refInfo("numpy", "2.0", "module", "numpy.ndarray");
+    const doc = ingestedDoc({
+      signature: { __type: "SignatureNode", __tag: 4030, parameters: [ref] },
+    });
+    expect(collectForwardRefs(doc)).toEqual([]);
+  });
+
   it("collects cross-package refs in canonical form (kind=module, version=?)", () => {
     // Since the sentinel unification, gen.py emits RefInfo(kind="module",
     // version="?") directly for cross-package refs — the visitor no longer

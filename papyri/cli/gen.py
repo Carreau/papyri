@@ -43,6 +43,12 @@ def gen(
     fail_unseen_error: bool = typer.Option(
         False, help="Fail on any previously unseen error."
     ),
+    error_on_warning: bool = typer.Option(
+        True,
+        "--error-on-warning/--no-error-on-warning",
+        help="Exit non-zero when any diagnostic resolves to 'error' severity. "
+        "Pass --no-error-on-warning for the legacy warn-and-continue behaviour.",
+    ),
     only: list[str] = typer.Option(
         None,
         "--only",
@@ -95,6 +101,7 @@ def gen(
             fail_early=fail_early,
             fail_unseen_error=fail_unseen_error,
             limit_to=only,
+            error_on_warning=error_on_warning,
         )
 
     if pack and bundle_path:

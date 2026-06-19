@@ -633,10 +633,18 @@ in the one-time synchronous `loadSchemaFromDisk` DB-init path.)
   `keys.ts` for all key-string construction. `parseKeyStr(s) → Key` added to
   `keys.ts` as a validated inverse that fails loudly if the string has fewer
   than four `/`-separated segments; `path` may itself contain `/`.
-- **Unify forward-ref collection.** `collectForwardRefs` (`visitor.ts:45`) and
-  `collectForwardRefsFromSection` (`visitor.ts:105`) walk the same node types
-  with slight differences. Parameterize the input subtrees so the walker is
-  shared; today the `Figure`-handling branch only exists in `collectForwardRefs`.
+- **Unify forward-ref collection.** *Done.* Both `collectForwardRefs` and
+  `collectForwardRefsFromSection` (`ingest/src/visitor.ts`) now route through a
+  single `forwardRefKeys(subtree)` collect-and-sort path over the shared
+  `collectNodes` / `collectRefsFromSubtree` walker, so RefInfo and Figure
+  handling live in exactly one place. The two public entry points differ only
+  in subtree selection: `collectForwardRefs` deliberately walks only the
+  section-bearing IngestedDoc fields (`_content`, `example_section_data`,
+  `arbitrary`, `see_also`) so signature/reference strings stay out of the
+  forward-ref graph (test in `ingest/tests/visitor.test.ts`); the bare-Section
+  entry point walks its whole input. The stale "mirrors Python's
+  `IngestedDoc.all_forward_refs()`" docstring was dropped — that method no
+  longer exists.
 
 ### Viewer (`viewer/`)
 

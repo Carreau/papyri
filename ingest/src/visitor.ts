@@ -1,10 +1,12 @@
 /**
  * IR tree walker for the ingest step.
  *
- * collectForwardRefs() mirrors Python's IngestedDoc.all_forward_refs():
- * it walks a decoded IR tree and returns every RefInfo node (excluding
- * kind="local") and every Figure node, expressed as Key tuples suitable
- * for the graph store.
+ * Walks a decoded IR subtree and returns every RefInfo node (excluding
+ * kind="local") and every asset-bearing Figure node, expressed as Key
+ * tuples suitable for the graph store. Both public entry points
+ * (collectForwardRefs / collectForwardRefsFromSection) share the same
+ * walker and key-collection path; they differ only in which subtrees of
+ * their input they feed to it.
  */
 
 import type { IRNode, TypedNode } from "./encoder.js";
@@ -65,7 +67,16 @@ function collectRefsFromSubtree(subtree: AnyValue, keys: Map<string, Key>): void
   }
 }
 
-function sortKeys(keys: Map<string, Key>): Key[] {
+/**
+ * The single collect-and-sort path: walk `subtree` for RefInfo/Figure
+ * nodes and return their deduplicated Keys in lexicographic order.
+ *
+ * - RefInfo nodes with kind != "local" are included as-is.
+ * - Figure nodes whose embedded RefInfo has kind == "assets" are included.
+ */
+function forwardRefKeys(subtree: AnyValue): Key[] {
+  const keys = new Map<string, Key>();
+  collectRefsFromSubtree(subtree, keys);
   return [...keys.values()].sort((a, b) => {
     const sa = keyStr(a);
     const sb = keyStr(b);
@@ -75,10 +86,11 @@ function sortKeys(keys: Map<string, Key>): Key[] {
 
 /**
  * Extract all forward-reference Keys from a decoded IngestedDoc.
- * Mirrors Python's IngestedDoc.all_forward_refs().
  *
- * - RefInfo nodes with kind != "local" are included as-is.
- * - Figure nodes whose embedded RefInfo has kind == "assets" are included.
+ * Only the section-bearing fields are walked. The doc's other fields
+ * (signature, references, aliases, qa, …) hold strings/primitives, never
+ * RefInfo/Figure nodes, so excluding them keeps signature type strings out
+ * of the forward-ref graph even if they later become structured.
  */
 export function collectForwardRefs(doc: IRNode): Key[] {
   const d = doc as TypedNode;
@@ -89,10 +101,7 @@ export function collectForwardRefs(doc: IRNode): Key[] {
   if (d.example_section_data) subtrees.push(d.example_section_data);
   if (Array.isArray(d.arbitrary)) subtrees.push(...d.arbitrary);
   if (Array.isArray(d.see_also)) subtrees.push(...d.see_also);
-
-  const keys = new Map<string, Key>();
-  collectRefsFromSubtree(subtrees, keys);
-  return sortKeys(keys);
+  return forwardRefKeys(subtrees);
 }
 
 /**
@@ -100,7 +109,5 @@ export function collectForwardRefs(doc: IRNode): Key[] {
  * Accepts any IR subtree; handles RefInfo and Figure nodes.
  */
 export function collectForwardRefsFromSection(section: IRNode): Key[] {
-  const keys = new Map<string, Key>();
-  collectRefsFromSubtree(section, keys);
-  return sortKeys(keys);
+  return forwardRefKeys(section);
 }

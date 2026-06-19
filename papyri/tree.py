@@ -42,6 +42,12 @@ from .directives import (
     versionchanged_handler,
     warning_handler,
 )
+from .error_collector import (
+    W_UNRESOLVED_REF,
+    W_UNSUPPORTED_SUBSTITUTION,
+    DiagnosticConfig,
+    Diagnostics,
+)
 from .node_base import Node
 
 _N = TypeVar("_N", bound=Node)
@@ -684,6 +690,7 @@ class DirectiveVisiter(TreeReplacer):
         doc_titles: dict[str, str] | None = None,
         execute: bool = False,
         param_names: frozenset[str] | set[str] | None = None,
+        diagnostics: Diagnostics | None = None,
     ):
         """
         qa: str
@@ -758,6 +765,14 @@ class DirectiveVisiter(TreeReplacer):
 
         self.known_refs = frozenset(known_refs)
         self.local_refs = frozenset(local_refs)
+        # Coded gen-time diagnostics. Defaults to a standalone collector (every
+        # code at its registered severity) so the visitor still works when
+        # driven outside ``papyri gen`` — e.g. tests and ``papyri.tests.utils``.
+        self.diagnostics: Diagnostics = (
+            diagnostics
+            if diagnostics is not None
+            else Diagnostics(DiagnosticConfig.default(), log)
+        )
         self.qa = qa
         # qa may use either `.` (submodule path) or `:` (top-level module
         # attribute, e.g. "numpy:promote_types") as the first separator;
@@ -851,11 +866,11 @@ class DirectiveVisiter(TreeReplacer):
                         if isinstance(child, UnprocessedDirective)
                         else type(child).__name__
                     )
-                    log.warning(
-                        "substitution %r uses unsupported directive %r in %s; dropping",
-                        node.value,
-                        directive_name,
+                    self.diagnostics.emit(
+                        W_UNSUPPORTED_SUBSTITUTION,
                         self.qa,
+                        f"substitution {node.value!r} uses unsupported directive "
+                        f"{directive_name!r}; dropping",
                     )
 
     def replace_SubstitutionDef(self, node: SubstitutionDef) -> list[Any]:
@@ -872,7 +887,11 @@ class DirectiveVisiter(TreeReplacer):
         name = node.value  # e.g. '|foo|'
         if name in self._substitutions:
             return list(self._substitutions[name])
-        log.warning("unresolved substitution reference %r in %s", name, self.qa)
+        self.diagnostics.emit(
+            W_UNRESOLVED_REF,
+            self.qa,
+            f"unresolved substitution reference {name!r}",
+        )
         inner = name[1:-1] if name.startswith("|") and name.endswith("|") else name
         return [Text(inner)]
 
@@ -1135,6 +1154,11 @@ class DirectiveVisiter(TreeReplacer):
                 doc_key = self.doc_targets[label]
                 return [CrossRef(text, LocalRef("docs", doc_key), "exists")]
             else:
+                self.diagnostics.emit(
+                    W_UNRESOLVED_REF,
+                    self.qa,
+                    f"unresolved :ref: label {label!r}",
+                )
                 return [directive]
 
         # Plain RST hyperlink with angle-bracket syntax (``text <label>`_``) or
@@ -1233,6 +1257,12 @@ class DirectiveVisiter(TreeReplacer):
                     path=target_qa,
                 )
                 return [CrossRef(text, ri, "module")]
+        role_desc = directive.role or "(default)"
+        self.diagnostics.emit(
+            W_UNRESOLVED_REF,
+            self.qa,
+            f"unresolved reference {directive.value!r} (role {role_desc})",
+        )
         return [directive]
 
 

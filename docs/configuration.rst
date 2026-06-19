@@ -279,6 +279,104 @@ Use this to document known upstream issues without failing the build.
    ]
 
 
+.. _config-diagnostics:
+
+``[global.diagnostics]``
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**Type:** ``dict[str, str]`` (plus a ``per-target`` sub-table) — default ``{}``
+
+``papyri gen`` emits *diagnostics* — coded, non-fatal observations about
+the documentation it processes (an unresolved cross-reference, a docstring
+section numpydoc can't parse, a doctest that won't tokenize).  Each
+diagnostic has a **stable code** (``W-unresolved-ref``, ``W-bad-section``,
+…) and a **default severity**.  This section lets you override severities,
+mirroring the strictness model of ``ruff``/``mypy``: *you* decide which
+diagnostics gate your build, not papyri.
+
+Severities, from least to most severe:
+
+- ``ignore`` — suppress entirely (no log line, not recorded, never gates).
+- ``info`` — informational; logged, recorded, does not fail the build.
+- ``warning`` — logged, recorded, does not fail the build.
+- ``error`` — logged, recorded, and **fails** ``papyri gen`` (non-zero
+  exit) unless ``--no-error-on-warning`` is passed.
+
+Resolution order, most general to most specific: the code's registered
+default → a global override here → the first matching ``per-target`` glob
+override (in config order).
+
+Global overrides map a code to a severity:
+
+.. code:: toml
+
+   [global.diagnostics]
+   # Promote unresolved references to hard errors for a strictly clean bundle.
+   "W-unresolved-ref" = "error"
+   # Quieten a diagnostic you've decided not to act on.
+   "W-module-docstring" = "ignore"
+
+Per-target overrides relax (or tighten) a code for a subset of objects,
+matched by ``fnmatch`` glob against the fully-qualified name of the object
+whose doc produced the diagnostic (narrative pages match on their doc
+path).  This is the realistic adoption path for large projects: gate on
+clean docs everywhere while carving out the legacy corners that can't be
+fixed in one pass.
+
+.. code:: toml
+
+   [global.diagnostics]
+   "W-unresolved-ref" = "error"
+
+   [global.diagnostics.per-target]
+   # This stubborn module keeps unresolved refs as warnings…
+   "numpy.ma.MaskedArray.*" = { "W-unresolved-ref" = "warning" }
+   # …and these C-extension ufuncs ignore module-docstring failures entirely.
+   "scipy.special._ufuncs.*" = { "W-module-docstring" = "ignore" }
+
+When several ``per-target`` globs match the same object, the first one in
+config order wins, so order from least to most specific.
+
+Unknown codes or severities in this table fail the run immediately, so a
+typo can't silently do nothing.  ``papyri gen`` prints a per-severity
+summary at the end of a run and exits non-zero when any diagnostic
+resolved to ``error``; pass ``--no-error-on-warning`` to restore the
+legacy warn-and-continue behaviour during incremental adoption.
+
+The diagnostic codes papyri currently emits:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 15 55
+
+   * - Code
+     - Default
+     - Meaning
+   * - ``W-unresolved-ref``
+     - ``warning``
+     - A cross-reference could not be resolved to a local or cross-bundle
+       target.  Common across not-yet-built packages, so it defaults to a
+       warning; promote to ``error`` for a strictly clean bundle.
+   * - ``W-unsupported-substitution``
+     - ``warning``
+     - An RST substitution uses a directive papyri can't represent in the
+       IR; the substitution is dropped.
+   * - ``W-doctest-syntax``
+     - ``error``
+     - An example/doctest block could not be parsed into tokens.
+   * - ``W-doctest-exec``
+     - ``warning``
+     - Executing an example block raised (only when ``exec_failure =
+       'fallback'``; otherwise gen aborts the object).
+   * - ``W-numpydoc-parse``
+     - ``error``
+     - numpydoc could not parse an object's docstring; the object is dropped.
+   * - ``W-module-docstring``
+     - ``warning``
+     - numpydoc could not parse a *module* docstring; gen injects a visible
+       "could not be parsed" sentinel instead of dropping the page.
+
+
 .. _config-implied-imports:
 
 ``[global.implied_imports]``
@@ -623,6 +721,11 @@ All options override or supplement the TOML config.
    * - ``--fail-unseen-error``
      - ``false``
      - Fail if any exception type not listed in ``expected_errors`` is raised.
+   * - ``--error-on-warning / --no-error-on-warning``
+     - ``true``
+     - Exit non-zero when any :ref:`diagnostic <config-diagnostics>` resolves
+       to ``error`` severity.  Pass ``--no-error-on-warning`` for the legacy
+       warn-and-continue behaviour during incremental adoption.
    * - ``--only TEXT``
      - all objects
      - Restrict generation to this qualified name (repeatable).

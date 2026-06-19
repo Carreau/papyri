@@ -67,7 +67,15 @@ from .doc import (
     _normalize_see_also,
     _numpy_data_to_section,
 )
-from .error_collector import ErrorCollector
+from .error_collector import (
+    W_DOCTEST_EXEC,
+    W_DOCTEST_SYNTAX,
+    W_MODULE_DOCSTRING,
+    W_NUMPYDOC_PARSE,
+    DiagnosticConfig,
+    Diagnostics,
+    ErrorCollector,
+)
 from .errors import (
     IncorrectInternalDocsLen,
     NumpydocParseError,
@@ -245,6 +253,7 @@ def gen_main(
     fail_early: bool,
     fail_unseen_error: bool,
     limit_to: list[str],
+    error_on_warning: bool = True,
 ) -> Path | None:
     """
     Main entry point to generate DocBundle files.
@@ -294,6 +303,7 @@ def gen_main(
     conf["early_error"] = fail_early
     conf["fail_unseen_error"] = fail_unseen_error
     config = Config(**conf, dry_run=dry_run, dummy_progress=dummy_progress)
+    config.error_on_warning = error_on_warning
     if exec_ is not None:
         config.execute_doctests = exec_
     if infer is not None:
@@ -343,6 +353,19 @@ def gen_main(
     if dry_run:
         temp_dir.cleanup()
         return None
+
+    summary = g.diagnostics.summary()
+    if summary:
+        g.log.info("Diagnostics: %s", summary)
+    # The bundle is written to disk before we gate on diagnostics, so an
+    # error-severity diagnostic still leaves the (degraded) bundle available
+    # for inspection while signalling failure to CI.
+    if g.diagnostics.has_errors and config.error_on_warning:
+        raise SystemExit(
+            f"papyri gen: {g.diagnostics.error_count} diagnostic(s) resolved to "
+            "error. Fix them, downgrade their severity in [global.diagnostics], "
+            "or pass --no-error-on-warning to continue."
+        )
     return p
 
 
@@ -804,6 +827,13 @@ class Gen:
         self.config = config
         self.log.debug("Configuration: %s", self.config)
 
+        # Gen-time diagnostics: coded, severity-resolved observations emitted
+        # from gen/tree. Built once from the project's [global.diagnostics]
+        # config and threaded into every GenVisitor.
+        self.diagnostics = Diagnostics(
+            DiagnosticConfig.from_raw(self.config.diagnostics), self.log
+        )
+
         self.data = {}
         self.bdata = {}
         self._meta: dict[str, Any] = {}
@@ -1094,6 +1124,7 @@ class Gen:
                         external_targets=external_targets,
                         doc_titles=doc_titles,
                         execute=self.config.execute_doctests,
+                        diagnostics=self.diagnostics,
                     )
                     dv.collect_substitutions(*data)
                     blob.arbitrary = tuple(dv.visit(s) for s in data)
@@ -1195,7 +1226,10 @@ class Gen:
         self.write_assets(where)
         with (where / "papyri.json").open("w") as f:
             assert "version" in self._meta
-            f.write(json.dumps(self._meta, indent=2, sort_keys=True))
+            meta = dict(self._meta)
+            if self.diagnostics.records:
+                meta["diagnostics"] = self.diagnostics.records
+            f.write(json.dumps(meta, indent=2, sort_keys=True))
 
     def write_assets(self, where: Path) -> None:
         assets = where / "assets"
@@ -1553,7 +1587,11 @@ class Gen:
                         except Exception as e:
                             failed.append(str(example))
                             if config.exec_failure == "fallback":
-                                self.log.exception("%s failed %s", example, type(e))
+                                self.diagnostics.emit(
+                                    W_DOCTEST_EXEC,
+                                    str(example),
+                                    f"executing example raised {type(e).__name__}: {e}",
+                                )
                             else:
                                 raise type(e)(f"Within {example}") from e
                 entries_p = parse_script(
@@ -1565,7 +1603,11 @@ class Gen:
 
                 entries: list[Any]
                 if entries_p is None:
-                    log.warning("Issue in %r", example)
+                    self.diagnostics.emit(
+                        W_DOCTEST_SYNTAX,
+                        str(example),
+                        "example block could not be parsed into tokens",
+                    )
                     entries = [("fail", "fail")]
                 else:
                     entries = list(entries_p)
@@ -1600,6 +1642,7 @@ class Gen:
                     config=self.config.directives,
                     module=self.root,
                     execute=self.config.execute_doctests,
+                    diagnostics=self.diagnostics,
                 )
                 dv.collect_substitutions(s)
                 s2 = dv.visit(s)
@@ -1895,10 +1938,16 @@ class Gen:
                     # ndoc.ordered_sections
             except Exception as e:
                 if not isinstance(target_item, ModuleType):
-                    self.log.exception(
-                        "Unexpected error parsing %s - %s",
+                    self.log.debug(
+                        "numpydoc failed to parse %s - %s",
                         qa,
                         target_item.__name__,
+                        exc_info=True,
+                    )
+                    self.diagnostics.emit(
+                        W_NUMPYDOC_PARSE,
+                        qa,
+                        f"numpydoc could not parse docstring ({type(e).__name__}: {e})",
                     )
                     failure_collection["NumpydocError-" + str(type(e))].append(qa)
                 if isinstance(target_item, ModuleType):
@@ -1907,10 +1956,11 @@ class Gen:
                     # has no docstring at all. Previously the placeholder
                     # read ``"To remove in the future -- <qa>"`` which
                     # leaked into the rendered output.
-                    self.log.warning(
-                        "numpydoc failed to parse module docstring for %s: %s",
+                    self.diagnostics.emit(
+                        W_MODULE_DOCSTRING,
                         qa,
-                        e,
+                        f"numpydoc could not parse module docstring "
+                        f"({type(e).__name__}: {e})",
                     )
                     failure_collection["module_docstring_parse_failure"].append(qa)
                     module_docstring_parse_failed = True
@@ -1989,6 +2039,7 @@ class Gen:
                     asset_store=self.put_raw,
                     execute=self.config.execute_doctests,
                     param_names=_param_names,
+                    diagnostics=self.diagnostics,
                 )
                 dv.collect_substitutions(
                     *arbitrary,

@@ -527,12 +527,37 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
 ### Gen-time diagnostics
 
 - **Warnings should be promotable to errors, and most should be errors by
-  default — configurable per fully-qualified target.**
-  Today `papyri gen` emits a wide range of warnings (unresolved refs, malformed
-  docstring sections, unparseable signatures, broken doctest blocks, etc.) and
-  the run keeps going. For maintainers who want their bundle to be
-  *actually* clean, a warning is just noise that scrolls past in CI. The
-  proposal:
+  default — configurable per fully-qualified target.** *Core landed.*
+  The infrastructure exists and a representative set of emission sites is
+  wired through it:
+  - `Severity` (ignore/info/warning/error), the `DIAGNOSTICS` code registry,
+    the `DiagnosticConfig` resolver (default → global override → first-match
+    per-target glob), and the `Diagnostics` collector all live in
+    `papyri/error_collector.py`.
+  - Config: `[global.diagnostics]` (global code → severity overrides) plus a
+    `per-target` sub-table (glob → `{code: severity}`), parsed via
+    `DiagnosticConfig.from_raw`; unknown codes/severities fail the run.
+    `Config` gains `diagnostics` and `error_on_warning`.
+  - `papyri gen` writes the bundle, logs a per-severity summary, and exits
+    non-zero when any diagnostic resolves to `error`; `--no-error-on-warning`
+    is the escape hatch. Resolved diagnostics are recorded in `papyri.json`
+    under `diagnostics` (separate from the exception-based `errors`).
+  - Codes wired so far: `W-unresolved-ref`, `W-unsupported-substitution`
+    (tree.py), `W-doctest-syntax`, `W-doctest-exec`, `W-numpydoc-parse`,
+    `W-module-docstring` (gen.py). Docs: `docs/configuration.rst`
+    `[global.diagnostics]` section + the CLI flag.
+
+  *Still open:*
+  - Wire the remaining `log.warning` sites in `directives.py` and `ts.py`
+    (image/include/list-table/csv-table malformed-directive warnings, the
+    `:ghpull:`/`:ghissue:` missing-`github_slug` notice, the unparseable
+    interpreted-text fallbacks) through `Diagnostics`. These currently still
+    log plainly; they need the collector threaded into the free-function
+    handlers (overlaps with the `DirectiveContext` injection follow-up).
+  - Viewer "0 errors / N warnings" badge per bundle, reading the new
+    `diagnostics` manifest key.
+
+  The original proposal, for reference:
 
   1. Give every diagnostic a stable *warning code* (e.g. `W-unresolved-ref`,
      `W-bad-section`, `W-doctest-syntax`, …), surfaced in the message and in

@@ -48,6 +48,14 @@ class Config:
     execute_doctests: bool = True
     # Names of doctest.OPTIONFLAGS_BY_NAME flags to enable (e.g. ["ELLIPSIS", "NORMALIZE_WHITESPACE"]).
     doctest_optionflags: Sequence[str] = ("ELLIPSIS",)
+    # ``[global.diagnostics]`` table: per-code severity overrides plus an
+    # optional ``per-target`` sub-table (glob -> {code: severity}). Parsed into
+    # a DiagnosticConfig by ``error_collector.DiagnosticConfig.from_raw``.
+    diagnostics: dict[str, Any] = dataclasses.field(default_factory=dict)
+    # When True (the default), ``papyri gen`` exits non-zero if any diagnostic
+    # resolves to ``error``. Set False (CLI: ``--no-error-on-warning``) for the
+    # legacy "warn and continue" behaviour during incremental adoption.
+    error_on_warning: bool = True
     # Values are either a plain handler qualname ("mod:Class.method") or a table
     # with "handler", optional "init_args" list, and optional "init_kwargs" dict.
     directives: dict[str, str | dict[str, Any]] = dataclasses.field(

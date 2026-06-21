@@ -548,8 +548,6 @@ def test_narrative_grid_directive_does_not_drop_index(tmp_path: Path) -> None:
     assert root.ref.path == "index"
     child_paths = [c.ref.path for c in root.children]
     assert "section:page" in child_paths, child_paths
-    # No silent drops in this clean build.
-    assert gen._gen_errors == []
 
 
 def test_doctest_parser_accepts_pytest_doctestplus_options() -> None:
@@ -558,9 +556,9 @@ def test_doctest_parser_accepts_pytest_doctestplus_options() -> None:
     astropy / scipy / ... docstrings use option flags registered at runtime
     by pytest-doctestplus. ``papyri gen`` parses examples standalone, so
     stdlib ``doctest.DocTestParser`` rejects those unknown options with a
-    ``ValueError`` — turning every affected qa into an ``ExampleError1``
-    that the new pack-time error check refuses to ship. ``papyri/gen.py``
-    registers them as no-op flags at import time; this test pins that.
+    ``ValueError`` — turning every affected qa into an ``ExampleError1``.
+    ``papyri/gen.py`` registers them as no-op flags at import time; this
+    test pins that.
     """
     import doctest
 
@@ -572,22 +570,17 @@ def test_doctest_parser_accepts_pytest_doctestplus_options() -> None:
     assert any(isinstance(b, doctest.Example) for b in blocks)
 
 
-def test_lenient_narrative_skip_records_error_and_pack_refuses(
+def test_lenient_narrative_skip_drops_doc_and_continues(
     tmp_path: Path,
 ) -> None:
-    """A lenient narrative-doc skip must surface as a pack-time failure.
+    """A doc that fails ``validate()`` is skipped in lenient mode, not fatal.
 
-    In lenient mode (``early_error = false``) gen used to silently drop any
-    page that failed to validate (e.g. an unregistered directive), shipping
-    a bundle with missing pages. Now those failures are recorded under
-    ``errors`` in ``papyri.json``; ``papyri pack`` refuses to produce an
-    artifact while any are present, so CI fails on a real mistake instead
-    of producing a degraded bundle.
+    In lenient mode (``early_error = false``) gen drops a single narrative
+    page that fails to validate (e.g. one carrying an unregistered directive
+    whose terminal ``Directive`` node trips ``blob.validate()``) and keeps
+    going, rather than aborting the whole run. The bad page is absent from the
+    output while sibling pages still make it through.
     """
-    import json as _json
-
-    from papyri.pack import BundleError, make_artifact_from_dir
-
     docs = tmp_path / "docs"
     docs.mkdir()
     # 'completely-unregistered' has no handler and isn't in
@@ -606,23 +599,9 @@ def test_lenient_narrative_skip_records_error_and_pack_refuses(
     config.early_error = False
     gen = Gen(False, config=config)
     gen._meta = {"version": "1.0", "module": "nptest"}
+    # Must not raise: the bad page is dropped, gen keeps going.
     gen.collect_narrative_docs()
 
-    # Lenient gen recorded the failure, didn't crash.
-    assert len(gen._gen_errors) == 1
-    err = gen._gen_errors[0]
-    assert err["kind"] == "narrative"
-    assert "index.rst" in err["path"]
-
-    # Write the bundle dir; pack reads errors from papyri.json and refuses.
-    bundle_dir = tmp_path / "nptest_1.0"
-    bundle_dir.mkdir()
-    (bundle_dir / "module").mkdir()
-    gen.write_narrative(bundle_dir)
-    meta = dict(gen._meta)
-    meta["errors"] = gen._gen_errors
-    (bundle_dir / "papyri.json").write_text(_json.dumps(meta))
-
-    with pytest.raises(BundleError) as excinfo:
-        make_artifact_from_dir(bundle_dir)
-    assert "gen error" in excinfo.value.problems[0]
+    # The failing page was skipped; the valid sibling survived.
+    assert "index" not in gen.docs
+    assert "page" in gen.docs

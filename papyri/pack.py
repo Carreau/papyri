@@ -151,46 +151,6 @@ def _check_layout(path: Path) -> None:
             raise BundleError(f"unexpected top-level entry: {entry.name}")
 
 
-def _check_no_gen_errors(raw: dict[str, Any]) -> None:
-    """Refuse to pack a bundle whose gen step swallowed errors.
-
-    ``papyri gen`` (in lenient mode) records every per-object failure under
-    ``errors`` in ``papyri.json`` instead of producing a degraded bundle in
-    silence. Pack treats any such record as fatal: the maintainer must fix
-    or explicitly suppress (e.g. register a handler for the offending
-    directive, add the qa to ``exclude`` or ``[global.expected_errors]``)
-    before the bundle can ship. CI sees a non-zero ``papyri pack`` and fails.
-
-    Every error is listed on its own line so the maintainer can copy qas
-    straight into their config; the qa column is grouped by error type so
-    common failure modes stand out.
-    """
-    errors = raw.get("errors")
-    if not errors:
-        return
-    if not isinstance(errors, list):
-        raise BundleError(
-            f"papyri.json 'errors' must be a list, got {type(errors).__name__}"
-        )
-    grouped: dict[str, list[str]] = {}
-    malformed: list[str] = []
-    for e in errors:
-        if not isinstance(e, dict):
-            malformed.append(repr(e))
-            continue
-        key = f"{e.get('kind', '?')} {e.get('error_type', '?')}"
-        grouped.setdefault(key, []).append(str(e.get("path", "?")))
-    lines: list[str] = []
-    for key in sorted(grouped):
-        lines.append(f"  [{key}]")
-        lines.extend(f"    - {path}" for path in sorted(grouped[key]))
-    lines.extend(f"  (malformed) {entry}" for entry in malformed)
-    raise BundleError(
-        f"bundle records {len(errors)} gen error(s) — refusing to pack:\n"
-        + "\n".join(lines)
-    )
-
-
 def _read_meta(path: Path) -> BundleManifest:
     try:
         raw: Any = json.loads((path / "papyri.json").read_text())
@@ -198,7 +158,6 @@ def _read_meta(path: Path) -> BundleManifest:
         raise BundleError(f"papyri.json is not valid JSON: {exc}") from exc
     if not isinstance(raw, dict):
         raise BundleError("papyri.json is not a JSON object")
-    _check_no_gen_errors(raw)
     for key in ("module", "version"):
         if key not in raw:
             raise BundleError(f"papyri.json is missing required key {key!r}")

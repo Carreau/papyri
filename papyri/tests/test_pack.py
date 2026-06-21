@@ -258,64 +258,6 @@ def test_pack_rejects_unexpected_toplevel_entry(tmp_path: Any) -> None:
     assert any(".DS_Store" in p for p in excinfo.value.problems)
 
 
-def test_pack_rejects_bundle_with_gen_errors(tmp_path: Any) -> None:
-    """A bundle whose papyri.json records gen errors must not pack.
-
-    Lenient ``papyri gen`` records every per-object failure under ``errors``
-    instead of producing a silently-degraded bundle; pack treats any such
-    record as fatal so CI fails on a real mistake instead of shipping a
-    bundle with missing pages.
-    """
-    bundle_dir = tmp_path / "mypkg_1.0"
-    bundle_dir.mkdir()
-    (bundle_dir / "module").mkdir()
-    (bundle_dir / "papyri.json").write_text(
-        json.dumps(
-            {
-                "module": "mypkg",
-                "version": "1.0",
-                "errors": [
-                    {
-                        "kind": "narrative",
-                        "path": "docs/index.rst",
-                        "error_type": "NotImplementedError",
-                        "message": "unhandled directive 'totally-made-up'",
-                    }
-                ],
-            }
-        )
-    )
-    with pytest.raises(BundleError) as excinfo:
-        read_bundle_dir(bundle_dir)
-    assert "gen error" in excinfo.value.problems[0]
-    assert "docs/index.rst" in excinfo.value.problems[0]
-
-
-def test_pack_rejects_bundle_with_malformed_errors_field(tmp_path: Any) -> None:
-    """A non-list ``errors`` field is itself a bundle-format error."""
-    bundle_dir = tmp_path / "mypkg_1.0"
-    bundle_dir.mkdir()
-    (bundle_dir / "module").mkdir()
-    (bundle_dir / "papyri.json").write_text(
-        json.dumps({"module": "mypkg", "version": "1.0", "errors": "oops"})
-    )
-    with pytest.raises(BundleError) as excinfo:
-        read_bundle_dir(bundle_dir)
-    assert "must be a list" in excinfo.value.problems[0]
-
-
-def test_pack_accepts_bundle_with_empty_errors(tmp_path: Any) -> None:
-    """An explicitly empty ``errors`` list is the clean-build state."""
-    bundle_dir = tmp_path / "mypkg_1.0"
-    bundle_dir.mkdir()
-    (bundle_dir / "module").mkdir()
-    (bundle_dir / "papyri.json").write_text(
-        json.dumps({"module": "mypkg", "version": "1.0", "errors": []})
-    )
-    bundle = read_bundle_dir(bundle_dir)
-    assert bundle.module == "mypkg"
-
-
 def test_pack_rejects_invalid_papyri_json(tmp_path: Any) -> None:
     bundle_dir = tmp_path / "mypkg_1.0"
     bundle_dir.mkdir()

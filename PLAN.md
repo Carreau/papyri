@@ -377,14 +377,18 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   open:
   - Lint check for empty module-docstring sentinel placeholder.
 
-  *Partial landing — silent-drop → hard pack failure:* lenient `papyri gen`
-  used to swallow per-object failures (a narrative page that failed to
-  validate, an API qa whose introspection raised) with a `log.warning` and
-  produce a quietly-degraded bundle. Now every such failure is recorded
-  under `errors` in `papyri.json` (`Gen._record_error` / `_gen_errors` in
-  `papyri/gen.py`, mirroring `ErrorCollector._unexpected_errors` for the API
-  side), and `papyri pack`'s `_check_no_gen_errors` refuses to produce an
-  artifact while any are present.
+  *Silent-drop → hard pack failure: tried and reverted.* An earlier iteration
+  recorded every per-object gen failure (a narrative page that failed to
+  validate, an API qa whose introspection raised) under `errors` in
+  `papyri.json` (`Gen._record_error` / `_gen_errors`, mirroring
+  `ErrorCollector._unexpected_errors` for the API side) and had `papyri pack`'s
+  `_check_no_gen_errors` refuse to produce an artifact while any were present.
+  That gate was removed: `gen` and `pack` are separate steps, and a maintainer
+  may run an intermediate fix-up between them, so a failure recorded at gen
+  time is not necessarily still present at pack time — pack must not gate on a
+  stale gen-time error record. Lenient `papyri gen` still emits a `log.warning`
+  and continues on each per-object failure; it just no longer persists those
+  failures into `papyri.json` or block pack on them.
 
 - **Toc ↔ narrative consistency checks.**
   *Forward direction landed:* `papyri pack` now fails (via `_check_toc_refs`

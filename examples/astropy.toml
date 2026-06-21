@@ -31,6 +31,11 @@ exclude = [
                         "astropy.modeling.fitting:_NLLSQFitter",
                         "astropy.nddata.mixins.ndarithmetic:NDArithmeticMixin._prepare_then_do_arithmetic",
                         "astropy.table.index",
+                        # ERRORS:SpaceAfterBlockDirectiveError
+                        "astropy.coordinates.builtin_frames.lsr:GalacticLSR",
+                        "astropy.coordinates.builtin_frames.galactocentric:Galactocentric",
+                        "astropy.coordinates.builtin_frames.lsr:LSR",
+
 ]
 submodules = [ "io", "io.fits",]
 

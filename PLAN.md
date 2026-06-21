@@ -398,10 +398,14 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   (via `nodes.iter_crossrefs`) walks every doc's `CrossRef`s and reports any
   `LocalRef` whose target is absent from the bundle — warns by default, and
   `papyri pack --strict` promotes it (and future lint warnings) to a hard
-  `BundleError` so maintainer CI can block dead-link bundles. The viewer also
-  verifies local refs against the graph at render time, degrading missing ones
-  to plain text. The remaining `--strict`/`--lint` items above (missing assets,
-  stray `SubstitutionRef`/`SubstitutionDef`, …) are still open.
+  `BundleError` so maintainer CI can block dead-link bundles. The viewer never
+  silently hides one: a dangling local ref renders inline as a flagged
+  `.xref.unresolved.broken-local` span (orange, with a "broken local reference"
+  tooltip) instead of a working link, and the per-bundle
+  `/project/<pkg>/<ver>/validate` page lists them in a dedicated "Dangling local
+  references" section (`collectLocalXrefsDetailed`) above the ordinary
+  cross-package misses. The remaining `--strict`/`--lint` items above (missing
+  assets, stray `SubstitutionRef`/`SubstitutionDef`, …) are still open.
 
 - **Toc ↔ narrative consistency checks.**
   *Forward direction landed:* `papyri pack` now fails (via `_check_toc_refs`

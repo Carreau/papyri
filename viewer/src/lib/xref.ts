@@ -62,6 +62,28 @@ export function collectXrefsDetailed(node: unknown): DetailedXref[] {
   return out;
 }
 
+/**
+ * Like `collectXrefsDetailed`, but for *local* refs (a `LocalRef`, or a RefInfo
+ * with no module), keyed to the page's own `(pkg, ver)`. A local ref that
+ * doesn't resolve against the bundle is a broken build — gen emitted a link to
+ * a page that isn't here — so the validate page reports these separately and
+ * more loudly than ordinary not-yet-ingested cross-package refs.
+ */
+export function collectLocalXrefsDetailed(node: unknown, pkg: string, ver: string): DetailedXref[] {
+  const out: DetailedXref[] = [];
+  for (const n of collectNodes(node, new Set(["CrossRef"]))) {
+    const xn = n as IRNode as XRefShape;
+    const ref = xn.reference;
+    if (!ref || !ref.path || !ref.kind) continue;
+    if (!isLocalRef(ref)) continue;
+    out.push({
+      value: xn.value ?? ref.path,
+      ref: { pkg, ver, kind: ref.kind, path: ref.path },
+    });
+  }
+  return out;
+}
+
 /** Walk a decoded doc and return every CrossRef ref-tuple it points at. */
 export function collectXrefs(node: unknown): RefTuple[] {
   const out: RefTuple[] = [];

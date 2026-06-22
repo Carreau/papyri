@@ -175,6 +175,30 @@ class CrossRef(Node):
         return hash((self.value, self.reference, self.kind))
 
 
+def iter_crossrefs(node: Any) -> Iterator[CrossRef]:
+    """Yield every ``CrossRef`` in an IR subtree, depth-first.
+
+    Walks ``Node`` fields via their type hints (mirroring the traversal in
+    ``node_base._invalidate``) and recurses through list/tuple/dict containers;
+    scalars are ignored. The IR is acyclic, so no cycle guard is needed.
+
+    ``CrossRef.reference`` is a leaf (``LocalRef``/``RefInfo``) and never
+    contains a nested ``CrossRef``, so traversal stops at each one.
+    """
+    if isinstance(node, CrossRef):
+        yield node
+        return
+    if isinstance(node, (list, tuple)):
+        for item in node:
+            yield from iter_crossrefs(item)
+    elif isinstance(node, dict):
+        for item in node.values():
+            yield from iter_crossrefs(item)
+    elif isinstance(node, Node):
+        for attr in get_type_hints(type(node)):  # type: ignore[arg-type]
+            yield from iter_crossrefs(getattr(node, attr, None))
+
+
 class Leaf(Node):
     value: str
 

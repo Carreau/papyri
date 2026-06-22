@@ -5,7 +5,11 @@ import BundleLayout from "../../../../layouts/BundleLayout.astro";
 import { resolveVersion } from "../../../../lib/ir-reader.ts";
 import { getBackends } from "../../../../lib/backends.ts";
 import { resolveRefs, resolveExternalRefs, refKey, type RefTuple } from "../../../../lib/graph.ts";
-import { collectXrefsDetailed, type DetailedXref } from "../../../../lib/xref.ts";
+import {
+  collectXrefsDetailed,
+  collectLocalXrefsDetailed,
+  type DetailedXref,
+} from "../../../../lib/xref.ts";
 import { walkBundle, type PageRef } from "../../../../lib/bundle-walk.ts";
 
 const { pkg, ver } = Astro.params;
@@ -15,13 +19,17 @@ const { blobStore, graphDb } = await getBackends();
 const actualVer = await resolveVersion(graphDb, pkg, ver);
 if (!actualVer) return new Response(`Package ${pkg} not found`, { status: 404 });
 
-// Walk every doc in the bundle, collecting all CrossRef nodes per page.
+// Walk every doc once, collecting both cross-package refs and same-bundle
+// (local) refs per page. Local refs are tracked separately because a local
+// ref that doesn't resolve is a *broken build*, not an awaiting-ingest miss.
 interface PageEntry {
   page: PageRef;
   refs: DetailedXref[];
+  localRefs: DetailedXref[];
 }
 const entries: PageEntry[] = [];
 const allRefs: RefTuple[] = [];
+const allLocalRefs: RefTuple[] = [];
 
 await walkBundle(
   blobStore,
@@ -29,9 +37,11 @@ await walkBundle(
   actualVer,
   (doc, page) => {
     const refs = collectXrefsDetailed(doc);
-    if (refs.length > 0) {
-      entries.push({ page, refs });
+    const localRefs = collectLocalXrefsDetailed(doc, pkg, actualVer);
+    if (refs.length > 0 || localRefs.length > 0) {
+      entries.push({ page, refs, localRefs });
       allRefs.push(...refs.map((d) => d.ref));
+      allLocalRefs.push(...localRefs.map((d) => d.ref));
     }
     return true; // never stop early
   },
@@ -39,16 +49,28 @@ await walkBundle(
 );
 
 // Batch-resolve all refs in one pass.
-const resolved = await resolveRefs(graphDb, allRefs);
+const resolved = await resolveRefs(graphDb, [...allRefs, ...allLocalRefs]);
 const stillUnresolved = allRefs.filter((r) => !resolved.has(refKey(r)));
 const external = await resolveExternalRefs(graphDb, stillUnresolved);
 
-// Build per-page lists of truly unresolved refs.
-interface UnresolvedEntry {
+interface PageItems {
   page: PageRef;
   items: DetailedXref[];
 }
-const unresolvedPages: UnresolvedEntry[] = [];
+
+// Dangling local refs: same-bundle targets that aren't in the bundle. These
+// are build errors — surfaced first and most loudly. LocalRefs never resolve
+// against an external inventory, so the graph check alone decides.
+const danglingPages: PageItems[] = [];
+for (const { page, localRefs } of entries) {
+  const items = localRefs.filter((d) => !resolved.has(refKey(d.ref)));
+  if (items.length > 0) danglingPages.push({ page, items });
+}
+const totalDangling = danglingPages.reduce((s, p) => s + p.items.length, 0);
+
+// Unresolved cross-package refs: not in any ingested bundle or external
+// inventory. Often expected (the target project hasn't been uploaded).
+const unresolvedPages: PageItems[] = [];
 for (const { page, refs } of entries) {
   const items = refs.filter((d) => {
     const k = refKey(d.ref);
@@ -56,7 +78,6 @@ for (const { page, refs } of entries) {
   });
   if (items.length > 0) unresolvedPages.push({ page, items });
 }
-
 const totalUnresolved = unresolvedPages.reduce((s, p) => s + p.items.length, 0);
 ---
 
@@ -64,18 +85,61 @@ const totalUnresolved = unresolvedPages.reduce((s, p) => s + p.items.length, 0);
   pkg={pkg}
   ver={ver}
   actualVer={actualVer}
-  title={`Unresolved outgoing refs — ${pkg} ${ver} — Papyri viewer`}
+  title={`Outgoing ref diagnostics — ${pkg} ${ver} — Papyri viewer`}
 >
   <p class="crumb"><a href={`/project/${pkg}/${ver}/`}>&larr; {pkg} {ver}</a></p>
-  <h1>Unresolved outgoing references</h1>
+  <h1>Outgoing reference diagnostics</h1>
+
+  <h2 class="diag-section">Dangling local references</h2>
+  <p class="lede">
+    Same-bundle links emitted by <strong>{pkg} {ver}</strong> whose target page is not in the bundle.
+    These are <strong>build errors</strong>: gen produced a link to a page that doesn&apos;t exist
+    here (e.g. a <code>:doc:</code> target whose narrative page was excluded). Fix the source or the gen
+    config; <code>papyri pack --strict</code> fails on these before upload.
+  </p>
+
+  {
+    totalDangling === 0 ? (
+      <p class="diag-ok">&#x2713; No dangling local references.</p>
+    ) : (
+      <>
+        <p class="diag-error">
+          {totalDangling} dangling local reference{totalDangling !== 1 ? "s" : ""} across{" "}
+          {danglingPages.length} page{danglingPages.length !== 1 ? "s" : ""}.
+        </p>
+        <div class="diag-list">
+          {danglingPages.map(({ page, items }) => (
+            <section class="diag-page">
+              <h3>
+                <a href={page.href}>{page.label}</a>
+              </h3>
+              <ul>
+                {items.map((d) => (
+                  <li>
+                    <code class="xref unresolved broken-local">{d.value}</code>
+                    <span class="diag-ref-target">
+                      {d.ref.kind}:{d.ref.path}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
+      </>
+    )
+  }
+
+  <h2 class="diag-section">Unresolved cross-package references</h2>
   <p class="lede">
     Cross-references emitted by <strong>{pkg} {ver}</strong> that could not be resolved to any ingested
-    bundle or registered external inventory.
+    bundle or registered external inventory. Often expected — the target project may simply not be uploaded
+    yet.
   </p>
 
   {
     totalUnresolved === 0 ? (
-      <p class="diag-ok">&#x2713; No unresolved outgoing references.</p>
+      <p class="diag-ok">&#x2713; No unresolved cross-package references.</p>
     ) : (
       <>
         <p class="diag-summary">
@@ -85,9 +149,9 @@ const totalUnresolved = unresolvedPages.reduce((s, p) => s + p.items.length, 0);
         <div class="diag-list">
           {unresolvedPages.map(({ page, items }) => (
             <section class="diag-page">
-              <h2>
+              <h3>
                 <a href={page.href}>{page.label}</a>
-              </h2>
+              </h3>
               <ul>
                 {items.map((d) => (
                   <li>
@@ -118,10 +182,21 @@ const totalUnresolved = unresolvedPages.reduce((s, p) => s + p.items.length, 0);
     font-weight: 600;
     margin-top: 0.5rem;
   }
+  .diag-error {
+    color: var(--error-fg, #cc0000);
+    font-weight: 600;
+    margin-top: 0.5rem;
+  }
+  .diag-section {
+    font-size: 1.15rem;
+    margin-top: 2.5rem;
+    padding-bottom: 0.25rem;
+    border-bottom: 1px solid var(--border);
+  }
   .diag-list {
     margin-top: 1.5rem;
   }
-  .diag-page h2 {
+  .diag-page h3 {
     font-size: 1rem;
     margin-top: 1.5rem;
     margin-bottom: 0.25rem;

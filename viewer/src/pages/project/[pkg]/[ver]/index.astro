@@ -72,7 +72,7 @@ const apiHref = nav.qualnames.includes(pkg)
   </div>
 
   <div class="diag-links">
-    <a class="diag-link" href={`/project/${pkg}/${ver}/validate`}> Unresolved outgoing refs </a>
+    <a class="diag-link" href={`/project/${pkg}/${ver}/validate`}> Outgoing ref diagnostics </a>
     <a
       class:list={["diag-link", brokenBackrefCount > 0 && "diag-link-warn"]}
       href={`/project/${pkg}/${ver}/backref-validate`}

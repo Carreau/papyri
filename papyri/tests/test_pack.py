@@ -376,6 +376,51 @@ def test_check_toc_refs_rejects_unknown_kind() -> None:
     assert "bogus" in excinfo.value.problems[0]
 
 
+def _doc_with_local_ref(kind: str, path: str) -> Any:
+    """A narrative doc carrying one inline ``CrossRef`` → ``LocalRef(kind, path)``."""
+    from papyri.nodes import CrossRef, LocalRef, Section
+
+    doc = _minimal_narrative_doc()
+    cr = CrossRef("text", LocalRef(kind, path), "exists")
+    doc.arbitrary = (Section((cr,), (), 0, None),)
+    return doc
+
+
+def test_check_local_refs_warns_on_dangling(caplog: Any) -> None:
+    """An inline LocalRef to an absent target warns (non-fatal) by default."""
+    from papyri.pack import _check_local_refs
+
+    bundle = _make_bundle_node(
+        narrative={"index": _doc_with_local_ref("docs", "missing")}
+    )
+    with caplog.at_level("WARNING", logger="papyri"):
+        _check_local_refs(bundle)
+    assert "dangling local ref" in caplog.text
+    assert "docs:missing" in caplog.text
+
+
+def test_check_local_refs_strict_raises_on_dangling() -> None:
+    """Under --strict the same dangling ref is fatal."""
+    from papyri.pack import _check_local_refs
+
+    bundle = _make_bundle_node(
+        narrative={"index": _doc_with_local_ref("docs", "missing")}
+    )
+    with pytest.raises(BundleError) as excinfo:
+        _check_local_refs(bundle, strict=True)
+    assert "docs:missing" in excinfo.value.problems[0]
+
+
+def test_check_local_refs_accepts_present_target() -> None:
+    """A LocalRef whose target is in the bundle passes even under --strict."""
+    from papyri.pack import _check_local_refs
+
+    bundle = _make_bundle_node(
+        narrative={"index": _doc_with_local_ref("docs", "index")}
+    )
+    _check_local_refs(bundle, strict=True)  # no raise: "index" is present
+
+
 # ---------------------------------------------------------------------------
 # Orphan detection — narrative docs not reachable from the toc.
 # ---------------------------------------------------------------------------

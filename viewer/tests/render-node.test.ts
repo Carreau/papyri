@@ -44,6 +44,21 @@ describe("renderNode CrossRef", () => {
     expect(html).not.toContain("data-ref-");
   });
 
+  it("flags an unresolved LocalRef as a broken local ref (build error)", async () => {
+    const local = {
+      __type: "CrossRef",
+      value: "optimize.root-hybr",
+      reference: { __type: "LocalRef", kind: "docs", path: "optimize.root-hybr" },
+    } as unknown as IRNode;
+    // No resolveXref → unresolved branch; LocalRef means same-bundle target.
+    const html = await renderNode(local);
+    expect(html).toContain('class="xref unresolved broken-local"');
+    const dbg = "broken local reference: docs:optimize.root-hybr not found in this bundle";
+    expect(html).toContain(`data-debug="${dbg}"`);
+    expect(html).toContain(`title="${dbg}"`);
+    expect(html).toContain(">optimize.root-hybr</span>");
+  });
+
   it("falls back to placeholders when the reference is missing", async () => {
     const bare = { __type: "CrossRef", value: "mystery" } as unknown as IRNode;
     const html = await renderNode(bare);

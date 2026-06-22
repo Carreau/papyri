@@ -62,22 +62,68 @@ export function collectXrefsDetailed(node: unknown): DetailedXref[] {
   return out;
 }
 
+/**
+ * Like `collectXrefsDetailed`, but for *local* refs (a `LocalRef`, or a RefInfo
+ * with no module), keyed to the page's own `(pkg, ver)`. A local ref that
+ * doesn't resolve against the bundle is a broken build — gen emitted a link to
+ * a page that isn't here — so the validate page reports these separately and
+ * more loudly than ordinary not-yet-ingested cross-package refs.
+ */
+export function collectLocalXrefsDetailed(node: unknown, pkg: string, ver: string): DetailedXref[] {
+  const out: DetailedXref[] = [];
+  for (const n of collectNodes(node, new Set(["CrossRef"]))) {
+    const xn = n as IRNode as XRefShape;
+    const ref = xn.reference;
+    if (!ref || !ref.path || !ref.kind) continue;
+    if (!isLocalRef(ref)) continue;
+    out.push({
+      value: xn.value ?? ref.path,
+      ref: { pkg, ver, kind: ref.kind, path: ref.path },
+    });
+  }
+  return out;
+}
+
 /** Walk a decoded doc and return every CrossRef ref-tuple it points at. */
 export function collectXrefs(node: unknown): RefTuple[] {
   const out: RefTuple[] = [];
   for (const n of collectNodes(node, new Set(["CrossRef"]))) {
     const ref = (n as IRNode as XRefShape).reference;
     if (!ref || !ref.path || !ref.kind) continue;
-    // LocalRef carries no (module, version) — it's resolved by the page
-    // context (current pkg/ver) without a graph lookup.
-    if (ref.__type === "LocalRef" || !ref.module) continue;
+    // LocalRef carries no (module, version) — it's resolved against the page
+    // context (current pkg/ver); see collectLocalRefs.
+    if (isLocalRef(ref)) continue;
     if (ref.module === "current-module" || ref.kind === "to-resolve") continue;
     out.push({
-      pkg: ref.module,
+      pkg: ref.module!,
       ver: ref.version ?? "?",
       kind: ref.kind,
       path: ref.path,
     });
+  }
+  return out;
+}
+
+/** A CrossRef whose target lives in the page's own bundle. */
+function isLocalRef(ref: NonNullable<XRefShape["reference"]>): boolean {
+  return ref.__type === "LocalRef" || !ref.module;
+}
+
+/**
+ * Walk a decoded doc and return every *local* CrossRef as a ref-tuple keyed
+ * to the page's own (pkg, ver). LocalRefs were historically rendered as links
+ * unconditionally — but gen emits hopeful ones (e.g. `:doc:` targets, or See
+ * Also names resolved to same-package objects) that may have no page in this
+ * bundle. We resolve them against the graph like any other ref so missing
+ * targets degrade to plain text instead of 404 links.
+ */
+export function collectLocalRefs(node: unknown, pkg: string, ver: string): RefTuple[] {
+  const out: RefTuple[] = [];
+  for (const n of collectNodes(node, new Set(["CrossRef"]))) {
+    const ref = (n as IRNode as XRefShape).reference;
+    if (!ref || !ref.path || !ref.kind) continue;
+    if (!isLocalRef(ref)) continue;
+    out.push({ pkg, ver, kind: ref.kind, path: ref.path });
   }
   return out;
 }
@@ -98,7 +144,10 @@ export async function buildXrefResolver(
   ver: string
 ): Promise<XRefResolver> {
   const refs = collectXrefs(doc);
-  const resolved = await resolveRefs(graphDb, refs);
+  // LocalRefs resolve against the page's own bundle; batch them alongside the
+  // cross-package refs so we can verify the target exists before linking.
+  const localRefs = collectLocalRefs(doc, pkg, ver);
+  const resolved = await resolveRefs(graphDb, [...refs, ...localRefs]);
   // Refs that don't resolve to an ingested bundle may still be linkable
   // against an external (intersphinx) inventory — e.g. a ref to numpy when
   // no numpy DocBundle has been uploaded.
@@ -110,15 +159,19 @@ export async function buildXrefResolver(
     const label = n.value ?? "";
     const ref = n.reference;
     if (!ref || !ref.path || !ref.kind) return null;
-    // LocalRef → resolve directly against the page's pkg/ver.
-    if (ref.__type === "LocalRef" || !ref.module) {
+    // LocalRef → resolve against the page's pkg/ver, but only link when the
+    // target actually has a blob in the graph. Gen emits hopeful LocalRefs
+    // (`:doc:` targets, same-package See Also names) that may not exist here;
+    // those must degrade to plain text rather than render as 404 links.
+    if (isLocalRef(ref)) {
+      if (!resolved.has(refKey({ pkg, ver, kind: ref.kind, path: ref.path }))) return null;
       const url = linkForLocalRef({ kind: ref.kind, path: ref.path }, pkg, ver);
       if (!url) return null;
       return { url, label };
     }
     if (ref.module === "current-module" || ref.kind === "to-resolve") return null;
     const k = refKey({
-      pkg: ref.module,
+      pkg: ref.module!,
       ver: ref.version ?? "?",
       kind: ref.kind,
       path: ref.path,

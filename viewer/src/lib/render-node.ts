@@ -47,12 +47,27 @@ function unresolvedRefDebug(node: Record<string, unknown>): string {
   const refType = ref ? String(ref.__type ?? "RefInfo") : "RefInfo";
   const fields = ["module", "version", "kind", "path"] as const;
   const parts = fields.map((k) => `${k}=${ref?.[k] != null ? String(ref[k]) : "∅"}`);
-  const debug = `unresolved ${refType}(${parts.join(", ")})`;
+  // A LocalRef that didn't resolve is a *broken build*: the bundle claims the
+  // target lives in itself, but no such page exists. Say so explicitly rather
+  // than lumping it in with cross-package refs that are merely not-yet-ingested.
+  const debug = isBrokenLocalRef(ref)
+    ? `broken local reference: ${String(ref?.kind ?? "?")}:${String(ref?.path ?? "?")} not found in this bundle`
+    : `unresolved ${refType}(${parts.join(", ")})`;
   let attrs = ` data-debug="${escapeHtml(debug)}" title="${escapeHtml(debug)}" data-ref-type="${escapeHtml(refType)}"`;
   for (const k of fields) {
     attrs += ` data-ref-${k}="${escapeHtml(ref?.[k] != null ? String(ref[k]) : "")}"`;
   }
   return attrs;
+}
+
+/**
+ * True when a CrossRef's reference is a same-bundle ref (a `LocalRef`, or a
+ * RefInfo with no module). When such a ref fails to resolve it is a bundle bug
+ * — gen emitted a link to a page that isn't here — not an expected
+ * cross-package miss.
+ */
+function isBrokenLocalRef(ref: Record<string, unknown> | null | undefined): boolean {
+  return !!ref && (ref.__type === "LocalRef" || ref.module == null);
 }
 
 async function renderChildren(children: IRNode[], opts: RenderOptions): Promise<string> {
@@ -248,7 +263,10 @@ export async function renderNode(node: IRNode, opts: RenderOptions = {}): Promis
           return `<a class="xref" href="${escapeHtml(resolved.url)}">${escapeHtml(resolved.label)}</a>`;
         }
       }
-      return `<span class="xref unresolved"${unresolvedRefDebug(n)}>${escapeHtml(String(n.value ?? ""))}</span>`;
+      const cls = isBrokenLocalRef(n.reference as Record<string, unknown> | null | undefined)
+        ? "xref unresolved broken-local"
+        : "xref unresolved";
+      return `<span class="${cls}"${unresolvedRefDebug(n)}>${escapeHtml(String(n.value ?? ""))}</span>`;
     }
 
     case "SeeAlsoItem": {

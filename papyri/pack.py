@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any
 
 from .bundle import IR_SCHEMA_VERSION, PACK_FORMAT_VERSION, Bundle, BundleManifest
 from .node_base import Node
-from .nodes import Image, Link, encoder
+from .nodes import Image, Link, LocalRef, encoder, iter_crossrefs
 from .serde import get_type_hints
 
 if TYPE_CHECKING:
@@ -244,6 +244,52 @@ def _check_toc_refs(bundle: Bundle) -> None:
         walk(node)
 
 
+def _check_local_refs(bundle: Bundle, strict: bool = False) -> None:
+    """Every inline ``LocalRef`` must point at a document present in the bundle.
+
+    A ``LocalRef`` promises its target lives in *this* bundle. Gen downgrades
+    the hopeful ones it can't satisfy to ``RefInfo(kind="missing")`` (see
+    ``Gen._relink_dangling_local_refs``), so a ``LocalRef`` that still dangles
+    here is a gen-side regression that would render as a dead link.
+
+    This is the inline-ref analogue of ``_check_toc_refs``. It is a lint, not a
+    hard invariant: warn by default, and only raise under ``--strict`` so
+    maintainer CI can block publishing a bundle with dead links while ordinary
+    packs stay lenient.
+    """
+    present: dict[str, set[str]] = {
+        "docs": set(bundle.narrative),
+        "module": set(bundle.api),
+        "examples": set(bundle.examples),
+        "assets": set(bundle.assets),
+    }
+    seen: set[str] = set()
+    for store in (bundle.api, bundle.narrative, bundle.examples):
+        for doc in store.values():
+            for cr in iter_crossrefs(doc):
+                ref = cr.reference
+                if not isinstance(ref, LocalRef):
+                    continue
+                known = present.get(ref.kind)
+                # Kinds with no key set to check against are left alone.
+                if known is None or ref.path in known:
+                    continue
+                seen.add(f"{ref.kind}:{ref.path}")
+
+    if not seen:
+        return
+    dangling = sorted(seen)
+    sample = ", ".join(dangling[:10])
+    more = f" (+{len(dangling) - 10} more)" if len(dangling) > 10 else ""
+    msg = (
+        f"bundle {bundle.module} {bundle.version} has {len(dangling)} dangling "
+        f"local ref(s) — LocalRef target(s) absent from the bundle: {sample}{more}"
+    )
+    if strict:
+        raise BundleError(msg)
+    log.warning(msg)
+
+
 def find_orphan_docs(bundle: Bundle) -> list[str]:
     """Narrative docs that no toc entry points at, sorted.
 
@@ -423,6 +469,7 @@ def read_bundle_dir(
     )
     bundle.validate()
     _check_toc_refs(bundle)
+    _check_local_refs(bundle, strict=strict)
     if strict:
         _check_orphan_docs(bundle)
     else:
@@ -453,8 +500,8 @@ def make_artifact_from_dir(
 ) -> tuple[bytes, Bundle]:
     """Validate and pack a DocBundle directory. Returns (artifact_bytes, bundle).
 
-    If ``strict=True``, orphan narrative docs are treated as hard errors instead
-    of warnings.
+    If ``strict=True``, dangling local refs and orphan narrative docs are
+    treated as hard errors instead of warnings.
     """
     bundle = read_bundle_dir(path, log=log, strict=strict)
     return make_artifact(bundle, log=log), bundle

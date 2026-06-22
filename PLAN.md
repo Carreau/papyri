@@ -390,6 +390,23 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
   and continues on each per-object failure; it just no longer persists those
   failures into `papyri.json` or block pack on them.
 
+  *Partial landing — dangling local refs:* a `LocalRef` promises its target
+  lives in this bundle, so one that doesn't resolve is a build problem, not
+  something to paper over — gen deliberately does **not** rewrite it (e.g. the
+  scipy `optimize.root-*` case: refs into `optimize.rst`, which
+  `narrative_exclude` drops). `papyri pack` surfaces it instead: `_check_local_refs`
+  (via `nodes.iter_crossrefs`) walks every doc's `CrossRef`s and reports any
+  `LocalRef` whose target is absent from the bundle — warns by default, and
+  `papyri pack --strict` promotes it (and future lint warnings) to a hard
+  `BundleError` so maintainer CI can block dead-link bundles. The viewer never
+  silently hides one: a dangling local ref renders inline as a flagged
+  `.xref.unresolved.broken-local` span (orange, with a "broken local reference"
+  tooltip) instead of a working link, and the per-bundle
+  `/project/<pkg>/<ver>/validate` page lists them in a dedicated "Dangling local
+  references" section (`collectLocalXrefsDetailed`) above the ordinary
+  cross-package misses. The remaining `--strict`/`--lint` items above (missing
+  assets, stray `SubstitutionRef`/`SubstitutionDef`, …) are still open.
+
 - **Toc ↔ narrative consistency checks.**
   *Forward direction landed:* `papyri pack` now fails (via `_check_toc_refs`
   in `pack.py`, run from `read_bundle_dir`) if any toc entry points at a

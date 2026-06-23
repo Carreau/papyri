@@ -130,7 +130,8 @@ describe("end-to-end gen→pack→ingest→render pipeline", () => {
     const intRef = refs.find((r) => r.path === "builtins:int");
     expect(intRef, `no forward ref to builtins:int among ${JSON.stringify(refs)}`).toBeDefined();
     expect(intRef!.module).toBe("builtins");
-    // gen emits kind "api"; ingest normalizes it to "module".
+    // gen emits the canonical cross-package form (kind "module"); the visitor
+    // passes it through unchanged (it no longer normalises the old "api" form).
     expect(intRef!.kind).toBe("module");
   });
 });

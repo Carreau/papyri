@@ -267,11 +267,18 @@ describe("generatedDocToIngested", () => {
   });
 
   it("has exactly the fields listed in FIELD_ORDER[4010]", () => {
+    // Bidirectional guard: the keys generatedDocToIngested emits (minus the
+    // __type/__tag meta keys) must equal FIELD_ORDER[4010].fields as a set —
+    // no missing field (would silently null out on encode) and no stray extra
+    // (would be dropped by toEncodable, masking a typo). check_ir_sync.py keeps
+    // FIELD_ORDER itself in sync with papyri/nodes.py; this closes the one seam
+    // it can't see — the hand-written 4011→4010 mapping in this function.
     const gen = makeGenDoc("mymodule.myfunc");
     const ing = generatedDocToIngested(gen, "mymodule.myfunc");
-    const expectedFields = FIELD_ORDER[4010]!.fields;
-    for (const f of expectedFields) {
-      expect(ing).toHaveProperty(f);
-    }
+    const actual = Object.keys(ing)
+      .filter((k) => k !== "__type" && k !== "__tag")
+      .sort();
+    const expected = [...FIELD_ORDER[4010]!.fields].sort();
+    expect(actual).toEqual(expected);
   });
 });

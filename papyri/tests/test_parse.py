@@ -6,6 +6,7 @@ import pytest
 from papyri import errors
 from papyri.nodes import (
     CitationReference,
+    DefList,
     InlineCode,
     InlineRole,
     Paragraph,
@@ -967,3 +968,20 @@ def test_builtins_resolve_to_crossref(
     assert ref.path == expected_path, (
         f"Expected path={expected_path!r}, got {ref.path!r}"
     )
+
+
+def test_classifier_def_list_keeps_definition() -> None:
+    """Regression: a definition-list item with a classifier (``term :
+    classifier``) must keep its definition body. The 4-child branch
+    previously re-visited the term into ``dd`` and dropped the definition.
+    """
+    src = b"term : classifier\n    The definition body text.\n"
+    [section] = parse(src, "test_classifier_def_list_keeps_definition")
+    [deflist] = section.children
+    assert isinstance(deflist, DefList)
+    [item] = deflist.children
+    assert isinstance(item.dt, Paragraph)
+    assert _flatten_text(item.dt) == "term"
+    [dd] = item.dd
+    assert isinstance(dd, Paragraph)
+    assert _flatten_text(dd) == "The definition body text."

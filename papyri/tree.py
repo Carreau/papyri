@@ -1250,10 +1250,15 @@ class DirectiveVisiter(TreeReplacer):
             target_qa = self._import_solver(tqa)
             if target_qa is not None:
                 module = target_qa.split(":")[0].split(".")[0]
+                # Emit the canonical cross-package form (kind="module",
+                # version="?") directly. Since the sentinel unification the
+                # consumer side no longer normalises the old (kind="api",
+                # version="*") form, so producing it here would strand the
+                # edge under a phantom node category that no stored page uses.
                 ri = RefInfo(
                     module=module,
-                    version="*",
-                    kind="api",
+                    version="?",
+                    kind="module",
                     path=target_qa,
                 )
                 return [CrossRef(text, ri, "module")]

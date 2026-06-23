@@ -1,6 +1,7 @@
 {
   "name": "papyri-monorepo",
   "private": true,
+  "packageManager": "pnpm@10.11.0",
   "pnpm": {
     "onlyBuiltDependencies": [
       "better-sqlite3",

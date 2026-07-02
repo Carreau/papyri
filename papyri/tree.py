@@ -1170,6 +1170,17 @@ class DirectiveVisiter(TreeReplacer):
         text = text.replace("\n", " ")
         to_resolve = text
 
+        # Sphinx: a leading "!" on the raw role text suppresses
+        # cross-referencing entirely — the target renders as plain inline
+        # code, no lookup, no warning. Sphinx strips it *before* the
+        # "Title <target>" split, so check here and again on the target
+        # after the split.
+        suppress = False
+        if to_resolve.startswith("!"):
+            suppress = True
+            text = text[1:]
+            to_resolve = to_resolve[1:]
+
         if (
             ("<" in text)
             and text.endswith(">")
@@ -1188,21 +1199,21 @@ class DirectiveVisiter(TreeReplacer):
             assert to_resolve.endswith(">"), (text, to_resolve)
             to_resolve = to_resolve.rstrip(">")
 
-        # Sphinx: a leading "!" suppresses cross-referencing entirely — the
-        # target renders as plain inline code, no lookup, no warning.
         if to_resolve.startswith("!"):
+            suppress = True
             stripped = to_resolve[1:]
             if text == to_resolve:
                 text = stripped
-                if stripped.startswith("~"):
-                    text = stripped[1:].split(".")[-1]
-            return [InlineCode(text)]
+            to_resolve = stripped
 
         if to_resolve.startswith("~"):
             stripped = to_resolve[1:]
             if text == to_resolve:
                 text = stripped.split(".")[-1]
             to_resolve = stripped
+
+        if suppress:
+            return [InlineCode(text)]
 
         if to_resolve.startswith(("https://", "http://", "mailto://")):
             to_resolve = to_resolve.replace(" ", "")
@@ -1236,7 +1247,18 @@ class DirectiveVisiter(TreeReplacer):
         # relative to the current document); normalize to the ":"-joined doc
         # key so the LocalRef matches how narrative docs are stored.
         if role == "doc":
-            doc_key = self._resolve_doc_path(to_resolve)
+            doc_path = to_resolve
+            in_api_docstring = (
+                self.qa == self.module
+                or self.qa.startswith(self.module + ".")
+                or self.qa.startswith(self.module + ":")
+            )
+            if in_api_docstring and not doc_path.startswith("/"):
+                # API objects are not documents — there is no "current
+                # document directory" to resolve against, so anchor
+                # relative :doc: paths at the docs root.
+                doc_path = "/" + doc_path
+            doc_key = self._resolve_doc_path(doc_path)
             display = text if text != to_resolve else self.doc_titles.get(doc_key, text)
             return [CrossRef(display, LocalRef("docs", doc_key), "docs")]
 

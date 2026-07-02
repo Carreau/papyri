@@ -157,10 +157,39 @@ def test_doc_role_relative_path_resolves_from_current_doc() -> None:
         local_refs=frozenset(),
         aliases={},
         version="1.0",
+        module="pkg",
     )
     ref = _doc_role(v, "intro")
     assert isinstance(ref.reference, LocalRef)
     assert ref.reference.path == "tutorial:intro"
+
+
+def test_doc_role_from_api_docstring_anchors_at_root() -> None:
+    # In an API docstring there is no "current document directory" —
+    # :doc:`quickstart` in numpy:any must target the root-level doc, not a
+    # phantom "numpy:quickstart" key derived from the object's qa.
+    v = DirectiveVisiter(
+        qa="numpy:any",
+        known_refs=frozenset(),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+        module="numpy",
+    )
+    ref = _doc_role(v, "quickstart")
+    assert isinstance(ref.reference, LocalRef)
+    assert ref.reference.path == "quickstart"
+
+    v2 = DirectiveVisiter(
+        qa="numpy.ma.core:MaskedArray.var",
+        known_refs=frozenset(),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+        module="numpy",
+    )
+    ref2 = _doc_role(v2, "reference/maskedarray")
+    assert ref2.reference.path == "reference:maskedarray"
 
 
 def test_doc_role_titled_form() -> None:
@@ -2476,3 +2505,45 @@ def test_config_role_handler_dispatch() -> None:
     assert isinstance(out2[0], TextNode)
     out3 = v2.replace_InlineRole(InlineRole(domain=None, role="gone", value="x"))
     assert out3 == []
+
+
+def test_suppressed_ref_bang_before_explicit_title() -> None:
+    # Sphinx strips the "!" from the raw role text before splitting the
+    # explicit title: ":func:`!Title <pkg.mod.foo>`" renders "Title" as
+    # plain code, never a link or a warning.
+    v = DirectiveVisiter(
+        qa="pkg.mod",
+        known_refs=frozenset({RefInfo("pkg", "1.0", "module", "pkg.mod.foo")}),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+    )
+    out = v.replace_InlineRole(
+        InlineRole(domain=None, role="func", value="!Title <pkg.mod.foo>")
+    )
+    assert len(out) == 1
+    assert isinstance(out[0], InlineCode)
+    assert out[0].value == "Title"
+    assert _unresolved_records(v) == []
+
+
+def test_plot_handler_malformed_doctest_body_degrades_to_code(caplog):
+    # DocTestParser raises ValueError on inconsistent prompt indentation;
+    # the handler must warn and keep the Code node, not propagate.
+    pytest.importorskip("matplotlib")
+    from papyri.nodes import Code
+
+    stored: dict[str, bytes] = {}
+    h = make_plot_handler(
+        asset_store=stored.__setitem__,
+        module="pkg",
+        version="1.0",
+        execute=True,
+        qa="pkg.mod",
+    )
+    body = "text\n    >>> x=1\n    y\n  z\n"
+    with caplog.at_level("WARNING", logger="papyri"):
+        out = h("", {}, body)
+    assert len(out) == 1
+    assert isinstance(out[0], Code)
+    assert out[0].value == body

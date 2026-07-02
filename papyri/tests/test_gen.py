@@ -635,3 +635,14 @@ def test_numpydoc_see_also_backticked_entries() -> None:
     entries = [name for group in ndoc["See Also"] for (name, _role) in group[0]]
     assert "numpy.polynomial" in entries
     assert "foo" in entries and "bar" in entries
+
+
+def test_numpydoc_see_also_description_backticks_untouched() -> None:
+    # Only the names segment of a See Also entry is de-backticked; role
+    # references and inline code in the description must survive.
+    doc = "Summary line.\n\nSee Also\n--------\n`foo` : uses :meth:`bar` internally\n"
+    ndoc = NumpyDocString(doc)
+    (group,) = ndoc["See Also"]
+    names, desc = group
+    assert names == [("foo", None)]
+    assert ":meth:`bar`" in " ".join(desc)

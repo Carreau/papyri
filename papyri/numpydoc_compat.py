@@ -11,10 +11,21 @@ import numpydoc.docscrape as nds
 # A See Also entry line written with default-role backticks:
 # "`numpy.polynomial`" or "`foo`, `bar` : description". Upstream numpydoc
 # only accepts bare names or :role:`name` forms and raises on these.
+# The names segment (group 1) is captured separately from the optional
+# ": description" tail so only the names get rewritten — descriptions may
+# legitimately contain backticks and role references.
 _SEE_ALSO_BACKTICKED_LINE = re.compile(
-    r"^\s*(`[A-Za-z_][\w.]*`\s*,?\s*)+(:.*)?$",
+    r"^(\s*(?:`[A-Za-z_][\w.]*`\s*,?\s*)+)(:.*)?$",
 )
 _BACKTICKED_NAME = re.compile(r"`([A-Za-z_][\w.]*)`")
+
+
+def _strip_see_also_backticks(line: str) -> str:
+    m = _SEE_ALSO_BACKTICKED_LINE.match(line)
+    if m is None:
+        return line
+    names, desc = m.group(1), m.group(2) or ""
+    return _BACKTICKED_NAME.sub(r"\1", names) + desc
 
 
 class NumpyDocString(nds.NumpyDocString):
@@ -83,12 +94,7 @@ class NumpyDocString(nds.NumpyDocString):
         dropped the whole docstring. Strip the backticks from entry lines
         (description lines are left untouched).
         """
-        content = [
-            _BACKTICKED_NAME.sub(r"\1", line)
-            if _SEE_ALSO_BACKTICKED_LINE.match(line)
-            else line
-            for line in content
-        ]
+        content = [_strip_see_also_backticks(line) for line in content]
         return super()._parse_see_also(content)
 
     def _parse_param_list(self, *args: Any, **kwargs: Any) -> list[Any]:

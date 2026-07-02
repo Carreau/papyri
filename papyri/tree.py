@@ -566,17 +566,6 @@ def py_pep_hander(value: str) -> list[Any]:
     ]
 
 
-@directive_handler("py", "doc")
-def py_doc_handler(value: str) -> list[Any]:
-    text = value
-    path = value
-    if " <" in value and value.endswith(">"):
-        text, path = value.split(" <", 1)
-        text = text.rstrip()
-        path = path.rstrip(">")
-    return [CrossRef(text, LocalRef("docs", path), "docs")]
-
-
 @directive_handler("py", "param")
 def py_param_handler(value: str) -> list[Any]:
     """Handle ``:param:`name``` — an inline reference to a sibling parameter."""
@@ -1221,6 +1210,15 @@ class DirectiveVisiter(TreeReplacer):
                     f"unresolved :ref: label {label!r}",
                 )
                 return [directive]
+
+        # :doc:`path` — RST cross-reference to another document. Paths use
+        # "/" separators ("/" prefix anchors at the docs root, otherwise
+        # relative to the current document); normalize to the ":"-joined doc
+        # key so the LocalRef matches how narrative docs are stored.
+        if role == "doc":
+            doc_key = self._resolve_doc_path(to_resolve)
+            display = text if text != to_resolve else self.doc_titles.get(doc_key, text)
+            return [CrossRef(display, LocalRef("docs", doc_key), "docs")]
 
         # Plain RST hyperlink with angle-bracket syntax (``text <label>`_``) or
         # bare named reference (``label_``) where the target matches a known

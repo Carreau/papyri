@@ -3,7 +3,7 @@ Tests for ``papyri.tree``: small pieces of the gen-time/ingest-time IR
 transformation that are easy to pin and have historically regressed.
 
 Covered surfaces:
-- ``py_doc_handler`` (:doc: role → LocalRef("docs", path))
+- ``:doc:`` role (→ LocalRef("docs", doc-key), path normalization)
 - ``DelayedResolver`` (target/reference unification)
 - ``_toctree_handler`` (blank lines, comments, glob, hidden, malformed entries, LocalRef links, all-filtered/empty → no empty BulletList)
 - ``_SPHINX_ONLY_DIRECTIVES`` (silent drop via warning)
@@ -71,7 +71,6 @@ from papyri.nodes import (
 from papyri.tree import (
     DelayedResolver,
     DirectiveVisiter,
-    py_doc_handler,
     resolve_,
 )
 from papyri.utils import obj_from_qualname
@@ -122,30 +121,72 @@ def test_obj_from_qualname_class_itself_unchanged() -> None:
 
 
 # ---------------------------------------------------------------------------
-# :doc: role  (py_doc_handler)
+# :doc: role — resolved via the visitor so paths normalize to doc keys
 # ---------------------------------------------------------------------------
 
 
-def test_py_doc_handler_simple_path() -> None:
-    out = py_doc_handler("tutorial/intro")
+def _doc_role(v: DirectiveVisiter, value: str) -> Any:
+    out = v.replace_InlineRole(InlineRole(domain=None, role="doc", value=value))
     assert len(out) == 1
-    ref = out[0]
+    return out[0]
+
+
+def test_doc_role_root_relative_path() -> None:
+    # "/api/axes_api" anchors at the docs root and normalizes to the
+    # ":"-joined doc-key form the bundle stores narrative docs under.
+    v = DirectiveVisiter(
+        qa="docs:index",
+        known_refs=frozenset(),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+    )
+    ref = _doc_role(v, "/api/axes_api")
     assert isinstance(ref, CrossRef)
     assert ref.kind == "docs"
     assert isinstance(ref.reference, LocalRef)
     assert ref.reference.kind == "docs"
-    assert ref.reference.path == "tutorial/intro"
-    assert ref.value == "tutorial/intro"
+    assert ref.reference.path == "api:axes_api"
 
 
-def test_py_doc_handler_titled_form() -> None:
+def test_doc_role_relative_path_resolves_from_current_doc() -> None:
+    # A relative path resolves against the current document's directory.
+    v = DirectiveVisiter(
+        qa="tutorial:index",
+        known_refs=frozenset(),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+    )
+    ref = _doc_role(v, "intro")
+    assert isinstance(ref.reference, LocalRef)
+    assert ref.reference.path == "tutorial:intro"
+
+
+def test_doc_role_titled_form() -> None:
     # "Nice Title <real/path>" — title is the display text, path the target.
-    out = py_doc_handler("Nice Title <real/path>")
-    ref = out[0]
+    v = _make_visitor()
+    ref = _doc_role(v, "Nice Title </real/path>")
     assert isinstance(ref, CrossRef)
     assert ref.value == "Nice Title"
     assert isinstance(ref.reference, LocalRef)
-    assert ref.reference.path == "real/path"
+    assert ref.reference.path == "real:path"
+
+
+def test_doc_role_untitled_uses_doc_title() -> None:
+    # Without an explicit title, display falls back to the target doc's
+    # first heading when known.
+    v = DirectiveVisiter(
+        qa="docs:index",
+        known_refs=frozenset(),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+        doc_titles={"tutorial:intro": "Getting Started"},
+    )
+    ref = _doc_role(v, "/tutorial/intro")
+    assert ref.value == "Getting Started"
+    assert ref.reference.path == "tutorial:intro"
 
 
 # ---------------------------------------------------------------------------

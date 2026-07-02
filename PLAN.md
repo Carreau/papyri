@@ -37,6 +37,13 @@ service ingests many and serves them from one place.
 - **`ingest/`**: TypeScript `papyri-ingest` package — the canonical
   ingestion engine, invoked by the viewer's upload endpoint.
 
+`papyri gen` is the *reference* producer, not the only intended one. The
+bundle format (schema + the invariants below) is the ecosystem contract;
+other producers may emerge — e.g. working from Markdown/MyST sources — and
+anything that emits a valid, linted bundle is a first-class citizen. Ingest
+validates and may reject (see invariants); it does not care who produced
+the bundle.
+
 The viewer lives in-tree while the IR is still in flux; co-locating producer
 and consumer lets us iterate across breaking changes in one PR. Splitting into
 a separate repo remains an option once the IR schema stabilizes.
@@ -85,6 +92,17 @@ Applies to the IR in the raw archive (not the graphstore's internal form).
 - Ingest resolves `LocalRef`s to full keys and records live or dangling
   `RefInfo` links and an optimisation. A two-step ingest (build a ref map first) is an
   optimisation, not a correctness requirement.
+
+**No raw HTML in the IR.**
+The IR is semantic: producers express content as IR nodes, never as embedded
+HTML/CSS islands. Raw HTML breaks every non-HTML consumer (terminal /
+Jupyter rendering), cross-linking, and theming — it is one of the two
+failure modes that made building on docutils/MyST output intractable the
+first time (the other: links resolved too early; see the ref-classification
+invariant). Directives that only produce HTML get unwrapped, preserved
+verbatim as `Directive` nodes, or handled by a registered IR-producing
+handler — never passed through as markup. This applies to *any* producer,
+not just `papyri gen`.
 
 **RST substitutions never reach the IR.**
 The IR must never contain `SubstitutionDef` or `SubstitutionRef` nodes.
@@ -136,6 +154,16 @@ layers. Do not write CBOR into the bundle directory or JSON into the artifact.
   or eventually admit a PEP 440 specifier ("changed in numpy 2.0" is `>=2.0`,
   not `==2.0.1`)? *(2026-07: explicitly deferred until the pin path is
   implemented.)*
+- **Second-producer experiment (MyST- or docutils-based).** An earlier
+  attempt to build papyri on top of docutils/MyST failed on two things:
+  links resolved too early, and content collapsing into HTML. Both are now
+  explicit producer requirements (the ref-classification and no-raw-HTML
+  invariants), and the coming schema gives an external producer something
+  concrete to target — so a retry becomes viable *as an alternative
+  producer* (a Sphinx builder or mystmd plugin emitting bundles for
+  Markdown/MyST-source projects), not as papyri's base. Worth attempting
+  once the schema exists; the IR → MyST exporter provides the round-trip
+  check.
 - **Terminal / Jupyter client architecture.** Terminal + JupyterLab rendering
   is deferred, not dead, and it is on the critical path of the IPython
   adoption wedge (`?` showing rich cross-linked docs is the demo nobody else
@@ -266,8 +294,13 @@ principle; firm up details when implementation starts:
   boundary" invariant: the gen-dir vs artifact boundary was never really
   JSON-vs-CBOR — it is *lenient staging output* vs *strict, linted,
   schema-validated artifact*. That is the boundary worth enforcing.
-- Bonus: a `"type"`-discriminated JSON tree makes a one-way IR → MyST AST
-  exporter a small tree transform, if interop is ever wanted.
+- **IR → MyST AST export: yes (decided 2026-07).** A one-way exporter is a
+  small tree transform once the JSON encoding lands; schedule it after the
+  schema exists. It doubles as a conformance tool if a MyST-based producer
+  emerges (round-trip testing between exporter and producer).
+- The schema is also what makes third-party *producers* possible (see
+  Target shape): a bundle is valid because it validates against the schema
+  and passes lint — not because `papyri gen` wrote it.
 
 Old raw archives in the CBOR format are re-generated, not migrated
 (pre-production rule: no old data matters).

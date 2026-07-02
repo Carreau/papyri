@@ -1944,6 +1944,11 @@ class Gen:
         # Narrative link targets, so API docstrings can resolve :ref: labels
         # defined in the prose docs (e.g. numpy's `ufuncs.kwargs`).
         _, doc_targets, external_targets, _ = self._scan_narrative_sources()
+        # Documentation root, so Sphinx-absolute paths ("/_static/foo.svg")
+        # in docstring image/plot directives resolve to embeddable files.
+        _doc_root = (
+            Path(self.config.docs_path).expanduser() if self.config.docs_path else None
+        )
 
         error_collector = ErrorCollector(self.config, self.log)
         # with self.progress() as p2:
@@ -2088,6 +2093,7 @@ class Gen:
                     module=self.root,
                     doc_path=_doc_path,
                     asset_store=self.put_raw,
+                    doc_root=_doc_root,
                     doc_targets=doc_targets,
                     external_targets=external_targets,
                     execute=self.config.execute_doctests,

@@ -397,6 +397,8 @@ def make_plot_handler(
     version: str,
     execute: bool = False,
     qa: str = "plot",
+    doc_path: Path | None = None,
+    doc_root: Path | None = None,
     warn: DirectiveWarn = _log_warn,
 ) -> Callable[[str, dict[str, str], str], list[Any]]:
     """Return a ``.. plot::`` directive handler bound to the given execution context.
@@ -409,31 +411,63 @@ def make_plot_handler(
     When *execute* is ``False`` (or matplotlib / *asset_store* are absent) the
     code body is returned as a bare ``Code`` node so the example is not lost.
 
-    If the directive argument names an external ``.py`` script file rather than
-    providing an inline body, a warning is emitted and nothing is returned
-    (filesystem access is not available inside the handler).
+    Matching Sphinx's plot directive semantics:
+
+    - An argument naming an external ``.py`` script embeds that file as the
+      code body (``/``-prefixed paths resolve against *doc_root*, others
+      against *doc_path*; the inline body, if any, is the caption — dropped).
+    - A doctest-format body (``>>>`` prompts) is displayed verbatim but has
+      its prompts stripped for execution.
+    - Execution namespace is pre-seeded like matplotlib's default
+      ``plot_pre_code`` (``import numpy as np``,
+      ``from matplotlib import pyplot as plt``).
     """
 
     def plot_handler(argument: str, options: dict[str, str], content: str) -> list[Any]:
         script_file = (argument or "").strip()
         if script_file:
-            warn(
-                f"plot directive: cannot embed external script {script_file!r} "
-                "at gen time; dropping"
-            )
-            return []
+            if script_file.startswith("/"):
+                base, rel = doc_root, script_file.lstrip("/")
+            else:
+                base, rel = doc_path, script_file
+            if base is None:
+                warn(
+                    f"plot directive: cannot embed external script {script_file!r} "
+                    "at gen time; dropping"
+                )
+                return []
+            script_path = (base / rel).resolve()
+            if not script_path.is_file():
+                warn(f"plot directive: script {script_file!r} not found in {base}")
+                return []
+            # With a script argument, the directive body is the caption —
+            # the code comes from the file.
+            content = script_path.read_text()
         if not content or not content.strip():
             return []
 
         nodes: list[Any] = [Code(content)]
 
         if execute and asset_store is not None:
+            # Sphinx's plot directive also accepts doctest-format bodies;
+            # strip the prompts for execution (display keeps them).
+            exec_source = content
+            if any(ln.lstrip().startswith(">>>") for ln in content.splitlines()):
+                import doctest as _doctest
+
+                exec_source = "".join(
+                    ex.source for ex in _doctest.DocTestParser().get_examples(content)
+                )
             try:
                 from .executors import BlockExecutor
 
-                executor = BlockExecutor({})
+                # Mirror matplotlib's default ``plot_pre_code``: plot bodies
+                # assume np/plt are in scope.
+                ns: dict[str, Any] = {}
+                exec("import numpy as np\nfrom matplotlib import pyplot as plt\n", ns)
+                executor = BlockExecutor(ns)
                 with executor:
-                    executor.exec(content, name=qa)
+                    executor.exec(exec_source, name=qa)
                     fig_bytes_list = executor.get_figs()
                 for fig_bytes in fig_bytes_list:
                     n = next(_plot_counter)

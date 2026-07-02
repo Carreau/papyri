@@ -820,6 +820,8 @@ class DirectiveVisiter(TreeReplacer):
                 version=self.version,
                 execute=execute,
                 qa=self.qa,
+                doc_path=doc_path,
+                doc_root=doc_root,
                 warn=self._directive_warn,
             ),
         )

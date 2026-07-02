@@ -357,6 +357,13 @@ The diagnostic codes papyri currently emits:
      - A cross-reference could not be resolved to a local or cross-bundle
        target.  Common across not-yet-built packages, so it defaults to a
        warning; promote to ``error`` for a strictly clean bundle.
+   * - ``W-unresolved-default-role``
+     - ``info``
+     - Bare interpreted text (default role, no explicit ``:role:``) did not
+       resolve to any object.  Docstring authors routinely use bare
+       backticks for variable names, and Sphinx's ``autolink`` default role
+       degrades to plain text silently, so this defaults to ``info``;
+       promote it per project if bare backticks are expected to link.
    * - ``W-unsupported-substitution``
      - ``warning``
      - An RST substitution uses a directive papyri can't represent in the
@@ -594,6 +601,34 @@ To silently drop a directive instead of raising an error, map it to
 
 The handler callable must accept ``(argument, options, content)`` and
 return an IR node or ``None``.
+
+
+.. _config-roles:
+
+``[global.roles]``
+~~~~~~~~~~~~~~~~~~
+
+**Type:** ``dict[str, str]`` — default ``{}``
+
+Custom inline *role* handlers for project-local roles that papyri's
+built-in registry doesn't know (e.g. roles provided by a project's own
+Sphinx extension).  Keys are the bare role name as written in RST
+(``mpltype`` for ``:mpltype:`color```) or ``domain:role`` for
+domain-qualified roles; values are ``'module:callable'`` strings.  The
+handler receives the role body text and returns a list of IR nodes (or
+``None`` to fall through to the built-in behaviour).
+
+Three ready-made handlers cover the common cases:
+
+.. code:: toml
+
+   [global.roles]
+   mpltype  = 'papyri.directives:role_verbatim'  # render as inline code
+   somerole = 'papyri.directives:role_text'      # render as plain text
+   internal = 'papyri.directives:role_drop'      # drop entirely
+
+Without a mapping, an unknown role falls through to cross-reference
+resolution and typically reports ``W-unresolved-ref``.
 
 
 ``[meta]`` reference

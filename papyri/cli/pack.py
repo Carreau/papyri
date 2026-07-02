@@ -47,7 +47,7 @@ def pack(
         typer.Option(
             "--strict",
             "-s",
-            help="Promote bundle-lint warnings to errors and refuse to pack: dangling local refs, and orphan narrative docs (present but unreachable from any toc entry). Use in CI to catch toctree/cross-ref regressions.",
+            help="Promote bundle-lint warnings to errors and refuse to pack: dangling local refs, orphan narrative docs (present but unreachable from any toc entry), missing Figure assets, and docstring-parse-failure sentinels. Use in CI to catch toctree/cross-ref regressions.",
         ),
     ] = False,
 ) -> None:

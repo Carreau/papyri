@@ -2,10 +2,19 @@
 vestigial things from velin.
 """
 
+import re
 from collections.abc import Iterator
 from typing import Any, ClassVar
 
 import numpydoc.docscrape as nds
+
+# A See Also entry line written with default-role backticks:
+# "`numpy.polynomial`" or "`foo`, `bar` : description". Upstream numpydoc
+# only accepts bare names or :role:`name` forms and raises on these.
+_SEE_ALSO_BACKTICKED_LINE = re.compile(
+    r"^\s*(`[A-Za-z_][\w.]*`\s*,?\s*)+(:.*)?$",
+)
+_BACKTICKED_NAME = re.compile(r"`([A-Za-z_][\w.]*)`")
 
 
 class NumpyDocString(nds.NumpyDocString):
@@ -65,6 +74,22 @@ class NumpyDocString(nds.NumpyDocString):
         for name, data in super()._read_sections():
             name = self._guess_header(name)
             yield name, data
+
+    def _parse_see_also(self, content: list[str]) -> Any:
+        """Tolerate default-role backticks around See Also entry names.
+
+        Authors write ``See Also`` entries like ```numpy.polynomial``` —
+        legal RST, but upstream numpydoc raises ParseError, which previously
+        dropped the whole docstring. Strip the backticks from entry lines
+        (description lines are left untouched).
+        """
+        content = [
+            _BACKTICKED_NAME.sub(r"\1", line)
+            if _SEE_ALSO_BACKTICKED_LINE.match(line)
+            else line
+            for line in content
+        ]
+        return super()._parse_see_also(content)
 
     def _parse_param_list(self, *args: Any, **kwargs: Any) -> list[Any]:
         """

@@ -44,6 +44,10 @@ from papyri.directives import (
     tip_handler,
     topic_handler,
 )
+from papyri.error_collector import (
+    W_MALFORMED_DIRECTIVE,
+    W_MISSING_GITHUB_SLUG,
+)
 from papyri.nodes import (
     Admonition,
     CrossRef,
@@ -767,6 +771,121 @@ def test_ref_role_unknown_label_returns_directive_unchanged() -> None:
     out = v.replace_InlineRole(role)
     assert len(out) == 1
     assert isinstance(out[0], InlineRole)
+
+
+# ---------------------------------------------------------------------------
+# Malformed-directive diagnostics (W-malformed-directive)
+#
+# The recoverable-failure warnings inside the free-function directive handlers
+# (list-table/csv-table/image/include/figure/plot) are routed through the
+# visitor's Diagnostics collector, not a bare log.warning. Exercising them
+# through replace_UnprocessedDirective proves the ``warn`` callback is actually
+# bound at registration time.
+# ---------------------------------------------------------------------------
+
+
+def _malformed_records(v: DirectiveVisiter) -> list[dict[str, str]]:
+    return [r for r in v.diagnostics.records if r["code"] == W_MALFORMED_DIRECTIVE]
+
+
+def test_list_table_empty_body_emits_malformed_directive_diagnostic() -> None:
+    v = _make_visitor()
+    ud = UnprocessedDirective(
+        name="list-table",
+        args="",
+        options={},
+        value="",
+        children=[],
+        raw=".. list-table::",
+    )
+    out = v.replace_UnprocessedDirective(ud)
+    assert out == []
+    recs = _malformed_records(v)
+    assert len(recs) == 1
+    assert recs[0]["target"] == "pkg.mod"
+    assert "list-table" in recs[0]["message"]
+
+
+def test_csv_table_empty_body_emits_malformed_directive_diagnostic() -> None:
+    v = _make_visitor()
+    ud = UnprocessedDirective(
+        name="csv-table",
+        args="",
+        options={},
+        value="",
+        children=[],
+        raw=".. csv-table::",
+    )
+    out = v.replace_UnprocessedDirective(ud)
+    assert out == []
+    recs = _malformed_records(v)
+    assert len(recs) == 1
+    assert recs[0]["target"] == "pkg.mod"
+
+
+def test_image_unembeddable_path_emits_malformed_directive_diagnostic() -> None:
+    # No doc_path/asset_store on the default visitor, so a relative path cannot
+    # be embedded: the handler falls back to an Image node and records a
+    # diagnostic instead of logging plainly.
+    v = _make_visitor()
+    ud = UnprocessedDirective(
+        name="image",
+        args="foo.png",
+        options={},
+        value="",
+        children=[],
+        raw=".. image:: foo.png",
+    )
+    out = v.replace_UnprocessedDirective(ud)
+    assert len(out) == 1
+    assert isinstance(out[0], Image)
+    recs = _malformed_records(v)
+    assert len(recs) == 1
+    assert recs[0]["target"] == "pkg.mod"
+
+
+# ---------------------------------------------------------------------------
+# :ghpull: / :ghissue: roles (W-missing-github-slug)
+# ---------------------------------------------------------------------------
+
+
+def _make_visitor_with_slug(slug: str | None) -> DirectiveVisiter:
+    return DirectiveVisiter(
+        qa="pkg.mod",
+        known_refs=frozenset(),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+        github_slug=slug,
+    )
+
+
+def test_ghpull_role_with_slug_emits_github_link() -> None:
+    v = _make_visitor_with_slug("ipython/ipython")
+    out = v.replace_InlineRole(InlineRole(domain=None, role="ghpull", value="123"))
+    assert len(out) == 1
+    assert isinstance(out[0], Link)
+    assert out[0].url == "https://github.com/ipython/ipython/pull/123"
+    assert not any(r["code"] == W_MISSING_GITHUB_SLUG for r in v.diagnostics.records)
+
+
+def test_ghissue_role_with_slug_uses_issues_path() -> None:
+    v = _make_visitor_with_slug("numpy/numpy")
+    out = v.replace_InlineRole(InlineRole(domain=None, role="ghissue", value="7"))
+    assert len(out) == 1
+    assert isinstance(out[0], Link)
+    assert out[0].url == "https://github.com/numpy/numpy/issues/7"
+
+
+def test_ghpull_role_without_slug_emits_text_and_diagnostic() -> None:
+    v = _make_visitor_with_slug(None)
+    out = v.replace_InlineRole(InlineRole(domain=None, role="ghpull", value="9"))
+    assert len(out) == 1
+    assert isinstance(out[0], Text)
+    assert out[0].value == "#9"
+    recs = [r for r in v.diagnostics.records if r["code"] == W_MISSING_GITHUB_SLUG]
+    assert len(recs) == 1
+    assert recs[0]["target"] == "pkg.mod"
 
 
 def test_ref_role_cross_doc_resolves_to_correct_doc_key() -> None:

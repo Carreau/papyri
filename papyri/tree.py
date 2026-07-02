@@ -7,7 +7,7 @@ usually trees, and update nodes.
 import logging
 from collections import Counter, defaultdict
 from collections.abc import Callable, Collection
-from functools import lru_cache
+from functools import lru_cache, partial
 from pathlib import Path
 from textwrap import indent
 from typing import Any, TypeVar, cast
@@ -43,6 +43,8 @@ from .directives import (
     warning_handler,
 )
 from .error_collector import (
+    W_MALFORMED_DIRECTIVE,
+    W_MISSING_GITHUB_SLUG,
     W_UNRESOLVED_REF,
     W_UNSUPPORTED_SUBSTITUTION,
     DiagnosticConfig,
@@ -521,58 +523,16 @@ for role in _PY_VERBATIM_ROLES:
     )
 
 
-# :ghpull: / :ghissue: are IPython-invented roles; we honour them for any
-# project whose config declares ``[meta].github_slug``. The slug is set at
-# gen time via ``set_github_slug()`` below. When no slug is configured we
-# refuse to guess — the role renders as plain ``#N`` text and a warning is
-# logged once, so maintainers notice the missing config instead of getting
-# a silent link to the wrong repo (historically hardcoded to
+# :ghpull: / :ghissue: are IPython-invented roles honoured for any project
+# whose config declares ``[meta].github_slug``. They are resolved in
+# ``DirectiveVisiter.replace_InlineRole`` (not registered in the global
+# ``DIRECTIVE_MAP``) because they need per-bundle state — the slug and the
+# ``Diagnostics`` collector — rather than reading module-level globals. When no
+# slug is configured the role renders as plain ``#N`` text and emits a
+# ``W-missing-github-slug`` diagnostic so maintainers notice the missing config
+# instead of getting a silent link to the wrong repo (historically hardcoded to
 # ``ipython/ipython``, which was correct for exactly one project).
-_GITHUB_SLUG: str | None = None
-_WARNED_MISSING_SLUG: set[str] = set()
-
-
-def set_github_slug(slug: str | None) -> None:
-    """Configure the repo used by ``:ghpull:`` / ``:ghissue:`` roles.
-
-    ``slug`` is the ``owner/name`` GitHub path from ``[meta].github_slug``.
-    Passing a falsy value clears the configured slug; the roles then fall
-    back to plain-text rendering with a one-shot warning.
-    """
-    global _GITHUB_SLUG
-    _GITHUB_SLUG = slug or None
-    _WARNED_MISSING_SLUG.clear()
-
-
-def _gh_link_or_warn(role: str, path_segment: str, value: str) -> list[Any]:
-    if _GITHUB_SLUG is None:
-        if role not in _WARNED_MISSING_SLUG:
-            _WARNED_MISSING_SLUG.add(role)
-            log.warning(
-                ":%s: used but [meta].github_slug is not set; rendering "
-                "#%s as plain text. Add ``github_slug = 'owner/name'`` "
-                "under [meta] in your config to enable these links.",
-                role,
-                value,
-            )
-        return [Text(f"#{value}")]
-    return [
-        Link(
-            children=[Text(f"#{value}")],
-            url=f"https://github.com/{_GITHUB_SLUG}/{path_segment}/{value}",
-            title="",
-        )
-    ]
-
-
-@directive_handler("py", "ghpull")
-def py_ghpull_handler(value: str) -> list[Any]:
-    return _gh_link_or_warn("ghpull", "pull", value)
-
-
-@directive_handler("py", "ghissue")
-def py_ghissue_handler(value: str) -> list[Any]:
-    return _gh_link_or_warn("ghissue", "issues", value)
+_GH_ROLE_PATH_SEGMENT = {"ghpull": "pull", "ghissue": "issues"}
 
 
 @directive_handler("py", "math")
@@ -691,6 +651,7 @@ class DirectiveVisiter(TreeReplacer):
         execute: bool = False,
         param_names: frozenset[str] | set[str] | None = None,
         diagnostics: Diagnostics | None = None,
+        github_slug: str | None = None,
     ):
         """
         qa: str
@@ -724,11 +685,11 @@ class DirectiveVisiter(TreeReplacer):
             # as ``.. sourcecode:: ipython``.
             "sourcecode": code_handler,
             "code": code_handler,
-            "list-table": list_table_handler,
+            "list-table": partial(list_table_handler, warn=self._directive_warn),
             "rubric": rubric_handler,
             "only": only_handler,
             "literalinclude": literalinclude_handler,
-            "csv-table": csv_table_handler,
+            "csv-table": partial(csv_table_handler, warn=self._directive_warn),
             # Standard RST admonitions not yet handled above.
             "attention": attention_handler,
             "caution": caution_handler,
@@ -773,6 +734,10 @@ class DirectiveVisiter(TreeReplacer):
             if diagnostics is not None
             else Diagnostics(DiagnosticConfig.default(), log)
         )
+        # ``owner/name`` GitHub slug from ``[meta].github_slug``, used by the
+        # ``:ghpull:`` / ``:ghissue:`` roles in ``replace_InlineRole``. ``None``
+        # means the roles render as plain ``#N`` text and emit a diagnostic.
+        self.github_slug: str | None = github_slug or None
         self.qa = qa
         # qa may use either `.` (submodule path) or `:` (top-level module
         # attribute, e.g. "numpy:promote_types") as the first separator;
@@ -819,18 +784,28 @@ class DirectiveVisiter(TreeReplacer):
         self._handlers.setdefault(
             "image",
             make_image_handler(
-                doc_path, asset_store, self.module, self.version, doc_root
+                doc_path,
+                asset_store,
+                self.module,
+                self.version,
+                doc_root,
+                warn=self._directive_warn,
             ),
         )
         self._handlers.setdefault(
             "figure",
             make_figure_handler(
-                doc_path, asset_store, self.module, self.version, doc_root
+                doc_path,
+                asset_store,
+                self.module,
+                self.version,
+                doc_root,
+                warn=self._directive_warn,
             ),
         )
         self._handlers.setdefault(
             "include",
-            make_include_handler(doc_path, doc_root),
+            make_include_handler(doc_path, doc_root, warn=self._directive_warn),
         )
         self._handlers.setdefault(
             "plot",
@@ -840,8 +815,45 @@ class DirectiveVisiter(TreeReplacer):
                 version=self.version,
                 execute=execute,
                 qa=self.qa,
+                warn=self._directive_warn,
             ),
         )
+
+    def _gh_link_or_warn(self, role: str, value: str) -> list[Any]:
+        """Resolve a ``:ghpull:`` / ``:ghissue:`` role against ``github_slug``.
+
+        Renders a GitHub link when the bundle configured ``[meta].github_slug``;
+        otherwise falls back to plain ``#N`` text and emits a
+        ``W-missing-github-slug`` diagnostic against the current object.
+        """
+        if self.github_slug is None:
+            self.diagnostics.emit(
+                W_MISSING_GITHUB_SLUG,
+                self.qa,
+                f":{role}: used but [meta].github_slug is not set; rendering "
+                f"#{value} as plain text. Add github_slug = 'owner/name' under "
+                "[meta] in your config to enable these links.",
+            )
+            return [Text(f"#{value}")]
+        path_segment = _GH_ROLE_PATH_SEGMENT[role]
+        return [
+            Link(
+                children=[Text(f"#{value}")],
+                url=f"https://github.com/{self.github_slug}/{path_segment}/{value}",
+                title="",
+            )
+        ]
+
+    def _directive_warn(self, message: str) -> None:
+        """Report a malformed/unprocessable directive as a coded diagnostic.
+
+        Bound into the free-function directive handlers (``list-table``,
+        ``csv-table``, ``image``, ``figure``, ``include``, ``plot``) so their
+        recoverable failures flow through ``Diagnostics`` as
+        ``W-malformed-directive`` against the current object, instead of a bare
+        ``log.warning``.
+        """
+        self.diagnostics.emit(W_MALFORMED_DIRECTIVE, self.qa, message)
 
     def collect_substitutions(self, *sections: Section) -> None:
         """Pre-scan sections for SubstitutionDef nodes to build the substitution map.
@@ -1096,6 +1108,8 @@ class DirectiveVisiter(TreeReplacer):
             domain = "py"
         if role is None:
             role = "py"
+        if domain == "py" and role in _GH_ROLE_PATH_SEGMENT:
+            return self._gh_link_or_warn(role, directive.value)
         domain_handler: dict[str, list[Handler]] = DIRECTIVE_MAP.get(domain, {})
         handlers: list[Handler] = domain_handler.get(role, [])
         for h in handlers:

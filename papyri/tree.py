@@ -232,6 +232,12 @@ def resolve_(
     if hk not in _cache:
         _cache[hk] = _build_resolver_cache(known_refs)
 
+    # qa uses full_qual "module:qualname" notation ("numpy:any",
+    # "numpy.ma.core:MaskedArray.var") while the lookup keys are indexed in
+    # dotted form; normalize before deriving enclosing scopes, otherwise no
+    # relative ref inside an object page can ever resolve.
+    qa = qa.replace(":", ".")
+
     # this is a mapping from the key to the most relevant
     # Refinfo to a document
     k_path_map: dict[str, RefInfo]

@@ -896,6 +896,36 @@ def test_resolve_dotted_ref_relative_to_current_module() -> None:
     assert r.path == "pkg.mod.sub.Klass.fit"
 
 
+def test_resolve_colon_qa_resolves_relative_ref() -> None:
+    # qa uses full_qual "module:qualname" notation ("numpy:any") while
+    # lookup keys are indexed dotted; "ndarray" mentioned in numpy:any's
+    # docstring must still resolve to numpy:ndarray.
+    known = frozenset(
+        {
+            RefInfo("numpy", "1.0", "module", "numpy:ndarray"),
+            RefInfo("numpy", "1.0", "module", "numpy:any"),
+        }
+    )
+    r = resolve_("numpy:any", known, frozenset(), "ndarray", {})
+    assert r.kind != "missing"
+    assert r.path == "numpy:ndarray"
+
+
+def test_resolve_colon_qa_method_scope() -> None:
+    # Same, from a method page: "var" inside numpy.ma.core:MaskedArray.var
+    # scope-walks through the class and module scopes.
+    known = frozenset(
+        {
+            RefInfo("numpy", "1.0", "module", "numpy.ma.core:MaskedArray.mean"),
+        }
+    )
+    r = resolve_(
+        "numpy.ma.core:MaskedArray.var", known, frozenset(), "MaskedArray.mean", {}
+    )
+    assert r.kind != "missing"
+    assert r.path == "numpy.ma.core:MaskedArray.mean"
+
+
 # ---------------------------------------------------------------------------
 # Malformed-directive diagnostics (W-malformed-directive)
 #

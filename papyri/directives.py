@@ -488,16 +488,20 @@ def make_plot_handler(
         nodes: list[Any] = [Code(content)]
 
         if execute and asset_store is not None:
-            # Sphinx's plot directive also accepts doctest-format bodies;
-            # strip the prompts for execution (display keeps them).
-            exec_source = content
-            if any(ln.lstrip().startswith(">>>") for ln in content.splitlines()):
-                import doctest as _doctest
-
-                exec_source = "".join(
-                    ex.source for ex in _doctest.DocTestParser().get_examples(content)
-                )
             try:
+                # Sphinx's plot directive also accepts doctest-format bodies;
+                # strip the prompts for execution (display keeps them). Kept
+                # inside the try: DocTestParser raises ValueError on
+                # malformed prompt indentation, which must degrade to a
+                # warning + bare Code node, not abort the object.
+                exec_source = content
+                if any(ln.lstrip().startswith(">>>") for ln in content.splitlines()):
+                    import doctest as _doctest
+
+                    exec_source = "".join(
+                        ex.source
+                        for ex in _doctest.DocTestParser().get_examples(content)
+                    )
                 from .executors import BlockExecutor
 
                 # Mirror matplotlib's default ``plot_pre_code``: plot bodies

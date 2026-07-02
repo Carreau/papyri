@@ -286,13 +286,18 @@ def resolve_(
 
                 return RefInfo(None, None, "missing", ref)
 
+        # Walk the enclosing scopes most-specific-first (Sphinx resolves
+        # relative to the closest enclosing module/class): try "qa.ref"
+        # first, then each parent scope, down to "root.ref". The previous
+        # form of this loop computed the attempt *before* extending the
+        # prefix, so the current scope itself ("qa.ref") was never tried —
+        # a module docstring could not resolve a ref relative to its own
+        # module.
         parts = qa.split(".")
-        prefix = ""
-        for part in parts:
-            attempt = prefix + "." + ref
+        for i in range(len(parts), 0, -1):
+            attempt = ".".join(parts[:i]) + "." + ref
             if attempt in k_path_map:
                 return k_path_map[attempt]
-            prefix = part if not prefix else prefix + "." + part
 
     q0 = parts[0]
     rs = root_start(q0, keyset)
@@ -1142,6 +1147,16 @@ class DirectiveVisiter(TreeReplacer):
             assert to_resolve.endswith(">"), (text, to_resolve)
             to_resolve = to_resolve.rstrip(">")
 
+        # Sphinx: a leading "!" suppresses cross-referencing entirely — the
+        # target renders as plain inline code, no lookup, no warning.
+        if to_resolve.startswith("!"):
+            stripped = to_resolve[1:]
+            if text == to_resolve:
+                text = stripped
+                if stripped.startswith("~"):
+                    text = stripped[1:].split(".")[-1]
+            return [InlineCode(text)]
+
         if to_resolve.startswith("~"):
             stripped = to_resolve[1:]
             if text == to_resolve:
@@ -1210,6 +1225,11 @@ class DirectiveVisiter(TreeReplacer):
                             title="",
                         )
                     ]
+
+        # Sphinx py roles ignore a trailing pair of parentheses on the target
+        # (":meth:`foo()`" links to foo); the display text keeps them.
+        if to_resolve.endswith("()"):
+            to_resolve = to_resolve[:-2]
 
         r = self._resolve(loc, to_resolve)
         # this is now likely incorrect as Ref kind should not be exists,

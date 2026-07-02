@@ -47,12 +47,14 @@ from papyri.directives import (
 from papyri.error_collector import (
     W_MALFORMED_DIRECTIVE,
     W_MISSING_GITHUB_SLUG,
+    W_UNRESOLVED_REF,
 )
 from papyri.nodes import (
     Admonition,
     CrossRef,
     Figure,
     Image,
+    InlineCode,
     InlineRole,
     Link,
     LocalRef,
@@ -70,6 +72,7 @@ from papyri.tree import (
     DelayedResolver,
     DirectiveVisiter,
     py_doc_handler,
+    resolve_,
 )
 from papyri.utils import obj_from_qualname
 
@@ -771,6 +774,105 @@ def test_ref_role_unknown_label_returns_directive_unchanged() -> None:
     out = v.replace_InlineRole(role)
     assert len(out) == 1
     assert isinstance(out[0], InlineRole)
+
+
+# ---------------------------------------------------------------------------
+# "!" suppressed cross-references (Sphinx: render as plain code, never warn)
+# ---------------------------------------------------------------------------
+
+
+def _unresolved_records(v: DirectiveVisiter) -> list[dict[str, str]]:
+    return [r for r in v.diagnostics.records if r["code"] == W_UNRESOLVED_REF]
+
+
+def test_suppressed_ref_renders_plain_inline_code() -> None:
+    v = _make_visitor()
+    role = InlineRole(domain=None, role="class", value="!matplotlib.axes.Axes")
+    out = v.replace_InlineRole(role)
+    assert len(out) == 1
+    assert isinstance(out[0], InlineCode)
+    assert out[0].value == "matplotlib.axes.Axes"
+    assert _unresolved_records(v) == []
+
+
+def test_suppressed_ref_with_tilde_shows_last_component() -> None:
+    v = _make_visitor()
+    role = InlineRole(domain=None, role="meth", value="!~pkg.mod.Klass.frob")
+    out = v.replace_InlineRole(role)
+    assert len(out) == 1
+    assert isinstance(out[0], InlineCode)
+    assert out[0].value == "frob"
+    assert _unresolved_records(v) == []
+
+
+def test_suppressed_ref_keeps_explicit_title() -> None:
+    v = _make_visitor()
+    role = InlineRole(
+        domain=None, role="class", value="the axes <!matplotlib.axes.Axes>"
+    )
+    out = v.replace_InlineRole(role)
+    assert len(out) == 1
+    assert isinstance(out[0], InlineCode)
+    assert out[0].value == "the axes"
+    assert _unresolved_records(v) == []
+
+
+# ---------------------------------------------------------------------------
+# Trailing "()" on py-role targets (Sphinx links foo, displays foo())
+# ---------------------------------------------------------------------------
+
+
+def test_trailing_parens_target_resolves_and_display_keeps_parens() -> None:
+    v = DirectiveVisiter(
+        qa="pkg.mod",
+        known_refs=frozenset({RefInfo("pkg", "1.0", "module", "pkg.mod.foo")}),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+    )
+    role = InlineRole(domain=None, role=None, value="pkg.mod.foo()")
+    out = v.replace_InlineRole(role)
+    assert len(out) == 1
+    cr = out[0]
+    assert isinstance(cr, CrossRef)
+    assert cr.value == "pkg.mod.foo()"
+    assert cr.reference == RefInfo("pkg", "1.0", "module", "pkg.mod.foo")
+    assert _unresolved_records(v) == []
+
+
+# ---------------------------------------------------------------------------
+# resolve_ — enclosing-scope walk
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_relative_ref_prefers_current_scope() -> None:
+    # "foo" used inside pkg.mod must resolve to pkg.mod.foo even when another
+    # module defines a foo too (Sphinx resolves the closest scope first).
+    known = frozenset(
+        {
+            RefInfo("pkg", "1.0", "module", "pkg.mod.foo"),
+            RefInfo("pkg", "1.0", "module", "pkg.other.foo"),
+        }
+    )
+    r = resolve_("pkg.mod", known, frozenset(), "foo", {})
+    assert r.kind != "missing"
+    assert r.path == "pkg.mod.foo"
+
+
+def test_resolve_dotted_ref_relative_to_current_module() -> None:
+    # "sub.Klass.fit" mentioned in the pkg.mod module docstring must resolve
+    # relative to pkg.mod itself. The pre-fix scope walk never tried the
+    # current scope as a prefix, so this only worked when the fuzzy
+    # substring fallback happened to be unambiguous.
+    known = frozenset(
+        {
+            RefInfo("pkg", "1.0", "module", "pkg.mod.sub.Klass.fit"),
+            RefInfo("pkg", "1.0", "module", "pkg.zzz.sub.Klass.fit"),
+        }
+    )
+    r = resolve_("pkg.mod", known, frozenset(), "sub.Klass.fit", {})
+    assert r.kind != "missing"
+    assert r.path == "pkg.mod.sub.Klass.fit"
 
 
 # ---------------------------------------------------------------------------

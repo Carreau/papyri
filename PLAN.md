@@ -359,11 +359,6 @@ layers. Do not write CBOR into the bundle directory or JSON into the artifact.
   `StaticPhrasingContent` (nodes.py union + ir-types/ir-schema + renderer) and
   routing the substitution body through the image handler. IR schema change —
   batch with the next schema-touching PR.
-- **Custom role mapping in config.** matplotlib's `:mpltype:`color`` role
-  (1.5k+ hits) and similar project-local roles have no handler and warn as
-  unresolved. Add a `[global.roles]` config table mirroring
-  `[global.directives]` so projects can map custom roles (drop / plain-code /
-  link template).
 - **numpydoc section fragments that tree-sitter cannot re-parse (#361).**
   `numpy.ma.core:MaskedArray.resize` stays excluded: the full docstring parses
   fine, but the numpydoc-section fragment gen re-parses trips
@@ -622,6 +617,11 @@ Newest areas first; each line names the key symbol/file.
 - examples/numpy.toml exclusions pruned to just MaskedArray.resize (#361).
 - Examples collected *after* API docs and their visitor now gets
   `known_refs` + narrative target maps, so example pages cross-link.
+- `[global.roles]` config table (`Config.roles` → `DirectiveVisiter`
+  `_role_handlers`): project-local roles map to handlers
+  (`role_verbatim`/`role_text`/`role_drop` in `directives.py`);
+  matplotlib's `:mpltype:` mapped in its example config. Docs:
+  `configuration.rst` `[global.roles]`.
 
 ### Gen-time diagnostics
 - Core framework: `Severity`, `DIAGNOSTICS` registry, `DiagnosticConfig`

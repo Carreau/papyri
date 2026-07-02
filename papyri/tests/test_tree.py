@@ -2381,3 +2381,20 @@ def test_import_solver_descriptor_without_module_attr() -> None:
     # the path exists, so the solver derives module:qualname from it.
     pytest.importorskip("numpy")
     assert DirectiveVisiter._import_solver("numpy.ufunc.reduce") == "numpy:ufunc.reduce"
+
+
+def test_unresolved_default_role_uses_quiet_code() -> None:
+    # Bare backticks that fail to resolve get W-unresolved-default-role
+    # (info by default); explicit roles keep W-unresolved-ref.
+    from papyri.error_collector import W_UNRESOLVED_DEFAULT_ROLE
+
+    v = _make_visitor()
+    out = v.replace_InlineRole(InlineRole(domain=None, role=None, value="x"))
+    assert len(out) == 1
+    codes = [r["code"] for r in v.diagnostics.records]
+    assert codes == [W_UNRESOLVED_DEFAULT_ROLE]
+
+    v2 = _make_visitor()
+    v2.replace_InlineRole(InlineRole(domain=None, role="func", value="nope"))
+    codes2 = [r["code"] for r in v2.diagnostics.records]
+    assert codes2 == [W_UNRESOLVED_REF]

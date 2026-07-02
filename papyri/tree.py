@@ -45,6 +45,7 @@ from .directives import (
 from .error_collector import (
     W_MALFORMED_DIRECTIVE,
     W_MISSING_GITHUB_SLUG,
+    W_UNRESOLVED_DEFAULT_ROLE,
     W_UNRESOLVED_REF,
     W_UNSUPPORTED_SUBSTITUTION,
     DiagnosticConfig,
@@ -1328,8 +1329,16 @@ class DirectiveVisiter(TreeReplacer):
                 )
                 return [CrossRef(text, ri, "module")]
         role_desc = directive.role or "(default)"
+        # Bare backticks (no explicit role) are routinely used for variable
+        # names; Sphinx's autolink default role degrades to plain text
+        # silently, so an unresolved default role gets its own, quieter code.
+        code = (
+            W_UNRESOLVED_REF
+            if directive.role is not None
+            else W_UNRESOLVED_DEFAULT_ROLE
+        )
         self.diagnostics.emit(
-            W_UNRESOLVED_REF,
+            code,
             self.qa,
             f"unresolved reference {directive.value!r} (role {role_desc})",
         )

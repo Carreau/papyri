@@ -500,10 +500,12 @@ def make_artifact_from_dir(
 ) -> tuple[bytes, Bundle]:
     """Validate and pack a DocBundle directory. Returns (artifact_bytes, bundle).
 
-    If ``strict=True``, dangling local refs and orphan narrative docs are
-    treated as hard errors instead of warnings.
+    If ``strict=True``, dangling local refs, orphan narrative docs, missing
+    Figure assets, and docstring-parse-failure sentinels are treated as hard
+    errors instead of warnings. Substitution nodes in the IR always fail.
     """
     bundle = read_bundle_dir(path, log=log, strict=strict)
+    _check_lint(bundle, strict=strict)
     return make_artifact(bundle, log=log), bundle
 
 
@@ -620,20 +622,8 @@ def explode_artifact_to_dir(
     return out_dir
 
 
-def lint_bundle(bundle: Bundle) -> list[str]:
-    """Check a bundle for IR consistency issues.
-
-    Returns a list of issue strings. Empty list means no issues found.
-
-    Checks performed:
-    - Unresolved SubstitutionRef/SubstitutionDef nodes (should have been replaced)
-    - Referenced assets that are missing from the asset store
-    """
-    from .nodes import Figure, RefInfo, SubstitutionDef, SubstitutionRef
-
-    issues: list[str] = []
-
-    # Collect nodes from all docs, tracking document paths for better error messages
+def _all_docs(bundle: Bundle) -> list[tuple[str, Any]]:
+    """All documents of a bundle as ``(display_path, doc)`` pairs."""
     all_docs: list[tuple[str, Any]] = []
     for qa, doc in bundle.api.items():
         all_docs.append((f"module/{qa}", doc))
@@ -641,18 +631,34 @@ def lint_bundle(bundle: Bundle) -> list[str]:
         all_docs.append((f"docs/{name}", doc))
     for name, section in bundle.examples.items():
         all_docs.append((f"examples/{name}", section))
+    return all_docs
 
-    # Check 1: SubstitutionRef/SubstitutionDef nodes should have been resolved
-    for doc_path, doc in all_docs:
+
+def _lint_substitutions(bundle: Bundle) -> list[str]:
+    """SubstitutionRef/SubstitutionDef nodes must never reach the IR.
+
+    Gen resolves ``replace::`` substitutions inline and drops (with a warning)
+    the other kinds, so any survivor here is a gen-side regression.
+    """
+    from .nodes import SubstitutionDef, SubstitutionRef
+
+    issues: list[str] = []
+    for doc_path, doc in _all_docs(bundle):
         for node in _iter_nodes(doc):
             if isinstance(node, SubstitutionRef):
                 issues.append(f"unresolved SubstitutionRef in {doc_path}")
             elif isinstance(node, SubstitutionDef):
                 issues.append(f"unresolved SubstitutionDef in {doc_path}")
+    return issues
 
-    # Check 2: Missing assets referenced by Figure nodes
+
+def _lint_missing_assets(bundle: Bundle) -> list[str]:
+    """Figure nodes whose ``assets`` ref has no backing entry in the bundle."""
+    from .nodes import Figure, RefInfo
+
+    issues: list[str] = []
     asset_keys = set(bundle.assets.keys())
-    for doc_path, doc in all_docs:
+    for doc_path, doc in _all_docs(bundle):
         for node in _iter_nodes(doc):
             if (
                 isinstance(node, Figure)
@@ -664,5 +670,70 @@ def lint_bundle(bundle: Bundle) -> list[str]:
                     issues.append(
                         f"missing asset '{asset_name}' referenced in {doc_path}"
                     )
-
     return issues
+
+
+def _lint_docstring_sentinels(bundle: Bundle) -> list[str]:
+    """``DocstringSentinel`` placeholders left by unparseable module docstrings.
+
+    Gen inserts these so the viewer shows a visible notice instead of a blank
+    page; a published bundle should not ship them.
+    """
+    from .nodes import DocstringSentinel
+
+    return [
+        f"docstring parse-failure sentinel in {doc_path}"
+        for doc_path, doc in _all_docs(bundle)
+        for node in _iter_nodes(doc)
+        if isinstance(node, DocstringSentinel)
+    ]
+
+
+def lint_bundle(bundle: Bundle) -> list[str]:
+    """Check a bundle for IR consistency issues.
+
+    Returns a list of issue strings. Empty list means no issues found.
+
+    Checks performed:
+    - Unresolved SubstitutionRef/SubstitutionDef nodes (should have been replaced)
+    - Referenced assets that are missing from the asset store
+    - DocstringSentinel placeholders (module docstrings numpydoc could not parse)
+    """
+    return (
+        _lint_substitutions(bundle)
+        + _lint_missing_assets(bundle)
+        + _lint_docstring_sentinels(bundle)
+    )
+
+
+def _check_lint(bundle: Bundle, strict: bool = False) -> None:
+    """Enforce lint checks at pack time.
+
+    Substitution nodes violate a hard IR invariant ("RST substitutions never
+    reach the IR") and always fail the pack. Missing Figure assets and
+    docstring-parse-failure sentinels are degraded-but-renderable content:
+    warn by default, fail under ``--strict`` so maintainer CI can block
+    publishing incomplete bundles.
+    """
+    substitutions = _lint_substitutions(bundle)
+    if substitutions:
+        sample = ", ".join(substitutions[:10])
+        more = f" (+{len(substitutions) - 10} more)" if len(substitutions) > 10 else ""
+        raise BundleError(
+            f"bundle {bundle.module} {bundle.version} contains {len(substitutions)} "
+            f"substitution node(s) — RST substitutions must never reach the IR: "
+            f"{sample}{more}"
+        )
+
+    lint_warnings = _lint_missing_assets(bundle) + _lint_docstring_sentinels(bundle)
+    if not lint_warnings:
+        return
+    sample = ", ".join(lint_warnings[:10])
+    more = f" (+{len(lint_warnings) - 10} more)" if len(lint_warnings) > 10 else ""
+    msg = (
+        f"bundle {bundle.module} {bundle.version} has {len(lint_warnings)} "
+        f"lint issue(s): {sample}{more}"
+    )
+    if strict:
+        raise BundleError(msg)
+    log.warning(msg)

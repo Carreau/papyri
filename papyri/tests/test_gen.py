@@ -619,3 +619,19 @@ def test_numpydoc_unknown_section_does_not_raise() -> None:
         warnings.simplefilter("ignore", UserWarning)
         ndoc = NumpyDocString(doc)
     assert ndoc["Summary"] == ["Summary line."]
+
+
+def test_numpydoc_see_also_backticked_entries() -> None:
+    # `numpy.polynomial`-style (default-role backticked) See Also entries
+    # are legal RST; upstream numpydoc raises on them, which used to drop
+    # the whole docstring (numpy.polynomial.* module pages in the sweep).
+    doc = (
+        "Summary line.\n\n"
+        "See Also\n--------\n"
+        "`numpy.polynomial`\n"
+        "`foo`, `bar` : two at once\n"
+    )
+    ndoc = NumpyDocString(doc)
+    entries = [name for group in ndoc["See Also"] for (name, _role) in group[0]]
+    assert "numpy.polynomial" in entries
+    assert "foo" in entries and "bar" in entries

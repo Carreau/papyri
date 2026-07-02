@@ -30,6 +30,17 @@ from .ts import parse
 
 log = logging.getLogger("papyri")
 
+# A ``warn`` callback lets a handler report a malformed/unprocessable directive
+# through the gen-time ``Diagnostics`` collector (as ``W-malformed-directive``)
+# when one is available. Handlers built outside ``papyri gen`` (tests, the
+# standalone helpers in ``papyri.tests.utils``) fall back to ``_log_warn`` so
+# they still surface the message without a collector wired in.
+DirectiveWarn = Callable[[str], None]
+
+
+def _log_warn(msg: str) -> None:
+    log.warning(msg)
+
 
 def drop(argument: str, options: dict[str, str], content: str) -> list[Any]:
     """Directive handler that silently discards the directive and returns nothing.
@@ -166,19 +177,28 @@ def seealso_handler(argument: str, options: dict[str, str], content: str) -> lis
     return admonition_helper("seealso", argument, options, content)
 
 
-def _parse_int_option(options: dict[str, str], key: str, default: int = 0) -> int:
+def _parse_int_option(
+    options: dict[str, str],
+    key: str,
+    default: int = 0,
+    warn: DirectiveWarn = _log_warn,
+) -> int:
     raw = (options or {}).get(key)
     if raw is None:
         return default
     try:
         return int(str(raw).strip())
     except ValueError:
-        log.warning("list-table: option %r is not an integer: %r", key, raw)
+        warn(f"list-table: option {key!r} is not an integer: {raw!r}")
         return default
 
 
 def list_table_handler(
-    argument: str, options: dict[str, str], content: str
+    argument: str,
+    options: dict[str, str],
+    content: str,
+    *,
+    warn: DirectiveWarn = _log_warn,
 ) -> list[Any]:
     """Handler for the ``.. list-table::`` directive.
 
@@ -196,7 +216,7 @@ def list_table_handler(
     """
 
     if not content.strip():
-        log.warning("list-table: empty body; dropping directive")
+        warn("list-table: empty body; dropping directive")
         return []
 
     parsed = parse(content.encode(), qa="")
@@ -208,19 +228,15 @@ def list_table_handler(
                 break
 
     if bullet_list is None:
-        log.warning(
-            "list-table: body did not parse as a bullet list; dropping directive"
-        )
+        warn("list-table: body did not parse as a bullet list; dropping directive")
         return []
 
-    header_count = _parse_int_option(options or {}, "header-rows", 0)
+    header_count = _parse_int_option(options or {}, "header-rows", 0, warn=warn)
 
     rows: list[TableRow] = []
     for row_idx, outer_item in enumerate(bullet_list.children):
         if not isinstance(outer_item, ListItem):
-            log.warning(
-                "list-table: outer row %d is not a list item; skipping", row_idx
-            )
+            warn(f"list-table: outer row {row_idx} is not a list item; skipping")
             continue
         inner_list: BulletList | None = None
         for c in outer_item.children:
@@ -228,9 +244,8 @@ def list_table_handler(
                 inner_list = c
                 break
         if inner_list is None:
-            log.warning(
-                "list-table: row %d has no inner bullet list of cells; skipping",
-                row_idx,
+            warn(
+                f"list-table: row {row_idx} has no inner bullet list of cells; skipping"
             )
             continue
 
@@ -243,7 +258,7 @@ def list_table_handler(
         rows.append(TableRow(header=row_idx < header_count, children=tuple(cells)))
 
     if not rows:
-        log.warning("list-table: no rows parsed; dropping directive")
+        warn("list-table: no rows parsed; dropping directive")
         return []
 
     out: list[Any] = []
@@ -382,6 +397,7 @@ def make_plot_handler(
     version: str,
     execute: bool = False,
     qa: str = "plot",
+    warn: DirectiveWarn = _log_warn,
 ) -> Callable[[str, dict[str, str], str], list[Any]]:
     """Return a ``.. plot::`` directive handler bound to the given execution context.
 
@@ -401,9 +417,9 @@ def make_plot_handler(
     def plot_handler(argument: str, options: dict[str, str], content: str) -> list[Any]:
         script_file = (argument or "").strip()
         if script_file:
-            log.warning(
-                "plot directive: cannot embed external script %r at gen time; dropping",
-                script_file,
+            warn(
+                f"plot directive: cannot embed external script {script_file!r} "
+                "at gen time; dropping"
             )
             return []
         if not content or not content.strip():
@@ -429,9 +445,7 @@ def make_plot_handler(
                         )
                     )
             except Exception as exc:
-                log.warning(
-                    "plot directive: figure generation failed in %s: %s", qa, exc
-                )
+                warn(f"plot directive: figure generation failed in {qa}: {exc}")
 
         return nodes
 
@@ -488,7 +502,11 @@ def _parse_csv_row(line: str) -> list[str]:
 
 
 def csv_table_handler(
-    argument: str, options: dict[str, str], content: str
+    argument: str,
+    options: dict[str, str],
+    content: str,
+    *,
+    warn: DirectiveWarn = _log_warn,
 ) -> list[Any]:
     """Handler for ``.. csv-table::`` — CSV-formatted table directive.
 
@@ -513,7 +531,7 @@ def csv_table_handler(
         if cells:
             header_rows.append(TableRow(header=True, children=tuple(cells)))
 
-    header_count = _parse_int_option(opts, "header-rows", 0)
+    header_count = _parse_int_option(opts, "header-rows", 0, warn=warn)
 
     data_rows: list[TableRow] = []
     if content and content.strip():
@@ -531,7 +549,7 @@ def csv_table_handler(
 
     all_rows = header_rows + data_rows
     if not all_rows:
-        log.warning("csv-table: no rows parsed; dropping directive")
+        warn("csv-table: no rows parsed; dropping directive")
         return []
 
     out: list[Any] = []
@@ -547,6 +565,7 @@ def make_image_handler(
     module: str,
     version: str,
     doc_root: Path | None = None,
+    warn: DirectiveWarn = _log_warn,
 ) -> Callable[[str, dict[str, str], str], list[Any]]:
     """Return an ``.. image::`` directive handler bound to the given asset context.
 
@@ -596,28 +615,23 @@ def make_image_handler(
         # documentation root, not the current file's directory.
         if uri.startswith("/"):
             if doc_root is None or asset_store is None:
-                log.warning(
-                    "image directive: cannot embed root-relative path %r - "
-                    "no doc_root/asset_store available",
-                    uri,
+                warn(
+                    f"image directive: cannot embed root-relative path {uri!r} - "
+                    "no doc_root/asset_store available"
                 )
                 return [Image(url=uri, alt=alt)]
             img_path = (doc_root / uri.lstrip("/")).resolve()
         else:
             if doc_path is None or asset_store is None:
-                log.warning(
-                    "image directive: cannot embed local path %r - "
-                    "no doc_path/asset_store available (external URLs only)",
-                    uri,
+                warn(
+                    f"image directive: cannot embed local path {uri!r} - "
+                    "no doc_path/asset_store available (external URLs only)"
                 )
                 return [Image(url=uri, alt=alt)]
             img_path = (doc_path / uri).resolve()
 
         if not img_path.is_file():
-            log.warning(
-                "image directive: %s not found",
-                img_path,
-            )
+            warn(f"image directive: {img_path} not found")
             return [Image(url=uri, alt=alt)]
 
         asset_name = img_path.name
@@ -633,6 +647,7 @@ def make_figure_handler(
     module: str,
     version: str,
     doc_root: Path | None = None,
+    warn: DirectiveWarn = _log_warn,
 ) -> Callable[[str, dict[str, str], str], list[Any]]:
     """Return a ``.. figure::`` directive handler bound to the given asset context.
 
@@ -640,7 +655,9 @@ def make_figure_handler(
     caption in its body.  Path resolution is identical to ``make_image_handler``;
     the caption (if present) is appended as a ``Paragraph`` after the image node.
     """
-    image_handler = make_image_handler(doc_path, asset_store, module, version, doc_root)
+    image_handler = make_image_handler(
+        doc_path, asset_store, module, version, doc_root, warn=warn
+    )
 
     def figure_handler(
         argument: str, options: dict[str, str], content: str
@@ -659,6 +676,7 @@ def make_figure_handler(
 def make_include_handler(
     doc_path: Path | None,
     doc_root: Path | None,
+    warn: DirectiveWarn = _log_warn,
 ) -> "Callable[[str, dict[str, str], str], list[Any]]":
     """Return an ``.. include::`` directive handler bound to the given path context.
 
@@ -689,38 +707,35 @@ def make_include_handler(
 
         uri = (argument or "").strip()
         if not uri:
-            log.warning("include directive: no file argument given; dropping")
+            warn("include directive: no file argument given; dropping")
             return []
 
         if content and content.strip():
-            log.warning(
-                "include directive: unexpected body content for %r; "
-                "the include directive takes only a filename argument — dropping",
-                uri,
+            warn(
+                f"include directive: unexpected body content for {uri!r}; "
+                "the include directive takes only a filename argument — dropping"
             )
             return []
 
         if uri.startswith("/"):
             if doc_root is None:
-                log.warning(
-                    "include directive: cannot resolve root-relative path %r "
-                    "— no doc_root available",
-                    uri,
+                warn(
+                    f"include directive: cannot resolve root-relative path {uri!r} "
+                    "— no doc_root available"
                 )
                 return []
             inc_path = (doc_root / uri.lstrip("/")).resolve()
         else:
             if doc_path is None:
-                log.warning(
-                    "include directive: cannot resolve relative path %r "
-                    "— no doc_path available",
-                    uri,
+                warn(
+                    f"include directive: cannot resolve relative path {uri!r} "
+                    "— no doc_path available"
                 )
                 return []
             inc_path = (doc_path / uri).resolve()
 
         if not inc_path.is_file():
-            log.warning("include directive: %s not found; dropping", inc_path)
+            warn(f"include directive: {inc_path} not found; dropping")
             return []
 
         text = inc_path.read_text(encoding="utf-8", errors="replace")
@@ -728,16 +743,16 @@ def make_include_handler(
 
         # Line-range options (Python slice semantics handle negatives naturally).
         opts = options or {}
-        start_line: int = _parse_int_option(opts, "start-line", 0)
+        start_line: int = _parse_int_option(opts, "start-line", 0, warn=warn)
         end_line: int | None = None
         raw_end = opts.get("end-line")
         if raw_end is not None:
             try:
                 end_line = int(str(raw_end).strip())
             except ValueError:
-                log.warning(
-                    "include directive: :end-line: is not an integer: %r; ignoring",
-                    raw_end,
+                warn(
+                    f"include directive: :end-line: is not an integer: {raw_end!r}; "
+                    "ignoring"
                 )
 
         lines = lines[start_line:end_line]
@@ -748,10 +763,9 @@ def make_include_handler(
             joined = "".join(lines)
             idx = joined.find(start_after)
             if idx == -1:
-                log.warning(
-                    "include directive: :start-after: text %r not found; "
-                    "including entire (sliced) content",
-                    start_after,
+                warn(
+                    f"include directive: :start-after: text {start_after!r} not "
+                    "found; including entire (sliced) content"
                 )
             else:
                 lines = (joined[idx + len(start_after) :]).splitlines(keepends=True)
@@ -761,10 +775,9 @@ def make_include_handler(
             joined = "".join(lines)
             idx = joined.find(end_after)
             if idx == -1:
-                log.warning(
-                    "include directive: :end-after: text %r not found; "
-                    "including entire (sliced) content",
-                    end_after,
+                warn(
+                    f"include directive: :end-after: text {end_after!r} not found; "
+                    "including entire (sliced) content"
                 )
             else:
                 lines = (joined[: idx + len(end_after)]).splitlines(keepends=True)
@@ -776,7 +789,7 @@ def make_include_handler(
         try:
             sections = parse(final_text.encode(), qa="")
         except Exception as e:
-            log.warning("include directive: failed to parse %s: %s", inc_path, e)
+            warn(f"include directive: failed to parse {inc_path}: {e}")
             return []
 
         # Nested ``.. include::`` directives inside the parsed content must
@@ -785,7 +798,7 @@ def make_include_handler(
         # the handler bound at the outer scope (this closure's ``doc_path``)
         # and follow paths relative to the wrong file. Build an inner handler
         # bound to the included file's parent and pre-resolve them in place.
-        inner_handler = make_include_handler(inc_path.parent, doc_root)
+        inner_handler = make_include_handler(inc_path.parent, doc_root, warn=warn)
         for s in sections:
             _resolve_nested_includes(s, inner_handler)
 

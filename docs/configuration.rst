@@ -361,6 +361,17 @@ The diagnostic codes papyri currently emits:
      - ``warning``
      - An RST substitution uses a directive papyri can't represent in the
        IR; the substitution is dropped.
+   * - ``W-malformed-directive``
+     - ``warning``
+     - A block directive could not be fully processed (empty/unparseable
+       body, an ``image``/``include`` target that couldn't be embedded, a
+       malformed option, …); gen drops or degrades the directive rather than
+       aborting the object.
+   * - ``W-missing-github-slug``
+     - ``warning``
+     - A ``:ghpull:``/``:ghissue:`` role was used but ``[meta].github_slug``
+       is not set, so the reference renders as plain ``#N`` text instead of a
+       GitHub link.
    * - ``W-doctest-syntax``
      - ``error``
      - An example/doctest block could not be parsed into tokens.

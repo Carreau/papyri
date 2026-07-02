@@ -145,6 +145,19 @@ W_MODULE_DOCSTRING = _register(
     "numpydoc could not parse a module docstring; gen injects a visible "
     "'could not be parsed' sentinel instead of dropping the page.",
 )
+W_MALFORMED_DIRECTIVE = _register(
+    "W-malformed-directive",
+    Severity.WARNING,
+    "A block directive could not be fully processed (empty/unparseable body, "
+    "an image/include target that could not be embedded, a malformed option, "
+    "etc.); gen drops or degrades the directive rather than aborting the object.",
+)
+W_MISSING_GITHUB_SLUG = _register(
+    "W-missing-github-slug",
+    Severity.WARNING,
+    "A ':ghpull:'/':ghissue:' role was used but [meta].github_slug is not set, "
+    "so the reference is rendered as plain '#N' text instead of a GitHub link.",
+)
 
 
 def _validate_code(code: str) -> None:

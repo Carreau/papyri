@@ -222,11 +222,14 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
     and `py:function`/etc. are in `_SPHINX_ONLY_DIRECTIVES` as of the
     2026-05-01 audit.)
 
-- **Directive handlers should not read global state.** `:ghpull:` and
-  `:ghissue:` pull the GitHub slug from a module-level `_GITHUB_SLUG` in
-  `tree.py`, set at gen start via `set_github_slug()`. The registry should
-  pass the active `Config` into the handler call so handlers are pure
-  functions of `(value, ctx)`.
+- **Directive handlers should not read global state.** *Done for
+  `:ghpull:`/`:ghissue:`.* They no longer read a module-level `_GITHUB_SLUG`;
+  the slug is a per-visitor field threaded from `[meta].github_slug`, and the
+  roles are resolved in `DirectiveVisiter.replace_InlineRole` (emitting
+  `W-missing-github-slug` when unset). `set_github_slug()` and the globals are
+  removed. The broader goal — passing the active `Config`/context into every
+  directive handler so all handlers are pure functions of `(value, ctx)` —
+  remains open and folds into the `DirectiveContext` injection item below.
 - **Stateful directives need a proper context-injection API.** The
   `make_image_handler` factory is a workable stopgap: it closes over
   `doc_path`, `asset_store`, `module`, and `version` to give the handler
@@ -542,20 +545,40 @@ Tracked in [`viewer/PLAN.md`](viewer/PLAN.md).
     non-zero when any diagnostic resolves to `error`; `--no-error-on-warning`
     is the escape hatch. Resolved diagnostics are recorded in `papyri.json`
     under `diagnostics` (separate from the exception-based `errors`).
-  - Codes wired so far: `W-unresolved-ref`, `W-unsupported-substitution`
-    (tree.py), `W-doctest-syntax`, `W-doctest-exec`, `W-numpydoc-parse`,
+  - Codes wired so far: `W-unresolved-ref`, `W-unsupported-substitution`,
+    `W-malformed-directive`, `W-missing-github-slug` (tree.py),
+    `W-doctest-syntax`, `W-doctest-exec`, `W-numpydoc-parse`,
     `W-module-docstring` (gen.py). Docs: `docs/configuration.rst`
     `[global.diagnostics]` section + the CLI flag.
+  - `directives.py` malformed-directive warnings landed: `list-table`,
+    `csv-table`, `image`, `figure`, `include`, and `plot` recoverable failures
+    now flow through `Diagnostics` as `W-malformed-directive`. The handlers take
+    a `warn` callback (default `log.warning`); the visitor binds it to
+    `DirectiveVisiter._directive_warn` at registration (via `functools.partial`
+    for the two table handlers, a factory kwarg for the rest). Handlers built
+    outside gen (tests) keep logging plainly.
+  - `:ghpull:`/`:ghissue:` landed and de-globalized: the roles are resolved in
+    `DirectiveVisiter.replace_InlineRole` against a per-visitor `github_slug`
+    (threaded from `[meta].github_slug` at each `GenVisitor` construction) and
+    emit `W-missing-github-slug` when unset. The `_GITHUB_SLUG` /
+    `_WARNED_MISSING_SLUG` module globals and `set_github_slug()` are gone (this
+    also closes the ghpull/ghissue half of the "no global state" follow-up).
 
   *Still open:*
-  - Wire the remaining `log.warning` sites in `directives.py` and `ts.py`
-    (image/include/list-table/csv-table malformed-directive warnings, the
-    `:ghpull:`/`:ghissue:` missing-`github_slug` notice, the unparseable
-    interpreted-text fallbacks) through `Diagnostics`. These currently still
-    log plainly; they need the collector threaded into the free-function
-    handlers (overlaps with the `DirectiveContext` injection follow-up).
-  - Viewer "0 errors / N warnings" badge per bundle, reading the new
-    `diagnostics` manifest key.
+  - Wire the `log.warning` sites in `ts.py` (the unparseable interpreted-text /
+    hyperlink fallbacks) through `Diagnostics`. Blocked on a design wrinkle:
+    `ts.parse()` is `@functools.lru_cache`'d, so diagnostics emitted during
+    parsing only fire on a cache *miss* and `parse()` has no handle to the
+    Gen's `Diagnostics`. Doing this correctly means having the cached parse
+    return its warnings alongside the nodes so `parse()` can re-emit them on
+    every call — a real refactor of the TS visitor, tracked separately.
+  - Viewer "0 errors / N warnings" badge per bundle. Blocked on carrying the
+    counts through pack→ingest: `papyri.json`'s `diagnostics` key is a list of
+    dicts, but `pack._read_meta` only lifts *scalar* manifest keys into
+    `Bundle.extra`, so the diagnostics never reach the CBOR artifact or the
+    viewer today. Either add scalar `diagnostic_{error,warning}_count` manifest
+    keys (they'd flow through `extra` → `meta.cbor`) or carry the full records
+    as a typed `Bundle` field.
 
   The original proposal, for reference:
 

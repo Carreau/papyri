@@ -2373,3 +2373,11 @@ def test_figure_via_visitor_dispatch_external_url():
     # Should have at least the Image node.
     assert len(out) >= 1
     assert isinstance(out[0], Image)
+
+
+def test_import_solver_descriptor_without_module_attr() -> None:
+    # numpy.ufunc.reduce is a method descriptor with no usable
+    # __module__/__qualname__ pair; the attribute traversal itself proves
+    # the path exists, so the solver derives module:qualname from it.
+    pytest.importorskip("numpy")
+    assert DirectiveVisiter._import_solver("numpy.ufunc.reduce") == "numpy:ufunc.reduce"

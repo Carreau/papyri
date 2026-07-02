@@ -603,6 +603,34 @@ The handler callable must accept ``(argument, options, content)`` and
 return an IR node or ``None``.
 
 
+.. _config-roles:
+
+``[global.roles]``
+~~~~~~~~~~~~~~~~~~
+
+**Type:** ``dict[str, str]`` — default ``{}``
+
+Custom inline *role* handlers for project-local roles that papyri's
+built-in registry doesn't know (e.g. roles provided by a project's own
+Sphinx extension).  Keys are the bare role name as written in RST
+(``mpltype`` for ``:mpltype:`color```) or ``domain:role`` for
+domain-qualified roles; values are ``'module:callable'`` strings.  The
+handler receives the role body text and returns a list of IR nodes (or
+``None`` to fall through to the built-in behaviour).
+
+Three ready-made handlers cover the common cases:
+
+.. code:: toml
+
+   [global.roles]
+   mpltype  = 'papyri.directives:role_verbatim'  # render as inline code
+   somerole = 'papyri.directives:role_text'      # render as plain text
+   internal = 'papyri.directives:role_drop'      # drop entirely
+
+Without a mapping, an unknown role falls through to cross-reference
+resolution and typically reports ``W-unresolved-ref``.
+
+
 ``[meta]`` reference
 ---------------------
 

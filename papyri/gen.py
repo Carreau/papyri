@@ -1181,6 +1181,7 @@ class Gen:
                         execute=self.config.execute_doctests,
                         diagnostics=self.diagnostics,
                         github_slug=self._meta.get("github_slug"),
+                        roles=self.config.roles,
                     )
                     dv.collect_substitutions(*data)
                     blob.arbitrary = tuple(dv.visit(s) for s in data)
@@ -1703,6 +1704,7 @@ class Gen:
                     execute=self.config.execute_doctests,
                     diagnostics=self.diagnostics,
                     github_slug=self._meta.get("github_slug"),
+                    roles=self.config.roles,
                 )
                 dv.collect_substitutions(s)
                 s2 = dv.visit(s)
@@ -2105,6 +2107,7 @@ class Gen:
                     param_names=_param_names,
                     diagnostics=self.diagnostics,
                     github_slug=self._meta.get("github_slug"),
+                    roles=self.config.roles,
                 )
                 dv.collect_substitutions(
                     *arbitrary,

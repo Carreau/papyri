@@ -181,10 +181,6 @@ layers. Do not write CBOR into the bundle directory or JSON into the artifact.
   unresolved. Add a `[global.roles]` config table mirroring
   `[global.directives]` so projects can map custom roles (drop / plain-code /
   link template).
-- **Examples visitor has no known_refs.** `collect_examples_out` runs before
-  `collect_api_docs`, so example pages resolve refs with an empty known-refs
-  set. Either reorder (examples after API collection) or resolve example refs
-  lazily.
 - **numpydoc section fragments that tree-sitter cannot re-parse (#361).**
   `numpy.ma.core:MaskedArray.resize` stays excluded: the full docstring parses
   fine, but the numpydoc-section fragment gen re-parses trips
@@ -320,6 +316,8 @@ Newest areas first; each line names the key symbol/file.
   warn by default, error under `--strict`; sentinel check added to
   `lint_bundle` (closes the former "pack strict-mode / lint gaps" item).
 - examples/numpy.toml exclusions pruned to just MaskedArray.resize (#361).
+- Examples collected *after* API docs and their visitor now gets
+  `known_refs` + narrative target maps, so example pages cross-link.
 
 ### Gen-time diagnostics
 - Core framework: `Severity`, `DIAGNOSTICS` registry, `DiagnosticConfig`

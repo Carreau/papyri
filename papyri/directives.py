@@ -42,6 +42,45 @@ def _log_warn(msg: str) -> None:
     log.warning(msg)
 
 
+def role_verbatim(value: str) -> list[Any]:
+    """Role handler that renders the role body as plain inline code.
+
+    Register it for project-local roles that are formatting-only (no
+    cross-reference semantics), e.g. matplotlib's ``:mpltype:``::
+
+        [global.roles]
+        mpltype = 'papyri.directives:role_verbatim'
+
+    """
+    from .nodes import InlineCode
+
+    return [InlineCode(value)]
+
+
+def role_text(value: str) -> list[Any]:
+    """Role handler that renders the role body as plain text.
+
+    ::
+
+        [global.roles]
+        someprose = 'papyri.directives:role_text'
+
+    """
+    return [Text(value)]
+
+
+def role_drop(value: str) -> list[Any]:
+    """Role handler that discards the role entirely.
+
+    ::
+
+        [global.roles]
+        internalmarker = 'papyri.directives:role_drop'
+
+    """
+    return []
+
+
 def drop(argument: str, options: dict[str, str], content: str) -> list[Any]:
     """Directive handler that silently discards the directive and returns nothing.
 

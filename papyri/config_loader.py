@@ -61,6 +61,11 @@ class Config:
     directives: dict[str, str | dict[str, Any]] = dataclasses.field(
         default_factory=dict
     )
+    # ``[global.roles]`` table: project-local inline roles → handler qualname
+    # ("papyri.directives:role_verbatim" &c.). The handler receives the role
+    # body text and returns replacement nodes. Keys are the bare role name
+    # (":mpltype:") or "domain:role" for domain-qualified roles.
+    roles: dict[str, str] = dataclasses.field(default_factory=dict)
 
     def replace(self, **kwargs: Any) -> Config:
         return dataclasses.replace(self, **kwargs)

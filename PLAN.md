@@ -21,25 +21,28 @@ service ingests many and serves them from one place.
 ## Target shape
 
 - **`papyri gen`**: run per project, by each library maintainer in their own
-  CI or build environment. Produces a self-contained DocBundle on disk.
+  CI or build environment. Produces a self-contained DocBundle on disk. The
+  DocBundle at this stage is intentionally left as JSON and lenient on
+  errors/completeness, so other tools can operate on it for flexibility.
+- **`papyri pack`**: packs the DocBundle into the final IR artifact for
+  upload. This packed form is what should be standardized and exchangeable;
+  it must be linted and contain no errors.
 - **`papyri upload`**: ships the bundle to a viewer instance's
   `/api/bundle` endpoint, which runs the TypeScript ingest pipeline
   server-side to wire bundles into the cross-linked graph.
 - **`viewer/`**: TypeScript web renderer. Works locally for development and
   is built with the centralized service in mind — the intended rendering
   frontend for the hosted service, not just a local debug tool. Deployed as a
-- **`papyri gen`**: run per project, by each library maintainer in their own
-CI or build environment. Produces a self-contained DocBundle on disk. The docbundle at this stage is typically left as JSON and lenient on errors/completness to let potentially other tools run at this point for flexibility. 
-- **`papyri pack`** pack the doc bundle into the final IR for for upload, this packed for is the form that should be standardized and exchangeable and should contain no contain any errors and linted.
-- **`papyri upload`**: ships the bundle to a viewer instance's
-`/api/bundle` endpoint, which runs the TypeScript ingest pipeline
-server-side to wire bundles into the cross-linked graph.
-- **`viewer/`**: TypeScript web renderer. Works locally for development and
-  is built with the centralized service in mind — the intended rendering
-  frontend for the hosted service, not just a local debug tool. Deployed as a
   long-running Node.js server on a VPS. Milestone tracker: [`viewer/PLAN.md`](viewer/PLAN.md).
 - **`ingest/`**: TypeScript `papyri-ingest` package — the canonical
   ingestion engine, invoked by the viewer's upload endpoint.
+
+`papyri gen` is the *reference* producer, not the only intended one. The
+bundle format (schema + the invariants below) is the ecosystem contract;
+other producers may emerge — e.g. working from Markdown/MyST sources — and
+anything that emits a valid, linted bundle is a first-class citizen. Ingest
+validates and may reject (see invariants); it does not care who produced
+the bundle.
 
 The viewer lives in-tree while the IR is still in flux; co-locating producer
 and consumer lets us iterate across breaking changes in one PR. Splitting into
@@ -78,16 +81,46 @@ the raw archive.
 Applies to the IR in the raw archive (not the graphstore's internal form).
 - `LocalRef` means *this bundle*, always. Gen converts every relative ref,
   alias, and local name to a `LocalRef` before writing the IR.
-- Every cross-bundle reference is a `RefInfo` with a fully qualified
-  `(package, version, kind, path)`. No fuzzy strings, no unresolved aliases.
+- Every cross-bundle reference is a `RefInfo(package, version, kind, path)`.
+  The *name* half (`package`, `kind`, `path`) must be fully resolved — no
+  fuzzy strings, no unresolved aliases. The *version* field is late-bound:
+  `"?"` (resolve to the best available version at serve time) is the expected
+  value for the overwhelming majority of refs. An explicit version is an
+  opt-in **pin** for the rare doc that genuinely targets one release;
+  version-exact refs are *not* a goal, and gen must not bind refs to
+  whatever version happens to be installed in the build environment.
 - Ingest resolves `LocalRef`s to full keys and records live or dangling
   `RefInfo` links and an optimisation. A two-step ingest (build a ref map first) is an
   optimisation, not a correctness requirement.
+
+**No raw HTML in the IR.**
+The IR is semantic: producers express content as IR nodes, never as embedded
+HTML/CSS islands. Raw HTML breaks every non-HTML consumer (terminal /
+Jupyter rendering), cross-linking, and theming — it is one of the two
+failure modes that made building on docutils/MyST output intractable the
+first time (the other: links resolved too early; see the ref-classification
+invariant). Directives that only produce HTML get unwrapped, preserved
+verbatim as `Directive` nodes, or handled by a registered IR-producing
+handler — never passed through as markup. This applies to *any* producer,
+not just `papyri gen`.
 
 **RST substitutions never reach the IR.**
 The IR must never contain `SubstitutionDef` or `SubstitutionRef` nodes.
 Non-`replace::` substitution types (image, unicode) are warned and dropped;
 support can be added per demand.
+
+**Gen never silently discards directive body content.**
+Content preserved in the IR — even as a verbatim `Directive` node — can be
+recovered later by a renderer or ingest upgrade replayed against the archived
+bundle. Content dropped at gen time is unrecoverable without a maintainer
+re-`gen`: the one failure mode the derived-cache architecture cannot heal.
+So unknown directives are kept verbatim (`Directive.from_unprocessed`, the
+existing default path in `tree.py`). Dropping outright is allowed only for
+directives whose body carries no documentation content (`highlight`,
+`currentmodule`, `testsetup`/`testcleanup`, the `auto*` family).
+Container-style directives with real prose inside (tabs, grids, cards,
+dropdowns) must be *unwrapped* — wrapper discarded, body recursed — not
+dropped wholesale.
 
 **Encoding boundary.**
 The bundle directory (`papyri gen` output) is JSON — intentionally
@@ -113,6 +146,33 @@ layers. Do not write CBOR into the bundle directory or JSON into the artifact.
 
 - **PyPI republish?** Re-publish under a new version, or keep "install from
   git" only for the foreseeable future? Still open.
+- **Pinned-ref semantics at serve time.** When a `RefInfo` pins a version the
+  store doesn't hold: hard dangling link, or fall back to the best available
+  version with a "pinned to X, showing Y" indicator? (Lean fallback +
+  indicator — a pin expresses authorial intent, not a guarantee about what a
+  given service instance holds.) Related: does the pin stay an exact version,
+  or eventually admit a PEP 440 specifier ("changed in numpy 2.0" is `>=2.0`,
+  not `==2.0.1`)? *(2026-07: explicitly deferred until the pin path is
+  implemented.)*
+- **Second-producer experiment (MyST- or docutils-based).** An earlier
+  attempt to build papyri on top of docutils/MyST failed on two things:
+  links resolved too early, and content collapsing into HTML. Both are now
+  explicit producer requirements (the ref-classification and no-raw-HTML
+  invariants), and the coming schema gives an external producer something
+  concrete to target — so a retry becomes viable *as an alternative
+  producer* (a Sphinx builder or mystmd plugin emitting bundles for
+  Markdown/MyST-source projects), not as papyri's base. Worth attempting
+  once the schema exists; the IR → MyST exporter provides the round-trip
+  check.
+- **Terminal / Jupyter client architecture.** Terminal + JupyterLab rendering
+  is deferred, not dead, and it is on the critical path of the IPython
+  adoption wedge (`?` showing rich cross-linked docs is the demo nobody else
+  can match). When it comes back: thin client of the hosted service's JSON
+  API, or reader of a local store? Thin-client avoids reimplementing ingest
+  in Python but promotes the viewer's JSON endpoints to a public contract —
+  design them accordingly either way. *(2026-07 lean: deferred; offline is
+  desirable, but relying on the central service is acceptable if it's
+  solid — decide when the work starts.)*
 - **Future of `papyri find` / `describe` / `diff` / `debug`.** They work
   against the store the TypeScript pipeline writes, but the viewer is the
   user-facing replacement. Keep, trim, or drop?
@@ -151,7 +211,12 @@ layers. Do not write CBOR into the bundle directory or JSON into the artifact.
   (the `:ghpull:`/`:ghissue:` half is already done) and would let the
   factory-bound `warn` callbacks (malformed-directive diagnostics) become plain
   `ctx.warn`. Config-supplied handlers (`obj_from_qualname`) make the signature
-  change the delicate part.
+  change the delicate part. **End goal (decided 2026-07): this is the
+  foundation of a public registration API** — projects register their own
+  IR-producing handlers for their custom directives (via `papyri.toml` /
+  entry points): Sphinx's ahead-of-time registration model with the
+  HTML-output target fixed. `_SPHINX_ONLY_DIRECTIVES` and the built-in
+  handler set are a stopgap until third-party registration exists.
 - **`ts.py` diagnostics wiring.** The unparseable interpreted-text / hyperlink
   fallbacks in `ts.py` still `log.warning` plainly. Blocked on a design
   wrinkle: `ts.parse()` is `@functools.lru_cache`'d, so diagnostics emitted
@@ -159,9 +224,24 @@ layers. Do not write CBOR into the bundle directory or JSON into the artifact.
   Gen's `Diagnostics`. Correct fix: have the cached parse return its warnings
   alongside the nodes so `parse()` re-emits them on every call — a real refactor
   of the TS visitor.
-- **Per-reference version resolution.** Local references should carry explicit
-  versions; the invariant needs an enforcement point once cross-package version
-  data is threaded through.
+- **Per-reference version pins.** `"?"` is the expected version on almost all
+  refs (see the ref-classification invariant); what's missing is the opt-in
+  path for a doc to *pin* a specific version when it means one, plus an
+  enforcement point that pins are well-formed once cross-package version data
+  is threaded through.
+- **Triage `_SPHINX_ONLY_DIRECTIVES` per the no-silent-drop invariant.**
+  The frozenset in `tree.py` conflates three cases. Truly meta → keep
+  dropping (`highlight`, `currentmodule`, `testsetup`/`testcleanup`, the
+  `auto*` family). Layout containers → unwrap and recurse (`grid*`, `card*`,
+  `tab-set`/`tab-item`, `dropdown`, `button-*`): tabs and dropdowns routinely
+  hold unique prose (per-OS install instructions are the classic).
+  Handwritten py-domain directives (`py:function` &c. and the bare
+  `function`/`class`/… forms) are the biggest real loss: their bodies are API
+  documentation that exists nowhere else in the bundle (C-level or
+  dynamically-generated APIs the import-based collector can't see) — at
+  minimum unwrap, eventually real handling. `testcode`/`testoutput` render as
+  visible code blocks in Sphinx, so they are unwrap candidates too, not
+  drops.
 - **Builtin ref resolution at gen time.** Ship a Python-builtins bundle shim (a
   minimal DocBundle registering every builtin as a `RefInfo`); `papyri gen`
   emits builtin refs as ordinary cross-refs and ingest resolves them against the
@@ -182,6 +262,48 @@ layers. Do not write CBOR into the bundle directory or JSON into the artifact.
   manifest is read into `Bundle` via a freeform dict (`_read_meta` in
   `pack.py`). Represent it as a typed struct inside `Bundle` so the round-trip
   is fully typed from `pack.py` onward (mirror in `ingest.ts`'s `PapyriMeta`).
+
+## Open work — IR schema / encoding (cross-cutting)
+
+Decided (2026-07): the IR gets a machine-readable schema as the single
+source of truth, replacing "grep for `@register`" plus the hand-maintained
+mirrors in `encoder.ts` / `ir-types.ts` — settle this before a third IR
+consumer (the future terminal renderer) exists. Direction accepted in
+principle; firm up details when implementation starts:
+
+- **Schema.** One JSON Schema document — a fragment per node type,
+  discriminated union on a `"type"` field. `ir-types.ts` is generated from
+  it (`json-schema-to-typescript` or similar); the Python node classes are
+  either generated or conformance-tested against it. CI runs a golden
+  corpus of fixture documents that both languages must round-trip.
+- **Wire format.** Replace the CBOR numeric-tag registry with
+  type-discriminated JSON (`{"type": "Paragraph", …}`). The `.papyri`
+  artifact becomes a plain container (zip or tar.gz): `manifest.json`,
+  per-doc JSON files, raw asset bytes. Rationale: gzipped JSON ≈ gzipped
+  CBOR in size; the schema then validates the wire bytes *directly*, so
+  `pack --strict` and ingest share one validator; consumers need no CBOR
+  library or out-of-band tag map; the artifact is unzip-and-grep
+  inspectable (`papyri unpack` becomes near-trivial); and the viewer's
+  "encoding convergence" open question resolves — one encoding everywhere,
+  `ir-reader.ts` simplifies.
+- **Tuple vs list (tag 4444).** The one real thing CBOR tags bought was
+  encoding a Python-ism on the wire. Move it into the schema instead: the
+  schema declares which fields are tuples and the Python decoder coerces
+  on load. The wire format should not carry Python-isms.
+- **Boundary invariant rewrite.** When this lands, restate the "Encoding
+  boundary" invariant: the gen-dir vs artifact boundary was never really
+  JSON-vs-CBOR — it is *lenient staging output* vs *strict, linted,
+  schema-validated artifact*. That is the boundary worth enforcing.
+- **IR → MyST AST export: yes (decided 2026-07).** A one-way exporter is a
+  small tree transform once the JSON encoding lands; schedule it after the
+  schema exists. It doubles as a conformance tool if a MyST-based producer
+  emerges (round-trip testing between exporter and producer).
+- The schema is also what makes third-party *producers* possible (see
+  Target shape): a bundle is valid because it validates against the schema
+  and passes lint — not because `papyri gen` wrote it.
+
+Old raw archives in the CBOR format are re-generated, not migrated
+(pre-production rule: no old data matters).
 
 ## Open work — Viewer / ingest
 
@@ -216,9 +338,10 @@ layers. Do not write CBOR into the bundle directory or JSON into the artifact.
     raw archive to the main zone and re-ingests. Staged bundles skip the
     "latest backrefs only" dedup (they have none). Same upload auth as normal;
     viewing may optionally require login.
-  - *Open.* TTL/auto-eviction vs. explicit delete (lean explicit for v1);
-    whether a staged `GET /[pkg]/[ver]/` shows a warning banner (probably yes,
-    reuse the version-status banner).
+  - *Open.* Whether a staged `GET /[pkg]/[ver]/` shows a warning banner
+    (probably yes, reuse the version-status banner). Eviction: TTL /
+    auto-eviction is required, not optional — see "Adoption / CI
+    integration" below (PR-preview load makes staging storage unbounded).
   - *Files.* `ingest/src/ingest.ts` (flag, skip backref writes),
     `viewer/src/pages/api/bundle/[...path].ts`, graph-layer
     `listStagingBundles`/`dropStagingBundle`,
@@ -229,7 +352,6 @@ layers. Do not write CBOR into the bundle directory or JSON into the artifact.
   packages.
 - **Per-bundle → global search.** The manifest is per-bundle; a cross-bundle
   index would enable "find `linspace` across numpy and scipy".
-- **Static export hardening** for a `viewer/dist/` static deployment.
 - **Ingest-time precomputation (perf).** Two count queries still run at view
   time: precompute the broken-incoming-refs count into a `bundle_stats` row
   (badge on `/project/[pkg]/[ver]/`), and precompute the latest-linking-version
@@ -238,6 +360,41 @@ layers. Do not write CBOR into the bundle directory or JSON into the artifact.
   `ingest/` and `viewer/` maintain near-copies of graph-layer logic. Once the
   schema stabilises, move the shared bits into the package and have the viewer
   import them rather than re-implement.
+
+## Open work — Adoption / CI integration
+
+PR doc previews are the adoption wedge: a project that adds the papyri
+GitHub Action gets rendered previews of its own docs on every PR —
+single-player value, no other bundles required — and cross-package linking
+accrues as projects join for the previews. The build cost (imports, doctest
+execution, figure rendering, per-PR) lands on GitHub's free public-repo
+minutes; the service pays only for ingest + serve, which the VPS
+architecture already makes cheap. This is the structural cost advantage over
+central-build services (Read the Docs' largest cost is per-build — notably
+per-PR — compute). First adoption target: IPython. Operation/governance:
+personal VPS for now; revisit once IPython plus a few packages are live.
+Caveat: the free-compute
+argument holds for public repos on github.com; private repos and non-GitHub
+CI use the token path and pay their own compute.
+
+- **`papyri` GitHub Action.** One copy-pasteable job: install papyri +
+  project, `gen`, `pack`, `upload` to a viewer instance. Does not exist yet
+  (no `action.yml` anywhere in the repo). The bar is "works on the first try
+  in a repo whose tests already pass in CI" — every configuration knob is
+  adoption friction.
+- **OIDC (trusted-publishing-style) upload auth.** Fork PRs cannot see
+  repository secrets, so bearer-token upload silently fails for the most
+  common contribution flow, and `pull_request_target` is a known footgun.
+  Follow PyPI's trusted-publisher model: `PUT /api/bundle` verifies GitHub's
+  OIDC claim (repo, workflow, ref) and maps it to a project via a
+  `project → allowed claims` table in the auth DB; per-project tokens stay
+  as the non-GitHub fallback. Design this before the token scheme calcifies.
+- **Staging eviction is launch-blocking under PR-preview load.** Every push
+  to every PR of every enrolled repo uploads a bundle → unbounded storage.
+  Needs TTL / auto-eviction, one staging slot per PR (replaced on push,
+  dropped on merge/close), and a version naming scheme that can never shadow
+  a real release (e.g. `<base-version>+pr<N>.<sha>`). This supersedes the
+  "lean explicit delete for v1" note in the staging-area item above.
 
 ## Open work — Security / hosting
 

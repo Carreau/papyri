@@ -14,16 +14,24 @@ Splitting into a separate repo remains an option once the IR schema stabilizes.
 1. Serve browsable HTML for every ingested package/module/qualname.
 2. Consume the IR through an abstract storage layer — no Python-side
    rendering, no new intermediate format.
-3. Support both a local dev server (for working on papyri) and a static
-   export (for publishing a site from a given set of ingested bundles).
-4. Stay small. No authoring, no search backend, no database beyond what
-   papyri already provides.
+3. Be the rendering + ingest frontend for the hosted service: long-running
+   Node server, in-process upload, auth, per-project upload authorization.
+4. Stay a thin projection of the IR: the graphstore remains a derived,
+   rebuildable cache; IR-format knowledge stays confined to `ir-reader.ts`.
 
-## Non-goals (for v0)
+> The original v0 non-goals (no auth, no multi-tenant hosting, no full-text
+> search, no database beyond what papyri provides) were all overtaken as the
+> viewer became the hosted-service frontend: the separate auth DB,
+> per-project upload tokens, the admin panel, and full-text search now
+> exist. This section is updated to describe the project as it is, not as
+> v0 imagined it — keep it that way rather than letting scope drift
+> silently.
+
+## Non-goals
 
 - Running or re-executing examples.
-- Authentication, multi-tenant hosting, comments, edit-in-browser.
-- Full-text search. Start with qualname/prefix search; revisit later.
+- Authoring, comments, edit-in-browser.
+- Changing the IR format from inside the viewer (see Ground rules).
 
 ## Features
 
@@ -163,6 +171,11 @@ exist today, and there is no Cloudflare adapter, `wrangler.toml`, or
 
 ## Open questions
 
+- Static export: **parked** (decided 2026-07). Not an active deployment
+  target — the SSR server is the only story, and "static export hardening"
+  is off the open-work list. Worth re-adding later as a *local,
+  single-project* mode: a static snapshot is a good way to debug one
+  project's docs without running the full service.
 - Encoding convergence: if everything moves to a single encoding (CBOR or
   JSON), `ir-reader` gets simpler. Until then it handles both.
 - IR-drift policy: pin a "known-good" IR version, or accept best-effort

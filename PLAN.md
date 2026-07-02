@@ -134,14 +134,17 @@ layers. Do not write CBOR into the bundle directory or JSON into the artifact.
   indicator — a pin expresses authorial intent, not a guarantee about what a
   given service instance holds.) Related: does the pin stay an exact version,
   or eventually admit a PEP 440 specifier ("changed in numpy 2.0" is `>=2.0`,
-  not `==2.0.1`)?
+  not `==2.0.1`)? *(2026-07: explicitly deferred until the pin path is
+  implemented.)*
 - **Terminal / Jupyter client architecture.** Terminal + JupyterLab rendering
   is deferred, not dead, and it is on the critical path of the IPython
   adoption wedge (`?` showing rich cross-linked docs is the demo nobody else
   can match). When it comes back: thin client of the hosted service's JSON
   API, or reader of a local store? Thin-client avoids reimplementing ingest
   in Python but promotes the viewer's JSON endpoints to a public contract —
-  design them accordingly either way.
+  design them accordingly either way. *(2026-07 lean: deferred; offline is
+  desirable, but relying on the central service is acceptable if it's
+  solid — decide when the work starts.)*
 - **IR schema single source of truth.** Today the authoritative IR definition
   is "grep for `@register`", hand-mirrored in `encoder.ts` and
   `ir-types.ts`. A terminal renderer would be hand-maintained mirror number
@@ -280,7 +283,6 @@ layers. Do not write CBOR into the bundle directory or JSON into the artifact.
   packages.
 - **Per-bundle → global search.** The manifest is per-bundle; a cross-bundle
   index would enable "find `linspace` across numpy and scipy".
-- **Static export hardening** for a `viewer/dist/` static deployment.
 - **Ingest-time precomputation (perf).** Two count queries still run at view
   time: precompute the broken-incoming-refs count into a `bundle_stats` row
   (badge on `/project/[pkg]/[ver]/`), and precompute the latest-linking-version
@@ -300,7 +302,9 @@ execution, figure rendering, per-PR) lands on GitHub's free public-repo
 minutes; the service pays only for ingest + serve, which the VPS
 architecture already makes cheap. This is the structural cost advantage over
 central-build services (Read the Docs' largest cost is per-build — notably
-per-PR — compute). First adoption target: IPython. Caveat: the free-compute
+per-PR — compute). First adoption target: IPython. Operation/governance:
+personal VPS for now; revisit once IPython plus a few packages are live.
+Caveat: the free-compute
 argument holds for public repos on github.com; private repos and non-GitHub
 CI use the token path and pay their own compute.
 

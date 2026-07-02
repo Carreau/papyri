@@ -171,10 +171,11 @@ exist today, and there is no Cloudflare adapter, `wrangler.toml`, or
 
 ## Open questions
 
-- Static export: keep a `viewer/dist/` static deployment as a supported
-  story, or drop it? The SSR server with auth + SQLite is the primary and
-  only exercised deployment; "static export hardening" sits unowned in the
-  top-level plan. Decide explicitly rather than carry both.
+- Static export: **parked** (decided 2026-07). Not an active deployment
+  target — the SSR server is the only story, and "static export hardening"
+  is off the open-work list. Worth re-adding later as a *local,
+  single-project* mode: a static snapshot is a good way to debug one
+  project's docs without running the full service.
 - Encoding convergence: if everything moves to a single encoding (CBOR or
   JSON), `ir-reader` gets simpler. Until then it handles both.
 - IR-drift policy: pin a "known-good" IR version, or accept best-effort

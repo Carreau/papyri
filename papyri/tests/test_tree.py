@@ -2104,11 +2104,88 @@ def test_plot_handler_empty_body_returns_empty():
 
 
 def test_plot_handler_file_arg_drops_with_warning(caplog):
+    # No doc_path/doc_root bound → external scripts cannot be resolved.
     h = make_plot_handler(None, "pkg", "1.0", execute=False)
     with caplog.at_level("WARNING", logger="papyri"):
         out = h("examples/myplot.py", {}, "")
     assert out == []
     assert any("plot" in r.getMessage() for r in caplog.records)
+
+
+def test_plot_handler_embeds_external_script(tmp_path):
+    from papyri.nodes import Code
+
+    (tmp_path / "plots").mkdir()
+    script = tmp_path / "plots" / "myplot.py"
+    script.write_text("x = [1, 2, 3]\n")
+    h = make_plot_handler(None, "pkg", "1.0", execute=False, doc_path=tmp_path)
+    out = h("plots/myplot.py", {}, "A caption, not code.")
+    assert len(out) == 1
+    assert isinstance(out[0], Code)
+    assert out[0].value == "x = [1, 2, 3]\n"
+
+
+def test_plot_handler_embeds_root_relative_script(tmp_path):
+    from papyri.nodes import Code
+
+    (tmp_path / "root" / "plots").mkdir(parents=True)
+    script = tmp_path / "root" / "plots" / "myplot.py"
+    script.write_text("y = 1\n")
+    h = make_plot_handler(
+        None, "pkg", "1.0", execute=False, doc_path=tmp_path, doc_root=tmp_path / "root"
+    )
+    out = h("/plots/myplot.py", {}, "")
+    assert len(out) == 1
+    assert isinstance(out[0], Code)
+    assert out[0].value == "y = 1\n"
+
+
+def test_plot_handler_missing_script_warns(tmp_path, caplog):
+    h = make_plot_handler(None, "pkg", "1.0", execute=False, doc_path=tmp_path)
+    with caplog.at_level("WARNING", logger="papyri"):
+        out = h("nope.py", {}, "")
+    assert out == []
+    assert any("not found" in r.getMessage() for r in caplog.records)
+
+
+def test_plot_handler_doctest_body_executes_and_displays_prompts():
+    pytest.importorskip("matplotlib")
+    from papyri.nodes import Code, Figure
+
+    stored: dict[str, bytes] = {}
+    h = make_plot_handler(
+        asset_store=stored.__setitem__,
+        module="pkg",
+        version="1.0",
+        execute=True,
+        qa="pkg.mod",
+    )
+    code = ">>> plt.plot([1, 2])\n[<matplotlib.lines.Line2D ...>]\n"
+    out = h("", {}, code)
+    # Display keeps the doctest prompts verbatim.
+    assert isinstance(out[0], Code)
+    assert out[0].value == code
+    # Prompt-stripped source executed (plt pre-seeded) → a figure came out.
+    assert any(isinstance(n, Figure) for n in out)
+    assert stored
+
+
+def test_plot_handler_pre_seeds_np_and_plt():
+    pytest.importorskip("matplotlib")
+    from papyri.nodes import Figure
+
+    stored: dict[str, bytes] = {}
+    h = make_plot_handler(
+        asset_store=stored.__setitem__,
+        module="pkg",
+        version="1.0",
+        execute=True,
+        qa="pkg.mod",
+    )
+    # Uses np and plt without importing them — matplotlib's plot_pre_code
+    # default makes this valid in Sphinx docs.
+    out = h("", {}, "plt.plot(np.arange(3))")
+    assert any(isinstance(n, Figure) for n in out)
 
 
 def test_plot_registered_on_visitor():

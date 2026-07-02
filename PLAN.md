@@ -145,12 +145,6 @@ layers. Do not write CBOR into the bundle directory or JSON into the artifact.
   design them accordingly either way. *(2026-07 lean: deferred; offline is
   desirable, but relying on the central service is acceptable if it's
   solid — decide when the work starts.)*
-- **IR schema single source of truth.** Today the authoritative IR definition
-  is "grep for `@register`", hand-mirrored in `encoder.ts` and
-  `ir-types.ts`. A terminal renderer would be hand-maintained mirror number
-  three. Define the schema once (JSON Schema fragments per node, or similar)
-  with golden-file conformance tests both languages run — decide before a
-  third consumer exists.
 - **Future of `papyri find` / `describe` / `diff` / `debug`.** They work
   against the store the TypeScript pipeline writes, but the viewer is the
   user-facing replacement. Keep, trim, or drop?
@@ -189,7 +183,12 @@ layers. Do not write CBOR into the bundle directory or JSON into the artifact.
   (the `:ghpull:`/`:ghissue:` half is already done) and would let the
   factory-bound `warn` callbacks (malformed-directive diagnostics) become plain
   `ctx.warn`. Config-supplied handlers (`obj_from_qualname`) make the signature
-  change the delicate part.
+  change the delicate part. **End goal (decided 2026-07): this is the
+  foundation of a public registration API** — projects register their own
+  IR-producing handlers for their custom directives (via `papyri.toml` /
+  entry points): Sphinx's ahead-of-time registration model with the
+  HTML-output target fixed. `_SPHINX_ONLY_DIRECTIVES` and the built-in
+  handler set are a stopgap until third-party registration exists.
 - **`ts.py` diagnostics wiring.** The unparseable interpreted-text / hyperlink
   fallbacks in `ts.py` still `log.warning` plainly. Blocked on a design
   wrinkle: `ts.parse()` is `@functools.lru_cache`'d, so diagnostics emitted
@@ -235,6 +234,43 @@ layers. Do not write CBOR into the bundle directory or JSON into the artifact.
   manifest is read into `Bundle` via a freeform dict (`_read_meta` in
   `pack.py`). Represent it as a typed struct inside `Bundle` so the round-trip
   is fully typed from `pack.py` onward (mirror in `ingest.ts`'s `PapyriMeta`).
+
+## Open work — IR schema / encoding (cross-cutting)
+
+Decided (2026-07): the IR gets a machine-readable schema as the single
+source of truth, replacing "grep for `@register`" plus the hand-maintained
+mirrors in `encoder.ts` / `ir-types.ts` — settle this before a third IR
+consumer (the future terminal renderer) exists. Direction accepted in
+principle; firm up details when implementation starts:
+
+- **Schema.** One JSON Schema document — a fragment per node type,
+  discriminated union on a `"type"` field. `ir-types.ts` is generated from
+  it (`json-schema-to-typescript` or similar); the Python node classes are
+  either generated or conformance-tested against it. CI runs a golden
+  corpus of fixture documents that both languages must round-trip.
+- **Wire format.** Replace the CBOR numeric-tag registry with
+  type-discriminated JSON (`{"type": "Paragraph", …}`). The `.papyri`
+  artifact becomes a plain container (zip or tar.gz): `manifest.json`,
+  per-doc JSON files, raw asset bytes. Rationale: gzipped JSON ≈ gzipped
+  CBOR in size; the schema then validates the wire bytes *directly*, so
+  `pack --strict` and ingest share one validator; consumers need no CBOR
+  library or out-of-band tag map; the artifact is unzip-and-grep
+  inspectable (`papyri unpack` becomes near-trivial); and the viewer's
+  "encoding convergence" open question resolves — one encoding everywhere,
+  `ir-reader.ts` simplifies.
+- **Tuple vs list (tag 4444).** The one real thing CBOR tags bought was
+  encoding a Python-ism on the wire. Move it into the schema instead: the
+  schema declares which fields are tuples and the Python decoder coerces
+  on load. The wire format should not carry Python-isms.
+- **Boundary invariant rewrite.** When this lands, restate the "Encoding
+  boundary" invariant: the gen-dir vs artifact boundary was never really
+  JSON-vs-CBOR — it is *lenient staging output* vs *strict, linted,
+  schema-validated artifact*. That is the boundary worth enforcing.
+- Bonus: a `"type"`-discriminated JSON tree makes a one-way IR → MyST AST
+  exporter a small tree transform, if interop is ever wanted.
+
+Old raw archives in the CBOR format are re-generated, not migrated
+(pre-production rule: no old data matters).
 
 ## Open work — Viewer / ingest
 

@@ -117,6 +117,15 @@ W_UNRESOLVED_REF = _register(
     "target. Common across packages whose targets are not yet built, so it "
     "defaults to a warning; promote to error for a strictly clean bundle.",
 )
+W_UNRESOLVED_DEFAULT_ROLE = _register(
+    "W-unresolved-default-role",
+    Severity.INFO,
+    "Bare interpreted text (default role, no explicit :role:) did not "
+    "resolve to any object. Docstring authors routinely use bare backticks "
+    "for variable names, and Sphinx's autolink default role degrades to "
+    "plain text silently, so this defaults to info; promote per project if "
+    "bare backticks are expected to link.",
+)
 W_UNSUPPORTED_SUBSTITUTION = _register(
     "W-unsupported-substitution",
     Severity.WARNING,

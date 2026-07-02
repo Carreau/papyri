@@ -357,6 +357,13 @@ The diagnostic codes papyri currently emits:
      - A cross-reference could not be resolved to a local or cross-bundle
        target.  Common across not-yet-built packages, so it defaults to a
        warning; promote to ``error`` for a strictly clean bundle.
+   * - ``W-unresolved-default-role``
+     - ``info``
+     - Bare interpreted text (default role, no explicit ``:role:``) did not
+       resolve to any object.  Docstring authors routinely use bare
+       backticks for variable names, and Sphinx's ``autolink`` default role
+       degrades to plain text silently, so this defaults to ``info``;
+       promote it per project if bare backticks are expected to link.
    * - ``W-unsupported-substitution``
      - ``warning``
      - An RST substitution uses a directive papyri can't represent in the

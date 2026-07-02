@@ -15,6 +15,7 @@ from papyri.bundle import IR_SCHEMA_VERSION, PACK_FORMAT_VERSION, Bundle
 from papyri.node_base import TAG_MAP
 from papyri.pack import (
     BundleError,
+    _check_lint,
     explode_artifact_to_dir,
     explode_bundle_to_dir,
     find_orphan_docs,
@@ -1055,3 +1056,79 @@ def test_lint_bundle_multiple_issues() -> None:
     assert any("SubstitutionRef" in issue for issue in issues)
     assert any("missing1.png" in issue for issue in issues)
     assert any("missing2.png" in issue for issue in issues)
+
+
+def test_lint_bundle_detects_docstring_sentinel() -> None:
+    """A DocstringSentinel left by an unparseable module docstring is flagged."""
+    from papyri.doc import GeneratedDoc
+    from papyri.nodes import DocstringSentinel, Section
+
+    doc = GeneratedDoc.new()
+    doc._content = {
+        "Summary": Section([DocstringSentinel(message="numpydoc could not parse")], ())
+    }
+    bundle = _make_bundle_node(api={"mod": doc})
+
+    issues = lint_bundle(bundle)
+    assert len(issues) == 1
+    assert "docstring parse-failure sentinel" in issues[0]
+    assert "module/mod" in issues[0]
+
+
+# ---------------------------------------------------------------------------
+# _check_lint — pack-time enforcement of the lint checks.
+# ---------------------------------------------------------------------------
+
+
+def test_check_lint_substitutions_always_fatal() -> None:
+    """Substitution nodes violate an IR invariant — fatal even without --strict."""
+    from papyri.doc import GeneratedDoc
+    from papyri.nodes import Paragraph, Section, SubstitutionRef
+
+    doc = GeneratedDoc.new()
+    doc._content = {"summary": Section([Paragraph([SubstitutionRef("VAR")])], ())}
+    bundle = _make_bundle_node(api={"mod": doc})
+
+    with pytest.raises(BundleError) as excinfo:
+        _check_lint(bundle, strict=False)
+    assert "substitution" in str(excinfo.value)
+
+
+def test_check_lint_missing_asset_warns_by_default_raises_strict() -> None:
+    """Missing Figure assets warn on plain pack and fail under --strict."""
+    from papyri.doc import GeneratedDoc
+    from papyri.nodes import Figure, Paragraph, RefInfo, Section
+
+    doc = GeneratedDoc.new()
+    fig = Figure(value=RefInfo(None, None, "assets", "missing.png"))
+    doc._content = {"summary": Section([Paragraph([fig])], ())}
+    bundle = _make_bundle_node(examples={"ex": doc})
+
+    _check_lint(bundle, strict=False)  # no raise: warning only
+    with pytest.raises(BundleError) as excinfo:
+        _check_lint(bundle, strict=True)
+    assert "missing.png" in str(excinfo.value)
+
+
+def test_check_lint_docstring_sentinel_warns_by_default_raises_strict() -> None:
+    """Docstring-parse-failure sentinels warn on plain pack and fail under --strict."""
+    from papyri.doc import GeneratedDoc
+    from papyri.nodes import DocstringSentinel, Section
+
+    doc = GeneratedDoc.new()
+    doc._content = {
+        "Summary": Section([DocstringSentinel(message="numpydoc could not parse")], ())
+    }
+    bundle = _make_bundle_node(api={"mod": doc})
+
+    _check_lint(bundle, strict=False)  # no raise: warning only
+    with pytest.raises(BundleError) as excinfo:
+        _check_lint(bundle, strict=True)
+    assert "sentinel" in str(excinfo.value)
+
+
+def test_check_lint_clean_bundle_passes_strict() -> None:
+    """A clean bundle passes _check_lint in both modes."""
+    bundle = _make_bundle_node()
+    _check_lint(bundle, strict=False)
+    _check_lint(bundle, strict=True)

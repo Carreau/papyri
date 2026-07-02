@@ -1,8 +1,7 @@
 # Papyri plan
 
 Source of truth for scope and ordered work. Future sessions (human or agent)
-should keep it current: move finished items into the **Done log** at the
-bottom, keep **Open work** actionable, and update **Open questions** as
+should keep it current: delete finished items keep **Open work** actionable, and update **Open questions** as
 answers arrive. If this file contradicts `CLAUDE.md`, this file wins on scope.
 
 ## Why this project exists
@@ -29,6 +28,15 @@ service ingests many and serves them from one place.
 - **`viewer/`**: TypeScript web renderer. Works locally for development and
   is built with the centralized service in mind — the intended rendering
   frontend for the hosted service, not just a local debug tool. Deployed as a
+- **`papyri gen`**: run per project, by each library maintainer in their own
+CI or build environment. Produces a self-contained DocBundle on disk. The docbundle at this stage is typically left as JSON and lenient on errors/completness to let potentially other tools run at this point for flexibility. 
+- **`papyri pack`** pack the doc bundle into the final IR for for upload, this packed for is the form that should be standardized and exchangeable and should contain no contain any errors and linted.
+- **`papyri upload`**: ships the bundle to a viewer instance's
+`/api/bundle` endpoint, which runs the TypeScript ingest pipeline
+server-side to wire bundles into the cross-linked graph.
+- **`viewer/`**: TypeScript web renderer. Works locally for development and
+  is built with the centralized service in mind — the intended rendering
+  frontend for the hosted service, not just a local debug tool. Deployed as a
   long-running Node.js server on a VPS. Milestone tracker: [`viewer/PLAN.md`](viewer/PLAN.md).
 - **`ingest/`**: TypeScript `papyri-ingest` package — the canonical
   ingestion engine, invoked by the viewer's upload endpoint.
@@ -45,18 +53,16 @@ The boundary between the two halves:
 - Storage is abstracted: the viewer and ingest pipeline must not assume a
   specific on-disk layout or wire encoding. The current implementation uses
   SQLite for the cross-link graph (`SqliteGraphDb`) and a filesystem store for
-  blobs (`FsBlobStore` / `FsRawStore`). An earlier Cloudflare Workers (R2 + D1)
-  target was abandoned — ingest latency was far too high (per-object subrequest
-  fan-out against the Workers cap; see `viewer/PLAN.md`). The `BlobStore` /
-  `GraphDb` / `RawStore` interfaces are kept so a backend swap stays possible,
-  but those are the only implementations today.
+  blobs (`FsBlobStore` / `FsRawStore`). The `BlobStore` /
+  `GraphDb` / `RawStore` interfaces exist kept so a backend swap stays possible,
+  but this is the only implementations today.
 
 ## Invariants
 
 These must hold; treat a change that breaks one as a bug, not a trade-off.
 
 **Storage: the graphstore is a derived cache.**
-The DocBundle (`.papyri.gz` artifact produced by `papyri gen`, archived
+The DocBundle (`.papyri.gz` artifact produced by `papyri gen` and `papyri pack`, archived
 verbatim at `_raw/<pkg>/<ver>.papyri.gz`) is the **only** authoritative IR.
 Everything in the viewer's graphstore + blob store is a derived projection,
 rebuildable via `POST /api/reingest`. Consequence: **what ingest writes into
@@ -68,14 +74,14 @@ or migrates in lockstep with the renderer. Do not try to preserve
 round-trip-to-IR fidelity in the store; the round-trip is via re-ingest from
 the raw archive.
 
-**Gen owns all ref classification; ingest only links.**
+**Gen owns all ref classification; ingest only links. Ingest can _fail_ if it disagree and believe the uploaded bundle is incorrect.**
 Applies to the IR in the raw archive (not the graphstore's internal form).
 - `LocalRef` means *this bundle*, always. Gen converts every relative ref,
   alias, and local name to a `LocalRef` before writing the IR.
 - Every cross-bundle reference is a `RefInfo` with a fully qualified
   `(package, version, kind, path)`. No fuzzy strings, no unresolved aliases.
 - Ingest resolves `LocalRef`s to full keys and records live or dangling
-  `RefInfo` links. A two-step ingest (build a ref map first) is an
+  `RefInfo` links and an optimisation. A two-step ingest (build a ref map first) is an
   optimisation, not a correctness requirement.
 
 **RST substitutions never reach the IR.**

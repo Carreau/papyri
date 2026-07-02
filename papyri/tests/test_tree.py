@@ -859,6 +859,27 @@ def test_resolve_relative_ref_prefers_current_scope() -> None:
     assert r.path == "pkg.mod.foo"
 
 
+def test_narrative_context_resolves_relative_api_ref() -> None:
+    # A narrative doc key ("docs:overview") is not a Python path; refs in
+    # prose must resolve against the package root, so "mod.foo" inside a
+    # narrative page finds pkg.mod.foo among the bundle's API items.
+    v = DirectiveVisiter(
+        qa="docs:overview",
+        known_refs=frozenset({RefInfo("pkg", "1.0", "module", "pkg.mod.foo")}),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+        module="pkg",
+    )
+    role = InlineRole(domain=None, role=None, value="mod.foo")
+    out = v.replace_InlineRole(role)
+    assert len(out) == 1
+    cr = out[0]
+    assert isinstance(cr, CrossRef)
+    assert cr.reference == RefInfo("pkg", "1.0", "module", "pkg.mod.foo")
+    assert _unresolved_records(v) == []
+
+
 def test_resolve_dotted_ref_relative_to_current_module() -> None:
     # "sub.Klass.fit" mentioned in the pkg.mod module docstring must resolve
     # relative to pkg.mod itself. The pre-fix scope walk never tried the

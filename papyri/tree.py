@@ -1056,8 +1056,18 @@ class DirectiveVisiter(TreeReplacer):
 
         """
         assert isinstance(text, str)
+        # Narrative doc keys ("reference:ufuncs") are not Python paths under
+        # the package root; resolve those relative to the root module so the
+        # in-bundle scope walk and suffix search still apply.
+        qa = self.qa
+        if not (
+            qa == self.module
+            or qa.startswith(self.module + ".")
+            or qa.startswith(self.module + ":")
+        ):
+            qa = self.module
         return resolve_(
-            self.qa,
+            qa,
             self.known_refs,
             loc,
             text,

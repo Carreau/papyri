@@ -52,7 +52,14 @@ class NumpyDocString(nds.NumpyDocString):
         for k, v in self.aliases.items():
             if header.lower() in v:
                 return k
-        raise ValueError("Could not find match for section:", header)
+        # Not a recognizable numpydoc section ("Goals", "Usage", …) — return
+        # it unchanged and let upstream numpydoc handle it (warn + skip).
+        # Raising here failed the whole docstring: module docstrings got
+        # replaced by a parse-failure sentinel and non-module objects were
+        # dropped from the bundle entirely, both far worse than losing one
+        # free-form section from the structured data (modules keep the full
+        # text via the ts.parse "arbitrary" sections anyway).
+        return header
 
     def _read_sections(self) -> Iterator[tuple[str, Any]]:
         for name, data in super()._read_sections():

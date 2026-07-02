@@ -605,3 +605,17 @@ def test_lenient_narrative_skip_drops_doc_and_continues(
     # The failing page was skipped; the valid sibling survived.
     assert "index" not in gen.docs
     assert "page" in gen.docs
+
+
+def test_numpydoc_unknown_section_does_not_raise() -> None:
+    # Free-form section headings ("Goals", "Usage") are common in module
+    # docstrings. The lenient NumpyDocString must not raise on them —
+    # raising replaced module docstrings with a parse-failure sentinel and
+    # dropped non-module objects from the bundle entirely.
+    import warnings
+
+    doc = "Summary line.\n\nGoals\n-----\nSome free-form prose.\n"
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        ndoc = NumpyDocString(doc)
+    assert ndoc["Summary"] == ["Summary line."]

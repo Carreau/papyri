@@ -986,13 +986,21 @@ class Gen:
                     docstring=example_code,
                 )
                 if config.execute_doctests:
+                    # catch_warnings must enclose the run itself: it both
+                    # applies the ignore filter to the executed example and
+                    # keeps any warnings-filter mutation made *by* example
+                    # code (e.g. simplefilter("error")) from leaking into
+                    # the rest of the gen process — a leaked "error" filter
+                    # turned numpydoc's benign "Unknown section" UserWarning
+                    # into module-docstring parse failures for every module
+                    # processed afterwards.
                     with warnings.catch_warnings():
                         warnings.filterwarnings(
                             "ignore",
                             message="is non-interactive, and thus cannot be shown",
                             category=UserWarning,
                         )
-                    doctest_runner.run(doctests, out=debugprint, clear_globs=False)
+                        doctest_runner.run(doctests, out=debugprint, clear_globs=False)
                     doctest_runner.globs.update(doctests.globs)
                     example_section_data.extend(
                         doctest_runner.get_example_section_data()

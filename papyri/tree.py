@@ -653,6 +653,7 @@ class DirectiveVisiter(TreeReplacer):
         param_names: frozenset[str] | set[str] | None = None,
         diagnostics: Diagnostics | None = None,
         github_slug: str | None = None,
+        roles: dict[str, str] | None = None,
     ):
         """
         qa: str
@@ -724,6 +725,13 @@ class DirectiveVisiter(TreeReplacer):
                 self._handlers[k] = obj_from_qualname(
                     handler_ref, ctor_args, ctor_kwargs
                 )
+
+        # ``[global.roles]`` — project-local inline roles ("mpltype" or
+        # "domain:role") mapped to a handler that receives the role body.
+        # Consulted in ``replace_InlineRole`` before the built-in registry.
+        self._role_handlers: dict[str, Callable[[str], list[Any] | None]] = {
+            k: obj_from_qualname(v) for k, v in (roles or {}).items()
+        }
 
         self.known_refs = frozenset(known_refs)
         self.local_refs = frozenset(local_refs)
@@ -1136,6 +1144,18 @@ class DirectiveVisiter(TreeReplacer):
             role = "py"
         if domain == "py" and role in _GH_ROLE_PATH_SEGMENT:
             return self._gh_link_or_warn(role, directive.value)
+        # Config-supplied role handlers ([global.roles]) win over the
+        # built-in registry; keyed by bare role name or "domain:role".
+        if self._role_handlers and directive.role is not None:
+            key = (
+                f"{directive.domain}:{directive.role}"
+                if directive.domain
+                else directive.role
+            )
+            if (rh := self._role_handlers.get(key)) is not None:
+                res = rh(directive.value)
+                if res is not None:
+                    return res
         domain_handler: dict[str, list[Handler]] = DIRECTIVE_MAP.get(domain, {})
         handlers: list[Handler] = domain_handler.get(role, [])
         for h in handlers:

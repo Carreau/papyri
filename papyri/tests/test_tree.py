@@ -2439,3 +2439,40 @@ def test_unresolved_default_role_uses_quiet_code() -> None:
     v2.replace_InlineRole(InlineRole(domain=None, role="func", value="nope"))
     codes2 = [r["code"] for r in v2.diagnostics.records]
     assert codes2 == [W_UNRESOLVED_REF]
+
+
+def test_config_role_handler_dispatch() -> None:
+    # [global.roles] maps a project-local role to a handler; it wins over
+    # the resolve path and emits no diagnostics.
+    from papyri.nodes import Text as TextNode
+
+    v = DirectiveVisiter(
+        qa="pkg.mod",
+        known_refs=frozenset(),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+        roles={"mpltype": "papyri.directives:role_verbatim"},
+    )
+    out = v.replace_InlineRole(InlineRole(domain=None, role="mpltype", value="color"))
+    assert len(out) == 1
+    assert isinstance(out[0], InlineCode)
+    assert out[0].value == "color"
+    assert v.diagnostics.records == []
+
+    # role_text / role_drop variants
+    v2 = DirectiveVisiter(
+        qa="pkg.mod",
+        known_refs=frozenset(),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+        roles={
+            "prose": "papyri.directives:role_text",
+            "gone": "papyri.directives:role_drop",
+        },
+    )
+    out2 = v2.replace_InlineRole(InlineRole(domain=None, role="prose", value="hi"))
+    assert isinstance(out2[0], TextNode)
+    out3 = v2.replace_InlineRole(InlineRole(domain=None, role="gone", value="x"))
+    assert out3 == []

@@ -1097,9 +1097,22 @@ class DirectiveVisiter(TreeReplacer):
         if not all(are_id):
             return None
         else:
-            target_qa = full_qual(_obj_from_path(parts))
+            target = _obj_from_path(parts)
+            target_qa = full_qual(target)
             if target_qa is not None:
                 return target_qa
+            if target is not None:
+                # Objects with no usable __module__/__qualname__ (e.g. method
+                # descriptors like numpy.ufunc.reduce): the successful
+                # attribute traversal itself proves the path exists, so derive
+                # module:qualname from the longest imported module prefix.
+                import sys
+
+                for i in range(len(parts), 0, -1):
+                    mod = ".".join(parts[:i])
+                    if mod in sys.modules:
+                        qual = ".".join(parts[i:])
+                        return FullQual(f"{mod}:{qual}") if qual else FullQual(mod)
 
         # Builtin fallback: names like True, False, None, repr, KeyError, dict
         # that belong to the `builtins` module.  full_qual() returns None for

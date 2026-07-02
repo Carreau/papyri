@@ -332,10 +332,12 @@ def gen_main(
     g.log.info("Target package is %s-%s", target_module_name, g.version)
     g.log.info("Will write data to %s", target_dir)
 
-    if examples:
-        g.collect_examples_out()
     if api:
         g.collect_api_docs(target_module_name, limit_to=limit_to)
+    if examples:
+        # After API collection, so example pages resolve refs against the
+        # bundle's known objects instead of an empty set.
+        g.collect_examples_out()
     if narrative:
         g.collect_narrative_docs()
 
@@ -1687,14 +1689,17 @@ class Gen:
                     None,
                 )
                 s = processed_example_data(s)
+                _, doc_targets, external_targets, _ = self._scan_narrative_sources()
                 dv = GenVisitor(
                     example.name,
-                    frozenset(),
+                    self._known_refs,
                     local_refs=frozenset(),
                     aliases={},
                     version=self.version,
                     config=self.config.directives,
                     module=self.root,
+                    doc_targets=doc_targets,
+                    external_targets=external_targets,
                     execute=self.config.execute_doctests,
                     diagnostics=self.diagnostics,
                     github_slug=self._meta.get("github_slug"),

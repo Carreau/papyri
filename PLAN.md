@@ -99,28 +99,30 @@ HTML/CSS islands. Raw HTML breaks every non-HTML consumer (terminal /
 Jupyter rendering), cross-linking, and theming — it is one of the two
 failure modes that made building on docutils/MyST output intractable the
 first time (the other: links resolved too early; see the ref-classification
-invariant). Directives that only produce HTML get unwrapped, preserved
-verbatim as `Directive` nodes, or handled by a registered IR-producing
-handler — never passed through as markup. This applies to *any* producer,
-not just `papyri gen`.
+invariant). Directives that only produce HTML get unwrapped, dropped by
+explicit policy, or handled by a registered IR-producing handler — never
+passed through as markup, and never smuggled in as raw directives either
+(see the directive invariant below). This applies to *any* producer, not
+just `papyri gen`.
 
 **RST substitutions never reach the IR.**
 The IR must never contain `SubstitutionDef` or `SubstitutionRef` nodes.
 Non-`replace::` substitution types (image, unicode) are warned and dropped;
 support can be added per demand.
 
-**Gen never silently discards directive body content.**
-Content preserved in the IR — even as a verbatim `Directive` node — can be
-recovered later by a renderer or ingest upgrade replayed against the archived
-bundle. Content dropped at gen time is unrecoverable without a maintainer
-re-`gen`: the one failure mode the derived-cache architecture cannot heal.
-So unknown directives are kept verbatim (`Directive.from_unprocessed`, the
-existing default path in `tree.py`). Dropping outright is allowed only for
-directives whose body carries no documentation content (`highlight`,
-`currentmodule`, `testsetup`/`testcleanup`, the `auto*` family).
-Container-style directives with real prose inside (tabs, grids, cards,
-dropdowns) must be *unwrapped* — wrapper discarded, body recursed — not
-dropped wholesale.
+**No directive reaches the packed IR; none is silently discarded.**
+Directives are a source-format construct (an RST-ism — MyST has its own):
+they must not leak into the packed artifact, for the same reason
+Python-isms must not leak into the wire encoding. Gen keeps unhandled
+directives verbatim in the *lenient* bundle directory
+(`Directive.from_unprocessed` — inspectable, available to tooling), but
+`papyri pack` / `papyri lint` fail while any `Directive` node remains.
+Every directive must be explicitly handled by then: by a built-in handler,
+a project-registered handler (see the `DirectiveContext` plugin API), or an
+explicit maintainer decision to unwrap or drop (via config). Dropping is
+legitimate when *chosen* — never as a silent default. The "not silently
+discarded" guarantee is enforced at the strict boundary (pack/lint), not by
+preserving raw directives in the artifact.
 
 **Encoding boundary.**
 The bundle directory (`papyri gen` output) is JSON — intentionally
@@ -229,19 +231,24 @@ layers. Do not write CBOR into the bundle directory or JSON into the artifact.
   path for a doc to *pin* a specific version when it means one, plus an
   enforcement point that pins are well-formed once cross-package version data
   is threaded through.
-- **Triage `_SPHINX_ONLY_DIRECTIVES` per the no-silent-drop invariant.**
-  The frozenset in `tree.py` conflates three cases. Truly meta → keep
-  dropping (`highlight`, `currentmodule`, `testsetup`/`testcleanup`, the
-  `auto*` family). Layout containers → unwrap and recurse (`grid*`, `card*`,
-  `tab-set`/`tab-item`, `dropdown`, `button-*`): tabs and dropdowns routinely
-  hold unique prose (per-OS install instructions are the classic).
-  Handwritten py-domain directives (`py:function` &c. and the bare
-  `function`/`class`/… forms) are the biggest real loss: their bodies are API
+- **Enforce the directive invariant.** Three parts. (a) `papyri lint` /
+  `pack` fail on any `Directive` node remaining in the bundle — a check on
+  bundle *content*, not on gen-time error records (the reverted gate in the
+  done log gated on stale records; this doesn't). (b) Config grows an
+  explicit per-project directive policy (declare `drop` / `unwrap` per
+  directive name) so maintainers can decide without writing a handler.
+  (c) Triage the built-in defaults in `_SPHINX_ONLY_DIRECTIVES`, which
+  conflates three cases: truly meta → drop (`highlight`, `currentmodule`,
+  `testsetup`/`testcleanup`, the `auto*` family); layout containers →
+  unwrap and recurse (`grid*`, `card*`, `tab-set`/`tab-item`, `dropdown`,
+  `button-*`) — tabs and dropdowns routinely hold unique prose (per-OS
+  install instructions are the classic); handwritten py-domain directives
+  (`py:function` &c. and the bare `function`/`class`/… forms) carry API
   documentation that exists nowhere else in the bundle (C-level or
   dynamically-generated APIs the import-based collector can't see) — at
-  minimum unwrap, eventually real handling. `testcode`/`testoutput` render as
-  visible code blocks in Sphinx, so they are unwrap candidates too, not
-  drops.
+  minimum unwrap, eventually real handling. `testcode`/`testoutput` render
+  as visible code blocks in Sphinx, so they default to unwrap-to-code-block,
+  not drop.
 - **Builtin ref resolution at gen time.** Ship a Python-builtins bundle shim (a
   minimal DocBundle registering every builtin as a `RefInfo`); `papyri gen`
   emits builtin refs as ordinary cross-refs and ingest resolves them against the

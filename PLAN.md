@@ -113,11 +113,14 @@ support can be added per demand.
 **No directive reaches the packed IR; none is silently discarded.**
 Directives are a source-format construct (an RST-ism — MyST has its own):
 they must not leak into the packed artifact, for the same reason
-Python-isms must not leak into the wire encoding. Gen keeps unhandled
-directives verbatim in the *lenient* bundle directory
-(`Directive.from_unprocessed` — inspectable, available to tooling), but
+Python-isms must not leak into the wire encoding. Target state: gen keeps
+unhandled directives verbatim in the *lenient* bundle directory
+(`Directive.from_unprocessed` — inspectable, available to tooling), and
 `papyri pack` / `papyri lint` fail while any `Directive` node remains.
-Every directive must be explicitly handled by then: by a built-in handler,
+(Current code differs: `Directive` is an `UnserializableNode` with
+`_reject_at_validate`, so gen hard-fails instead — the strictness sits one
+stage too early; see the enforcement item below.)
+Every directive must be explicitly handled by pack time: by a built-in handler,
 a project-registered handler (see the `DirectiveContext` plugin API), or an
 explicit maintainer decision to unwrap or drop (via config). Dropping is
 legitimate when *chosen* — never as a silent default. The "not silently
@@ -155,7 +158,9 @@ layers. Do not write CBOR into the bundle directory or JSON into the artifact.
   given service instance holds.) Related: does the pin stay an exact version,
   or eventually admit a PEP 440 specifier ("changed in numpy 2.0" is `>=2.0`,
   not `==2.0.1`)? *(2026-07: explicitly deferred until the pin path is
-  implemented.)*
+  implemented. Note: no pin pathway exists anywhere in gen today — no role
+  syntax, directive option, or config knob — deferred by design; recorded
+  so the invariant isn't read as implying one exists.)*
 - **Second-producer experiment (MyST- or docutils-based).** An earlier
   attempt to build papyri on top of docutils/MyST failed on two things:
   links resolved too early, and content collapsing into HTML. Both are now
@@ -219,52 +224,150 @@ layers. Do not write CBOR into the bundle directory or JSON into the artifact.
   entry points): Sphinx's ahead-of-time registration model with the
   HTML-output target fixed. `_SPHINX_ONLY_DIRECTIVES` and the built-in
   handler set are a stopgap until third-party registration exists.
+  2026-07 review specifics: real closure usage shows ctx needs, beyond the
+  minimum list above, `doc_root` (image/figure/include), `qa` (plot + every
+  warn emission), the `execute` flag (plot), and the invoked directive's
+  *name* (fixes the old TODO in `directives.py`; lets one handler serve
+  several names). Config-registered handlers currently receive *zero*
+  bundle state — not even the `warn` callback built-ins get via `partial` —
+  so pass ctx at the single dispatch site in `replace_UnprocessedDirective`
+  rather than partial-binding at registration. Add error isolation at
+  dispatch: a failing user handler should emit a coded diagnostic
+  (`E-directive-handler-failed`) and fall back to
+  `Directive.from_unprocessed`, not abort gen (which `early_error=True`
+  does today). Resolve and validate the handler registry once per gen run —
+  today `obj_from_qualname` re-imports/re-instantiates per documented
+  object and never checks callability — which is also where entry-point
+  registered handlers merge in later. Move the module globals onto ctx:
+  `_plot_counter` (non-reproducible `fig-plot-N.png` asset names across
+  runs in one process) and `_MISSING_DIRECTIVES`.
 - **`ts.py` diagnostics wiring.** The unparseable interpreted-text / hyperlink
   fallbacks in `ts.py` still `log.warning` plainly. Blocked on a design
   wrinkle: `ts.parse()` is `@functools.lru_cache`'d, so diagnostics emitted
   during parsing fire only on a cache *miss*, and `parse()` has no handle to the
   Gen's `Diagnostics`. Correct fix: have the cached parse return its warnings
   alongside the nodes so `parse()` re-emits them on every call — a real refactor
-  of the TS visitor.
+  of the TS visitor. The 2026-07 review upgraded this from cleanup to
+  **correctness bug**: the cache returns shared *mutable* node trees with no
+  defensive copy, and `TreeReplacer.generic_visit` (`tree.py`) plus the
+  include handler (`_resolve_nested_includes`, `directives.py`) mutate
+  `children` in place — two documents with byte-identical source text share
+  one tree, and the second sees the first's visited state. Also
+  `_parse_cached` constructs `TSVisitor(text, "")`, so qa context is lost
+  even on cache *misses* and parse warnings always print `in ()`. Extended
+  fix shape: the cached function returns an immutable `(sections, warnings)`
+  payload; `parse(text, qa, warn=…)` deep-copies (or rebuilds) the tree
+  before handing it to mutating visitors and re-emits each warning with qa
+  attached, routing to Diagnostics when a warn callback is passed.
 - **Per-reference version pins.** `"?"` is the expected version on almost all
   refs (see the ref-classification invariant); what's missing is the opt-in
   path for a doc to *pin* a specific version when it means one, plus an
   enforcement point that pins are well-formed once cross-package version data
   is threaded through.
-- **Enforce the directive invariant.** Three parts. (a) `papyri lint` /
-  `pack` fail on any `Directive` node remaining in the bundle — a check on
-  bundle *content*, not on gen-time error records (the reverted gate in the
-  done log gated on stale records; this doesn't). (b) Config grows an
-  explicit per-project directive policy (declare `drop` / `unwrap` per
-  directive name) so maintainers can decide without writing a handler.
+- **Enforce the directive invariant.** Four parts, sharpened by the
+  2026-07 gen conformance review.
+  (a) Invert the strictness boundary first: make `Directive` a normal
+  registered, JSON-serializable staging node (drop `_reject_at_validate`
+  and the fail-fast docstring in `nodes.py`), then add a leftover-Directive
+  scan to `lint_bundle`'s node loop and run it on the pack path — today the
+  check is unimplementable because a `Directive` can never be read back
+  from disk. A check on bundle *content*, not gen-time error records (the
+  reverted gate in the done log gated on stale records; this doesn't).
+  (b) Config: teach the `[global.directives]` value parser (the
+  `obj_from_qualname` loop in `tree.py`) to accept literal `"drop"` /
+  `"unwrap"` — the unwrap primitive already exists (`container_handler`,
+  `directives.py`); `"drop"` maps to a diagnostics-emitting drop handler.
   (c) Triage the built-in defaults in `_SPHINX_ONLY_DIRECTIVES`, which
   conflates three cases: truly meta → drop (`highlight`, `currentmodule`,
   `testsetup`/`testcleanup`, the `auto*` family); layout containers →
-  unwrap and recurse (`grid*`, `card*`, `tab-set`/`tab-item`, `dropdown`,
-  `button-*`) — tabs and dropdowns routinely hold unique prose (per-OS
-  install instructions are the classic); handwritten py-domain directives
-  (`py:function` &c. and the bare `function`/`class`/… forms) carry API
-  documentation that exists nowhere else in the bundle (C-level or
-  dynamically-generated APIs the import-based collector can't see) — at
-  minimum unwrap, eventually real handling. `testcode`/`testoutput` render
-  as visible code blocks in Sphinx, so they default to unwrap-to-code-block,
-  not drop.
+  unwrap via `container_handler` (`grid*`, `card*`, `tab-set`/`tab-item`,
+  `dropdown`, `button-*`) — tabs and dropdowns routinely hold unique prose
+  (per-OS install instructions are the classic); handwritten py-domain
+  directives (`py:function` &c. and the bare `function`/`class`/… forms)
+  carry API documentation that exists nowhere else in the bundle — at
+  minimum unwrap (argument as signature line + parsed body), eventually
+  real handling. `testcode`/`testoutput` render as visible code blocks in
+  Sphinx → map to the existing `code_handler`, not drop (the set's comment
+  currently asserts the opposite).
+  (d) No drop is silent: register a `W-dropped-directive` diagnostic and
+  emit it for every `_SPHINX_ONLY_DIRECTIVES` hit (today: bare `log.info`),
+  and give `raw_handler`/`only_handler` the same `warn=` binding as the
+  other free-function handlers so their drops reach Diagnostics too.
+- **See-also refs ship placeholder RefInfo into the packed IR.** `doc.py`
+  emits `RefInfo("current-module", "current-version", "to-resolve", name)`
+  and gen replaces it only for same-bundle targets; every cross-package
+  see-also keeps the fake literals through pack, and the viewer
+  special-cases them (`xref.ts`). The `CrossRef` docstring also promises an
+  "ingest relink pass" that does not exist anywhere in `ingest/src`. Fix:
+  classify in gen (emit `RefInfo(pkg, "?", "module", path)` via the import
+  solver; a well-defined missing form otherwise), have pack/lint reject
+  `kind="to-resolve"`, rewrite the docstring, then delete the viewer
+  special-cases. Clearest current violation of "no fuzzy strings".
+- **`resolve_` emits `RefInfo(None, None, …)`; ingest repairs it.** The
+  "missing"/"local" branches return None module/version; the "local" ones
+  reach the IR (module=None never matches the LocalRef conversion) and TS
+  ingest papers over gen's Nones with `?? "?"` (`visitor.ts`). Gen should
+  emit the canonical forms itself (LocalRef for same-bundle, a defined
+  missing shape otherwise) so ingest can *fail* on malformed refs instead
+  of fixing them, per the invariant. Related doc rot: `pack.py` cites
+  `Gen._relink_dangling_local_refs`, which doesn't exist, and `LocalRef`'s
+  "guaranteed to exist" docstring is not upheld by any gen-side pass.
+- **Figure/asset refs stamp the build-environment version.** Four sites
+  (`gen.py` ×2, `directives.py` ×2) emit
+  `RefInfo(module, <concrete version>, "assets", name)` for assets that are
+  same-bundle by construction, making the bundle digest depend on its own
+  version number — exactly what `_ref_to_crossref` avoids for other
+  intra-bundle refs. Change `Figure.value` to accept `LocalRef`, emit
+  `LocalRef("assets", name)` at all four sites, update the Figure check in
+  `pack.py`, and delete the stale "todo: add version number here" comment
+  in `tree.py`.
+- **Raw-markup passthroughs.** Three places copy unparsed RST source into
+  content nodes, against the no-raw-markup direction: `autosummary` renders
+  its own directive markup as a visible `Code` block
+  (`_block_verbatim_helper` — drop it like the rest of the `auto*` family,
+  or give it a real LocalRef-list handler, then delete the helper);
+  grid/simple RST tables become verbatim-source `Code` blocks (`ts.py` —
+  parse into the existing table nodes, or at minimum emit a coded
+  diagnostic so the degradation is tracked); `|x| replace::` substitution
+  bodies are spliced in as raw source `Text` (roles like
+  ``:class:`numpy.ndarray``` inside a substitution bypass inline parsing
+  and ref classification — run them through the inline parser).
 - **Builtin ref resolution at gen time.** Ship a Python-builtins bundle shim (a
   minimal DocBundle registering every builtin as a `RefInfo`); `papyri gen`
   emits builtin refs as ordinary cross-refs and ingest resolves them against the
   shim like any package — no special-casing in the resolver. (The intersphinx
   inventory already covers stdlib links via CPython's `objects.inv`; the shim is
   the gen-time alternative for builtins specifically.)
-- **`papyri pack` strict-mode / lint gaps.** `papyri lint`, `pack --strict`
-  (orphan-doc promotion), dangling-local-ref detection, and toc↔narrative checks
-  are done. Remaining lint checks to add: missing Figure assets promotion under
-  `--strict`, stray `SubstitutionRef`/`SubstitutionDef`, and a check for the
-  empty module-docstring sentinel placeholder.
+- **Unify the pack/lint check sets.** 2026-07 review finding: `papyri
+  pack` never calls `lint_bundle`, so `pack --strict` and `papyri lint`
+  enforce *disjoint* check sets — the SubstitutionRef/Def and
+  missing-Figure-asset checks already exist in `lint_bundle` (they are not
+  "to add") but never gate packing, so a bundle with substitution nodes
+  packs cleanly, violating the substitution invariant; conversely
+  `_assert_safe_urls` runs only on the pack path and lint never sees it.
+  Fix: call `lint_bundle` from `make_artifact_from_dir` (warn by default,
+  `BundleError` under `--strict`, matching `_check_local_refs` semantics)
+  and share `_assert_safe_urls` with lint. Also: `papyri lint` has no
+  `--strict` flag and its help text advertises a dangling-LocalRef check it
+  doesn't enforce (non-strict `read_bundle_dir` → warning, exit 0).
+  Remaining genuinely-new checks: the empty module-docstring sentinel
+  (`DocstringSentinel` carries a production tag and lints clean today), a
+  count of `Unimplemented` nodes (verbatim unparsed source rides into
+  artifacts untracked), and a heuristic raw-HTML scan over string leaves
+  (warn; `--strict` error) so the no-raw-HTML invariant is enforced at the
+  boundary for *any* producer, not only by gen's handler table.
 - **`:orphan:` flag in the IR.** Orphan-doc detection currently only *warns*
   because the IR can't tell an intentionally-unlisted page from an accidental
   one. Once gen reads the Sphinx field-list `:orphan:` metadata, promote
   accidental orphans to a hard `pack` error and exclude flagged ones. Then
   decide whether canonical-`index`-root vs. any-root reachability matters.
+- **Rewrite `docs/IR.md` — it documents the wrong encoding.** It claims
+  CBOR `module/<qualname>.cbor` blobs, a `tree`/`titles` toc shape, and
+  that JS consumers of the bundle dir need a CBOR library; gen writes
+  all-JSON (`module/<qa>.json` — pack *requires* the suffix) and a
+  list-shaped `toc.json`. CLAUDE.md and PLAN.md match the code; IR.md is
+  the stale document. Also fix its dead pointers (`DocBundler.write` is at
+  ~1220 not ~1540; `GeneratedDoc` lives in `doc.py`, not `gen.py`).
 - **Typed manifest struct through pack.** `papyri.json` stays JSON, but the
   manifest is read into `Bundle` via a freeform dict (`_read_meta` in
   `pack.py`). Represent it as a typed struct inside `Bundle` so the round-trip
@@ -303,14 +406,36 @@ principle; firm up details when implementation starts:
   whole IR graph, `papyri unpack` becomes near-trivial, and keeping image
   bytes out of the IR payload is what makes the content-identity hash
   ("hash structure + text, not nondeterministic figures") natural.
-- **Tuple vs list (tag 4444).** The one real thing CBOR tags bought was
-  encoding a Python-ism on the wire. Move it into the schema instead: the
-  schema declares which fields are tuples and the Python decoder coerces
-  on load. The wire format should not carry Python-isms.
+- **Tuple vs list (tag 4444) — already done by construction.** The 2026-07
+  review verified at the byte level that the tag is never emitted:
+  `Node.cbor` converts tuple fields to lists before encoding, and decode
+  restores tuples from annotations (`_coerce_field`) — exactly the
+  schema-driven coercion this bullet asked for. Remaining work is deletion:
+  drop `register(4444)(tuple)` (`nodes.py`), the `TUPLE_TAG` branch in
+  `ingest/src/encoder.ts`, and the stale tag-4444 row in `docs/IR.md`
+  (which wrongly claims the tag round-trips tuples).
 - **Boundary invariant rewrite.** When this lands, restate the "Encoding
   boundary" invariant: the gen-dir vs artifact boundary was never really
   JSON-vs-CBOR — it is *lenient staging output* vs *strict, linted,
   schema-validated artifact*. That is the boundary worth enforcing.
+- **Node-shape pre-work (do before freezing schema fragments).** 2026-07
+  review findings: rename `SeeAlsoItem.type` — a *data* field that hijacks
+  the discriminator slot (it serializes as `{"type": null}` today, so the
+  node carries no class identity on the wire); replace
+  `GeneratedDoc._content` + `_ordered_sections` with a single ordered
+  sections sequence (kills `_OrderedDictProxy`, the underscore wire keys,
+  the unreachable `| None` arm, and the one map whose key order is
+  semantic); fix `node_serializer` to use the ClassVar-filtered
+  `get_type_hints` — the `sections` ClassVar constant currently leaks into
+  every JSON doc but not into CBOR, so the two encodings disagree on
+  `GeneratedDoc`'s field set; collapse `SigParam.annotation`/`default`'s
+  three-valued `str | NoneType | Empty` (Python class names leak onto the
+  wire as `{"type": "NoneType"}`; the NoneType arm is unreachable from
+  gen); delete `UnimplementedInline` (zero remaining producers); exclude
+  `UnserializableNode` subclasses (`Directive`, `UnprocessedDirective`)
+  from persisted-node unions, which would poison generated schema
+  fragments; tighten `FieldListItem`'s annotations to what its `validate()`
+  actually enforces.
 - **IR → MyST AST export: yes (decided 2026-07).** A one-way exporter is a
   small tree transform once the JSON encoding lands; schedule it after the
   schema exists. It doubles as a conformance tool if a MyST-based producer
@@ -330,7 +455,12 @@ Old raw archives in the CBOR format are re-generated, not migrated
   so it never reaches the artifact or the viewer. Either add scalar
   `diagnostic_{error,warning}_count` manifest keys (flow through `extra` →
   `meta.cbor`) or carry the full records as a typed `Bundle` field, then render
-  the badge on the bundle index/overview.
+  the badge on the bundle index/overview. 2026-07 review wrinkles:
+  `_read_meta` drops the `diagnostics` list *silently* and stringifies the
+  scalars it does lift (`str(v)` — count keys would arrive as `"3"`, so the
+  viewer would have to parse), and `_manifest_dict`'s round-trip docstring
+  is wrong today (gen-dir → pack → unpack loses the key). Prefer the
+  typed-field route; make `_read_meta` log dropped manifest keys either way.
 - **Inline class members (methods & attributes).** Per-page/per-bundle toggle
   that expands each class's members inline (full docstrings, signatures, param
   tables) instead of a summary table of links. Reuses the member qualname blobs

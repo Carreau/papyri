@@ -283,16 +283,26 @@ principle; firm up details when implementation starts:
   it (`json-schema-to-typescript` or similar); the Python node classes are
   either generated or conformance-tested against it. CI runs a golden
   corpus of fixture documents that both languages must round-trip.
-- **Wire format.** Replace the CBOR numeric-tag registry with
-  type-discriminated JSON (`{"type": "Paragraph", …}`). The `.papyri`
-  artifact becomes a plain container (zip or tar.gz): `manifest.json`,
-  per-doc JSON files, raw asset bytes. Rationale: gzipped JSON ≈ gzipped
-  CBOR in size; the schema then validates the wire bytes *directly*, so
-  `pack --strict` and ingest share one validator; consumers need no CBOR
-  library or out-of-band tag map; the artifact is unzip-and-grep
-  inspectable (`papyri unpack` becomes near-trivial); and the viewer's
-  "encoding convergence" open question resolves — one encoding everywhere,
-  `ir-reader.ts` simplifies.
+- **Wire format — what goes is the private tag registry, not necessarily
+  CBOR.** RFC 8949 standardizes the envelope; tags 4000–4444 are a private
+  vocabulary a consumer can only learn from an out-of-band map. Firm
+  decision: string-keyed maps with a `"type"` discriminator
+  (`{"type": "Paragraph", …}`), no custom tags — the IR data model becomes
+  JSON-isomorphic and the schema validates the decoded tree, so `pack
+  --strict` and ingest share one validator and `ir-reader.ts` simplifies
+  (resolves the viewer's "encoding convergence" question). Open until
+  implementation: JSON bytes vs *tagless* CBOR bytes for the IR files.
+  JSON's edge: unzip-and-grep inspectability, zero-dependency consumers.
+  CBOR's edge: RFC 8949 §4.2 deterministic encoding gives canonical bytes
+  for the content-identity hash (JSON's counterpart is JCS / RFC 8785);
+  size is a wash after gzip. Lean JSON; decide when the schema lands.
+- **Artifact container.** The `.papyri` artifact becomes a plain container
+  (zip or tar.gz): `manifest.json`, per-doc IR files, assets as raw
+  members. Raw-member assets beat in-band byte strings whichever IR
+  encoding wins: per-asset extraction and caching without decoding the
+  whole IR graph, `papyri unpack` becomes near-trivial, and keeping image
+  bytes out of the IR payload is what makes the content-identity hash
+  ("hash structure + text, not nondeterministic figures") natural.
 - **Tuple vs list (tag 4444).** The one real thing CBOR tags bought was
   encoding a Python-ism on the wire. Move it into the schema instead: the
   schema declares which fields are tuples and the Python decoder coerces

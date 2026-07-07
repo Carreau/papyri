@@ -321,6 +321,11 @@ layers. Do not write CBOR into the bundle directory or JSON into the artifact.
   `LocalRef("assets", name)` at all four sites, update the Figure check in
   `pack.py`, and delete the stale "todo: add version number here" comment
   in `tree.py`.
+- **Inline roles in table cells.** `csv-table` / `list-table` cells become
+  plain `Text` — role markup inside cells (`:kbd:` in docs-tree csv files)
+  degrades to inert literal text. Upholds no-raw-HTML but reads noisily;
+  run cell content through the inline parser once the `DirectiveContext`
+  work lands.
 - **Raw-markup passthroughs.** Three places copy unparsed RST source into
   content nodes, against the no-raw-markup direction: `autosummary` renders
   its own directive markup as a visible `Code` block
@@ -528,7 +533,10 @@ CI use the token path and pay their own compute.
   project, `gen`, `pack`, `upload` to a viewer instance. Does not exist yet
   (no `action.yml` anywhere in the repo). The bar is "works on the first try
   in a repo whose tests already pass in CI" — every configuration knob is
-  adoption friction.
+  adoption friction. Projects with script-generated doc pages (IPython)
+  slot one extra line between gen and pack: an injector script built on
+  `papyri.bundle_edit` (see `examples/ipython_inject.py`); the Action
+  should make room for such a step.
 - **OIDC (trusted-publishing-style) upload auth.** Fork PRs cannot see
   repository secrets, so bearer-token upload silently fails for the most
   common contribution flow, and `pull_request_target` is a known footgun.
@@ -596,6 +604,20 @@ Newest areas first; each line names the key symbol/file.
   `W-missing-github-slug` when unset. `_GITHUB_SLUG`/`set_github_slug()` gone.
 
 ### Gen / Python
+- Bundle-edit API for script-generated pages: `papyri.bundle_edit`
+  (`read_doc`/`write_doc`/`narrative_doc`/`replace_block`/`add_toc_entry`)
+  — the supported custom step *between* gen and pack. Projects whose
+  Sphinx build generates pages (IPython's config options / magics /
+  shortcuts) inject the same content directly as IR nodes, no RST
+  round-trip: one CI line running an injector script against the bundle
+  dir. `replace_block` works on the flat Section-with-level page shape,
+  making injectors idempotent. Reference injector:
+  `examples/ipython_inject.py` (traitlets options → admonitions, magics →
+  DefList, prompt_toolkit bindings → Table). Docs: `docs/injecting.rst`.
+- `csv-table` `:file:`/`:delim:`/`:encoding:` support (`:url:` warns and
+  drops — no network at gen time); resolution mirrors `include`
+  (`doc_path`/`doc_root`); the delimiter also applies to the `:header:`
+  option row — `csv_table_handler`, `directives.py`.
 - Clinic signatures as fallback `ObjectSignature` for `type`s
   (`strip_clinic_signature` → `extract_docstring`, `gen.py`).
 - Missing block directives audit (2026-04-30/05-01) closed: `rubric`, `only`,

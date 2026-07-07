@@ -689,7 +689,12 @@ class DirectiveVisiter(TreeReplacer):
             "rubric": rubric_handler,
             "only": only_handler,
             "literalinclude": literalinclude_handler,
-            "csv-table": partial(csv_table_handler, warn=self._directive_warn),
+            "csv-table": partial(
+                csv_table_handler,
+                doc_path=doc_path,
+                doc_root=doc_root,
+                warn=self._directive_warn,
+            ),
             # Standard RST admonitions not yet handled above.
             "attention": attention_handler,
             "caution": caution_handler,

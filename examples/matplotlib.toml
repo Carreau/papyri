@@ -99,6 +99,12 @@ examples_exclude = [
 ]
 execute_doctests = true
 
+[global.roles]
+# ``:mpltype:`color``` — matplotlib's project-local role for parameter-type
+# prose (rendered by their Sphinx ext as a link to the colors tutorial).
+# Formatting-only outside their docs build: render as inline code.
+mpltype = 'papyri.directives:role_verbatim'
+
 [global.expected_errors]
 IncorrectInternalDocsLen = [
     "matplotlib.dates:ConciseDateFormatter",

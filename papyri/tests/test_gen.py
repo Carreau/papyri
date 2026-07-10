@@ -605,3 +605,44 @@ def test_lenient_narrative_skip_drops_doc_and_continues(
     # The failing page was skipped; the valid sibling survived.
     assert "index" not in gen.docs
     assert "page" in gen.docs
+
+
+def test_numpydoc_unknown_section_does_not_raise() -> None:
+    # Free-form section headings ("Goals", "Usage") are common in module
+    # docstrings. The lenient NumpyDocString must not raise on them —
+    # raising replaced module docstrings with a parse-failure sentinel and
+    # dropped non-module objects from the bundle entirely.
+    import warnings
+
+    doc = "Summary line.\n\nGoals\n-----\nSome free-form prose.\n"
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        ndoc = NumpyDocString(doc)
+    assert ndoc["Summary"] == ["Summary line."]
+
+
+def test_numpydoc_see_also_backticked_entries() -> None:
+    # `numpy.polynomial`-style (default-role backticked) See Also entries
+    # are legal RST; upstream numpydoc raises on them, which used to drop
+    # the whole docstring (numpy.polynomial.* module pages in the sweep).
+    doc = (
+        "Summary line.\n\n"
+        "See Also\n--------\n"
+        "`numpy.polynomial`\n"
+        "`foo`, `bar` : two at once\n"
+    )
+    ndoc = NumpyDocString(doc)
+    entries = [name for group in ndoc["See Also"] for (name, _role) in group[0]]
+    assert "numpy.polynomial" in entries
+    assert "foo" in entries and "bar" in entries
+
+
+def test_numpydoc_see_also_description_backticks_untouched() -> None:
+    # Only the names segment of a See Also entry is de-backticked; role
+    # references and inline code in the description must survive.
+    doc = "Summary line.\n\nSee Also\n--------\n`foo` : uses :meth:`bar` internally\n"
+    ndoc = NumpyDocString(doc)
+    (group,) = ndoc["See Also"]
+    names, desc = group
+    assert names == [("foo", None)]
+    assert ":meth:`bar`" in " ".join(desc)

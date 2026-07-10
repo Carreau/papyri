@@ -338,24 +338,31 @@ layers. Do not write CBOR into the bundle directory or JSON into the artifact.
   shim like any package — no special-casing in the resolver. (The intersphinx
   inventory already covers stdlib links via CPython's `objects.inv`; the shim is
   the gen-time alternative for builtins specifically.)
-- **Unify the pack/lint check sets.** 2026-07 review finding: `papyri
-  pack` never calls `lint_bundle`, so `pack --strict` and `papyri lint`
-  enforce *disjoint* check sets — the SubstitutionRef/Def and
-  missing-Figure-asset checks already exist in `lint_bundle` (they are not
-  "to add") but never gate packing, so a bundle with substitution nodes
-  packs cleanly, violating the substitution invariant; conversely
-  `_assert_safe_urls` runs only on the pack path and lint never sees it.
-  Fix: call `lint_bundle` from `make_artifact_from_dir` (warn by default,
-  `BundleError` under `--strict`, matching `_check_local_refs` semantics)
-  and share `_assert_safe_urls` with lint. Also: `papyri lint` has no
-  `--strict` flag and its help text advertises a dangling-LocalRef check it
-  doesn't enforce (non-strict `read_bundle_dir` → warning, exit 0).
-  Remaining genuinely-new checks: the empty module-docstring sentinel
-  (`DocstringSentinel` carries a production tag and lints clean today), a
-  count of `Unimplemented` nodes (verbatim unparsed source rides into
-  artifacts untracked), and a heuristic raw-HTML scan over string leaves
-  (warn; `--strict` error) so the no-raw-HTML invariant is enforced at the
-  boundary for *any* producer, not only by gen's handler table.
+- **Remaining pack/lint unification.** The core of the 2026-07 review
+  finding is closed: `make_artifact_from_dir` now runs the lint checks
+  (substitution nodes always fail — invariant; missing Figure assets and
+  `DocstringSentinel` placeholders warn by default, fail under
+  `--strict`). Still open from that finding: share `_assert_safe_urls`
+  with `papyri lint` (today it runs only on the pack path); give `papyri
+  lint` a `--strict` flag and fix its help text (it advertises a
+  dangling-LocalRef check that non-strict `read_bundle_dir` only warns
+  about); add a count of `Unimplemented` nodes (verbatim unparsed source
+  rides into artifacts untracked) and a heuristic raw-HTML scan over
+  string leaves (warn; `--strict` error) so the no-raw-HTML invariant is
+  enforced at the boundary for *any* producer, not only by gen's handler
+  table.
+- **Inline images in phrasing content (image substitutions).** matplotlib's
+  docstrings define `image`-type substitutions (`.. |m30| image:: …` used in
+  marker/mathtext tables); gen warns and drops them because `Image` is
+  FlowContent only — a `SubstitutionRef` inside a `Paragraph` has no legal
+  replacement. Supporting them means admitting `Image` into
+  `StaticPhrasingContent` (nodes.py union + ir-types/ir-schema + renderer) and
+  routing the substitution body through the image handler. IR schema change —
+  batch with the next schema-touching PR.
+- **numpydoc section fragments that tree-sitter cannot re-parse (#361).**
+  `numpy.ma.core:MaskedArray.resize` stays excluded: the full docstring parses
+  fine, but the numpydoc-section fragment gen re-parses trips
+  TreeSitterParseError. Fix is in how gen splits/re-parses section content.
 - **`:orphan:` flag in the IR.** Orphan-doc detection currently only *warns*
   because the IR can't tell an intentionally-unlisted page from an accidental
   one. Once gen reads the Sphinx field-list `:orphan:` metadata, promote
@@ -575,6 +582,46 @@ CI use the token path and pay their own compute.
 
 Terse, grep-able record of what exists so future work doesn't re-derive it.
 Newest areas first; each line names the key symbol/file.
+
+### Sphinx-fidelity pass (2026-07 example sweep)
+- Ref resolution: leading-`!` suppression → plain `InlineCode`, no warning;
+  trailing `()` stripped before resolve (display keeps parens); scope walk
+  most-specific-first *including the current scope*; colon-form qa
+  ("numpy:any") normalized before scope derivation — all in `tree.py`
+  (`replace_InlineRole` / `resolve_`).
+- Narrative↔API cross-linking: `Gen._scan_narrative_sources()` (cached first
+  pass) gives API visitors the narrative `doc_targets`/`external_targets`
+  maps (`:ref:` from docstrings resolves) and narrative visitors get the API
+  `known_refs` (`Gen._known_refs`); narrative doc keys resolve refs against
+  the package root (`DirectiveVisiter._resolve`).
+- `:doc:` role resolved through the visitor (`_resolve_doc_path`) → doc-key
+  LocalRefs ("api:axes_api", not "/api/axes_api"); free-function
+  `py_doc_handler` deleted.
+- plot directive: external-script arguments embedded (doc_path/doc_root),
+  doctest-format bodies execute with prompts stripped, exec namespace
+  pre-seeded with np/plt (matplotlib `plot_pre_code` default); `doc_root`
+  threaded into API visitors for `/`-rooted image paths.
+- numpydoc leniency: unknown section headings fall through to upstream
+  warn+skip (was: ValueError → sentinel/object drop); backticked See Also
+  entries (`numpy.polynomial`) accepted (`numpydoc_compat.py`).
+- Import solver: objects `full_qual()` cannot name (method descriptors,
+  numpy.ufunc.reduce) fall back to longest-imported-module-prefix qualname.
+- `W-unresolved-default-role` (default `info`): bare-backtick lookup misses
+  split off from `W-unresolved-ref` (Sphinx autolink degrades silently).
+- Doctest-execution `catch_warnings()` now actually encloses the run, so
+  example code cannot leak warning-filter mutations into gen.
+- Pack lint enforcement: `_check_lint` in the pack path — Substitution nodes
+  always fatal (IR invariant); missing Figure assets + `DocstringSentinel`
+  warn by default, error under `--strict`; sentinel check added to
+  `lint_bundle` (closes the former "pack strict-mode / lint gaps" item).
+- examples/numpy.toml exclusions pruned to just MaskedArray.resize (#361).
+- Examples collected *after* API docs and their visitor now gets
+  `known_refs` + narrative target maps, so example pages cross-link.
+- `[global.roles]` config table (`Config.roles` → `DirectiveVisiter`
+  `_role_handlers`): project-local roles map to handlers
+  (`role_verbatim`/`role_text`/`role_drop` in `directives.py`);
+  matplotlib's `:mpltype:` mapped in its example config. Docs:
+  `configuration.rst` `[global.roles]`.
 
 ### Gen-time diagnostics
 - Core framework: `Severity`, `DIAGNOSTICS` registry, `DiagnosticConfig`

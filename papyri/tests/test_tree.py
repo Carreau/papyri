@@ -3,7 +3,7 @@ Tests for ``papyri.tree``: small pieces of the gen-time/ingest-time IR
 transformation that are easy to pin and have historically regressed.
 
 Covered surfaces:
-- ``py_doc_handler`` (:doc: role → LocalRef("docs", path))
+- ``:doc:`` role (→ LocalRef("docs", doc-key), path normalization)
 - ``DelayedResolver`` (target/reference unification)
 - ``_toctree_handler`` (blank lines, comments, glob, hidden, malformed entries, LocalRef links, all-filtered/empty → no empty BulletList)
 - ``_SPHINX_ONLY_DIRECTIVES`` (silent drop via warning)
@@ -47,12 +47,14 @@ from papyri.directives import (
 from papyri.error_collector import (
     W_MALFORMED_DIRECTIVE,
     W_MISSING_GITHUB_SLUG,
+    W_UNRESOLVED_REF,
 )
 from papyri.nodes import (
     Admonition,
     CrossRef,
     Figure,
     Image,
+    InlineCode,
     InlineRole,
     Link,
     LocalRef,
@@ -69,7 +71,7 @@ from papyri.nodes import (
 from papyri.tree import (
     DelayedResolver,
     DirectiveVisiter,
-    py_doc_handler,
+    resolve_,
 )
 from papyri.utils import obj_from_qualname
 
@@ -119,30 +121,101 @@ def test_obj_from_qualname_class_itself_unchanged() -> None:
 
 
 # ---------------------------------------------------------------------------
-# :doc: role  (py_doc_handler)
+# :doc: role — resolved via the visitor so paths normalize to doc keys
 # ---------------------------------------------------------------------------
 
 
-def test_py_doc_handler_simple_path() -> None:
-    out = py_doc_handler("tutorial/intro")
+def _doc_role(v: DirectiveVisiter, value: str) -> Any:
+    out = v.replace_InlineRole(InlineRole(domain=None, role="doc", value=value))
     assert len(out) == 1
-    ref = out[0]
+    return out[0]
+
+
+def test_doc_role_root_relative_path() -> None:
+    # "/api/axes_api" anchors at the docs root and normalizes to the
+    # ":"-joined doc-key form the bundle stores narrative docs under.
+    v = DirectiveVisiter(
+        qa="docs:index",
+        known_refs=frozenset(),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+    )
+    ref = _doc_role(v, "/api/axes_api")
     assert isinstance(ref, CrossRef)
     assert ref.kind == "docs"
     assert isinstance(ref.reference, LocalRef)
     assert ref.reference.kind == "docs"
-    assert ref.reference.path == "tutorial/intro"
-    assert ref.value == "tutorial/intro"
+    assert ref.reference.path == "api:axes_api"
 
 
-def test_py_doc_handler_titled_form() -> None:
+def test_doc_role_relative_path_resolves_from_current_doc() -> None:
+    # A relative path resolves against the current document's directory.
+    v = DirectiveVisiter(
+        qa="tutorial:index",
+        known_refs=frozenset(),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+        module="pkg",
+    )
+    ref = _doc_role(v, "intro")
+    assert isinstance(ref.reference, LocalRef)
+    assert ref.reference.path == "tutorial:intro"
+
+
+def test_doc_role_from_api_docstring_anchors_at_root() -> None:
+    # In an API docstring there is no "current document directory" —
+    # :doc:`quickstart` in numpy:any must target the root-level doc, not a
+    # phantom "numpy:quickstart" key derived from the object's qa.
+    v = DirectiveVisiter(
+        qa="numpy:any",
+        known_refs=frozenset(),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+        module="numpy",
+    )
+    ref = _doc_role(v, "quickstart")
+    assert isinstance(ref.reference, LocalRef)
+    assert ref.reference.path == "quickstart"
+
+    v2 = DirectiveVisiter(
+        qa="numpy.ma.core:MaskedArray.var",
+        known_refs=frozenset(),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+        module="numpy",
+    )
+    ref2 = _doc_role(v2, "reference/maskedarray")
+    assert ref2.reference.path == "reference:maskedarray"
+
+
+def test_doc_role_titled_form() -> None:
     # "Nice Title <real/path>" — title is the display text, path the target.
-    out = py_doc_handler("Nice Title <real/path>")
-    ref = out[0]
+    v = _make_visitor()
+    ref = _doc_role(v, "Nice Title </real/path>")
     assert isinstance(ref, CrossRef)
     assert ref.value == "Nice Title"
     assert isinstance(ref.reference, LocalRef)
-    assert ref.reference.path == "real/path"
+    assert ref.reference.path == "real:path"
+
+
+def test_doc_role_untitled_uses_doc_title() -> None:
+    # Without an explicit title, display falls back to the target doc's
+    # first heading when known.
+    v = DirectiveVisiter(
+        qa="docs:index",
+        known_refs=frozenset(),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+        doc_titles={"tutorial:intro": "Getting Started"},
+    )
+    ref = _doc_role(v, "/tutorial/intro")
+    assert ref.value == "Getting Started"
+    assert ref.reference.path == "tutorial:intro"
 
 
 # ---------------------------------------------------------------------------
@@ -771,6 +844,156 @@ def test_ref_role_unknown_label_returns_directive_unchanged() -> None:
     out = v.replace_InlineRole(role)
     assert len(out) == 1
     assert isinstance(out[0], InlineRole)
+
+
+# ---------------------------------------------------------------------------
+# "!" suppressed cross-references (Sphinx: render as plain code, never warn)
+# ---------------------------------------------------------------------------
+
+
+def _unresolved_records(v: DirectiveVisiter) -> list[dict[str, str]]:
+    return [r for r in v.diagnostics.records if r["code"] == W_UNRESOLVED_REF]
+
+
+def test_suppressed_ref_renders_plain_inline_code() -> None:
+    v = _make_visitor()
+    role = InlineRole(domain=None, role="class", value="!matplotlib.axes.Axes")
+    out = v.replace_InlineRole(role)
+    assert len(out) == 1
+    assert isinstance(out[0], InlineCode)
+    assert out[0].value == "matplotlib.axes.Axes"
+    assert _unresolved_records(v) == []
+
+
+def test_suppressed_ref_with_tilde_shows_last_component() -> None:
+    v = _make_visitor()
+    role = InlineRole(domain=None, role="meth", value="!~pkg.mod.Klass.frob")
+    out = v.replace_InlineRole(role)
+    assert len(out) == 1
+    assert isinstance(out[0], InlineCode)
+    assert out[0].value == "frob"
+    assert _unresolved_records(v) == []
+
+
+def test_suppressed_ref_keeps_explicit_title() -> None:
+    v = _make_visitor()
+    role = InlineRole(
+        domain=None, role="class", value="the axes <!matplotlib.axes.Axes>"
+    )
+    out = v.replace_InlineRole(role)
+    assert len(out) == 1
+    assert isinstance(out[0], InlineCode)
+    assert out[0].value == "the axes"
+    assert _unresolved_records(v) == []
+
+
+# ---------------------------------------------------------------------------
+# Trailing "()" on py-role targets (Sphinx links foo, displays foo())
+# ---------------------------------------------------------------------------
+
+
+def test_trailing_parens_target_resolves_and_display_keeps_parens() -> None:
+    v = DirectiveVisiter(
+        qa="pkg.mod",
+        known_refs=frozenset({RefInfo("pkg", "1.0", "module", "pkg.mod.foo")}),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+    )
+    role = InlineRole(domain=None, role=None, value="pkg.mod.foo()")
+    out = v.replace_InlineRole(role)
+    assert len(out) == 1
+    cr = out[0]
+    assert isinstance(cr, CrossRef)
+    assert cr.value == "pkg.mod.foo()"
+    assert cr.reference == RefInfo("pkg", "1.0", "module", "pkg.mod.foo")
+    assert _unresolved_records(v) == []
+
+
+# ---------------------------------------------------------------------------
+# resolve_ — enclosing-scope walk
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_relative_ref_prefers_current_scope() -> None:
+    # "foo" used inside pkg.mod must resolve to pkg.mod.foo even when another
+    # module defines a foo too (Sphinx resolves the closest scope first).
+    known = frozenset(
+        {
+            RefInfo("pkg", "1.0", "module", "pkg.mod.foo"),
+            RefInfo("pkg", "1.0", "module", "pkg.other.foo"),
+        }
+    )
+    r = resolve_("pkg.mod", known, frozenset(), "foo", {})
+    assert r.kind != "missing"
+    assert r.path == "pkg.mod.foo"
+
+
+def test_narrative_context_resolves_relative_api_ref() -> None:
+    # A narrative doc key ("docs:overview") is not a Python path; refs in
+    # prose must resolve against the package root, so "mod.foo" inside a
+    # narrative page finds pkg.mod.foo among the bundle's API items.
+    v = DirectiveVisiter(
+        qa="docs:overview",
+        known_refs=frozenset({RefInfo("pkg", "1.0", "module", "pkg.mod.foo")}),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+        module="pkg",
+    )
+    role = InlineRole(domain=None, role=None, value="mod.foo")
+    out = v.replace_InlineRole(role)
+    assert len(out) == 1
+    cr = out[0]
+    assert isinstance(cr, CrossRef)
+    assert cr.reference == RefInfo("pkg", "1.0", "module", "pkg.mod.foo")
+    assert _unresolved_records(v) == []
+
+
+def test_resolve_dotted_ref_relative_to_current_module() -> None:
+    # "sub.Klass.fit" mentioned in the pkg.mod module docstring must resolve
+    # relative to pkg.mod itself. The pre-fix scope walk never tried the
+    # current scope as a prefix, so this only worked when the fuzzy
+    # substring fallback happened to be unambiguous.
+    known = frozenset(
+        {
+            RefInfo("pkg", "1.0", "module", "pkg.mod.sub.Klass.fit"),
+            RefInfo("pkg", "1.0", "module", "pkg.zzz.sub.Klass.fit"),
+        }
+    )
+    r = resolve_("pkg.mod", known, frozenset(), "sub.Klass.fit", {})
+    assert r.kind != "missing"
+    assert r.path == "pkg.mod.sub.Klass.fit"
+
+
+def test_resolve_colon_qa_resolves_relative_ref() -> None:
+    # qa uses full_qual "module:qualname" notation ("numpy:any") while
+    # lookup keys are indexed dotted; "ndarray" mentioned in numpy:any's
+    # docstring must still resolve to numpy:ndarray.
+    known = frozenset(
+        {
+            RefInfo("numpy", "1.0", "module", "numpy:ndarray"),
+            RefInfo("numpy", "1.0", "module", "numpy:any"),
+        }
+    )
+    r = resolve_("numpy:any", known, frozenset(), "ndarray", {})
+    assert r.kind != "missing"
+    assert r.path == "numpy:ndarray"
+
+
+def test_resolve_colon_qa_method_scope() -> None:
+    # Same, from a method page: "var" inside numpy.ma.core:MaskedArray.var
+    # scope-walks through the class and module scopes.
+    known = frozenset(
+        {
+            RefInfo("numpy", "1.0", "module", "numpy.ma.core:MaskedArray.mean"),
+        }
+    )
+    r = resolve_(
+        "numpy.ma.core:MaskedArray.var", known, frozenset(), "MaskedArray.mean", {}
+    )
+    assert r.kind != "missing"
+    assert r.path == "numpy.ma.core:MaskedArray.mean"
 
 
 # ---------------------------------------------------------------------------
@@ -1981,11 +2204,88 @@ def test_plot_handler_empty_body_returns_empty():
 
 
 def test_plot_handler_file_arg_drops_with_warning(caplog):
+    # No doc_path/doc_root bound → external scripts cannot be resolved.
     h = make_plot_handler(None, "pkg", "1.0", execute=False)
     with caplog.at_level("WARNING", logger="papyri"):
         out = h("examples/myplot.py", {}, "")
     assert out == []
     assert any("plot" in r.getMessage() for r in caplog.records)
+
+
+def test_plot_handler_embeds_external_script(tmp_path):
+    from papyri.nodes import Code
+
+    (tmp_path / "plots").mkdir()
+    script = tmp_path / "plots" / "myplot.py"
+    script.write_text("x = [1, 2, 3]\n")
+    h = make_plot_handler(None, "pkg", "1.0", execute=False, doc_path=tmp_path)
+    out = h("plots/myplot.py", {}, "A caption, not code.")
+    assert len(out) == 1
+    assert isinstance(out[0], Code)
+    assert out[0].value == "x = [1, 2, 3]\n"
+
+
+def test_plot_handler_embeds_root_relative_script(tmp_path):
+    from papyri.nodes import Code
+
+    (tmp_path / "root" / "plots").mkdir(parents=True)
+    script = tmp_path / "root" / "plots" / "myplot.py"
+    script.write_text("y = 1\n")
+    h = make_plot_handler(
+        None, "pkg", "1.0", execute=False, doc_path=tmp_path, doc_root=tmp_path / "root"
+    )
+    out = h("/plots/myplot.py", {}, "")
+    assert len(out) == 1
+    assert isinstance(out[0], Code)
+    assert out[0].value == "y = 1\n"
+
+
+def test_plot_handler_missing_script_warns(tmp_path, caplog):
+    h = make_plot_handler(None, "pkg", "1.0", execute=False, doc_path=tmp_path)
+    with caplog.at_level("WARNING", logger="papyri"):
+        out = h("nope.py", {}, "")
+    assert out == []
+    assert any("not found" in r.getMessage() for r in caplog.records)
+
+
+def test_plot_handler_doctest_body_executes_and_displays_prompts():
+    pytest.importorskip("matplotlib")
+    from papyri.nodes import Code, Figure
+
+    stored: dict[str, bytes] = {}
+    h = make_plot_handler(
+        asset_store=stored.__setitem__,
+        module="pkg",
+        version="1.0",
+        execute=True,
+        qa="pkg.mod",
+    )
+    code = ">>> plt.plot([1, 2])\n[<matplotlib.lines.Line2D ...>]\n"
+    out = h("", {}, code)
+    # Display keeps the doctest prompts verbatim.
+    assert isinstance(out[0], Code)
+    assert out[0].value == code
+    # Prompt-stripped source executed (plt pre-seeded) → a figure came out.
+    assert any(isinstance(n, Figure) for n in out)
+    assert stored
+
+
+def test_plot_handler_pre_seeds_np_and_plt():
+    pytest.importorskip("matplotlib")
+    from papyri.nodes import Figure
+
+    stored: dict[str, bytes] = {}
+    h = make_plot_handler(
+        asset_store=stored.__setitem__,
+        module="pkg",
+        version="1.0",
+        execute=True,
+        qa="pkg.mod",
+    )
+    # Uses np and plt without importing them — matplotlib's plot_pre_code
+    # default makes this valid in Sphinx docs.
+    out = h("", {}, "plt.plot(np.arange(3))")
+    assert any(isinstance(n, Figure) for n in out)
 
 
 def test_plot_registered_on_visitor():
@@ -2143,3 +2443,107 @@ def test_figure_via_visitor_dispatch_external_url():
     # Should have at least the Image node.
     assert len(out) >= 1
     assert isinstance(out[0], Image)
+
+
+def test_import_solver_descriptor_without_module_attr() -> None:
+    # numpy.ufunc.reduce is a method descriptor with no usable
+    # __module__/__qualname__ pair; the attribute traversal itself proves
+    # the path exists, so the solver derives module:qualname from it.
+    pytest.importorskip("numpy")
+    assert DirectiveVisiter._import_solver("numpy.ufunc.reduce") == "numpy:ufunc.reduce"
+
+
+def test_unresolved_default_role_uses_quiet_code() -> None:
+    # Bare backticks that fail to resolve get W-unresolved-default-role
+    # (info by default); explicit roles keep W-unresolved-ref.
+    from papyri.error_collector import W_UNRESOLVED_DEFAULT_ROLE
+
+    v = _make_visitor()
+    out = v.replace_InlineRole(InlineRole(domain=None, role=None, value="x"))
+    assert len(out) == 1
+    codes = [r["code"] for r in v.diagnostics.records]
+    assert codes == [W_UNRESOLVED_DEFAULT_ROLE]
+
+    v2 = _make_visitor()
+    v2.replace_InlineRole(InlineRole(domain=None, role="func", value="nope"))
+    codes2 = [r["code"] for r in v2.diagnostics.records]
+    assert codes2 == [W_UNRESOLVED_REF]
+
+
+def test_config_role_handler_dispatch() -> None:
+    # [global.roles] maps a project-local role to a handler; it wins over
+    # the resolve path and emits no diagnostics.
+    from papyri.nodes import Text as TextNode
+
+    v = DirectiveVisiter(
+        qa="pkg.mod",
+        known_refs=frozenset(),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+        roles={"mpltype": "papyri.directives:role_verbatim"},
+    )
+    out = v.replace_InlineRole(InlineRole(domain=None, role="mpltype", value="color"))
+    assert len(out) == 1
+    assert isinstance(out[0], InlineCode)
+    assert out[0].value == "color"
+    assert v.diagnostics.records == []
+
+    # role_text / role_drop variants
+    v2 = DirectiveVisiter(
+        qa="pkg.mod",
+        known_refs=frozenset(),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+        roles={
+            "prose": "papyri.directives:role_text",
+            "gone": "papyri.directives:role_drop",
+        },
+    )
+    out2 = v2.replace_InlineRole(InlineRole(domain=None, role="prose", value="hi"))
+    assert isinstance(out2[0], TextNode)
+    out3 = v2.replace_InlineRole(InlineRole(domain=None, role="gone", value="x"))
+    assert out3 == []
+
+
+def test_suppressed_ref_bang_before_explicit_title() -> None:
+    # Sphinx strips the "!" from the raw role text before splitting the
+    # explicit title: ":func:`!Title <pkg.mod.foo>`" renders "Title" as
+    # plain code, never a link or a warning.
+    v = DirectiveVisiter(
+        qa="pkg.mod",
+        known_refs=frozenset({RefInfo("pkg", "1.0", "module", "pkg.mod.foo")}),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+    )
+    out = v.replace_InlineRole(
+        InlineRole(domain=None, role="func", value="!Title <pkg.mod.foo>")
+    )
+    assert len(out) == 1
+    assert isinstance(out[0], InlineCode)
+    assert out[0].value == "Title"
+    assert _unresolved_records(v) == []
+
+
+def test_plot_handler_malformed_doctest_body_degrades_to_code(caplog):
+    # DocTestParser raises ValueError on inconsistent prompt indentation;
+    # the handler must warn and keep the Code node, not propagate.
+    pytest.importorskip("matplotlib")
+    from papyri.nodes import Code
+
+    stored: dict[str, bytes] = {}
+    h = make_plot_handler(
+        asset_store=stored.__setitem__,
+        module="pkg",
+        version="1.0",
+        execute=True,
+        qa="pkg.mod",
+    )
+    body = "text\n    >>> x=1\n    y\n  z\n"
+    with caplog.at_level("WARNING", logger="papyri"):
+        out = h("", {}, body)
+    assert len(out) == 1
+    assert isinstance(out[0], Code)
+    assert out[0].value == body

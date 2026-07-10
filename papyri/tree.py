@@ -45,6 +45,7 @@ from .directives import (
 from .error_collector import (
     W_MALFORMED_DIRECTIVE,
     W_MISSING_GITHUB_SLUG,
+    W_UNRESOLVED_DEFAULT_ROLE,
     W_UNRESOLVED_REF,
     W_UNSUPPORTED_SUBSTITUTION,
     DiagnosticConfig,
@@ -232,6 +233,12 @@ def resolve_(
     if hk not in _cache:
         _cache[hk] = _build_resolver_cache(known_refs)
 
+    # qa uses full_qual "module:qualname" notation ("numpy:any",
+    # "numpy.ma.core:MaskedArray.var") while the lookup keys are indexed in
+    # dotted form; normalize before deriving enclosing scopes, otherwise no
+    # relative ref inside an object page can ever resolve.
+    qa = qa.replace(":", ".")
+
     # this is a mapping from the key to the most relevant
     # Refinfo to a document
     k_path_map: dict[str, RefInfo]
@@ -286,13 +293,18 @@ def resolve_(
 
                 return RefInfo(None, None, "missing", ref)
 
+        # Walk the enclosing scopes most-specific-first (Sphinx resolves
+        # relative to the closest enclosing module/class): try "qa.ref"
+        # first, then each parent scope, down to "root.ref". The previous
+        # form of this loop computed the attempt *before* extending the
+        # prefix, so the current scope itself ("qa.ref") was never tried —
+        # a module docstring could not resolve a ref relative to its own
+        # module.
         parts = qa.split(".")
-        prefix = ""
-        for part in parts:
-            attempt = prefix + "." + ref
+        for i in range(len(parts), 0, -1):
+            attempt = ".".join(parts[:i]) + "." + ref
             if attempt in k_path_map:
                 return k_path_map[attempt]
-            prefix = part if not prefix else prefix + "." + part
 
     q0 = parts[0]
     rs = root_start(q0, keyset)
@@ -554,17 +566,6 @@ def py_pep_hander(value: str) -> list[Any]:
     ]
 
 
-@directive_handler("py", "doc")
-def py_doc_handler(value: str) -> list[Any]:
-    text = value
-    path = value
-    if " <" in value and value.endswith(">"):
-        text, path = value.split(" <", 1)
-        text = text.rstrip()
-        path = path.rstrip(">")
-    return [CrossRef(text, LocalRef("docs", path), "docs")]
-
-
 @directive_handler("py", "param")
 def py_param_handler(value: str) -> list[Any]:
     """Handle ``:param:`name``` — an inline reference to a sibling parameter."""
@@ -652,6 +653,7 @@ class DirectiveVisiter(TreeReplacer):
         param_names: frozenset[str] | set[str] | None = None,
         diagnostics: Diagnostics | None = None,
         github_slug: str | None = None,
+        roles: dict[str, str] | None = None,
     ):
         """
         qa: str
@@ -723,6 +725,13 @@ class DirectiveVisiter(TreeReplacer):
                 self._handlers[k] = obj_from_qualname(
                     handler_ref, ctor_args, ctor_kwargs
                 )
+
+        # ``[global.roles]`` — project-local inline roles ("mpltype" or
+        # "domain:role") mapped to a handler that receives the role body.
+        # Consulted in ``replace_InlineRole`` before the built-in registry.
+        self._role_handlers: dict[str, Callable[[str], list[Any] | None]] = {
+            k: obj_from_qualname(v) for k, v in (roles or {}).items()
+        }
 
         self.known_refs = frozenset(known_refs)
         self.local_refs = frozenset(local_refs)
@@ -815,6 +824,8 @@ class DirectiveVisiter(TreeReplacer):
                 version=self.version,
                 execute=execute,
                 qa=self.qa,
+                doc_path=doc_path,
+                doc_root=doc_root,
                 warn=self._directive_warn,
             ),
         )
@@ -1051,8 +1062,18 @@ class DirectiveVisiter(TreeReplacer):
 
         """
         assert isinstance(text, str)
+        # Narrative doc keys ("reference:ufuncs") are not Python paths under
+        # the package root; resolve those relative to the root module so the
+        # in-bundle scope walk and suffix search still apply.
+        qa = self.qa
+        if not (
+            qa == self.module
+            or qa.startswith(self.module + ".")
+            or qa.startswith(self.module + ":")
+        ):
+            qa = self.module
         return resolve_(
-            self.qa,
+            qa,
             self.known_refs,
             loc,
             text,
@@ -1074,9 +1095,22 @@ class DirectiveVisiter(TreeReplacer):
         if not all(are_id):
             return None
         else:
-            target_qa = full_qual(_obj_from_path(parts))
+            target = _obj_from_path(parts)
+            target_qa = full_qual(target)
             if target_qa is not None:
                 return target_qa
+            if target is not None:
+                # Objects with no usable __module__/__qualname__ (e.g. method
+                # descriptors like numpy.ufunc.reduce): the successful
+                # attribute traversal itself proves the path exists, so derive
+                # module:qualname from the longest imported module prefix.
+                import sys
+
+                for i in range(len(parts), 0, -1):
+                    mod = ".".join(parts[:i])
+                    if mod in sys.modules:
+                        qual = ".".join(parts[i:])
+                        return FullQual(f"{mod}:{qual}") if qual else FullQual(mod)
 
         # Builtin fallback: names like True, False, None, repr, KeyError, dict
         # that belong to the `builtins` module.  full_qual() returns None for
@@ -1110,6 +1144,18 @@ class DirectiveVisiter(TreeReplacer):
             role = "py"
         if domain == "py" and role in _GH_ROLE_PATH_SEGMENT:
             return self._gh_link_or_warn(role, directive.value)
+        # Config-supplied role handlers ([global.roles]) win over the
+        # built-in registry; keyed by bare role name or "domain:role".
+        if self._role_handlers and directive.role is not None:
+            key = (
+                f"{directive.domain}:{directive.role}"
+                if directive.domain
+                else directive.role
+            )
+            if (rh := self._role_handlers.get(key)) is not None:
+                res = rh(directive.value)
+                if res is not None:
+                    return res
         domain_handler: dict[str, list[Handler]] = DIRECTIVE_MAP.get(domain, {})
         handlers: list[Handler] = domain_handler.get(role, [])
         for h in handlers:
@@ -1123,6 +1169,17 @@ class DirectiveVisiter(TreeReplacer):
         assert "`" not in text
         text = text.replace("\n", " ")
         to_resolve = text
+
+        # Sphinx: a leading "!" on the raw role text suppresses
+        # cross-referencing entirely — the target renders as plain inline
+        # code, no lookup, no warning. Sphinx strips it *before* the
+        # "Title <target>" split, so check here and again on the target
+        # after the split.
+        suppress = False
+        if to_resolve.startswith("!"):
+            suppress = True
+            text = text[1:]
+            to_resolve = to_resolve[1:]
 
         if (
             ("<" in text)
@@ -1142,11 +1199,21 @@ class DirectiveVisiter(TreeReplacer):
             assert to_resolve.endswith(">"), (text, to_resolve)
             to_resolve = to_resolve.rstrip(">")
 
+        if to_resolve.startswith("!"):
+            suppress = True
+            stripped = to_resolve[1:]
+            if text == to_resolve:
+                text = stripped
+            to_resolve = stripped
+
         if to_resolve.startswith("~"):
             stripped = to_resolve[1:]
             if text == to_resolve:
                 text = stripped.split(".")[-1]
             to_resolve = stripped
+
+        if suppress:
+            return [InlineCode(text)]
 
         if to_resolve.startswith(("https://", "http://", "mailto://")):
             to_resolve = to_resolve.replace(" ", "")
@@ -1174,6 +1241,26 @@ class DirectiveVisiter(TreeReplacer):
                     f"unresolved :ref: label {label!r}",
                 )
                 return [directive]
+
+        # :doc:`path` — RST cross-reference to another document. Paths use
+        # "/" separators ("/" prefix anchors at the docs root, otherwise
+        # relative to the current document); normalize to the ":"-joined doc
+        # key so the LocalRef matches how narrative docs are stored.
+        if role == "doc":
+            doc_path = to_resolve
+            in_api_docstring = (
+                self.qa == self.module
+                or self.qa.startswith(self.module + ".")
+                or self.qa.startswith(self.module + ":")
+            )
+            if in_api_docstring and not doc_path.startswith("/"):
+                # API objects are not documents — there is no "current
+                # document directory" to resolve against, so anchor
+                # relative :doc: paths at the docs root.
+                doc_path = "/" + doc_path
+            doc_key = self._resolve_doc_path(doc_path)
+            display = text if text != to_resolve else self.doc_titles.get(doc_key, text)
+            return [CrossRef(display, LocalRef("docs", doc_key), "docs")]
 
         # Plain RST hyperlink with angle-bracket syntax (``text <label>`_``) or
         # bare named reference (``label_``) where the target matches a known
@@ -1210,6 +1297,11 @@ class DirectiveVisiter(TreeReplacer):
                             title="",
                         )
                     ]
+
+        # Sphinx py roles ignore a trailing pair of parentheses on the target
+        # (":meth:`foo()`" links to foo); the display text keeps them.
+        if to_resolve.endswith("()"):
+            to_resolve = to_resolve[:-2]
 
         r = self._resolve(loc, to_resolve)
         # this is now likely incorrect as Ref kind should not be exists,
@@ -1277,8 +1369,16 @@ class DirectiveVisiter(TreeReplacer):
                 )
                 return [CrossRef(text, ri, "module")]
         role_desc = directive.role or "(default)"
+        # Bare backticks (no explicit role) are routinely used for variable
+        # names; Sphinx's autolink default role degrades to plain text
+        # silently, so an unresolved default role gets its own, quieter code.
+        code = (
+            W_UNRESOLVED_REF
+            if directive.role is not None
+            else W_UNRESOLVED_DEFAULT_ROLE
+        )
         self.diagnostics.emit(
-            W_UNRESOLVED_REF,
+            code,
             self.qa,
             f"unresolved reference {directive.value!r} (role {role_desc})",
         )

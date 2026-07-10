@@ -332,10 +332,12 @@ def gen_main(
     g.log.info("Target package is %s-%s", target_module_name, g.version)
     g.log.info("Will write data to %s", target_dir)
 
-    if examples:
-        g.collect_examples_out()
     if api:
         g.collect_api_docs(target_module_name, limit_to=limit_to)
+    if examples:
+        # After API collection, so example pages resolve refs against the
+        # bundle's known objects instead of an empty set.
+        g.collect_examples_out()
     if narrative:
         g.collect_narrative_docs()
 
@@ -840,6 +842,21 @@ class Gen:
         self.examples = {}
         self.docs = {}
         self._toc_nodes: list[TocTree] = []
+        # Cached result of _scan_narrative_sources() — the narrative RST
+        # parse + link-target maps are needed by both the API pass (so
+        # docstrings can resolve :ref: labels) and the narrative pass.
+        self._narrative_scan: (
+            tuple[
+                list[tuple[Path, str, list[Section]]],
+                dict[str, str],
+                dict[str, str],
+                dict[str, str],
+            ]
+            | None
+        ) = None
+        # In-bundle API items collected by collect_api_docs; threaded into
+        # the narrative pass so prose can cross-link to API pages.
+        self._known_refs: frozenset[RefInfo] = frozenset()
 
     def get_example_data(
         self,
@@ -971,13 +988,21 @@ class Gen:
                     docstring=example_code,
                 )
                 if config.execute_doctests:
+                    # catch_warnings must enclose the run itself: it both
+                    # applies the ignore filter to the executed example and
+                    # keeps any warnings-filter mutation made *by* example
+                    # code (e.g. simplefilter("error")) from leaking into
+                    # the rest of the gen process — a leaked "error" filter
+                    # turned numpydoc's benign "Unknown section" UserWarning
+                    # into module-docstring parse failures for every module
+                    # processed afterwards.
                     with warnings.catch_warnings():
                         warnings.filterwarnings(
                             "ignore",
                             message="is non-interactive, and thus cannot be shown",
                             category=UserWarning,
                         )
-                    doctest_runner.run(doctests, out=debugprint, clear_globs=False)
+                        doctest_runner.run(doctests, out=debugprint, clear_globs=False)
                     doctest_runner.globs.update(doctests.globs)
                     example_section_data.extend(
                         doctest_runner.get_example_section_data()
@@ -1025,35 +1050,48 @@ class Gen:
                     external[child.label] = child.url
         return labels, external
 
-    def collect_narrative_docs(self) -> None:
-        """
-        Crawl the filesystem for all docs/rst files
+    def _scan_narrative_sources(
+        self,
+    ) -> tuple[
+        list[tuple[Path, str, list[Section]]],
+        dict[str, str],
+        dict[str, str],
+        dict[str, str],
+    ]:
+        """Parse every narrative RST file and collect cross-doc link targets.
 
+        Returns ``(parsed_files, doc_targets, external_targets, doc_titles)``:
+        - doc_targets maps each RST label to the doc key that defines it.
+        - external_targets maps each hyperlink label to its external URL.
+        - doc_titles maps each doc key to its first heading so toctree
+          entries can render document titles instead of raw paths.
+
+        Cached after the first call: the API pass needs the label maps
+        before the narrative pass runs, so docstrings can resolve
+        ``:ref:`` labels defined in narrative docs.
         """
+        if self._narrative_scan is not None:
+            return self._narrative_scan
+        parsed_files: list[tuple[Path, str, list[Section]]] = []
+        doc_targets: dict[str, str] = {}
+        external_targets: dict[str, str] = {}
+        doc_titles: dict[str, str] = {}
+        self._narrative_scan = (
+            parsed_files,
+            doc_targets,
+            external_targets,
+            doc_titles,
+        )
         if not self.config.docs_path:
-            return
+            return self._narrative_scan
         path = Path(self.config.docs_path).expanduser()
         if not path.exists():
             self.log.warning(
                 "docs_path %s does not exist, skipping narrative docs", path
             )
-            return
+            return self._narrative_scan
         self.log.info("Scraping Documentation")
-        files = list(path.glob("**/*.rst"))
-        trees = {}
-        title_map = {}
-        blbs = {}
-
-        # First pass: parse every RST file and collect targets so that
-        # :ref:`label` can resolve across documents in the same bundle.
-        # doc_targets maps each RST label to the doc key that defines it.
-        # doc_titles maps each doc key to its first heading so toctree
-        # entries can render document titles instead of raw paths.
-        parsed_files: list[tuple[Path, str, list[Section]]] = []
-        doc_targets: dict[str, str] = {}
-        external_targets: dict[str, str] = {}
-        doc_titles: dict[str, str] = {}
-        for p in files:
+        for p in path.glob("**/*.rst"):
             if any([k in str(p) for k in self.config.narrative_exclude]):
                 continue
             assert p.is_file()
@@ -1098,6 +1136,23 @@ class Gen:
                     )
                 external_targets[label] = url
             parsed_files.append((p, key, data))
+        return self._narrative_scan
+
+    def collect_narrative_docs(self) -> None:
+        """
+        Crawl the filesystem for all docs/rst files
+
+        """
+        parsed_files, doc_targets, external_targets, doc_titles = (
+            self._scan_narrative_sources()
+        )
+        if not parsed_files:
+            return
+        assert self.config.docs_path is not None
+        path = Path(self.config.docs_path).expanduser()
+        trees = {}
+        title_map = {}
+        blbs = {}
 
         # Second pass: visit each document with the full target map available.
         with self.progress() as p2:
@@ -1111,7 +1166,7 @@ class Gen:
                 try:
                     dv = GenVisitor(
                         key,
-                        frozenset(),
+                        self._known_refs,
                         local_refs=set(),
                         aliases={},
                         version=self._meta["version"],
@@ -1126,6 +1181,7 @@ class Gen:
                         execute=self.config.execute_doctests,
                         diagnostics=self.diagnostics,
                         github_slug=self._meta.get("github_slug"),
+                        roles=self.config.roles,
                     )
                     dv.collect_substitutions(*data)
                     blob.arbitrary = tuple(dv.visit(s) for s in data)
@@ -1634,17 +1690,21 @@ class Gen:
                     None,
                 )
                 s = processed_example_data(s)
+                _, doc_targets, external_targets, _ = self._scan_narrative_sources()
                 dv = GenVisitor(
                     example.name,
-                    frozenset(),
+                    self._known_refs,
                     local_refs=frozenset(),
                     aliases={},
                     version=self.version,
                     config=self.config.directives,
                     module=self.root,
+                    doc_targets=doc_targets,
+                    external_targets=external_targets,
                     execute=self.config.execute_doctests,
                     diagnostics=self.diagnostics,
                     github_slug=self._meta.get("github_slug"),
+                    roles=self.config.roles,
                 )
                 dv.collect_substitutions(s)
                 s2 = dv.visit(s)
@@ -1887,6 +1947,15 @@ class Gen:
                 for qa in collected
             }
         )
+        self._known_refs = known_refs
+        # Narrative link targets, so API docstrings can resolve :ref: labels
+        # defined in the prose docs (e.g. numpy's `ufuncs.kwargs`).
+        _, doc_targets, external_targets, _ = self._scan_narrative_sources()
+        # Documentation root, so Sphinx-absolute paths ("/_static/foo.svg")
+        # in docstring image/plot directives resolve to embeddable files.
+        _doc_root = (
+            Path(self.config.docs_path).expanduser() if self.config.docs_path else None
+        )
 
         error_collector = ErrorCollector(self.config, self.log)
         # with self.progress() as p2:
@@ -2031,10 +2100,14 @@ class Gen:
                     module=self.root,
                     doc_path=_doc_path,
                     asset_store=self.put_raw,
+                    doc_root=_doc_root,
+                    doc_targets=doc_targets,
+                    external_targets=external_targets,
                     execute=self.config.execute_doctests,
                     param_names=_param_names,
                     diagnostics=self.diagnostics,
                     github_slug=self._meta.get("github_slug"),
+                    roles=self.config.roles,
                 )
                 dv.collect_substitutions(
                     *arbitrary,

@@ -7,6 +7,7 @@ Papyri
 .. toctree::
 
    configuration
+   injecting
    crossrefs
    specimens/index
 

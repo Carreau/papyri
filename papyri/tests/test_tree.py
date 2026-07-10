@@ -1343,6 +1343,115 @@ def test_csv_table_empty_body_returns_nothing():
     assert csv_table_handler("", {}, "   \n  ") == []
 
 
+def _cell_text(cell):
+    """First Text value inside a TableCell's Paragraph."""
+    return cell.children[0].children[0].value
+
+
+def test_csv_table_delim_named_and_literal():
+    out = csv_table_handler("", {"delim": "tab"}, "a\tb\nc\td")
+    assert len(out[0].children) == 2
+    assert _cell_text(out[0].children[0].children[0]) == "a"
+
+    out = csv_table_handler("", {"delim": "space"}, "a b")
+    assert _cell_text(out[0].children[0].children[1]) == "b"
+
+    out = csv_table_handler("", {"delim": ";"}, "a;b")
+    assert _cell_text(out[0].children[0].children[1]) == "b"
+
+
+def test_csv_table_delim_invalid_falls_back_to_comma():
+    warns: list[str] = []
+    out = csv_table_handler("", {"delim": "xyz"}, "a,b", warn=warns.append)
+    assert len(out) == 1
+    assert _cell_text(out[0].children[0].children[1]) == "b"
+    assert any("delim" in w for w in warns)
+
+
+def test_csv_table_header_uses_delim():
+    out = csv_table_handler("", {"delim": "tab", "header": "Name\tAge"}, "a\t1")
+    header = out[0].children[0]
+    assert header.header is True
+    assert _cell_text(header.children[1]) == "Age"
+
+
+def test_csv_table_file_option(tmp_path):
+    (tmp_path / "data.csv").write_text('"Alice","30"\n"Bob","25"\n')
+    out = csv_table_handler("", {"file": "data.csv"}, "", doc_path=tmp_path)
+    assert len(out) == 1
+    assert len(out[0].children) == 2
+    assert _cell_text(out[0].children[1].children[0]) == "Bob"
+
+
+def test_csv_table_file_root_relative(tmp_path):
+    (tmp_path / "data.csv").write_text("a,b\n")
+    out = csv_table_handler(
+        "", {"file": "/data.csv"}, "", doc_path=tmp_path / "sub", doc_root=tmp_path
+    )
+    assert len(out) == 1
+
+
+def test_csv_table_file_missing_drops_with_warn(tmp_path):
+    warns: list[str] = []
+    out = csv_table_handler(
+        "", {"file": "nope.csv"}, "", doc_path=tmp_path, warn=warns.append
+    )
+    assert out == []
+    assert any("not found" in w for w in warns)
+
+
+def test_csv_table_file_without_path_context_drops():
+    warns: list[str] = []
+    out = csv_table_handler("", {"file": "data.csv"}, "", warn=warns.append)
+    assert out == []
+    assert any("doc_path" in w for w in warns)
+
+
+def test_csv_table_file_and_inline_content_drops(tmp_path):
+    (tmp_path / "data.csv").write_text("a,b\n")
+    warns: list[str] = []
+    out = csv_table_handler(
+        "", {"file": "data.csv"}, "x,y", doc_path=tmp_path, warn=warns.append
+    )
+    assert out == []
+    assert any("inline content" in w for w in warns)
+
+
+def test_csv_table_url_drops():
+    warns: list[str] = []
+    out = csv_table_handler(
+        "", {"url": "https://example.com/d.csv"}, "", warn=warns.append
+    )
+    assert out == []
+    assert any("url" in w for w in warns)
+
+
+def test_csv_table_ipython_shortcuts_shaped_tsv(tmp_path):
+    """IPython's generated shortcuts ``table.tsv`` parses; role markup in
+    cells stays inert literal text (no raw HTML enters the IR)."""
+    (tmp_path / "table.tsv").write_text(
+        ":kbd:`ctrl` + :kbd:`a`\t"
+        "Go to the start of the line :raw-html:`<br>` (beginning-of-line)\t"
+        ':raw-html:`<span title="always">always</span>`\n'
+    )
+    out = csv_table_handler(
+        "",
+        {
+            "file": "table.tsv",
+            "delim": "tab",
+            "header": "Shortcut\tDescription\tFilter",
+        },
+        "",
+        doc_path=tmp_path,
+    )
+    assert len(out) == 1
+    table = out[0]
+    assert len(table.children) == 2  # header + 1 data row
+    row = table.children[1]
+    assert len(row.children) == 3
+    assert _cell_text(row.children[0]) == ":kbd:`ctrl` + :kbd:`a`"
+
+
 def test_csv_table_registered_on_visitor():
     v = _make_visitor()
     assert "csv-table" in v._handlers

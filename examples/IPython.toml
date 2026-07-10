@@ -1,3 +1,15 @@
+# IPython's Sphinx build generates parts of its docs tree with scripts
+# before sphinx-build (config options, magics, keyboard shortcuts). For
+# papyri that content is injected directly as IR between gen and pack:
+#
+#   papyri gen examples/IPython.toml
+#   python examples/ipython_inject.py ~/.papyri/data/IPython_<version>
+#   papyri pack ~/.papyri/data/IPython_<version>
+#
+# Run against a clean IPython docs tree: stale autogen_* output from a
+# previous Sphinx build (config/options/terminal.rst,
+# interactive/magics-generated.txt, config/shortcuts/table.tsv) would be
+# collected by gen too and duplicate the injected content.
 [global]
 module = 'IPython'
 logo = "img/ipython-logo.png"
@@ -17,6 +29,8 @@ narrative_exclude = [
     "api/generated",
     "_build",
     "config/api",
+    # Sphinx-build leftover; its content comes from ipython_inject.py.
+    "config/options/terminal.rst",
 ]
 [global.implied_imports]
 get_ipython = 'IPython:get_ipython'

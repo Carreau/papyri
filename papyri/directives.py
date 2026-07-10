@@ -493,12 +493,17 @@ def literalinclude_handler(
     return []
 
 
-def _parse_csv_row(line: str) -> list[str]:
+def _parse_csv_row(line: str, delimiter: str = ",") -> list[str]:
     """Parse a single CSV row, respecting quoted fields."""
     import csv
 
-    rows = list(csv.reader([line]))
+    rows = list(csv.reader([line], delimiter=delimiter))
     return rows[0] if rows else []
+
+
+# ``:delim:`` accepts these names in addition to a literal character
+# (docutils also accepts ``U+00xx`` notation, which we do not).
+_CSV_DELIM_MAP = {"tab": "\t", "space": " "}
 
 
 def csv_table_handler(
@@ -506,27 +511,77 @@ def csv_table_handler(
     options: dict[str, str],
     content: str,
     *,
+    doc_path: Path | None = None,
+    doc_root: Path | None = None,
     warn: DirectiveWarn = _log_warn,
 ) -> list[Any]:
     """Handler for ``.. csv-table::`` — CSV-formatted table directive.
 
     Mirrors ``list-table`` in producing ``Table`` / ``TableRow`` / ``TableCell``
-    nodes.  Supported options: ``:header:`` (comma-separated header cells),
-    ``:header-rows:`` (integer).  Unsupported presentation options
+    nodes.  Supported options: ``:header:`` (delimiter-separated header cells),
+    ``:header-rows:`` (integer), ``:delim:`` (``tab``, ``space``, or a literal
+    character), ``:file:`` (read rows from a file, resolved like ``include``:
+    relative to *doc_path*, or *doc_root* for ``/``-prefixed paths) and its
+    companion ``:encoding:``.  ``:url:`` is dropped with a warning — gen does
+    not fetch over the network.  Unsupported presentation options
     (``:widths:``, ``:stub-columns:``, ``:align:``, etc.) are tolerated and
     ignored.
     """
     import csv as csv_mod
 
     opts = options or {}
+
+    delim_opt = (opts.get("delim") or "").strip()
+    delim = _CSV_DELIM_MAP.get(delim_opt, delim_opt) or ","
+    if len(delim) != 1:
+        warn(f"csv-table: unsupported :delim: {delim_opt!r}; falling back to ','")
+        delim = ","
+
+    if "url" in opts:
+        warn(
+            "csv-table: :url: option is not supported (no network at gen time); dropping directive"
+        )
+        return []
+
+    file_opt = (opts.get("file") or "").strip()
+    if file_opt:
+        if content and content.strip():
+            warn(
+                "csv-table: both :file: option and inline content given; "
+                "dropping directive"
+            )
+            return []
+        if file_opt.startswith("/"):
+            if doc_root is None:
+                warn(
+                    f"csv-table: cannot resolve root-relative path {file_opt!r} "
+                    "— no doc_root available"
+                )
+                return []
+            csv_path = (doc_root / file_opt.lstrip("/")).resolve()
+        else:
+            if doc_path is None:
+                warn(
+                    f"csv-table: cannot resolve relative path {file_opt!r} "
+                    "— no doc_path available"
+                )
+                return []
+            csv_path = (doc_path / file_opt).resolve()
+        if not csv_path.is_file():
+            warn(f"csv-table: file {csv_path} not found; dropping directive")
+            return []
+        content = csv_path.read_text(
+            encoding=opts.get("encoding", "utf-8"), errors="replace"
+        )
+
     header_rows: list[TableRow] = []
 
-    # Header from the :header: option (comma-separated quoted values).
+    # Header from the :header: option (delimiter-separated quoted values).
     header_opt = opts.get("header", "")
     if header_opt and header_opt.strip():
         cells = [
             TableCell(children=(Paragraph([Text(cell.strip())]),))
-            for cell in _parse_csv_row(header_opt)
+            for cell in _parse_csv_row(header_opt, delim)
         ]
         if cells:
             header_rows.append(TableRow(header=True, children=tuple(cells)))
@@ -535,7 +590,7 @@ def csv_table_handler(
 
     data_rows: list[TableRow] = []
     if content and content.strip():
-        reader = csv_mod.reader(content.splitlines())
+        reader = csv_mod.reader(content.splitlines(), delimiter=delim)
         for row_idx, raw_row in enumerate(reader):
             if not raw_row:
                 continue

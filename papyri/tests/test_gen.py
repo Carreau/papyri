@@ -646,3 +646,25 @@ def test_numpydoc_see_also_description_backticks_untouched() -> None:
     names, desc = group
     assert names == [("foo", None)]
     assert ":meth:`bar`" in " ".join(desc)
+
+
+def test_unknown_section_does_not_drop_object() -> None:
+    # Audit N2: __setitem__ recorded unknown sections in ordered_sections
+    # even though upstream numpydoc warn-and-drops them, so APIObjectInfo's
+    # section loop raised KeyError and the whole object was silently
+    # dropped from the bundle.
+    import warnings
+
+    from papyri.gen import APIObjectInfo
+
+    doc = "Summary line.\n\nUsage\n-----\nSome free-form prose.\n"
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        ndoc = NumpyDocString(doc)
+        assert "Usage" not in ndoc.ordered_sections
+        # Every recorded section is actually retrievable.
+        for title in ndoc.ordered_sections:
+            ndoc[title]
+        # End to end: the construction that used to KeyError.
+        api = APIObjectInfo("function", doc, None, "fn", qa="pkg:fn")
+    assert api.kind == "function"

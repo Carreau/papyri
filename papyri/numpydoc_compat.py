@@ -57,6 +57,13 @@ class NumpyDocString(nds.NumpyDocString):
             value = [d.rstrip() for d in value]
 
         super().__setitem__(key, value)
+        # Upstream numpydoc warns-and-drops unknown sections instead of
+        # storing them. Only record keys that actually landed: otherwise
+        # ordered_sections lists a key ``__getitem__`` raises on, and every
+        # consumer that iterates it (``APIObjectInfo``) KeyErrors — which
+        # used to silently drop the whole object from the bundle.
+        if key not in self._parsed_data:
+            return
         assert key not in self.ordered_sections, (
             f"assert {key!r} not in {self.ordered_sections}, {super().__getitem__(key)}, {value}"
         )

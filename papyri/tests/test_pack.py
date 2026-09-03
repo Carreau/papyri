@@ -1132,3 +1132,47 @@ def test_check_lint_clean_bundle_passes_strict() -> None:
     bundle = _make_bundle_node()
     _check_lint(bundle, strict=False)
     _check_lint(bundle, strict=True)
+
+
+def test_lint_bundle_counts_leftover_inline_roles() -> None:
+    """Unresolved InlineRole residue is reported by lint and strict-fatal
+    at pack (audit N4: it used to pass both unchecked)."""
+    from papyri.doc import GeneratedDoc
+    from papyri.nodes import InlineRole, Paragraph, Section
+
+    doc = GeneratedDoc.new()
+    doc._content = {
+        "summary": Section(
+            [Paragraph([InlineRole(domain=None, role="func", value="nope")])], ()
+        )
+    }
+    bundle = _make_bundle_node(api={"mod": doc})
+
+    issues = lint_bundle(bundle)
+    assert any("unresolved inline role" in i for i in issues)
+
+    _check_lint(bundle, strict=False)  # warning only
+    with pytest.raises(BundleError) as excinfo:
+        _check_lint(bundle, strict=True)
+    assert "inline role" in str(excinfo.value)
+
+
+def test_lint_bundle_counts_unimplemented_nodes() -> None:
+    """Unimplemented placeholders are reported by lint and strict-fatal at
+    pack."""
+    from papyri.doc import GeneratedDoc
+    from papyri.nodes import Section, Unimplemented
+
+    doc = GeneratedDoc.new()
+    doc._content = {
+        "summary": Section([Unimplemented("rubric", ".. rubric:: x")], ())
+    }
+    bundle = _make_bundle_node(api={"mod": doc})
+
+    issues = lint_bundle(bundle)
+    assert any("unimplemented-construct" in i for i in issues)
+
+    _check_lint(bundle, strict=False)  # warning only
+    with pytest.raises(BundleError) as excinfo:
+        _check_lint(bundle, strict=True)
+    assert "unimplemented" in str(excinfo.value)

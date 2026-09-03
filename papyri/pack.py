@@ -690,6 +690,39 @@ def _lint_docstring_sentinels(bundle: Bundle) -> list[str]:
     ]
 
 
+def _lint_inline_roles(bundle: Bundle) -> list[str]:
+    """Leftover ``InlineRole`` nodes — roles gen could not resolve or handle.
+
+    Gen returns the raw node when a cross-reference fails to resolve (or a
+    diagnostic downgrade let an unknown role through), so residue here is
+    unresolved-markup shipping to every consumer. Aggregated per document
+    to keep the report readable on ref-heavy bundles.
+    """
+    from .nodes import InlineRole
+
+    issues: list[str] = []
+    for doc_path, doc in _all_docs(bundle):
+        count = sum(1 for node in _iter_nodes(doc) if isinstance(node, InlineRole))
+        if count:
+            issues.append(f"{count} unresolved inline role(s) in {doc_path}")
+    return issues
+
+
+def _lint_unimplemented(bundle: Bundle) -> list[str]:
+    """``Unimplemented`` placeholder nodes — constructs gen has no handler for.
+
+    They carry raw source verbatim; a published bundle should not ship them.
+    """
+    from .nodes import Unimplemented
+
+    issues: list[str] = []
+    for doc_path, doc in _all_docs(bundle):
+        count = sum(1 for node in _iter_nodes(doc) if isinstance(node, Unimplemented))
+        if count:
+            issues.append(f"{count} unimplemented-construct node(s) in {doc_path}")
+    return issues
+
+
 def lint_bundle(bundle: Bundle) -> list[str]:
     """Check a bundle for IR consistency issues.
 
@@ -699,11 +732,15 @@ def lint_bundle(bundle: Bundle) -> list[str]:
     - Unresolved SubstitutionRef/SubstitutionDef nodes (should have been replaced)
     - Referenced assets that are missing from the asset store
     - DocstringSentinel placeholders (module docstrings numpydoc could not parse)
+    - Leftover InlineRole nodes (unresolved / unhandled roles)
+    - Unimplemented placeholder nodes (constructs without a gen handler)
     """
     return (
         _lint_substitutions(bundle)
         + _lint_missing_assets(bundle)
         + _lint_docstring_sentinels(bundle)
+        + _lint_inline_roles(bundle)
+        + _lint_unimplemented(bundle)
     )
 
 
@@ -716,9 +753,10 @@ def _check_lint(bundle: Bundle, strict: bool = False) -> None:
     standardized, exchangeable form and must contain no errors. They remain
     inspectable in the lenient bundle directory and reportable via ``papyri
     lint``; fix the source (or exclude the object explicitly) before
-    packing. Missing Figure assets are degraded-but-renderable content:
-    warn by default, fail under ``--strict`` so maintainer CI can block
-    publishing incomplete bundles.
+    packing. Missing Figure assets, leftover InlineRole nodes (unresolved
+    refs), and Unimplemented placeholders are degraded-but-renderable
+    content: warn by default, fail under ``--strict`` so maintainer CI can
+    block publishing incomplete bundles.
     """
     substitutions = _lint_substitutions(bundle)
     if substitutions:
@@ -741,7 +779,11 @@ def _check_lint(bundle: Bundle, strict: bool = False) -> None:
             f"docstring or exclude the object before packing: {sample}{more}"
         )
 
-    lint_warnings = _lint_missing_assets(bundle)
+    lint_warnings = (
+        _lint_missing_assets(bundle)
+        + _lint_inline_roles(bundle)
+        + _lint_unimplemented(bundle)
+    )
     if not lint_warnings:
         return
     sample = ", ".join(lint_warnings[:10])

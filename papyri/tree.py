@@ -535,6 +535,7 @@ _PY_VERBATIM_ROLES = (
     # they are built in rather than requiring every project to map them in
     # [global.roles]; papyri has no target index for them, so render as code.
     "abbr",
+    "code",  # docutils inline code role
     "dfn",
     "envvar",
     "guilabel",
@@ -547,6 +548,11 @@ _PY_VERBATIM_ROLES = (
     "option",
     "regexp",
     "token",
+    # Sphinx math-domain references (":eq:`label`", ":math:numref:`fig`").
+    # papyri keeps no equation/figure-number index, so the label renders as
+    # code rather than pretending to link.
+    "eq",
+    "numref",
 )
 
 # Cross-reference roles (any/attr/class/const/data/exc/func/meth/method/mod/obj
@@ -557,9 +563,9 @@ _PY_VERBATIM_ROLES = (
 # find the target the original ``InlineRole`` is returned and rendered as
 # styled code, matching the previous verbatim appearance.
 # Registered under "py" (the default when a role is written without a
-# domain) and "std" (their real Sphinx domain, for the explicit
-# ``:std:envvar:`` spelling).
-for domain in ("py", "std"):
+# domain), "std" (their real Sphinx domain, for the explicit
+# ``:std:envvar:`` spelling) and "math" (``:math:numref:`` / ``:math:eq:``).
+for domain in ("py", "std", "math"):
     for role in _PY_VERBATIM_ROLES:
         directive_handler(domain, role)(
             lambda value, _domain=domain, _role=role: _x_any_unimplemented_to_verbatim(

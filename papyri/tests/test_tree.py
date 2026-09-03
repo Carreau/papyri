@@ -2771,7 +2771,14 @@ def test_standard_std_domain_roles_are_builtin_verbatim() -> None:
     # inventions — built in as verbatim, in both the bare and the explicit
     # ``:std:`` spelling, with no diagnostic.
     v = _make_visitor()
-    for domain, role in ((None, "envvar"), ("std", "envvar"), (None, "dfn")):
+    for domain, role in (
+        (None, "envvar"),
+        ("std", "envvar"),
+        (None, "dfn"),
+        (None, "code"),
+        (None, "eq"),
+        ("math", "numref"),
+    ):
         out = v.replace_InlineRole(InlineRole(domain=domain, role=role, value="X"))
         assert len(out) == 1, (domain, role)
         assert isinstance(out[0], InlineCode), (domain, role)

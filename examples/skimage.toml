@@ -13,6 +13,11 @@ docs = 'https://scikit-image.org/docs/stable/'
 narrative_exclude = [
     'doc/source/skips/2-values.rst'
 ]
+[global.roles]
+# ``:DOI:`` comes from scikit-image's docs Sphinx extension (links to
+# doi.org). Render the identifier as inline code, explicitly.
+DOI = 'papyri.directives:role_verbatim'
+
 [global.expected_errors]
 WrongTypeAtField = [
     "skimage.morphology._skeletonize:medial_axis",

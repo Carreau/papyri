@@ -2764,3 +2764,16 @@ def test_resolve_ambiguous_suffix_is_unresolved() -> None:
     r2 = resolve_("numpy.linspace", known2, frozenset(), "mean", {})
     assert r2.kind != "missing"
     assert r2.path == "numpy.ma.core:MaskedArray.mean"
+
+
+def test_standard_std_domain_roles_are_builtin_verbatim() -> None:
+    # :envvar: / :dfn: are documented Sphinx/docutils roles, not project
+    # inventions — built in as verbatim, in both the bare and the explicit
+    # ``:std:`` spelling, with no diagnostic.
+    v = _make_visitor()
+    for domain, role in ((None, "envvar"), ("std", "envvar"), (None, "dfn")):
+        out = v.replace_InlineRole(InlineRole(domain=domain, role=role, value="X"))
+        assert len(out) == 1, (domain, role)
+        assert isinstance(out[0], InlineCode), (domain, role)
+        assert out[0].value == "X"
+    assert v.diagnostics.records == []

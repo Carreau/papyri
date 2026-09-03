@@ -530,6 +530,23 @@ _PY_VERBATIM_ROLES = (
     "sub",
     "sup",
     "term",
+    # Standard Sphinx std-domain / docutils formatting roles. They are part
+    # of the documented RST/Sphinx vocabulary (not project inventions), so
+    # they are built in rather than requiring every project to map them in
+    # [global.roles]; papyri has no target index for them, so render as code.
+    "abbr",
+    "dfn",
+    "envvar",
+    "guilabel",
+    "mailheader",
+    "makevar",
+    "manpage",
+    "menuselection",
+    "mimetype",
+    "newsgroup",
+    "option",
+    "regexp",
+    "token",
 )
 
 # Cross-reference roles (any/attr/class/const/data/exc/func/meth/method/mod/obj
@@ -539,10 +556,16 @@ _PY_VERBATIM_ROLES = (
 # generated.  ``ref`` (section-label refs) also falls through: if resolve can't
 # find the target the original ``InlineRole`` is returned and rendered as
 # styled code, matching the previous verbatim appearance.
-for role in _PY_VERBATIM_ROLES:
-    directive_handler("py", role)(
-        lambda value, _role=role: _x_any_unimplemented_to_verbatim("py", _role, value)
-    )
+# Registered under "py" (the default when a role is written without a
+# domain) and "std" (their real Sphinx domain, for the explicit
+# ``:std:envvar:`` spelling).
+for domain in ("py", "std"):
+    for role in _PY_VERBATIM_ROLES:
+        directive_handler(domain, role)(
+            lambda value, _domain=domain, _role=role: _x_any_unimplemented_to_verbatim(
+                _domain, _role, value
+            )
+        )
 
 
 # :ghpull: / :ghissue: are IPython-invented roles honoured for any project

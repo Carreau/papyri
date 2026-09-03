@@ -19,6 +19,12 @@ exclude = [
 exec_failure = 'fallback'
 execute_doctests = false
 
+[global.roles]
+# ``:ivar:`` is a docstring *field* (``:ivar name:``), not a role; two
+# distributed docstrings use it as one. Render the body as code rather
+# than fail the build until the docstrings are fixed upstream.
+ivar = 'papyri.directives:role_verbatim'
+
 [global.expected_errors]
 NumpydocParseError = [
    "distributed.client:default_client",

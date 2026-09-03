@@ -32,6 +32,16 @@ narrative_exclude = [
     # Sphinx-build leftover; its content comes from ipython_inject.py.
     "config/options/terminal.rst",
 ]
+[global.roles]
+# IPython's own Sphinx-extension roles (magics, config traits) and the
+# Sphinx rst-domain role used in the sphinxext docs. No target index
+# outside IPython's docs build: render as inline code, explicitly.
+magic            = 'papyri.directives:role_verbatim'
+cellmagic        = 'papyri.directives:role_verbatim'
+configtrait      = 'papyri.directives:role_verbatim'
+"std:configtrait" = 'papyri.directives:role_verbatim'
+"rst:dir"        = 'papyri.directives:role_verbatim'
+
 [global.implied_imports]
 get_ipython = 'IPython:get_ipython'
 

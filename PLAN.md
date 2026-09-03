@@ -218,6 +218,23 @@ layers. Do not write CBOR into the bundle directory or JSON into the artifact.
 
 ## Open work — Gen (Python)
 
+- **Typed qa forms (NewType) instead of ambiguous strings.** At least three
+  string shapes travel through gen/tree under the name "qa" and are told
+  apart only by convention: dotted module paths (`numpy.ma.core`), full_qual
+  object form (`numpy.ma.core:MaskedArray.var` — colon splits module from
+  qualname; `utils.FullQual` exists but most signatures take plain `str`),
+  and narrative doc keys (`reference:ufuncs` — colon is a *directory*
+  separator). The ambiguity has already produced real bugs fixed by ad-hoc
+  guards: `resolve_` normalizes `":" → "."` before scope derivation,
+  `DirectiveVisiter._resolve` detects "qa is not a Python path under the
+  module" to fall back to the package root, and `:doc:` resolution needed an
+  is-API-context test to stop deriving phantom doc keys from object qa.
+  Introduce distinct NewTypes (or tiny dataclasses) — e.g. `ModulePath`,
+  `FullQual` (reuse), `DocKey` — annotate the qa-carrying signatures
+  (`resolve_`, `DirectiveVisiter`/`GenVisitor` constructors, diagnostics
+  targets, doc-target maps), convert at the boundaries where each form is
+  created, and let mypy reject cross-form mixing so those guards become
+  type errors instead of runtime heuristics.
 - **`DirectiveContext` injection (context, not globals).** Directive handlers
   reach bundle state through ad-hoc closures (`make_image_handler` &c.) and,
   historically, module globals. Define an explicit `DirectiveContext` (at least

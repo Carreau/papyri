@@ -668,3 +668,30 @@ def test_unknown_section_does_not_drop_object() -> None:
         # End to end: the construction that used to KeyError.
         api = APIObjectInfo("function", doc, None, "fn", qa="pkg:fn")
     assert api.kind == "function"
+
+
+def test_exec_failure_fallback_records_and_continues(tmp_path: Any) -> None:
+    # Audit N9: under exec_failure="fallback" a failing example emitted
+    # W-doctest-exec and was then re-asserted fatal at the end of
+    # collect_examples, defeating the escape hatch numpy/scipy/matplotlib
+    # configs rely on.
+    from papyri.error_collector import W_DOCTEST_EXEC
+
+    (tmp_path / "boom.py").write_text("raise RuntimeError('nope')\n")
+    (tmp_path / "ok.py").write_text("x = 1\n")
+    config = Config(
+        dummy_progress=True,
+        execute_doctests=True,
+        exec_failure="fallback",
+        infer=False,
+    )
+    gen = Gen(dummy_progress=True, config=config)
+    gen.root = "pkg"
+    gen.version = "1.0"
+    gen._meta = {"version": "1.0", "module": "pkg"}
+    acc = gen.collect_examples(tmp_path, config=config)
+    # Both examples are kept (the failing one un-executed), and the
+    # failure is recorded as a diagnostic instead of aborting gen.
+    assert len(acc) == 2
+    codes = [r["code"] for r in gen.diagnostics.records]
+    assert W_DOCTEST_EXEC in codes

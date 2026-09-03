@@ -1715,7 +1715,13 @@ class Gen:
                         figs,
                     )
                 )
-        assert len(failed) == 0, failed
+        # Under exec_failure="fallback" the failures were already recorded
+        # as W-doctest-exec diagnostics — aborting here would defeat the
+        # documented escape hatch (audit finding N9). Any other mode
+        # re-raised inside the loop, so reaching this assert with failures
+        # means the fallback accounting broke.
+        if config.exec_failure != "fallback":
+            assert len(failed) == 0, failed
         return acc
 
     def _get_collector(self) -> DFSCollector:

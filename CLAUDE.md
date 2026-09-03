@@ -312,6 +312,12 @@ the graphstore and blob store is rebuildable via `POST /api/reingest`.
   `checkOrigin` is disabled in `astro.config.mjs`, since the endpoint carries
   its own bearer-token check). Some reverse proxies / WAFs reject
   `Python-urllib/3.x`, so the CLI sends `papyri-upload/<version>` instead.
+- TypeScript tooling is dual-version (see "Dependency notes" in `PLAN.md`):
+  `ingest/` builds and type-checks with native TypeScript 7 (the `tsc` bin
+  comes from the `typescript7` npm alias), while the `typescript` package
+  name is aliased to `@typescript/typescript6` (TS 6 JS API, bin `tsc6`)
+  for `typescript-eslint` and `@astrojs/check`, which can't consume TS 7's
+  native compiler yet. Don't "simplify" this to a single `typescript` dep.
 - Storage backends are chosen in `viewer/src/lib/backends.ts`. Only the
   filesystem + SQLite implementations exist (`FsBlobStore` / `SqliteGraphDb` /
   `FsRawStore`); the `BlobStore` / `GraphDb` / `RawStore` interfaces are kept

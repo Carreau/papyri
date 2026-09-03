@@ -144,6 +144,16 @@ layers. Do not write CBOR into the bundle directory or JSON into the artifact.
   Do not reintroduce `tree_sitter_languages` or `tree-sitter-language-pack`.
 - `numpy`, `scipy`, `astropy`, `IPython` in the CI matrix drift frequently;
   pin each matrix entry to a known-good version or xfail with a reason.
+- TypeScript is split across two packages (Microsoft's documented TS 7
+  migration pattern). `ingest/` compiles and type-checks with the native
+  Go-based TypeScript 7 (`typescript7` npm alias → `typescript@7`, provides
+  the `tsc` bin). The `typescript` dependency name in both `ingest/` and
+  `viewer/` is an alias for `@typescript/typescript6`, which re-exports the
+  TS 6 JS compiler API (bin: `tsc6`) — needed because `typescript-eslint`
+  and `@astrojs/check` consume the old JS API, which `typescript@7` no
+  longer ships. *Follow-up:* when typescript-eslint and Astro support the
+  stable native API (expected ~TS 7.1), drop the `@typescript/typescript6`
+  alias and move `viewer/` type-checking to TS 7 as well.
 
 ---
 

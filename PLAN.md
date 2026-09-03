@@ -117,9 +117,13 @@ Python-isms must not leak into the wire encoding. Target state: gen keeps
 unhandled directives verbatim in the *lenient* bundle directory
 (`Directive.from_unprocessed` — inspectable, available to tooling), and
 `papyri pack` / `papyri lint` fail while any `Directive` node remains.
-(Current code differs: `Directive` is an `UnserializableNode` with
-`_reject_at_validate`, so gen hard-fails instead — the strictness sits one
-stage too early; see the enforcement item below.)
+(Current code differs, and is *worse* than previously recorded here:
+`Directive` is an `UnserializableNode` with `_reject_at_validate`, so
+`doc_blob.validate()` raises at gen time — but under the default
+`--fail-early=False` that exception lands in the per-object catch and the
+whole host object is **silently dropped** from the bundle; only
+`--fail-early` produces the hard failure. 2026-07 audit, finding N3; see
+the enforcement item below.)
 Every directive must be explicitly handled by pack time: by a built-in handler,
 a project-registered handler (see the `DirectiveContext` plugin API), or an
 explicit maintainer decision to unwrap or drop (via config). Dropping is
@@ -286,6 +290,12 @@ layers. Do not write CBOR into the bundle directory or JSON into the artifact.
   payload; `parse(text, qa, warn=…)` deep-copies (or rebuilds) the tree
   before handing it to mutating visitors and re-emits each warning with qa
   attached, routing to Diagnostics when a warn callback is passed.
+  2026-07 audit addition (N8): `TSVisitor.visit_ERROR` returns `[]` with
+  **no signal at any log level**, silently deleting the text under any
+  tree-sitter ERROR node; the Text-preserving fallback branch its code
+  comment describes is unreachable because `getattr` dispatch finds
+  `visit_ERROR` first. Fold into this refactor: make ERROR nodes the
+  Text-preserving fallback plus a queued warning.
 - **Per-reference version pins.** `"?"` is the expected version on almost all
   refs (see the ref-classification invariant); what's missing is the opt-in
   path for a doc to *pin* a specific version when it means one, plus an
@@ -348,11 +358,13 @@ layers. Do not write CBOR into the bundle directory or JSON into the artifact.
   `LocalRef("assets", name)` at all four sites, update the Figure check in
   `pack.py`, and delete the stale "todo: add version number here" comment
   in `tree.py`.
-- **Inline roles in table cells.** `csv-table` / `list-table` cells become
-  plain `Text` — role markup inside cells (`:kbd:` in docs-tree csv files)
+- **Inline roles in csv-table cells.** `csv-table` cells become plain
+  `Text` — role markup inside cells (`:kbd:` in docs-tree csv files)
   degrades to inert literal text. Upholds no-raw-HTML but reads noisily;
   run cell content through the inline parser once the `DirectiveContext`
-  work lands.
+  work lands. (2026-07 audit: the `list-table` half of this item was
+  refuted — list-table cell content goes through `parse()` and roles
+  resolve normally.)
 - **Raw-markup passthroughs.** Three places copy unparsed RST source into
   content nodes, against the no-raw-markup direction: `autosummary` renders
   its own directive markup as a visible `Code` block
@@ -371,18 +383,74 @@ layers. Do not write CBOR into the bundle directory or JSON into the artifact.
   inventory already covers stdlib links via CPython's `objects.inv`; the shim is
   the gen-time alternative for builtins specifically.)
 - **Remaining pack/lint unification.** The core of the 2026-07 review
-  finding is closed: `make_artifact_from_dir` now runs the lint checks
-  (substitution nodes always fail — invariant; missing Figure assets and
-  `DocstringSentinel` placeholders warn by default, fail under
+  finding is closed: `make_artifact_from_dir` runs the lint checks
+  (substitution nodes and `DocstringSentinel` placeholders always fail;
+  missing Figure assets, leftover `InlineRole` residue, and
+  `Unimplemented` placeholder counts warn by default, fail under
   `--strict`). Still open from that finding: share `_assert_safe_urls`
   with `papyri lint` (today it runs only on the pack path); give `papyri
   lint` a `--strict` flag and fix its help text (it advertises a
   dangling-LocalRef check that non-strict `read_bundle_dir` only warns
-  about); add a count of `Unimplemented` nodes (verbatim unparsed source
-  rides into artifacts untracked) and a heuristic raw-HTML scan over
-  string leaves (warn; `--strict` error) so the no-raw-HTML invariant is
-  enforced at the boundary for *any* producer, not only by gen's handler
-  table.
+  about); and a heuristic raw-HTML scan over string leaves (warn;
+  `--strict` error) so the no-raw-HTML invariant is enforced at the
+  boundary for *any* producer, not only by gen's handler table.
+- **Route every skipped object/page through Diagnostics (2026-07 audit
+  N3).** Per-object exceptions in `collect_api_docs` (ErrorCollector
+  unexpected errors, the post-processing catch) and per-page skips in
+  `collect_narrative_docs` discard the object/page with only a
+  `log.warning` — no coded diagnostic, so `error_on_warning` never gates
+  them and gen exits 0 with content missing. Verified triggers: any
+  admonition with a `:class:` option (`assert not options` in
+  `admonition_helper`), and an unhandled directive under the default
+  `--fail-early=False` (see the corrected directive-invariant note).
+  Add `E-object-dropped` / `E-page-dropped` codes (error default),
+  emit at every skip site, and fix `admonition_helper` to tolerate
+  options via `warn`.
+- **Toctree/narrative silent-skip chain (2026-07 audit N5).** A narrative
+  page that fails to parse vanishes together with its navigation entry on
+  console noise alone: gen skips it (`log.warning`), `toc.py` then drops
+  the dangling toctree entry with a bare `print("skip Path", …)` — so
+  pack's hard `_check_toc_refs` never sees the breakage. `:glob:` toctree
+  entries are skipped un-expanded with no signal at all, and
+  absolute-path (`/…`) entries are dropped with a `print`. Convert the
+  `print`s to diagnostics, add `W-narrative-page-skipped` (error default)
+  and `W-toctree-entry-dropped`.
+- **Placeholder English prose ships in packed artifacts (2026-07 audit
+  N6).** "No Docstrings", "This module has no documentation", and
+  `<No Title …>` toc titles are magic strings injected by gen with no
+  diagnostic and no lint shape-check — verified present in real packed
+  bundles. Replace with structured representations (empty summary +
+  flag; doc-key fallback titles), emit a diagnostic per undocumented
+  object / untitled doc, and lint the known placeholder shapes during
+  the transition.
+- **`papyri upload` packs lenient by default (2026-07 audit N10).** The
+  publish path calls `make_artifact_from_dir(strict=False)`: dangling
+  LocalRefs, orphan docs, and the warn-tier lint issues ship to the
+  viewer un-gated, against "the packed form must be linted and contain
+  no errors". Decide: default `--strict` on upload (with an explicit
+  opt-out), or at minimum a flag + loud nudge.
+- **Audit minors (2026-07, N-misc).** `literalinclude` drops file content
+  at `log.info` (not the `warn` binding); `rubric`/`topic`/`container`/
+  figure-caption silently discard bodies that don't parse as a leading
+  Section; the `:external+inv:` intersphinx prefix is parsed into
+  `InlineRole.inventory` then ignored — an explicitly-external ref is
+  resolved against the local bundle, overriding author intent;
+  `jedi_failure_mode="log"` replaces an example's token stream with
+  literal "jedi failed" tokens (and `W-doctest-syntax` injects
+  "fail"/"fail" tokens) that pass pack unchecked;
+  `TextSignatureParsingFailed` → `pass` ships an object without a
+  signature silently; `DelayedResolver.add_reference` is dead machinery
+  (never called) and its module-global duplicate-target assert can turn
+  into a silent page skip. Fold each into the nearest structural item
+  (DirectiveContext, ts.py wiring, diagnostics routing) as they land.
+- **Upstream the numpydoc leniencies, then delete them.** The See Also
+  backtick normalization and section-heading normalization in
+  `numpydoc_compat.py` are recorded-and-diagnosed rewrites
+  (`W-see-also-syntax` / `W-section-heading-normalized`), but the real
+  fix is upstream: either teach numpydoc the backticked See Also form
+  (send the patch, leave a pointer here), or fix the source projects'
+  docstrings (numpy.polynomial et al.). Once either lands, delete the
+  corresponding rewrite.
 - **Inline images in phrasing content (image substitutions).** matplotlib's
   docstrings define `image`-type substitutions (`.. |m30| image:: …` used in
   marker/mathtext tables); gen warns and drops them because `Image` is

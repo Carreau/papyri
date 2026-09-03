@@ -500,9 +500,10 @@ def make_artifact_from_dir(
 ) -> tuple[bytes, Bundle]:
     """Validate and pack a DocBundle directory. Returns (artifact_bytes, bundle).
 
-    If ``strict=True``, dangling local refs, orphan narrative docs, missing
-    Figure assets, and docstring-parse-failure sentinels are treated as hard
-    errors instead of warnings. Substitution nodes in the IR always fail.
+    If ``strict=True``, dangling local refs, orphan narrative docs, and
+    missing Figure assets are treated as hard errors instead of warnings.
+    Substitution nodes and docstring-parse-failure sentinels in the IR
+    always fail — the packed artifact must contain no errors.
     """
     bundle = read_bundle_dir(path, log=log, strict=strict)
     _check_lint(bundle, strict=strict)
@@ -710,8 +711,12 @@ def _check_lint(bundle: Bundle, strict: bool = False) -> None:
     """Enforce lint checks at pack time.
 
     Substitution nodes violate a hard IR invariant ("RST substitutions never
-    reach the IR") and always fail the pack. Missing Figure assets and
-    docstring-parse-failure sentinels are degraded-but-renderable content:
+    reach the IR") and DocstringSentinel placeholders mark docstrings gen
+    could not parse — both always fail the pack: the packed artifact is the
+    standardized, exchangeable form and must contain no errors. They remain
+    inspectable in the lenient bundle directory and reportable via ``papyri
+    lint``; fix the source (or exclude the object explicitly) before
+    packing. Missing Figure assets are degraded-but-renderable content:
     warn by default, fail under ``--strict`` so maintainer CI can block
     publishing incomplete bundles.
     """
@@ -725,7 +730,18 @@ def _check_lint(bundle: Bundle, strict: bool = False) -> None:
             f"{sample}{more}"
         )
 
-    lint_warnings = _lint_missing_assets(bundle) + _lint_docstring_sentinels(bundle)
+    sentinels = _lint_docstring_sentinels(bundle)
+    if sentinels:
+        sample = ", ".join(sentinels[:10])
+        more = f" (+{len(sentinels) - 10} more)" if len(sentinels) > 10 else ""
+        raise BundleError(
+            f"bundle {bundle.module} {bundle.version} contains {len(sentinels)} "
+            f"docstring parse-failure sentinel(s) — placeholders for docstrings "
+            f"gen could not parse must not reach the packed artifact; fix the "
+            f"docstring or exclude the object before packing: {sample}{more}"
+        )
+
+    lint_warnings = _lint_missing_assets(bundle)
     if not lint_warnings:
         return
     sample = ", ".join(lint_warnings[:10])

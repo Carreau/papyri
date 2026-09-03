@@ -1110,8 +1110,9 @@ def test_check_lint_missing_asset_warns_by_default_raises_strict() -> None:
     assert "missing.png" in str(excinfo.value)
 
 
-def test_check_lint_docstring_sentinel_warns_by_default_raises_strict() -> None:
-    """Docstring-parse-failure sentinels warn on plain pack and fail under --strict."""
+def test_check_lint_docstring_sentinel_always_fatal() -> None:
+    """Sentinels mark docstrings gen could not parse — they must never reach
+    the packed artifact, so the pack fails even without --strict."""
     from papyri.doc import GeneratedDoc
     from papyri.nodes import DocstringSentinel, Section
 
@@ -1121,9 +1122,8 @@ def test_check_lint_docstring_sentinel_warns_by_default_raises_strict() -> None:
     }
     bundle = _make_bundle_node(api={"mod": doc})
 
-    _check_lint(bundle, strict=False)  # no raise: warning only
     with pytest.raises(BundleError) as excinfo:
-        _check_lint(bundle, strict=True)
+        _check_lint(bundle, strict=False)
     assert "sentinel" in str(excinfo.value)
 
 

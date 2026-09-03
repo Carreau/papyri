@@ -126,6 +126,21 @@ W_UNRESOLVED_DEFAULT_ROLE = _register(
     "plain text silently, so this defaults to info; promote per project if "
     "bare backticks are expected to link.",
 )
+W_SEE_ALSO_SYNTAX = _register(
+    "W-see-also-syntax",
+    Severity.WARNING,
+    "A See Also entry is written with default-role backticks (`name`), "
+    "which upstream numpydoc rejects. papyri normalized it to keep the "
+    "page, but the leniency is temporary: fix the docstring at the source "
+    "(or upstream the syntax to numpydoc).",
+)
+W_SECTION_HEADING_NORMALIZED = _register(
+    "W-section-heading-normalized",
+    Severity.WARNING,
+    "A docstring section heading was normalized to a canonical numpydoc "
+    "section (trailing ':', missing trailing 's', or a known misspelling). "
+    "The rewrite is recorded, never silent — fix the heading at the source.",
+)
 W_UNKNOWN_ROLE = _register(
     "W-unknown-role",
     Severity.ERROR,

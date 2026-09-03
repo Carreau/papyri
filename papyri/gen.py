@@ -72,6 +72,8 @@ from .error_collector import (
     W_DOCTEST_SYNTAX,
     W_MODULE_DOCSTRING,
     W_NUMPYDOC_PARSE,
+    W_SECTION_HEADING_NORMALIZED,
+    W_SEE_ALSO_SYNTAX,
     DiagnosticConfig,
     Diagnostics,
     ErrorCollector,
@@ -2036,6 +2038,24 @@ class Gen:
                     ndoc = NumpyDocString(dedent_but_first("No Docstrings"))
                 else:
                     continue
+            # The lenient NumpyDocString records every rewrite it performed;
+            # surface each one — normalization must never be silent, and the
+            # real fix is in the source docstring.
+            for entry in ndoc.seealso_normalized:
+                self.diagnostics.emit(
+                    W_SEE_ALSO_SYNTAX,
+                    qa,
+                    f"See Also entry uses default-role backticks ({entry!r}); "
+                    f"upstream numpydoc rejects this syntax — normalized, fix "
+                    f"the docstring at the source",
+                )
+            for original, canonical in ndoc.section_normalizations:
+                self.diagnostics.emit(
+                    W_SECTION_HEADING_NORMALIZED,
+                    qa,
+                    f"docstring section heading {original!r} normalized to "
+                    f"{canonical!r}; fix the heading at the source",
+                )
             if not isinstance(target_item, ModuleType):
                 arbitrary = []
             ex = self.config.execute_doctests

@@ -364,6 +364,17 @@ The diagnostic codes papyri currently emits:
        backticks for variable names, and Sphinx's ``autolink`` default role
        degrades to plain text silently, so this defaults to ``info``;
        promote it per project if bare backticks are expected to link.
+   * - ``W-see-also-syntax``
+     - ``warning``
+     - A See Also entry is written with default-role backticks
+       (```name```), which upstream numpydoc rejects.  papyri normalizes
+       it to keep the page; the leniency is temporary — fix the docstring
+       at the source (or upstream the syntax to numpydoc).
+   * - ``W-section-heading-normalized``
+     - ``warning``
+     - A docstring section heading was normalized to a canonical numpydoc
+       section (trailing ``:``, missing trailing ``s``, or a known
+       misspelling).  Never silent — fix the heading at the source.
    * - ``W-unknown-role``
      - ``error``
      - An inline role papyri does not know: not a built-in handler and not

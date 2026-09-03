@@ -695,3 +695,36 @@ def test_exec_failure_fallback_records_and_continues(tmp_path: Any) -> None:
     assert len(acc) == 2
     codes = [r["code"] for r in gen.diagnostics.records]
     assert W_DOCTEST_EXEC in codes
+
+
+def test_guess_header_no_prefix_guessing() -> None:
+    # Audit N7: the open-ended prefix match rewrote "Ret" into "Returns"
+    # and re-parsed the prose as a parameter list — wrong structured
+    # content, silently. Only bounded normalizations remain, each recorded.
+    import warnings
+
+    doc = "Summary.\n\nRet\n---\nA sentence, not a param list.\n"
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        ndoc = NumpyDocString(doc)
+    assert "Ret" not in ndoc.ordered_sections
+    assert "Returns" not in ndoc.ordered_sections
+    assert ndoc.section_normalizations == []
+
+    doc2 = "Summary.\n\nReturn\n------\nint\n    the thing\n"
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        ndoc2 = NumpyDocString(doc2)
+    assert "Returns" in ndoc2.ordered_sections
+    assert ("Return", "Returns") in ndoc2.section_normalizations
+
+
+def test_see_also_normalization_is_recorded() -> None:
+    # The backtick rewrite must be accountable: recorded on the instance
+    # (and surfaced by gen as W-see-also-syntax).
+    doc = "Summary.\n\nSee Also\n--------\n`numpy.polynomial`\n"
+    ndoc = NumpyDocString(doc)
+    assert ndoc.seealso_normalized == ["`numpy.polynomial`"]
+    # A clean entry records nothing.
+    ndoc2 = NumpyDocString("Summary.\n\nSee Also\n--------\nnumpy.polynomial\n")
+    assert ndoc2.seealso_normalized == []

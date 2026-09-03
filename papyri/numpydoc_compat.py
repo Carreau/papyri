@@ -14,6 +14,13 @@ import numpydoc.docscrape as nds
 # The names segment (group 1) is captured separately from the optional
 # ": description" tail so only the names get rewritten — descriptions may
 # legitimately contain backticks and role references.
+#
+# TEMPORARY LENIENCY, not a feature: every normalization is recorded on the
+# instance (``seealso_normalized``) and surfaced by gen as a
+# W-see-also-syntax diagnostic so the docstring gets fixed at the source.
+# The proper resolutions are upstream — teach numpydoc the backticked form,
+# or patch the source projects to use valid syntax — after which this
+# rewrite gets deleted (tracked in PLAN.md).
 _SEE_ALSO_BACKTICKED_LINE = re.compile(
     r"^(\s*(?:`[A-Za-z_][\w.]*`\s*,?\s*)+)(:.*)?$",
 )
@@ -33,7 +40,7 @@ class NumpyDocString(nds.NumpyDocString):
     subclass a littel bit more lenient on parsing
     """
 
-    __slots__ = ("ordered_sections",)
+    __slots__ = ("ordered_sections", "section_normalizations", "seealso_normalized")
 
     aliases: ClassVar[dict[str, tuple[str, ...]]] = {
         "Parameters": (
@@ -50,6 +57,11 @@ class NumpyDocString(nds.NumpyDocString):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         self.ordered_sections: list[str] = []
+        # Accountability for the leniencies below: every rewrite this
+        # subclass performs is recorded so gen can emit a diagnostic —
+        # normalization must never be silent.
+        self.section_normalizations: list[tuple[str, str]] = []
+        self.seealso_normalized: list[str] = []
         super().__init__(*args, **kwargs)
 
     def __setitem__(self, key: str, value: Any) -> None:
@@ -72,12 +84,21 @@ class NumpyDocString(nds.NumpyDocString):
     def _guess_header(self, header: str) -> str:
         if header in self.sections:
             return header
-        # handle missing trailing `s`, and trailing `:`
+        # Deliberate, bounded normalizations only — each one recorded in
+        # ``section_normalizations`` for gen to surface as a diagnostic:
+        # a trailing ":", a missing trailing "s" ("Return" → "Returns",
+        # case-insensitive exact otherwise), and the explicit misspelling
+        # alias table. The historical open-ended prefix match was a guess:
+        # it rewrote "Ret" to "Returns" and re-parsed the section's prose
+        # as a parameter list — wrong structured content, silently.
+        normalized = header.rstrip(":")
         for s in self.sections:
-            if s.lower().startswith(header.rstrip(":").lower()):
+            if s.lower() in (normalized.lower(), normalized.lower() + "s"):
+                self.section_normalizations.append((header, str(s)))
                 return str(s)
         for k, v in self.aliases.items():
             if header.lower() in v:
+                self.section_normalizations.append((header, k))
                 return k
         # Not a recognizable numpydoc section ("Goals", "Usage", …) — return
         # it unchanged and let upstream numpydoc handle it (warn + skip).
@@ -101,8 +122,13 @@ class NumpyDocString(nds.NumpyDocString):
         dropped the whole docstring. Strip the backticks from entry lines
         (description lines are left untouched).
         """
-        content = [_strip_see_also_backticks(line) for line in content]
-        return super()._parse_see_also(content)
+        fixed = []
+        for line in content:
+            new = _strip_see_also_backticks(line)
+            if new != line:
+                self.seealso_normalized.append(line.strip())
+            fixed.append(new)
+        return super()._parse_see_also(fixed)
 
     def _parse_param_list(self, *args: Any, **kwargs: Any) -> list[Any]:
         """

@@ -726,6 +726,30 @@ Newest areas first; each line names the key symbol/file.
   matplotlib's `:mpltype:` mapped in its example config. Docs:
   `configuration.rst` `[global.roles]`.
 
+### Everything-explicit pass (2026-07 review + adversarial audit)
+- Unknown roles are a hard failure: `W-unknown-role` (default `error`),
+  emitted *before* any resolution attempt (`replace_InlineRole` gate on
+  `_PYTHON_OBJECT_ROLES` / `ref` / `doc`), so an unmapped role can never
+  accidentally cross-link. Standard Sphinx std-domain formatting roles
+  (`envvar`, `dfn`, `abbr`, `guilabel`, `menuselection`, `option`, …) are
+  built in as verbatim under both `py` (bare) and `std` domains; IPython,
+  distributed, and scikit-image example configs carry explicit
+  `[global.roles]` mappings for their project-local roles.
+- `DocstringSentinel` always refuses to pack (`_check_lint`), alongside
+  substitution nodes; `InlineRole` residue and `Unimplemented` placeholders
+  are counted by `lint_bundle` and refuse under `pack --strict`.
+- `resolve_` substring fallback (`ref in q`) deleted; both suffix searches
+  require a component boundary and dedupe through the RefInfo; ambiguity
+  is unresolved (audit N1).
+- numpydoc compat: `_guess_header` restricted to trailing-`:`/missing-`s`/
+  alias-table normalizations; every rewrite (heading, See Also backticks)
+  recorded on the instance and emitted by gen as
+  `W-section-heading-normalized` / `W-see-also-syntax` (audit N7).
+  `__setitem__` records only sections that landed (audit N2: unknown
+  sections used to KeyError and silently drop the object).
+- `exec_failure="fallback"` no longer trips the end-of-collection assert
+  (audit N9).
+
 ### Gen-time diagnostics
 - Core framework: `Severity`, `DIAGNOSTICS` registry, `DiagnosticConfig`
   resolver (default → global → first-match per-target glob), `Diagnostics`

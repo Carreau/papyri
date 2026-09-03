@@ -10,8 +10,16 @@ execute_doctests = true
 exclude_jedi = ['networkx.algorithms.planarity.PlanarEmbedding']
 exec_failure = 'fallback'
 source = 'https://github.com/networkx/networkx'
-exclude = [ 
-             ]
+exclude = [
+    # Module docstrings whose "See Also" sections are not valid numpydoc
+    # (bullet-list URLs, ":doc:`title <target>`" entries). numpydoc rejects
+    # them, gen would ship a DocstringSentinel, and pack refuses sentinels
+    # — excluded explicitly until the docstrings are fixed upstream.
+    'networkx.drawing.nx_agraph',
+    'networkx.drawing.nx_pydot',
+    'networkx.drawing.nx_pylab',
+    'networkx.algorithms.isomorphism.isomorphvf2',
+]
 logo = './img/nx.png'
 [meta]
 github_slug = 'networkx/networkx'

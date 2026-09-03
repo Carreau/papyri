@@ -2705,3 +2705,62 @@ def test_known_py_role_unresolved_still_warns_not_unknown() -> None:
     v.replace_InlineRole(InlineRole(domain=None, role="func", value="nope"))
     codes = [r["code"] for r in v.diagnostics.records]
     assert codes == [W_UNRESOLVED_REF]
+
+
+def test_resolve_no_substring_mislink() -> None:
+    # The historical fallback matched `ref in q` as a plain substring: a
+    # bundle with numpy.testing.assert_allclose (and no numpy.all) turned
+    # :func:`all` into a link to assert_allclose with no diagnostic. Such
+    # a ref must now come back unresolved.
+    known = frozenset(
+        {RefInfo("numpy", "1.0", "module", "numpy.testing:assert_allclose")}
+    )
+    r = resolve_("numpy.linspace", known, frozenset(), "all", {})
+    assert r.kind == "missing"
+    # Same for "cos" accidentally inside "arccos".
+    known2 = frozenset({RefInfo("numpy", "1.0", "module", "numpy:arccos")})
+    r2 = resolve_("numpy.sin", known2, frozenset(), "cos", {})
+    assert r2.kind == "missing"
+
+
+def test_resolve_suffix_match_respects_component_boundary() -> None:
+    # ".shape" must not match "numpy.reshape" via a bare string suffix.
+    known = frozenset({RefInfo("numpy", "1.0", "module", "numpy:reshape")})
+    r = resolve_("numpy.linspace", known, frozenset(), ".shape", {})
+    assert r.kind == "missing"
+    # But a genuine component-boundary suffix still resolves.
+    known2 = frozenset(
+        {RefInfo("numpy", "1.0", "module", "numpy.char:chararray.shape")}
+    )
+    r2 = resolve_("numpy.linspace", known2, frozenset(), ".shape", {})
+    assert r2.kind != "missing"
+    assert r2.path == "numpy.char:chararray.shape"
+
+
+def test_resolve_last_segment_match_still_works() -> None:
+    # Exact component-boundary suffix anywhere under the root keeps
+    # working ("linspace" from an unrelated scope).
+    known = frozenset({RefInfo("numpy", "1.0", "module", "numpy.core:linspace")})
+    r = resolve_("numpy.ma.masked", known, frozenset(), "linspace", {})
+    assert r.kind != "missing"
+    assert r.path == "numpy.core:linspace"
+
+
+def test_resolve_ambiguous_suffix_is_unresolved() -> None:
+    # Two distinct objects sharing the suffix: never an arbitrary pick.
+    known = frozenset(
+        {
+            RefInfo("numpy", "1.0", "module", "numpy.ma.core:MaskedArray.mean"),
+            RefInfo("numpy", "1.0", "module", "numpy.matrixlib:matrix.mean"),
+        }
+    )
+    r = resolve_("numpy.linspace", known, frozenset(), "mean", {})
+    assert r.kind == "missing"
+    # The colon key and its dotted alias are the SAME object, not an
+    # ambiguity.
+    known2 = frozenset(
+        {RefInfo("numpy", "1.0", "module", "numpy.ma.core:MaskedArray.mean")}
+    )
+    r2 = resolve_("numpy.linspace", known2, frozenset(), "mean", {})
+    assert r2.kind != "missing"
+    assert r2.path == "numpy.ma.core:MaskedArray.mean"

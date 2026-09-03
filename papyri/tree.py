@@ -281,17 +281,20 @@ def resolve_(
             else:
                 root = qa.split(".")[0]
                 sub1 = root_start(root, keyset)
-                # endswith needs the ref without the leading dot so that
-                # "pkg.mod.Name".endswith("mod.Name") matches correctly.
-                subset = endswith(abs_ref, sub1)
+                # Suffix search on a *component boundary*: ".mod.Name" so
+                # that "pkg.mod.Name" matches but "pkg.altmod.Name" via a
+                # bare-string suffix ("od.Name") cannot. A bare endswith
+                # let ".shape" match "numpy.reshape" — a silently wrong
+                # link, indistinguishable from an exact hit.
+                # Dedupe through the RefInfo: the colon key and its dotted
+                # alias both match the suffix but name the same object.
+                subset = {
+                    k_path_map[q] for q in endswith("." + abs_ref, sub1)
+                }
                 if len(subset) == 1:
-                    return k_path_map[next(iter(subset))]
-                    # return RefInfo(None, None, "exists", next(iter(subset)))
-                else:
-                    if len(subset) > 1:
-                        # ambiguous ref
-                        pass
-
+                    return next(iter(subset))
+                # Zero or many hits: unresolved. Ambiguity must surface as
+                # a diagnostic at the caller, never an arbitrary pick.
                 return RefInfo(None, None, "missing", ref)
 
         # Walk the enclosing scopes most-specific-first (Sphinx resolves
@@ -307,16 +310,22 @@ def resolve_(
             if attempt in k_path_map:
                 return k_path_map[attempt]
 
+    # Last chance: an exact component-boundary suffix match anywhere under
+    # the bundle root ("linspace" → "numpy.linspace", "Chebyshev.fit" →
+    # "numpy.polynomial.chebyshev.Chebyshev.fit"), mirroring Sphinx's
+    # suffix search. The historical substring fallback (`ref in q`) is
+    # gone: a single accidental substring hit ("cos" inside "numpy.arccos")
+    # shipped a silently wrong link, indistinguishable from an exact match
+    # — no fuzzy matching may decide what reaches the IR. Ambiguity (two
+    # boundary matches) is also unresolved, never an arbitrary pick; the
+    # caller emits the diagnostic.
     q0 = parts[0]
     rs = root_start(q0, keyset)
-    attempts = [q for q in rs if (ref in q)]
-    if len(attempts) == 1:
-        # return RefInfo(None, None, "exists", attempts[0])
-        return k_path_map[attempts[0]]
-    else:
-        trail = [q for q in attempts if q.split(".")[-1] == ref]
-        if len(trail) == 1:
-            return k_path_map[trail[0]]
+    # Dedupe through the RefInfo: the colon key and its dotted alias both
+    # match the suffix but name the same object.
+    trail = {k_path_map[q] for q in rs if q.endswith("." + ref)}
+    if len(trail) == 1:
+        return next(iter(trail))
 
     return RefInfo(None, None, "missing", ref)
 

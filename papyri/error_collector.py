@@ -126,6 +126,15 @@ W_UNRESOLVED_DEFAULT_ROLE = _register(
     "plain text silently, so this defaults to info; promote per project if "
     "bare backticks are expected to link.",
 )
+W_UNKNOWN_ROLE = _register(
+    "W-unknown-role",
+    Severity.ERROR,
+    "An inline role papyri does not know: not a built-in handler and not "
+    "mapped in [global.roles]. Every role must be an explicit decision — "
+    "Sphinx reports unknown roles and keeps building, papyri fails the gen "
+    "by default. Map the role in [global.roles] (role_verbatim / role_text "
+    "/ role_drop or a custom handler) or downgrade this code.",
+)
 W_UNSUPPORTED_SUBSTITUTION = _register(
     "W-unsupported-substitution",
     Severity.WARNING,

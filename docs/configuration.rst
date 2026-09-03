@@ -364,6 +364,13 @@ The diagnostic codes papyri currently emits:
        backticks for variable names, and Sphinx's ``autolink`` default role
        degrades to plain text silently, so this defaults to ``info``;
        promote it per project if bare backticks are expected to link.
+   * - ``W-unknown-role``
+     - ``error``
+     - An inline role papyri does not know: not a built-in handler and not
+       mapped in :ref:`[global.roles] <config-roles>`.  Sphinx reports
+       unknown roles and keeps building; papyri fails the gen by default so
+       every role is an explicit decision.  Map the role or downgrade this
+       code.
    * - ``W-unsupported-substitution``
      - ``warning``
      - An RST substitution uses a directive papyri can't represent in the
@@ -627,8 +634,14 @@ Three ready-made handlers cover the common cases:
    somerole = 'papyri.directives:role_text'      # render as plain text
    internal = 'papyri.directives:role_drop'      # drop entirely
 
-Without a mapping, an unknown role falls through to cross-reference
-resolution and typically reports ``W-unresolved-ref``.
+Without a mapping, an unknown role is a hard failure: gen emits
+``W-unknown-role`` (default severity ``error``, so the run exits
+non-zero) and the role is *not* fed to cross-reference resolution — an
+unknown role that happened to match a known path would silently
+cross-link, which is exactly the implicit behaviour papyri refuses to
+inherit from Sphinx.  Every role must be an explicit decision: map it
+here, or downgrade ``W-unknown-role`` in ``[global.diagnostics]`` during
+incremental adoption.
 
 
 ``[meta]`` reference

@@ -45,6 +45,7 @@ from .directives import (
 from .error_collector import (
     W_MALFORMED_DIRECTIVE,
     W_MISSING_GITHUB_SLUG,
+    W_UNKNOWN_ROLE,
     W_UNRESOLVED_DEFAULT_ROLE,
     W_UNRESOLVED_REF,
     W_UNSUPPORTED_SUBSTITUTION,
@@ -545,6 +546,30 @@ for role in _PY_VERBATIM_ROLES:
 # instead of getting a silent link to the wrong repo (historically hardcoded to
 # ``ipython/ipython``, which was correct for exactly one project).
 _GH_ROLE_PATH_SEGMENT = {"ghpull": "pull", "ghissue": "issues"}
+
+# Roles that name a Python object and are resolved by the cross-reference
+# machinery in ``replace_InlineRole`` (in-bundle lookup, then the import
+# solver). The domain must be None (role written without a domain prefix,
+# e.g. :func:`…`) or "py" (explicit Python domain, e.g. :py:func:`…`).
+# ``None`` is the bare default role.
+_PYTHON_OBJECT_ROLES = frozenset(
+    {
+        None,
+        "mod",
+        "func",
+        "any",
+        "meth",
+        # papyri-accepted long form of :meth: — pinned by test_parse, seen in
+        # docstrings in the wild even though Sphinx itself rejects it.
+        "method",
+        "class",
+        "exc",
+        "data",
+        "attr",
+        "obj",
+        "const",
+    }
+)
 
 
 @directive_handler("py", "math")
@@ -1168,6 +1193,33 @@ class DirectiveVisiter(TreeReplacer):
             if res is not None:
                 return res
 
+        # Any role still unhandled here is *unknown*: not a built-in, not
+        # config-mapped, and not one of the cross-reference roles resolved
+        # below (default role, py object roles, :ref:, :doc:). Do not fall
+        # through to resolution — an unknown role accidentally matching a
+        # known path would silently cross-link, the implicit behaviour that
+        # plagues Sphinx. Every role must be an explicit decision: register
+        # it in [global.roles] or downgrade W-unknown-role (error by
+        # default, so gen fails fast).
+        is_crossref_role = directive.role in ("ref", "doc") or (
+            directive.role in _PYTHON_OBJECT_ROLES
+            and directive.domain in (None, "py")
+        )
+        if not is_crossref_role:
+            role_key = (
+                f"{directive.domain}:{directive.role}"
+                if directive.domain
+                else directive.role
+            )
+            self.diagnostics.emit(
+                W_UNKNOWN_ROLE,
+                self.qa,
+                f"unknown role :{role_key}: — no handler registered; map it in "
+                f"[global.roles] (papyri.directives:role_verbatim / role_text / "
+                f"role_drop or a custom handler)",
+            )
+            return [directive]
+
         loc: frozenset[str]
         loc = frozenset() if directive.role not in ["any", None] else self.local_refs
         text = directive.value
@@ -1321,25 +1373,8 @@ class DirectiveVisiter(TreeReplacer):
                 assert None not in r, r
                 self._targets.add(r)
             return [self._ref_to_crossref(text, r, exists)]
-        # Roles that name a Python object and should be resolved via the import
-        # solver when the local-ref lookup above produced no match.  The domain
-        # must be None (role written without a domain prefix, e.g. :func:`…`)
-        # or "py" (explicit Python domain, e.g. :py:func:`…`).
-        _PYTHON_OBJECT_ROLES = frozenset(
-            {
-                None,
-                "mod",
-                "func",
-                "any",
-                "meth",
-                "class",
-                "exc",
-                "data",
-                "attr",
-                "obj",
-                "const",
-            }
-        )
+        # Python-object roles fall back to the import solver when the
+        # in-bundle lookup above produced no match.
         if directive.role in _PYTHON_OBJECT_ROLES and directive.domain in (None, "py"):
             text = directive.value
             tqa = directive.value

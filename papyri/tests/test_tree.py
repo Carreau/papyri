@@ -2656,3 +2656,52 @@ def test_plot_handler_malformed_doctest_body_degrades_to_code(caplog):
     assert len(out) == 1
     assert isinstance(out[0], Code)
     assert out[0].value == body
+
+
+def test_unknown_role_emits_error_code_and_skips_resolution() -> None:
+    # A role with no handler anywhere is an explicit failure
+    # (W-unknown-role, error by default) — and its body must NOT be fed to
+    # cross-reference resolution: an accidental match on a known path would
+    # silently cross-link, the implicit Sphinx behaviour papyri refuses.
+    from papyri.error_collector import W_UNKNOWN_ROLE
+
+    v = DirectiveVisiter(
+        qa="pkg.mod",
+        # "color" is a real in-bundle path: resolution *would* succeed if
+        # the unknown role fell through to it.
+        known_refs=frozenset({RefInfo("pkg", "1.0", "module", "pkg.mod.color")}),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+    )
+    out = v.replace_InlineRole(InlineRole(domain=None, role="mpltype", value="color"))
+    assert len(out) == 1
+    assert isinstance(out[0], InlineRole)
+    codes = [r["code"] for r in v.diagnostics.records]
+    assert codes == [W_UNKNOWN_ROLE]
+    assert "mpltype" in v.diagnostics.records[0]["message"]
+
+
+def test_unknown_role_with_config_mapping_is_not_an_error() -> None:
+    # The same role mapped in [global.roles] is an explicit decision — no
+    # diagnostic at all.
+    v = DirectiveVisiter(
+        qa="pkg.mod",
+        known_refs=frozenset(),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+        roles={"mpltype": "papyri.directives:role_verbatim"},
+    )
+    out = v.replace_InlineRole(InlineRole(domain=None, role="mpltype", value="color"))
+    assert isinstance(out[0], InlineCode)
+    assert v.diagnostics.records == []
+
+
+def test_known_py_role_unresolved_still_warns_not_unknown() -> None:
+    # A *known* cross-ref role whose target is missing stays
+    # W-unresolved-ref — that is a resolution failure, not an unknown role.
+    v = _make_visitor()
+    v.replace_InlineRole(InlineRole(domain=None, role="func", value="nope"))
+    codes = [r["code"] for r in v.diagnostics.records]
+    assert codes == [W_UNRESOLVED_REF]

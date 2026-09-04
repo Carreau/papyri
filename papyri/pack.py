@@ -130,7 +130,7 @@ def _check_layout(path: Path) -> None:
     module_dir = path / "module"
     if not module_dir.is_dir():
         raise BundleError("missing module/ directory")
-    for entry in module_dir.iterdir():
+    for entry in sorted(module_dir.iterdir()):
         if not entry.is_file():
             raise BundleError(f"module/{entry.name} is not a regular file")
         if entry.suffix != ".json":
@@ -142,11 +142,11 @@ def _check_layout(path: Path) -> None:
             continue
         if not d.is_dir():
             raise BundleError(f"{sub} exists but is not a directory")
-        for entry in d.iterdir():
+        for entry in sorted(d.iterdir()):
             if not entry.is_file():
                 raise BundleError(f"{sub}/{entry.name} is not a regular file")
 
-    for entry in path.iterdir():
+    for entry in sorted(path.iterdir()):
         if entry.name not in _ALLOWED_TOPLEVEL:
             raise BundleError(f"unexpected top-level entry: {entry.name}")
 

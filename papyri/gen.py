@@ -1093,7 +1093,13 @@ class Gen:
             )
             return self._narrative_scan
         self.log.info("Scraping Documentation")
-        for p in path.glob("**/*.rst"):
+        # Sorted: `glob` yields in `os.scandir` order, which varies between
+        # filesystems and checkouts. This order decides which duplicate
+        # `:ref:` label and which external target wins, and becomes the
+        # narrative-doc / toc order -- so leaving it unsorted makes the same
+        # source tree produce different bundles (and different content
+        # hashes) on different machines.
+        for p in sorted(path.glob("**/*.rst")):
             if any([k in str(p) for k in self.config.narrative_exclude]):
                 continue
             assert p.is_file()
@@ -1608,7 +1614,9 @@ class Gen:
 
     def collect_examples(self, folder: Path, config: Config) -> list[Any]:
         acc = []
-        examples = list(folder.glob("**/*.py"))
+        # Sorted for the same reason as the narrative scan above: example
+        # pages must land in the bundle in a filesystem-independent order.
+        examples = sorted(folder.glob("**/*.py"))
 
         valid_examples = []
         for e in examples:

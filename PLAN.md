@@ -525,6 +525,57 @@ layers. Do not write CBOR into the bundle directory or JSON into the artifact.
   manifest is read into `Bundle` via a freeform dict (`_read_meta` in
   `pack.py`). Represent it as a typed struct inside `Bundle` so the round-trip
   is fully typed from `pack.py` onward (mirror in `ingest.ts`'s `PapyriMeta`).
+- **Assets and example pages are keyed by basename.** `make_image_handler`
+  uses `asset_name = img_path.name` (`directives.py`) into the flat
+  `Gen.bdata` dict, and `collect_examples` keys pages on `example.name`
+  (`gen.py`). Two files with the same basename in different source
+  directories silently overwrite each other: one figure shows the wrong
+  image, one example page disappears, no diagnostic either way. Content-
+  address the asset name (the doctest path already does this — see
+  `_figure_name`) and key example pages on the path relative to the
+  examples folder. Sorting the source globs (2026-09) made *which* file
+  wins deterministic, but the collision is still lossy.
+- **Warning-filter leaks in `tokens.parse_script` and `ingested_doc`.**
+  `parse_script` sets `warnings.simplefilter("ignore", UserWarning)` and
+  only restores it at the end of the function, but returns early on every
+  Jedi cache hit — so after the first cached example `UserWarning` is
+  suppressed process-wide for the rest of gen, and the restore sets
+  `"default"` rather than the previous state. `ingested_doc` does the same
+  at *import* time and also calls `logging.basicConfig`, so merely
+  importing the read-side module reconfigures logging for the process. Use
+  `warnings.catch_warnings()`; move logging setup to the CLI entry point.
+- **`error_collector` swallows `SystemExit`.** The bypass test is
+  `exc_type in (BaseException, KeyboardInterrupt)` — identity, not
+  `issubclass` — so a `SystemExit` raised while importing or inspecting a
+  documented object is recorded as an unexpected error and, under the
+  default `early_error=False`, swallowed: gen continues and exits 0.
+- **`toc._tree` has no cycle guard.** `assert p != current_path` catches
+  only direct self-reference; two docs listing each other recurse to
+  `RecursionError`, which nothing on the narrative path catches. `counter`
+  records visits but is never consulted. Track an in-progress path set.
+- **Small dead/incoherent bits (delete on sight).** `gen.normalise_ref` has
+  no callers (the done log's claim that it was deleted is wrong) and
+  imports arbitrary modules as an `lru_cache` side effect;
+  `DFSCollector.prune` is unreachable and would raise if it ever ran;
+  `Section.__bool__` returns `len(children) >= 0`, i.e. always `True`;
+  `compress_word`'s `Whitespace` branch is unreachable and discards its
+  accumulator; `tree.py`'s `hash(local_refs)` is a statement with no
+  effect, and the module-global resolver cache is keyed on
+  `hash(known_refs)` alone with no equality check and no eviction. Several
+  node classes (`Table`, `TableRow`, `TableCell`, `AdmonitionTitle`,
+  `Admonition`, `Blockquote`, `Section.title`) use
+  `field(default_factory=tuple)` as a default although they are not
+  dataclasses — nothing consumes the `Field`, so the "default" is a live
+  `dataclasses.Field` object that trips the serializer's isinstance
+  assert. Latent only because every call site passes the argument; use
+  `= ()`.
+- **`ts.py` drops content silently in two places.** A non-alphabetic tail
+  folded into an `interpreted_text` node is deleted unless
+  `trailing_suffix.isalpha()` (so `` `None`s2 `` loses characters), and the
+  `.. warning::` special case raises `ValueError("... has no content")`
+  when the directive carries both options and content — `:name:`/`:class:`
+  are legal on every admonition, and under the default
+  `--fail-early=False` the exception drops the whole host object.
 
 ## Open work — IR schema / encoding (cross-cutting)
 
@@ -661,6 +712,110 @@ Old raw archives in the CBOR format are re-generated, not migrated
   schema stabilises, move the shared bits into the package and have the viewer
   import them rather than re-implement.
 
+- **Ingest has no failure atomicity, and no per-bundle delete.** Three
+  linked problems in `ingest/src/ingest.ts`. (a) The `bundles` row that
+  marks a bundle as seen is written *last*, after all blob and graph
+  writes, so a mid-flight failure leaves nodes and links committed with no
+  `bundles` row; the next upload then takes the `freshIngest` path,
+  computes `removedRefs = []`, and never deletes the orphans — phantom
+  backrefs that no re-upload can clear. (b) Blob writes and graph writes
+  are two independent streams (`Promise.all`) and the graph half commits
+  in `DB_CHUNK_SIZE` transactions, so `nodes.has_blob = 1` can outlive a
+  failed blob write. (c) Ingest is insert-only: an object present in
+  version 1.2 and absent from a re-uploaded 1.2 keeps its node row, blob,
+  links and backrefs forever (`node_index` is the sole exception). Wanted:
+  a per-bundle delete, and a completion marker written first (or one
+  transaction). Prerequisite: `Ingester.ingestBundle` currently has **no
+  test at all** — the only import of `ingest.ts` anywhere in `ingest/tests`
+  is `applyMigrations`.
+- **Production opens the graph DB with a different PRAGMA set than
+  `openNodeBackends`.** `viewer/src/lib/backends.ts` sets `journal_mode`
+  and `synchronous`; the package helper also sets `foreign_keys`,
+  `cache_size` and `mmap_size`. SQLite defaults `foreign_keys` to OFF, so
+  the `ON DELETE CASCADE` on `links` never fires in the deployment that
+  matters. The PRAGMA list should live in `papyri-ingest` and be applied by
+  it, not re-typed per caller. (Deliberately not changed in the 2026-09
+  pass: turning FKs on may surface latent violations and wants the ingest
+  work above alongside it.)
+- **`GraphDb` does not abstract the backend.** It is half raw SQL
+  (`run`/`get`/`all`/`batch`, with callers hand-writing SQLite-specific
+  `ON CONFLICT … excluded.*` and partial-index-dependent queries) and half
+  domain methods (`insertNodeIndexRows` / `queryNodeIndex` /
+  `deleteNodeIndex`). A second backend would have to reimplement a SQL
+  dialect. Either finish the abstraction or, per the pre-production rule,
+  delete the interface and use `SqliteGraphDb` directly until a second
+  backend is real. Same review: `BlobStore` keys by `Key` while `RawStore`
+  keys by positional strings, `BlobStore.clear()`'s doc ("number of
+  objects deleted") disagrees with `FsBlobStore`'s implementation (it
+  counts top-level directories), and no store defines an error type — six
+  call sites sniff `err.code === "ENOENT"` instead.
+- **`FsBlobStore.list()` skips `safeJoin`.** Every other method uses it.
+  The prefix is built from route params (`ir-reader.ts`, `nav.ts`), so a
+  crafted `pkg`/`version` enumerates filenames outside the store root.
+- **`FsRawStore.put` writes the authoritative archive non-atomically.** A
+  plain `writeFile` over the existing path, plus a second unrelated write
+  for the `received_at` sidecar. Per the storage invariant this file is the
+  only authoritative IR, so a crash mid-write truncates the one copy
+  everything else is supposed to be rebuildable from. Write to a temp name
+  in the same directory and `rename`.
+- **`_populateNodeIndex` re-walks the whole bundle.** It re-calls
+  `generatedDocToIngested` for every doc already converted in phase 2 and
+  re-walks each tree with a private `collectNodes` that duplicates
+  `visitor.ts`. Fold row collection into the `stage()` loop and export one
+  walker. Related: `SqliteGraphDb.batch` re-prepares each statement by SQL
+  string with no cache, and `insertNodeIndexRows` sends every row as one
+  unbounded transaction while every other write path chunks.
+- **`keys.ts`: `keyStr` is ambiguous and `parseKeyStr` is dead.** `keyStr`
+  joins four attacker-controlled components with `/`, so a `RefInfo.module`
+  containing `/` can collide two distinct refs in the `existingRefs` /
+  `forwardRefKeys` dedup sets and drop one. `parseKeyStr` has zero call
+  sites and is not re-exported — delete it, and reject `/` in key
+  components in `assertBundle`.
+- **`node_index.content` stores `JSON.stringify` of a decoded CBOR node.**
+  Breaks the "CBOR only, from pack onward" invariant, throws `TypeError` on
+  a `BigInt` (cbor-x decodes CBOR integers > 2^53 as BigInt), and mangles
+  `Uint8Array`. The throw lands *after* all blob and graph writes have
+  committed, i.e. it triggers the orphan mode above.
+- **Viewer costs scale badly for a hosted service.** Four items, all
+  guest-reachable or always-on: `/api/text-search.json` and
+  `/project/*/text-search` walk and CBOR-decode every blob of every ingested
+  bundle with only the *hit count* capped, while the structurally identical
+  `/api/nodes.json` and `/api/ir-stats.json` are admin-gated for exactly
+  that reason; `validate.astro` does an uncapped per-bundle walk plus
+  per-ref resolution; `graph.ts`'s `resolveRefs` / `resolveExternalRefs`
+  issue one SQL round-trip per reference (its own comment says "naive"), so
+  a 200-ref docstring costs 400-600 queries; and `[...slug].astro` emits an
+  unconditional `server:defer` island per class member, each rebuilding
+  backends and a full xref resolver — PLAN.md specifies this as an opt-in
+  `?inline-members=1` toggle, default collapsed, but it ships always-on.
+- **`nav.ts`'s `_navCache` is never invalidated.** A process-lifetime `Map`
+  with no eviction and no hook from `PUT /api/bundle` or `POST
+  /api/reingest`, keyed on the URL version — so `latest` keeps serving the
+  nav of whatever version was current when the entry was created, and a
+  re-upload does not appear until the server restarts. Contradicts
+  "newly uploaded bundles appear without a rebuild".
+- **`image-index.ts` builds the asset URL by hand and gets it wrong.**
+  ``/assets/${ref.module}/${ref.version}/…`` where the route is
+  `/assets/project/<pkg>/<ver>/…`. The `node_index` branch always wins for
+  current bundles, so every Figure thumbnail in the image gallery 404s;
+  only the pre-migration `walkBundle` fallback produces working links.
+  Call `linkForAsset` — this is the duplication `links.ts` exists to
+  prevent. Same file and `api/[pkg]/[ver]/nodes.json.ts` interpolate the
+  version into a `RegExp` unescaped, so a PEP 440 local version (`0+git…`)
+  silently fails to rewrite and a version containing `(` throws.
+- **API response and error shapes are inconsistent.**
+  `api/bundles.json.ts` and `api/health.json.ts` hand-roll
+  `new Response(JSON.stringify(...))` instead of `respond()`, and three
+  error shapes are in use across endpoints — `{ ok: false, error }`,
+  `{ error }`, and `{ success: false, message }` — so a client cannot
+  write one handler. Pick one and route everything through `api-utils.ts`.
+- **`qualname-page.ts` duplicates `version-utils.ts`.** `_PRE_RE`,
+  `_DEV_RE` and `isPreRelease` are copied with a comment justifying it as
+  avoiding "heavier imports"; `version-utils.ts` imports only modules
+  `qualname-page.ts` already imports. Import `classifyVersionString`.
+  Relatedly `compareVersionsDesc` lives in `ir-reader.ts`, the IR decoder,
+  and belongs in `version-utils.ts`.
+
 ## Open work — Adoption / CI integration
 
 PR doc previews are the adoption wedge: a project that adds the papyri
@@ -707,6 +862,41 @@ CI use the token path and pay their own compute.
   `http://169.254.169.254/…`). Admin-gated today (low risk), but a
   metadata-endpoint SSRF vector on the multi-tenant hosted service. Block
   private/link-local ranges and disable redirects to them before hosting.
+  2026-09: the IP-literal half is done, the redirect half is not — the
+  guard checks only the initial URL and `fetch` still runs with the default
+  `redirect: "follow"`, so a 302 to a link-local address is followed and
+  parse errors return part of the body in the 422. Use
+  `redirect: "manual"` and re-run `isSafeUrl` on each hop.
+- **`PAPYRI_AUTH_DB` is not on the persisted volume.** `viewer/Dockerfile`
+  sets only `PAPYRI_INGEST_DIR=/data` while `docker-compose.yaml` mounts
+  `papyri-data:/data`, so the auth DB falls back to `~/.papyri/auth.db`
+  inside the container's writable layer: users, sessions, project
+  memberships and minted `papyri_pat_` tokens are lost on every container
+  recreate. This is exactly the durability the separate auth DB exists to
+  provide. Set `PAPYRI_AUTH_DB=/data/auth.db` (or equivalent) and document
+  the upgrade path for existing deployments.
+- **Admin endpoints carry no in-handler authorization.** `api/users.ts`,
+  `api/projects.ts`, `api/projects/members.ts`, `api/clear.ts`,
+  `api/clear-raw.ts`, `api/reingest.ts`, `api/stats.ts`,
+  `api/inventory.ts` and the `admin/*.astro` pages all trust
+  `middleware.ts`'s `ADMIN_ONLY_PREFIXES` string list, while every
+  `api/account/*` handler re-resolves the session itself and documents why
+  ("safe regardless of middleware wiring"). One route rename silently
+  exposes account creation. Add a `requireAdmin(cookies)` helper in
+  `lib/auth.ts` and use it in every admin handler. (`api/stats.ts` also
+  still documents itself as "No auth", which is now wrong.)
+- **No rate limiting on password login.** `api/auth/login.ts` calls
+  `verifyLogin` with no lockout, backoff or failure counter. Argon2id makes
+  stuffing slow, but that same cost makes a flood of login POSTs an
+  effective CPU-exhaustion vector against a single-process Node server.
+- **WebAuthn RP identity falls back to the `Host` header.** `lib/passkey.ts`
+  derives `rpID`/`expectedOrigin` from `new URL(request.url).hostname` when
+  `PAPYRI_SITE` is unset, which under `@astrojs/node` standalone is
+  Host-derived. Impact is bounded (a credential registered under another RP
+  ID cannot assert against the real domain), but the RP identity should
+  never be attacker-influenced: require `PAPYRI_SITE` whenever passkeys are
+  enabled, and note in the env table that it is security-relevant, not just
+  cosmetic.
 - **Separate domains/processes for upload, admin, and user surfaces.** In a
   hosted deployment, run the upload endpoint, admin panel, and per-user
   management UI as isolated processes on separate subdomains to limit blast
@@ -721,16 +911,241 @@ CI use the token path and pay their own compute.
   (matplotlib, Agg/freetype) are non-deterministic across runs/OSes, so hashing
   them makes every rebuild look changed. Open: keep a separate per-asset hash
   for cache-busting individual images (probably yes, out of the identity hash).
+  2026-09 measurement: with the source globs sorted, two consecutive
+  `papyri gen examples/papyri.toml --no-infer` runs differ *only* in
+  executed-doctest output — matplotlib figure bytes, and `repr()` strings
+  carrying memory addresses (`<object object at 0x7f…>`). Filesystem
+  ordering is no longer a source of drift, so the identity hash needs to
+  exclude executed output as well as image bytes, or gen needs to normalise
+  addresses in doctest `out` before storing them.
   - *Follow-up:* make `content_hash` `NOT NULL`. It's nullable only as a
     migration cushion; every write path now computes it. Fold into a future
     migration squash + wipe/re-ingest from the raw archive.
 
 ---
 
+## Open work — CLI uniformisation (2026-09 review)
+
+`pack`/`unpack`/`upload`/`lint` share a modern shape (`Annotated`
+options, short flags, `error: …` + `typer.Exit(1)`); `gen` and the
+graphstore-backed readers do not. Pick `pack.py` as the pattern and
+converge:
+
+- **`gen` is the odd command out.** No `Annotated`; `debug`, `dry_run`,
+  `api`, `examples` and `narrative` are bare defaults with no help text at
+  all; no short flags anywhere; `--no-progress` where the rest use
+  `--verbose/-v`; parameter names shadow the builtin `exec` and the sibling
+  commands `pack`/`upload`, which is why the body has to re-import them
+  under aliases.
+- **`gen --fail` is accepted, documented, threaded into `gen_main`, and
+  never read.** Delete it (`--fail-early` is the real knob) or wire it.
+- **`gen --upload` bypasses the upload resolution chain.** It reads
+  `$PAPYRI_UPLOAD_URL` / `$PAPYRI_UPLOAD_TOKEN` itself and passes them as
+  *explicit* flags, which outrank everything in `_resolve_upload_params` —
+  so a configured `default_target` is silently ignored in favour of
+  localhost. Call `upload_func` with neither and add a `--to` passthrough.
+  `--pack` likewise hardcodes `strict=False, verbose=False`.
+- **Three error-reporting styles.** Clean `error: …` + `typer.Exit(1)`
+  (lint, unpack, upload); raw uncaught tracebacks (pack's `_pack_one`,
+  gen's `raise SystemExit(str)`, every graphstore-backed command); and
+  `sys.exit(str)` (`config_loader`). Exit codes and stderr shape depend on
+  which subcommand you happen to run. Also: pack's bulk mode aborts the
+  whole loop on the first bad bundle where `upload` accumulates and
+  continues.
+- **`upload --url` help states the opposite precedence to the code.** Help
+  says env var then `--to`; `_resolve_upload_params` evaluates
+  `url_flag or target_url or env`, i.e. `--to` wins — which is what the
+  docstring and CLAUDE.md say. Fix the help text.
+- **The four read commands crash on a fresh machine.**
+  `sqlite3.connect` *creates* an empty `papyri.db`; the schema belongs to
+  the TS ingester, so the first `store.glob(...)` raises `no such table:
+  nodes`. `describe.py`'s careful "Have you run `papyri upload` yet?"
+  message is unreachable because the failure happens earlier. Add a
+  "store not initialised" check in `GraphStore.__init__`.
+- **`GraphStore(link_finder=…)` is dead and `root` is ignored for the DB.**
+  `_link_finder` is stored and never read; all four callers pass `{}`. The
+  DB path is the module constant `GLOBAL_PATH`, so a different `root`
+  yields blobs from one tree and graph rows from another. Delete the
+  parameter, derive the DB from `root`, and decide whether the Python
+  readers should honour `PAPYRI_INGEST_DIR`/`PAPYRI_INGEST_DB` (today they
+  read the wrong store whenever the viewer is configured off-default).
+- **`lint`'s advertised LocalRef check never runs.** The help promises
+  unresolved-`LocalRef` reporting, but that check lives in
+  `_check_local_refs`, which `read_bundle_dir` invokes with `strict=False`
+  → `log.warning` only, never in the returned `issues`. `lint` also skips
+  `_assert_safe_urls`. Add `--strict` matching `pack -s` and route both
+  through it.
+- **Three definitions of `~/.papyri/data`** (`cli/pack.py`'s
+  `_DEFAULT_DATA_DIR`, `gen.py`'s inline `Path("~/.papyri/data")`, and
+  `config.data_dir`, which only `debug.py` imports), and two of the user
+  config path (`config.user_config_path` is entirely unused while
+  `user_config.py` defines its own unexpanded constant). Import from
+  `papyri.config` everywhere.
+- **`config_loader` has no real validation at a system boundary.**
+  `sys.exit(...)` instead of `typer.Exit`; `conf["global"]` and
+  `info.pop("module")` raise bare `KeyError` tracebacks; the
+  `assert len(ks) >= 1` checks nothing; `Config(**conf)` turns a typo'd
+  TOML key into a raw `TypeError`; and an unknown top-level section is
+  dropped silently (this is what made `examples/pandas.toml`'s
+  `[pandas.expected_errors]` a no-op — the file was deleted 2026-09 rather
+  than fixed, since nothing in CI generated it). Name the offending key and
+  raise; keep `assert` for the invariants.
+- **`bootstrap` is the only command taking `str` instead of `Path`** (and
+  the only one with no `expanduser()`, so `papyri bootstrap ~/x.toml`
+  creates a literal `~` directory) **and the only one using raw
+  `input()`**, which raises `EOFError` under non-interactive CI. Use
+  `typer.prompt`.
+- **Small items.** `pyproject.toml`'s `postingest` marker is unused and
+  tells you to run two deleted commands (`papyri ingest` + relink); its
+  coverage `omit` lists `papyri/examples/*`, a directory that does not
+  exist. `scripts/*.py` pin `#!/usr/bin/env python3.13` while CI runs 3.14.
+  `cli/about.py` duplicates `--version`/`-V` from a second `__version__`
+  source while `upload.py` reads `importlib.metadata`, so the User-Agent
+  and `papyri --version` can disagree — and `PAPYRI_VERSION`, documented in
+  CLAUDE.md as overriding that User-Agent, is never consulted. `find`
+  prints `SKIP …` to stdout where every other diagnostic goes to stderr,
+  and `find`/`diff` exit 0 even when nothing matched.
+- **`examples/papyri.toml` hardcodes `~/dev/papyri/docs`** for `docs_path`
+  and `examples_folder`. Unlike `logo`, those are only `expanduser()`'d,
+  not resolved against the config file's directory — so the verification
+  step CLAUDE.md tells every contributor to run silently produces a bundle
+  with no narrative docs unless their clone is at that exact path. Its
+  `github_slug` is also `jupyter/papyri`, so papyri's own self-generated
+  bundle emits `:ghpull:`/`:ghissue:` links to the wrong repository.
+
+## Open work — Documentation drift (2026-09 review)
+
+The cross-language IR contract is *verified* — `scripts/check_ir_sync.py`
+and `scripts/gen_ir_schema.py` are CI-enforced, and all 55 tags, class
+names, field orders and `ir-schema.ts` entries agree between Python and
+TS. The prose around it has rotted:
+
+- **Four overlapping trackers describe a layout that no longer exists.**
+  `TODO`'s "Open code smells" and "Next up" cite `papyri/crosslink.py`
+  (renamed to `ingested_doc.py`) — the TS half of the same item is still
+  accurate and open, so only the Python pointers rotted.
+  `TODO-renames.md` opens with a "nothing on this list has landed yet"
+  banner that is false, asks to delete an `IntermediateNode` that is
+  already gone, and proposes renaming CLI commands (`ingest`, `relink`,
+  `drop`) that no longer exist. Fold both into PLAN.md or delete them.
+- **`docs/IR.md`'s tag registry is wrong.** It lists `4020 Heading` (no
+  such class), and `4052 Directive` / `4060 Comment` (real classes,
+  deliberately untagged), and omits roughly fifteen tags including `4070
+  Bundle` and `4010 IngestedDoc`. It also cites a `DocBundler.write` that
+  does not exist and a "PLAN.md Phase 2" that no longer does. Generate the
+  table from `TAG_MAP` instead of hand-maintaining it.
+- **`docs/IR-NODE-AUDIT.md` still asserts a bug that was fixed.** Its
+  central claim — that `tree.py` wraps unhandled directives in a
+  *serializable* `Directive`, "the leak path that lets raw directives reach
+  disk" — is stale: `Directive` is an `UnserializableNode`. Item 3's
+  "`Comment` wastes bytes on disk" is likewise stale (stripped at pack),
+  and every line number in the document is off. A reader would re-do closed
+  work.
+- **`ingest/src/encoder.ts` — the file that *is* the cross-language
+  contract — names two source files that do not hold those classes**
+  ("`papyri/crosslink.py` (IngestedDoc), `papyri/gen.py` (GeneratedDoc)";
+  actually `ingested_doc.py` and `doc.py`).
+- **CLAUDE.md's repository layout.** Viewer routes are documented one
+  level too shallow (`pages/[pkg]/[ver]/…`; the real routes live under
+  `pages/project/[pkg]/[ver]/…`), and nine real modules are missing —
+  `papyri/{__main__,_progress,bundle_edit,errors,user_config,utils}.py`,
+  `papyri/cli/lint.py`, `ingest/src/{fs-safe,url-safety}.ts` (both
+  security guards in the done log), and
+  `viewer/src/lib/{auth-db,passkey}.ts` — as are `viewer/README.md`,
+  `viewer/DEPLOY.md` and `viewer/TODO.md`. `bundle_edit.py` is called "the
+  supported custom step between gen and pack" here yet is invisible there.
+- **CLAUDE.md's env table.** `PAPYRI_PORT` (docker-compose) and
+  `PAPYRI_COMMIT` (the actual input feeding the documented
+  `PAPYRI_BUILD_COMMIT`) are undocumented; `PAPYRI_BUILD_ADAPTER` is
+  hard-coded to `"node"` in `buildDefine` and never read from the
+  environment at all. `docs/configuration.rst` omits `doctest_optionflags`.
+- **PLAN.md's own file paths.** `ingest/migrations/0000_init.sql` (actual
+  `0001_init.sql`), `0001_external_inventory.sql` in the done log (actual
+  `0003_…`), and `viewer/src/pages/api/bundle/[...path].ts` (actual
+  `api/bundle.ts`) — the last inside a scoped open-work item, so it is
+  actionable rot.
+- **`viewer/PLAN.md` contradicts itself.** "Must-have (v0)" still requires
+  a static build while "Open questions" records static export as parked
+  (2026-07) and `astro.config.mjs` is `output: "server"`; the tech table
+  claims a Playwright smoke suite that is in no `package.json`; the
+  architecture sketch says `astro.config.ts`.
+- **`Readme.md`** claims Python 3.14+ (`requires-python` is `>=3.13`; 3.14
+  is CI only) and describes gen as emitting `module/*.cbor` — the same
+  stale encoding claim already flagged for `docs/IR.md`, but in the first
+  file a contributor reads.
+- **Stale files.** `assets/` holds ~1.4 MB of screenshots referenced by
+  nothing; `examples/gallery1.py` is unreferenced;
+  `viewer/tests/bundle-ingest.test.ts` tests nothing about bundle ingest
+  (it is a second copy of the `isSafeSegment` suite) and should be renamed
+  or merged; `viewer/README.md` says Node 20+ where `engines` requires 22.
+
 ## Done log
 
 Terse, grep-able record of what exists so future work doesn't re-derive it.
 Newest areas first; each line names the key symbol/file.
+
+### Multi-agent review pass (2026-09)
+
+Five parallel reviews (gen core, CLI/storage, ingest, viewer, cross-cutting).
+Findings are filed as open work above; what landed in this pass:
+
+- **Bundle-asset route hardened** (`viewer/src/pages/assets/project/[pkg]/[ver]/[...asset].ts`).
+  Was a MIME lookup table that deliberately served `.html`/`.htm`/`.js` as
+  active content on the viewer's own origin, with no CSP anywhere in the
+  app — stored XSS for anyone holding an upload token for any project. Now
+  an extension **allow-list** (images only; gen never writes anything else
+  into `assets/`), `Content-Security-Policy: default-src 'none'; sandbox`
+  so an SVG carrying `<script>` lands in an opaque origin on direct
+  navigation, `X-Content-Type-Options: nosniff`, and an explicit
+  `Content-Disposition` with a sanitised filename (header-injection safe).
+  `pkg`/`ver` now go through `isSafeSegment` first, so a traversal attempt
+  is a 400 rather than an uncaught `safeJoin` throw. Tests:
+  `viewer/tests/asset-route.test.ts`.
+- **Silent data loss in `node_serializer.serialize` fixed.** The final
+  branch's first disjunct tested `type.__module__` (the builtin `type`)
+  instead of `annotation.__module__`, so it was always false and the check
+  degraded to exact-type equality — and there was no terminal `else`, so a
+  value matching no branch fell off the end and returned `None`
+  implicitly, writing the field to the bundle as JSON `null` with no
+  diagnostic. Both fixed; the function now raises. Hint resolution moved to
+  `serde.get_type_hints`, which filters `ClassVar` (previously every
+  `GeneratedDoc` carried a null `sections` key). `serde.serialize` has the
+  same dead `type.__module__` check but does raise at the end, so it loses
+  nothing — left alone deliberately; its second dead term
+  (`getattr(annotation, "_name", …)`, never set on a Node class) means
+  fixing only the module half would change nothing.
+- **`GeneratedDoc.content` proxy desync fixed** (`gen.py`). `_content` was
+  rebound to a fresh dict after visiting, but `_OrderedDictProxy` captured
+  the original mapping by reference at construction — so the
+  named-section loop that followed wrote its `dv.visit` results into the
+  dict the rebind had just orphaned, and they were discarded. Now updated
+  in place, and the redundant second pass (a subset of the same keys) is
+  gone along with the "the proxy may be stale" workaround comment it forced.
+- **Bundles are reproducible across machines.** `gen`'s narrative
+  (`**/*.rst`) and example (`**/*.py`) scans iterated `Path.glob` in
+  `os.scandir` order, which decides which duplicate `:ref:` label and which
+  external target wins and becomes the narrative-doc/toc order — so the
+  same source tree produced different bundles, and different
+  `content_hash`, on different filesystems. Both sorted. `pack`'s
+  validation walks are sorted too, so the *first* reported problem in a
+  malformed bundle is deterministic. (The remaining basename-collision
+  bug is filed under Gen above.)
+- **`PAPYRI_INGEST_DB` is honoured.** `backends.ts` hardcoded
+  `<ingestDir>/papyri.db`; the one function reading the variable
+  (`paths.ts:ingestDb()`) had no production callers, so the variable
+  documented in CLAUDE.md, `viewer/PLAN.md`, `DEPLOY.md` and
+  `backends.ts`'s own header did nothing. `paths.ts` now owns both paths
+  (`ingestDir()` added, `ingestDb()` defaults inside it) and `backends.ts`
+  calls them, so pointing `PAPYRI_INGEST_DIR` elsewhere moves the DB with
+  it and `PAPYRI_INGEST_DB` still wins.
+- **`papyri/py.types` → `papyri/py.typed`.** The PEP 561 marker was
+  misnamed, so a strictly-typed package shipped no inline types to
+  downstream mypy users.
+- **`examples/pandas.toml` deleted.** Its `[pandas.expected_errors]` table
+  should have been `[global.expected_errors]` and was silently dropped by
+  the loader (~35 entries), and it carried an empty-string `exclude`
+  entry. Nothing in CI generated it. The underlying "unknown top-level
+  section is ignored" bug is filed under CLI uniformisation above.
 
 ### Sphinx-fidelity pass (2026-07 example sweep)
 - Ref resolution: leading-`!` suppression → plain `InlineCode`, no warning;
@@ -842,7 +1257,9 @@ Newest areas first; each line names the key symbol/file.
 - Module-docstring parse failures → `DocstringSentinel` (tag 4072) + warning,
   recorded in `failure_collection`; encoder/IR/renderer updated.
 - `LocalRef` dangling-ref policy: gen does not rewrite; `pack` surfaces it.
-- Deleted dead code: `normalise_ref` (+ its test), `mod_root`.
+- Deleted dead code: `normalise_ref`'s test, `mod_root`. (2026-09: the
+  function itself is still in `gen.py` and still has no callers — see
+  "Small dead/incoherent bits" under Open work — Gen.)
 - Renamed `crosslink.py` → `ingested_doc.py`.
 - `graphstore.py` write-side removed (`put`/`put_meta`/`remove`/
   `_maybe_insert_node`, schema creation) — read-only; TS ingest owns writes.

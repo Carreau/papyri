@@ -41,6 +41,12 @@ import { isSafeSegment } from "../../lib/paths.ts";
 import { getBackends, getUploadToken } from "../../lib/backends.ts";
 import { respond, sha256Hex } from "../../lib/api-utils.ts";
 import { getAuthDb } from "../../lib/auth-db.ts";
+import {
+  audienceIsDerived,
+  getOidcAudience,
+  looksLikeJwt,
+  verifyGithubOidcToken,
+} from "../../lib/github-oidc.ts";
 
 export const prerender = false;
 
@@ -51,12 +57,16 @@ export const prerender = false;
 //     upload the projects that account is a member of (admins: any). When the
 //     token is scoped to a single project, `scopedProject` names it and the
 //     token may upload only that project.
+//   - oidc:   presented a GitHub Actions OIDC token whose claims match a
+//     registered trusted publisher. May upload exactly the project that
+//     publisher names — no account, no stored secret (see github-oidc.ts).
 //   - open:   no token required and none presented, on a fresh install with no
 //     users — the local-dev "everything open" mode.
 type UploadPrincipal =
   | { kind: "global" }
   | { kind: "open" }
-  | { kind: "user"; userId: number; isAdmin: boolean; scopedProject: string | null };
+  | { kind: "user"; userId: number; isAdmin: boolean; scopedProject: string | null }
+  | { kind: "oidc"; project: string; repository: string; workflowRef: string };
 
 /** Constant-time string compare that tolerates length differences. */
 function timingSafeEqualStr(a: string, b: string): boolean {
@@ -75,6 +85,8 @@ const UNAUTHORIZED = () =>
  * authenticated. Auth policy (see PLAN.md "per-user authorization scopes"):
  *
  *   - A bearer that matches PAPYRI_UPLOAD_TOKEN (timing-safe) → global.
+ *   - A JWT-shaped bearer verified as a GitHub Actions OIDC
+ *     token covered by a registered publisher                  → oidc.
  *   - A bearer that resolves as a personal upload token        → user.
  *   - A bearer that matches neither                            → 401.
  *   - No bearer, PAPYRI_UPLOAD_TOKEN set                       → 401.
@@ -92,6 +104,9 @@ async function authenticateUpload(request: Request): Promise<UploadPrincipal | R
     if (globalToken && timingSafeEqualStr(bearer, globalToken)) {
       return { kind: "global" };
     }
+    // A JWT-shaped bearer is a GitHub Actions OIDC token: verify GitHub's
+    // signature, then map the claims to a registered trusted publisher.
+    if (looksLikeJwt(bearer)) return authenticateOidc(bearer, request);
     const resolved = (await getAuthDb()).resolveUploadToken(bearer);
     if (resolved)
       return {
@@ -111,6 +126,64 @@ async function authenticateUpload(request: Request): Promise<UploadPrincipal | R
   return UNAUTHORIZED();
 }
 
+/** Why a verified OIDC token still does not authorize an upload. */
+const OIDC_REJECTION: Record<string, string> = {
+  "bad-claims": "the token's job_workflow_ref claim is not a workflow reference papyri understands",
+  "reusable-workflow":
+    "the publishing job runs in a reusable workflow from another repository; " +
+    "papyri only trusts workflows stored in the repository itself",
+  "no-match":
+    "no papyri project trusts this repository + workflow. Register it under the " +
+    "project's trusted publishers first",
+  "environment-mismatch":
+    "the trusted publisher for this workflow requires a GitHub Environment the job did not declare",
+  "owner-mismatch":
+    "this repository's owner id differs from the one recorded when the publisher was first used",
+};
+
+/**
+ * Authenticate a GitHub Actions OIDC token: verify GitHub's signature and the
+ * generic JWT claims, then match repository/workflow/environment against the
+ * `oidc_publishers` table. A 401 covers "not a token we can trust at all"; a
+ * verified token that no publisher covers gets a 403 naming the reason, since
+ * that is a configuration problem the caller can act on.
+ */
+async function authenticateOidc(
+  token: string,
+  request: Request
+): Promise<UploadPrincipal | Response> {
+  const audience = getOidcAudience(request.url);
+  if (audienceIsDerived()) {
+    console.warn(
+      "[oidc] neither PAPYRI_OIDC_AUDIENCE nor PAPYRI_SITE is set — falling back to the " +
+        "request origin as the OIDC audience. Set one of them in any real deployment."
+    );
+  }
+  const verified = await verifyGithubOidcToken(token, { audience });
+  if (!verified.ok) {
+    return respond({ ok: false, error: `OIDC token rejected: ${verified.error}` }, 401, {
+      "WWW-Authenticate": "Bearer",
+    });
+  }
+  const { claims } = verified;
+  const match = (await getAuthDb()).resolveOidcPublisher(claims);
+  if (!match.ok) {
+    console.warn(
+      `[oidc] refused ${claims.repository} (${claims.job_workflow_ref}): ${match.reason}`
+    );
+    return respond(
+      { ok: false, error: `OIDC token not authorized: ${OIDC_REJECTION[match.reason]}` },
+      403
+    );
+  }
+  return {
+    kind: "oidc",
+    project: match.publisher.project_name,
+    repository: claims.repository,
+    workflowRef: match.publisher.workflow_ref,
+  };
+}
+
 /**
  * Authorize an already-authenticated principal to upload `project` (the
  * bundle's module name). Returns a 403 Response when not permitted, or null to
@@ -121,6 +194,19 @@ async function authorizeUploadProject(
   project: string
 ): Promise<Response | null> {
   if (principal.kind === "global" || principal.kind === "open") return null;
+  // A trusted publisher authorizes exactly the project it was registered for.
+  if (principal.kind === "oidc") {
+    if (principal.project === project) return null;
+    return respond(
+      {
+        ok: false,
+        error:
+          `${principal.repository} (${principal.workflowRef}) is a trusted publisher for ` +
+          `project "${principal.project}", not "${project}"`,
+      },
+      403
+    );
+  }
   // A project-scoped token may upload only that one project — this narrows the
   // user's standing authority and applies even to admins.
   if (principal.scopedProject !== null && principal.scopedProject !== project) {

@@ -685,13 +685,12 @@ CI use the token path and pay their own compute.
   slot one extra line between gen and pack: an injector script built on
   `papyri.bundle_edit` (see `examples/ipython_inject.py`); the Action
   should make room for such a step.
-- **OIDC (trusted-publishing-style) upload auth.** Fork PRs cannot see
-  repository secrets, so bearer-token upload silently fails for the most
-  common contribution flow, and `pull_request_target` is a known footgun.
-  Follow PyPI's trusted-publisher model: `PUT /api/bundle` verifies GitHub's
-  OIDC claim (repo, workflow, ref) and maps it to a project via a
-  `project → allowed claims` table in the auth DB; per-project tokens stay
-  as the non-GitHub fallback. Design this before the token scheme calcifies.
+- **OIDC (trusted-publishing-style) upload auth.** Done — see the Auth /
+  security done log. Follow-ups left open: a staging-bundle path for fork PRs
+  (the trust currently covers any branch of the registered workflow unless an
+  environment is set, and a fork PR upload would land as a real version — so
+  the staging/eviction work below gates actually pointing PR previews at it),
+  and non-GitHub CI, which stays on per-project tokens.
 - **Staging eviction is launch-blocking under PR-preview load.** Every push
   to every PR of every enrolled repo uploads a bundle → unbounded storage.
   Needs TTL / auto-eviction, one staging slot per PR (replaced on push,
@@ -909,6 +908,16 @@ Newest areas first; each line names the key symbol/file.
   personal `upload_tokens` (SHA-256 stored) minted at `/settings`; `PUT
   /api/bundle` authenticates bearer → principal, authorizes per `module`
   (global `PAPYRI_UPLOAD_TOKEN` = escape hatch).
+- Trusted publishing from GitHub Actions (OIDC): `github-oidc.ts` verifies
+  GitHub's RS256 ID token (pinned issuer + alg, JWKS via OIDC discovery pinned
+  to the issuer origin and cached, audience from
+  `PAPYRI_OIDC_AUDIENCE`/`PAPYRI_SITE`), `oidc_publishers` maps
+  repository + workflow (+ optional environment) to a project with the owner id
+  pinned on first use; `PUT /api/bundle` gains an `oidc` principal scoped to
+  that one project. Managed at `/settings` (`TrustedPublisherPanel.tsx`,
+  `/api/oidc/publishers`), audience advertised at `/api/oidc/audience`,
+  minted client-side by `papyri upload --oidc` (auto inside Actions).
+  Reusable workflows from another repository are refused.
 - Path traversal closed via `safeJoin` (`fs-safe.ts`) in `FsBlobStore`/
   `FsRawStore`; `_safe_child` in `pack.py` for `papyri unpack`.
 - `javascript:`/`data:` URL blocking: `isSafeUrl` (`url-safety.ts`) enforced at

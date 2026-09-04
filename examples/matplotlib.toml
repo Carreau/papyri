@@ -102,8 +102,9 @@ execute_doctests = true
 [global.roles]
 # ``:mpltype:`color``` — matplotlib's project-local role for parameter-type
 # prose (rendered by their Sphinx ext as a link to the colors tutorial).
-# Formatting-only outside their docs build: render as inline code.
-mpltype = 'papyri.directives:role_verbatim'
+# Declared placeholder (role_unset: inline code + W-unset-role) until a
+# handler links it to the corresponding tutorial page.
+mpltype = 'papyri.directives:role_unset'
 
 [global.expected_errors]
 IncorrectInternalDocsLen = [

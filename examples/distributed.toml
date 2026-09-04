@@ -21,9 +21,10 @@ execute_doctests = false
 
 [global.roles]
 # ``:ivar:`` is a docstring *field* (``:ivar name:``), not a role; two
-# distributed docstrings use it as one. Render the body as code rather
-# than fail the build until the docstrings are fixed upstream.
-ivar = 'papyri.directives:role_verbatim'
+# distributed docstrings use it as one. Declared placeholder (role_unset:
+# inline code + W-unset-role) so the build passes while the misuse stays
+# visible, until the docstrings are fixed upstream.
+ivar = 'papyri.directives:role_unset'
 
 [global.expected_errors]
 NumpydocParseError = [

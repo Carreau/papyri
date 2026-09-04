@@ -34,13 +34,15 @@ narrative_exclude = [
 ]
 [global.roles]
 # IPython's own Sphinx-extension roles (magics, config traits) and the
-# Sphinx rst-domain role used in the sphinxext docs. No target index
-# outside IPython's docs build: render as inline code, explicitly.
-magic            = 'papyri.directives:role_verbatim'
-cellmagic        = 'papyri.directives:role_verbatim'
-configtrait      = 'papyri.directives:role_verbatim'
-"std:configtrait" = 'papyri.directives:role_verbatim'
-"rst:dir"        = 'papyri.directives:role_verbatim'
+# Sphinx rst-domain role used in the sphinxext docs. Declared placeholders
+# (role_unset: inline code + W-unset-role on every use) until real handlers
+# exist — e.g. :magic: should link to the magic's page, :configtrait: to
+# the trait.
+magic            = 'papyri.directives:role_unset'
+cellmagic        = 'papyri.directives:role_unset'
+configtrait      = 'papyri.directives:role_unset'
+"std:configtrait" = 'papyri.directives:role_unset'
+"rst:dir"        = 'papyri.directives:role_unset'
 
 [global.implied_imports]
 get_ipython = 'IPython:get_ipython'

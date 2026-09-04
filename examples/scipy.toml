@@ -33,11 +33,11 @@ narrative_exclude = [
 
 
 [global.roles]
-# scipy's own Sphinx-extension roles (doi/arxiv link builders). No target
-# index outside scipy's docs build: render the identifier as inline code,
-# explicitly.
-doi   = 'papyri.directives:role_verbatim'
-arxiv = 'papyri.directives:role_verbatim'
+# scipy's own Sphinx-extension roles (doi/arxiv link builders). Declared
+# placeholders (role_unset: inline code + W-unset-role) until a handler
+# builds the doi.org / arxiv.org Link from the identifier.
+doi   = 'papyri.directives:role_unset'
+arxiv = 'papyri.directives:role_unset'
 
 [meta]
 github_slug = 'scipy/scipy'

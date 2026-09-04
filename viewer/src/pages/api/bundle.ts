@@ -41,6 +41,18 @@ import { isSafeSegment } from "../../lib/paths.ts";
 import { getBackends, getUploadToken } from "../../lib/backends.ts";
 import { respond, sha256Hex } from "../../lib/api-utils.ts";
 import { getAuthDb } from "../../lib/auth-db.ts";
+import { makePreviewRef, previewBase, previewId, type PreviewRef } from "../../lib/preview.ts";
+import { linkForBundle } from "../../lib/links.ts";
+import { sweepExpiredPreviews, touchPreview } from "../../lib/preview-store.ts";
+import {
+  looksLikeJwt,
+  oidcEnabled,
+  OidcError,
+  previewRefFromClaims,
+  verifyGithubOidcToken,
+  workflowFile,
+  type GithubOidcClaims,
+} from "../../lib/oidc.ts";
 
 export const prerender = false;
 
@@ -53,10 +65,14 @@ export const prerender = false;
 //     token may upload only that project.
 //   - open:   no token required and none presented, on a fresh install with no
 //     users — the local-dev "everything open" mode.
+//   - oidc:   presented a GitHub Actions ID token (trusted publishing). May
+//     upload the projects its repository is a registered publisher for, and
+//     only into the preview namespace of its own pull request.
 type UploadPrincipal =
   | { kind: "global" }
   | { kind: "open" }
-  | { kind: "user"; userId: number; isAdmin: boolean; scopedProject: string | null };
+  | { kind: "user"; userId: number; isAdmin: boolean; scopedProject: string | null }
+  | { kind: "oidc"; claims: GithubOidcClaims; preview: PreviewRef; projects: string[] };
 
 /** Constant-time string compare that tolerates length differences. */
 function timingSafeEqualStr(a: string, b: string): boolean {
@@ -68,6 +84,61 @@ function timingSafeEqualStr(a: string, b: string): boolean {
 
 const UNAUTHORIZED = () =>
   respond({ ok: false, error: "unauthorized" }, 401, { "WWW-Authenticate": "Bearer" });
+
+/**
+ * Authenticate a GitHub Actions ID token to an `oidc` principal.
+ *
+ * The token's claims decide everything: which repository is speaking, which
+ * projects that repository may publish (the `oidc_publishers` table), and
+ * which preview namespace it owns. Nothing here is client-supplied.
+ */
+async function authenticateOidc(bearer: string): Promise<UploadPrincipal | Response> {
+  if (!oidcEnabled()) {
+    return respond({ ok: false, error: "OIDC uploads are disabled on this server" }, 403);
+  }
+  let claims: GithubOidcClaims;
+  try {
+    claims = await verifyGithubOidcToken(bearer);
+  } catch (err) {
+    if (err instanceof OidcError) {
+      return respond({ ok: false, error: `OIDC token rejected: ${err.message}` }, 401, {
+        "WWW-Authenticate": "Bearer",
+      });
+    }
+    console.error("OIDC verification error:", err);
+    return respond({ ok: false, error: "could not verify OIDC token" }, 500);
+  }
+
+  const preview = previewRefFromClaims(claims);
+  if (!preview) {
+    return respond(
+      {
+        ok: false,
+        error:
+          "OIDC uploads are accepted for pull-request previews only " +
+          `(event_name=${claims.event_name}, ref=${claims.ref})`,
+      },
+      403
+    );
+  }
+
+  const projects = (await getAuthDb()).projectsForRepository(
+    claims.repository,
+    workflowFile(claims)
+  );
+  if (projects.length === 0) {
+    return respond(
+      {
+        ok: false,
+        error:
+          `"${claims.repository}" is not a registered trusted publisher for any project; ` +
+          "an admin must add it before this repository can upload previews",
+      },
+      403
+    );
+  }
+  return { kind: "oidc", claims, preview, projects };
+}
 
 /**
  * Authenticate an upload request to a principal, WITHOUT yet checking which
@@ -92,6 +163,10 @@ async function authenticateUpload(request: Request): Promise<UploadPrincipal | R
     if (globalToken && timingSafeEqualStr(bearer, globalToken)) {
       return { kind: "global" };
     }
+    // A JWT-shaped bearer is a GitHub Actions ID token, never a papyri token
+    // (those are opaque `papyri_pat_…` strings), so it is safe to branch on
+    // shape before any DB lookup.
+    if (looksLikeJwt(bearer)) return authenticateOidc(bearer);
     const resolved = (await getAuthDb()).resolveUploadToken(bearer);
     if (resolved)
       return {
@@ -121,6 +196,18 @@ async function authorizeUploadProject(
   project: string
 ): Promise<Response | null> {
   if (principal.kind === "global" || principal.kind === "open") return null;
+  if (principal.kind === "oidc") {
+    if (principal.projects.includes(project)) return null;
+    return respond(
+      {
+        ok: false,
+        error:
+          `"${principal.claims.repository}" is not a trusted publisher for project ` +
+          `"${project}" (allowed: ${principal.projects.join(", ")})`,
+      },
+      403
+    );
+  }
   // A project-scoped token may upload only that one project — this narrows the
   // user's standing authority and applies even to admins.
   if (principal.scopedProject !== null && principal.scopedProject !== project) {
@@ -135,6 +222,36 @@ async function authorizeUploadProject(
   if (principal.isAdmin) return null;
   if ((await getAuthDb()).canUserUploadProject(principal.userId, project)) return null;
   return respond({ ok: false, error: `not authorized to upload project "${project}"` }, 403);
+}
+
+/**
+ * Which namespace this upload targets: the main store (null) or a PR preview.
+ *
+ * An OIDC principal always writes into the preview its claims name — the query
+ * string cannot move it. The deployment-wide token may name a preview
+ * explicitly (`?preview=owner/repo%2342`), which is how a preview is exercised
+ * locally without minting GitHub tokens. Per-user tokens cannot: previews are
+ * the CI path.
+ */
+function resolveTargetPreview(principal: UploadPrincipal, url: URL): PreviewRef | null | Response {
+  if (principal.kind === "oidc") return principal.preview;
+  const raw = url.searchParams.get("preview");
+  if (!raw) return null;
+  if (principal.kind !== "global" && principal.kind !== "open") {
+    return respond(
+      { ok: false, error: "only the deployment upload token may target a preview explicitly" },
+      403
+    );
+  }
+  const m = /^([^/]+)\/([^/#]+)[#/](\d+)$/.exec(raw);
+  const ref = m ? makePreviewRef(m[1]!, m[2]!, m[3]!) : null;
+  if (!ref) {
+    return respond(
+      { ok: false, error: `malformed preview id ${JSON.stringify(raw)} (expected owner/repo#42)` },
+      400
+    );
+  }
+  return ref;
 }
 
 // Existence check for `papyri upload`'s dedup step. The client computes the
@@ -157,9 +274,12 @@ export const GET: APIRoute = async ({ request, url }) => {
   const authzFail = await authorizeUploadProject(principal, module);
   if (authzFail) return authzFail;
 
+  const preview = resolveTargetPreview(principal, url);
+  if (preview instanceof Response) return preview;
+
   let backends: Awaited<ReturnType<typeof getBackends>>;
   try {
-    backends = await getBackends();
+    backends = await getBackends(preview);
   } catch (err) {
     console.error("failed to open ingest backend:", err);
     return respond({ ok: false, error: "failed to open ingest backend" }, 500);
@@ -176,7 +296,7 @@ export const GET: APIRoute = async ({ request, url }) => {
   return respond({ ok: true, module, version, stored_hash: storedHash, exists });
 };
 
-export const PUT: APIRoute = async ({ request }) => {
+export const PUT: APIRoute = async ({ request, url }) => {
   // Authenticate the caller to a principal first. The project-scope check
   // happens after decoding, once we know which project (bundle.module) this
   // artifact targets.
@@ -187,10 +307,15 @@ export const PUT: APIRoute = async ({ request }) => {
     return respond({ ok: false, error: "request body required (.papyri artifact)" }, 400);
   }
 
+  // A preview upload writes into its own isolated store, so nothing here can
+  // touch the main graph — no backrefs, no search index, no eviction cascade.
+  const preview = resolveTargetPreview(principal, url);
+  if (preview instanceof Response) return preview;
+
   let ingester: Ingester;
   let backends: Awaited<ReturnType<typeof getBackends>>;
   try {
-    backends = await getBackends();
+    backends = await getBackends(preview);
     ingester = new Ingester({ backends });
   } catch (err) {
     console.error("failed to open ingest backend:", err);
@@ -302,7 +427,31 @@ export const PUT: APIRoute = async ({ request }) => {
         },
         contentHash
       );
-      await sendWithTiming({ event: "done", pkg: result.pkg, version: result.version });
+      if (preview) {
+        // Register (or renew) the namespace only once content is actually in
+        // it, and take the chance to evict any preview past its TTL.
+        await touchPreview(preview);
+        void sweepExpiredPreviews().catch((err) =>
+          console.warn("preview eviction sweep failed:", err)
+        );
+      }
+      await sendWithTiming({
+        event: "done",
+        pkg: result.pkg,
+        version: result.version,
+        ...(preview
+          ? {
+              preview: previewId(preview),
+              // Built from the canonical helper, then prefixed: this endpoint
+              // runs outside a preview request context, so `linkForBundle`
+              // returns the un-prefixed path here.
+              url: new URL(
+                previewBase(preview) + linkForBundle(result.pkg, result.version),
+                process.env.PAPYRI_SITE ?? url.origin
+              ).toString(),
+            }
+          : {}),
+      });
     } catch (err) {
       await sendWithTiming({ event: "error", error: `ingest failed: ${err}` });
     } finally {

@@ -121,7 +121,12 @@ def _resolve_upload_params(
 
 
 def _bundle_already_uploaded(
-    url: str, pkg: str, version: str, bundle_hash: str, token: str | None
+    url: str,
+    pkg: str,
+    version: str,
+    bundle_hash: str,
+    token: str | None,
+    preview: str | None = None,
 ) -> bool:
     """Ask the viewer whether it already holds this exact bundle.
 
@@ -130,9 +135,10 @@ def _bundle_already_uploaded(
     that doesn't implement the check) returns ``False`` so the caller uploads
     anyway — the dedup check must never block a legitimate upload.
     """
-    query = urllib.parse.urlencode(
-        {"module": pkg, "version": version, "hash": bundle_hash}
-    )
+    params = {"module": pkg, "version": version, "hash": bundle_hash}
+    if preview:
+        params["preview"] = preview
+    query = urllib.parse.urlencode(params)
     parsed = urllib.parse.urlsplit(url)
     check_url = urllib.parse.urlunsplit(
         (parsed.scheme, parsed.netloc, parsed.path, query, "")
@@ -196,6 +202,44 @@ def upload(
                 "Overrides --to and $PAPYRI_UPLOAD_TOKEN.  "
                 "Defaults to $PAPYRI_UPLOAD_TOKEN, then the target set by --to.  "
                 "Omit when the viewer has no token configured (local dev)."
+            ),
+        ),
+    ] = None,
+    preview: Annotated[
+        bool,
+        typer.Option(
+            "--preview",
+            help=(
+                "Upload into the pull-request preview namespace instead of the "
+                "published store.  Inside GitHub Actions this authenticates with "
+                "a short-lived OIDC token (requires `permissions: id-token: "
+                "write`), so it works on pull requests from forks where secrets "
+                "are unavailable.  The preview is dropped when the pull request "
+                "closes (`papyri drop-preview`) and expires on its own if it isn't."
+            ),
+        ),
+    ] = False,
+    preview_id: Annotated[
+        str | None,
+        typer.Option(
+            "--preview-id",
+            help=(
+                "Preview namespace to target, as 'owner/repo#42'.  Implies "
+                "--preview and authenticates with the ordinary upload token "
+                "instead of OIDC — the viewer accepts this only from the "
+                "deployment-wide token, so it is a local-testing path.  Omit it "
+                "in CI: the OIDC token names the pull request itself."
+            ),
+        ),
+    ] = None,
+    oidc_audience: Annotated[
+        str | None,
+        typer.Option(
+            "--oidc-audience",
+            help=(
+                "Audience to request for the OIDC token.  Must match the "
+                "viewer's PAPYRI_OIDC_AUDIENCE.  Defaults to "
+                "$PAPYRI_OIDC_AUDIENCE, then 'papyri'."
             ),
         ),
     ] = None,
@@ -277,6 +321,45 @@ def upload(
         typer.echo(f"error: {exc}", err=True)
         raise typer.Exit(1) from exc
 
+    # Preview mode. Two authentication paths, in priority order:
+    #   --preview-id  → an explicit namespace, authenticated with the ordinary
+    #                   upload token (the viewer only accepts this from the
+    #                   deployment-wide token; it exists for local testing).
+    #   --preview     → a GitHub Actions OIDC token, whose claims name the
+    #                   pull request. Nothing is passed on the query string:
+    #                   the server derives the namespace from the token.
+    preview_query: str | None = None
+    if preview_id:
+        preview = True
+        preview_query = preview_id
+    elif preview:
+        from papyri.github_oidc import OidcUnavailable, request_id_token
+
+        try:
+            effective_token = request_id_token(oidc_audience)
+        except OidcUnavailable as exc:
+            typer.echo(f"error: {exc}", err=True)
+            typer.echo(
+                "hint: pass --preview-id owner/repo#42 with an upload token to "
+                "target a preview outside GitHub Actions",
+                err=True,
+            )
+            raise typer.Exit(1) from exc
+
+    if preview_query:
+        parsed_target = urllib.parse.urlsplit(effective_url)
+        merged = urllib.parse.parse_qsl(parsed_target.query)
+        merged.append(("preview", preview_query))
+        effective_url = urllib.parse.urlunsplit(
+            (
+                parsed_target.scheme,
+                parsed_target.netloc,
+                parsed_target.path,
+                urllib.parse.urlencode(merged),
+                "",
+            )
+        )
+
     ok = True
     total = len(paths)
     width = len(str(total))
@@ -324,7 +407,7 @@ def upload(
         # for (pkg, version) and skip the upload when it does. --force bypasses.
         bundle_hash = hashlib.sha256(data).hexdigest()
         if not force and _bundle_already_uploaded(
-            effective_url, pkg, version, bundle_hash, effective_token
+            effective_url, pkg, version, bundle_hash, effective_token, preview_query
         ):
             typer.echo(
                 f"{prefix} skipping {pkg} {version}: already uploaded "
@@ -423,6 +506,11 @@ def upload(
                     f"ingested in {elapsed:.1f}s",
                     err=True,
                 )
+                preview_url = final.get("url")
+                if preview_url:
+                    typer.echo(f"{prefix} preview: {preview_url}", err=True)
+                    # stdout, one per line, so a CI step can capture it.
+                    typer.echo(str(preview_url))
         except urllib.error.HTTPError as exc:
             raw = exc.read()
             try:

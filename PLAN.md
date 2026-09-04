@@ -624,8 +624,9 @@ Old raw archives in the CBOR format are re-generated, not migrated
   directly in a module (`?inline-functions=1`). Large modules (numpy) get very
   long — add "collapse all" + per-function anchors. Both toggles should share
   one rendering component.
-- **Bundle staging area.** Upload into an isolated staging zone (no backrefs
-  computed, atomically droppable) for PR-doc review and RC review. Staged
+- **Bundle staging area — the PR half is done (see PR previews in the done
+  log); this item is now only the RC-review half.** Upload into an isolated
+  staging zone (no backrefs computed, atomically droppable) for RC review. Staged
   bundles never appear in cross-package "Referenced by" lists or the global
   search index.
   - *Design.* Staging is a namespace, not a separate pipeline: same parsing,
@@ -639,9 +640,9 @@ Old raw archives in the CBOR format are re-generated, not migrated
     "latest backrefs only" dedup (they have none). Same upload auth as normal;
     viewing may optionally require login.
   - *Open.* Whether a staged `GET /[pkg]/[ver]/` shows a warning banner
-    (probably yes, reuse the version-status banner). Eviction: TTL /
-    auto-eviction is required, not optional — see "Adoption / CI
-    integration" below (PR-preview load makes staging storage unbounded).
+    (probably yes — the preview banner, `components/PreviewBanner.astro`, is
+    the model). Eviction: reuse the preview TTL sweep
+    (`lib/preview-store.ts`) rather than inventing a second one.
   - *Files.* `ingest/src/ingest.ts` (flag, skip backref writes),
     `viewer/src/pages/api/bundle/[...path].ts`, graph-layer
     `listStagingBundles`/`dropStagingBundle`,
@@ -677,27 +678,33 @@ Caveat: the free-compute
 argument holds for public repos on github.com; private repos and non-GitHub
 CI use the token path and pay their own compute.
 
-- **`papyri` GitHub Action.** One copy-pasteable job: install papyri +
-  project, `gen`, `pack`, `upload` to a viewer instance. Does not exist yet
-  (no `action.yml` anywhere in the repo). The bar is "works on the first try
-  in a repo whose tests already pass in CI" — every configuration knob is
-  adoption friction. Projects with script-generated doc pages (IPython)
-  slot one extra line between gen and pack: an injector script built on
-  `papyri.bundle_edit` (see `examples/ipython_inject.py`); the Action
-  should make room for such a step.
-- **OIDC (trusted-publishing-style) upload auth.** Fork PRs cannot see
-  repository secrets, so bearer-token upload silently fails for the most
-  common contribution flow, and `pull_request_target` is a known footgun.
-  Follow PyPI's trusted-publisher model: `PUT /api/bundle` verifies GitHub's
-  OIDC claim (repo, workflow, ref) and maps it to a project via a
-  `project → allowed claims` table in the auth DB; per-project tokens stay
-  as the non-GitHub fallback. Design this before the token scheme calcifies.
-- **Staging eviction is launch-blocking under PR-preview load.** Every push
-  to every PR of every enrolled repo uploads a bundle → unbounded storage.
-  Needs TTL / auto-eviction, one staging slot per PR (replaced on push,
-  dropped on merge/close), and a version naming scheme that can never shadow
-  a real release (e.g. `<base-version>+pr<N>.<sha>`). This supersedes the
-  "lean explicit delete for v1" note in the staging-area item above.
+- **PR previews are implemented; what is left is adoption.** The Action
+  (`action.yml`), OIDC trusted publishing, the isolated preview namespace and
+  its eviction all landed (see the done log). Remaining, in order:
+  - *First adoption target: IPython.* Register the trusted publisher, add the
+    two-job workflow, and fix whatever the first real project trips over. The
+    bar stays "works on the first try in a repo whose tests already pass in CI".
+  - *Preview ↔ pull-request feedback.* The Action writes the preview URL to the
+    job summary and a step output. A PR comment (or a commit status linking to
+    the preview) needs a token the fork flow doesn't have — decide between a
+    `pull_request_target` commenter job on the base repo, a GitHub App, or
+    leaving the summary as the only surface.
+  - *Cross-package links inside a preview.* A preview resolves refs only
+    within itself, so links into other packages render unresolved and a
+    reviewer sees more broken links than a reader would. Options: attach the
+    main graph DB read-only for *outgoing* resolution only (SQLite `ATTACH`
+    plus a union view), or resolve through a second `GraphDb` handle passed to
+    `xref.ts`. Do not let this become a write path into the main graph.
+  - *Sizing.* Nothing bounds how many previews one repository may hold at
+    once, or how large one may be; the 30-day TTL is the only limit. Add a
+    per-repository cap (and a per-preview byte ceiling) before opening
+    registration beyond invited projects.
+- **Staging for release candidates (previews do not cover this).** The preview
+  namespace answers the PR case only: identity comes from an OIDC claim, so
+  there is no way to stage an RC bundle for human review, and no `promote`
+  path that moves a staged bundle into the published store. Reuse the preview
+  machinery (namespace + registry + drop) with a different identity source
+  when that case comes up.
 
 ## Open work — Security / hosting
 
@@ -731,6 +738,33 @@ CI use the token path and pay their own compute.
 
 Terse, grep-able record of what exists so future work doesn't re-derive it.
 Newest areas first; each line names the key symbol/file.
+
+### PR previews (GitHub OIDC trusted publishing)
+- Namespace: one isolated storage triple per pull request under
+  `~/.papyri/previews/<owner>/<repo>/pr<N>/` (own `papyri.db`, blobs, `_raw/`)
+  — `viewer/src/lib/preview.ts`; `getBackends(preview?)` opens it with a
+  bounded LRU of SQLite handles (`backends.ts`). Nothing is written to the
+  main graph, so no backref/search pollution and drop = `rm -rf` + one row.
+- Routing: `/preview/<owner>/<repo>/<pr>/…` is rewritten in `middleware.ts`
+  onto the normal route tree, with the namespace carried by an
+  `AsyncLocalStorage` request context (`request-context.ts`). `links.ts`
+  prefixes every URL it builds via `url-base.ts`; hydrated islands read the
+  same prefix from `<meta name="papyri-url-base">`. Admin/account/upload
+  routes are refused under a preview prefix.
+- Auth: `PUT /api/bundle` accepts a GitHub Actions ID token as bearer
+  (`lib/oidc.ts` — JWKS fetch + RS256 verify with `node:crypto`, no new
+  dependency); the preview identity comes from the `repository` + `ref`
+  claims, never the client. `oidc_publishers` (auth DB) maps
+  `(repository, workflow) → project`; admin UI at `/admin/previews`.
+  `pull_request_target` is rejected.
+- Lifecycle: `previews` registry table + `preview-store.ts`
+  (`touchPreview` / `dropPreview` / `sweepExpiredPreviews`), 30-day TTL swept
+  opportunistically on upload; `DELETE /api/preview` drops one (OIDC token
+  for its own PR, or global token / admin session by id).
+- Client: `papyri upload --preview` (OIDC token from the Actions runtime,
+  `papyri/github_oidc.py`) and `--preview-id owner/repo#42` for local testing
+  with the deployment token; `papyri drop-preview`; composite `action.yml`
+  with `mode: upload|drop`. Docs: `docs/previews.rst`.
 
 ### Sphinx-fidelity pass (2026-07 example sweep)
 - Ref resolution: leading-`!` suppression → plain `InlineCode`, no warning;

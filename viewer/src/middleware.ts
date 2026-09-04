@@ -1,11 +1,16 @@
 import { defineMiddleware } from "astro:middleware";
+import type { APIContext } from "astro";
 import { getAuthDb, SESSION_COOKIE } from "./lib/auth-db.ts";
+import { parsePreviewPath, previewId } from "./lib/preview.ts";
+import { previewContext, runInRequestContext } from "./lib/request-context.ts";
 
 // Routes that must remain reachable without a session (login form, auth
 // endpoints, bundle upload). Any new pre-auth route needs an entry here.
 // `/api/bundle` is the upload endpoint hit by `papyri upload`; it carries
 // its own bearer-token check and must stay reachable without a session cookie.
-const PUBLIC_PREFIXES = ["/login", "/api/auth/", "/api/bundle"] as const;
+// `/api/preview` (drop / list-own) is authenticated by a GitHub OIDC token
+// exactly like the upload endpoint, so it too must bypass the session gate.
+const PUBLIC_PREFIXES = ["/login", "/api/auth/", "/api/bundle", "/api/preview"] as const;
 
 // Routes restricted to authenticated users. Everything not listed here (and
 // not in PUBLIC_PREFIXES) is accessible to guests so they can browse docs
@@ -44,12 +49,14 @@ function matchesAny(prefixes: readonly string[], pathname: string): boolean {
   return prefixes.some((p) => matchesPrefix(p, pathname));
 }
 
-export const onRequest = defineMiddleware(async (context, next) => {
-  const { pathname } = context.url;
-
+/**
+ * Auth gate for one (already un-prefixed) pathname. Returns a Response to
+ * short-circuit with, or null to let the request through.
+ */
+async function authGate(context: APIContext, pathname: string): Promise<Response | null> {
   // Public routes bypass all auth checks.
   if (matchesAny(PUBLIC_PREFIXES, pathname)) {
-    return next();
+    return null;
   }
 
   // Admin-only and signed-in-user routes both require an active, unexpired
@@ -84,5 +91,74 @@ export const onRequest = defineMiddleware(async (context, next) => {
   }
 
   // Everything else (docs, bundle index, text search, …) is open to guests.
-  return next();
+  return null;
+}
+
+/**
+ * Serve one request out of a PR preview namespace.
+ *
+ * `/preview/<owner>/<repo>/<pr>/<rest>` is rewritten to `<rest>`, so preview
+ * pages run the *same* routes as the main store; what changes is the request
+ * context, which points `getBackends()` at the preview's own SQLite + blob
+ * directory and prefixes every URL `links.ts` builds (see `url-base.ts`).
+ *
+ * The response body is buffered inside the context so the store is still
+ * active while Astro renders, whenever the body is pulled.
+ */
+async function servePreview(
+  context: APIContext,
+  parsed: NonNullable<ReturnType<typeof parsePreviewPath>>
+): Promise<Response> {
+  const record = (await getAuthDb()).getPreview(previewId(parsed.ref));
+  if (!record) {
+    return new Response("No such preview — it may have been merged, closed, or expired.", {
+      status: 404,
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    });
+  }
+  // A preview is a read-only browse surface. Admin tooling, account pages and
+  // the upload/drop endpoints all address the *deployment*, not one preview:
+  // reaching them through a preview prefix would point destructive operations
+  // (clear graphstore, reingest) at the preview store. They stay global-only.
+  if (
+    matchesAny(ADMIN_ONLY_PREFIXES, parsed.rest) ||
+    matchesAny(AUTH_REQUIRED_PREFIXES, parsed.rest) ||
+    matchesAny(PUBLIC_PREFIXES, parsed.rest)
+  ) {
+    return new Response("Not available inside a preview", { status: 404 });
+  }
+
+  const gate = await authGate(context, parsed.rest);
+  if (gate) return gate;
+
+  const target = new URL(parsed.rest + context.url.search, context.url);
+  // `context.rewrite(request)`, not `next(url)`: a `next()` rewrite renders
+  // the target page but does not re-bind route params for endpoint (`.ts`)
+  // routes, so `/…/search.json` and the asset endpoint would see
+  // `params.pkg === undefined` and 404. Rewriting re-enters this middleware
+  // with the un-prefixed path, which no longer matches `/preview/` — the
+  // request context set here stays active across that second pass.
+  const rewritten = new Request(target, context.request);
+  return runInRequestContext(previewContext(parsed.ref), async () => {
+    const res = await context.rewrite(rewritten);
+    const body = res.status === 204 || res.status === 304 ? null : await res.arrayBuffer();
+    return new Response(body, {
+      status: res.status,
+      statusText: res.statusText,
+      headers: res.headers,
+    });
+  });
+}
+
+export const onRequest = defineMiddleware(async (context, next) => {
+  const { pathname } = context.url;
+
+  if (pathname === "/preview" || pathname.startsWith("/preview/")) {
+    const parsed = parsePreviewPath(pathname);
+    if (!parsed) return new Response("Malformed preview URL", { status: 404 });
+    return servePreview(context, parsed);
+  }
+
+  const gate = await authGate(context, pathname);
+  return gate ?? next();
 });

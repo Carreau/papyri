@@ -4,6 +4,7 @@
 // sidebar so callers don't repeat the frontmatter.
 import Head from "../components/Head.astro";
 import SiteHeader from "../components/SiteHeader.astro";
+import PreviewBanner from "../components/PreviewBanner.astro";
 import SiteFooter from "../components/SiteFooter.astro";
 import BundleSidebar from "../components/BundleSidebar.astro";
 import VersionBanner from "../components/VersionBanner.astro";
@@ -13,6 +14,7 @@ import { getBackends } from "../lib/backends.ts";
 import { getVersionStatus, equivalentLatestHref } from "../lib/version-utils.ts";
 import { getVersionDigests } from "../lib/graph.ts";
 import { linkForBundle, linkForQualname, linkForDoc, linkForExample } from "../lib/links.ts";
+import { withBase } from "../lib/url-base.ts";
 import "../styles/global.css";
 
 interface Props {
@@ -46,7 +48,7 @@ const {
 } = Astro.props;
 const rawJsonHref =
   rawKind && rawPath
-    ? `/api/${pkg}/${ver}/raw.json?kind=${rawKind}&path=${encodeURIComponent(rawPath)}`
+    ? withBase(`/api/${pkg}/${ver}/raw.json?kind=${rawKind}&path=${encodeURIComponent(rawPath)}`)
     : null;
 const { blobStore, graphDb } = await getBackends();
 const actualVer = propActualVer ?? (await resolveVersion(graphDb, pkg, ver)) ?? ver;
@@ -111,6 +113,7 @@ if (versionStatus.kind !== "latest" && versionStatus.latestVersion) {
   </head>
   <body>
     <SiteHeader />
+    <PreviewBanner />
     <div class:list={["bundle-layout", hasToc && "has-page-toc"]}>
       <input type="checkbox" id="sidebar-toggle" class="sidebar-toggle-cb" aria-hidden="true" />
       <input type="checkbox" id="sidebar-collapse" class="sidebar-collapse-cb" aria-hidden="true" />

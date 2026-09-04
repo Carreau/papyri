@@ -8,6 +8,7 @@ Papyri
 
    configuration
    injecting
+   previews
    crossrefs
    specimens/index
 

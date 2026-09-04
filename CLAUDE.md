@@ -174,7 +174,9 @@ service *could* be built later without a breaking change to the IR.
 papyri/                   Python package (IR producer + CLI)
   __init__.py             CLI entry (typer app), wires commands from cli/
   cli/                    One file per subcommand: gen, upload, pack, unpack,
-                          find, describe, diff, debug, about, bootstrap
+                          find, describe, diff, debug, about, bootstrap,
+                          drop_preview
+  github_oidc.py          GitHub Actions OIDC token retrieval (PR previews)
   gen.py                  Core IR generation (inspect + docstring → IR)
   nodes.py                IR node types (CST/AST nodes)
   node_base.py            Base class for IR nodes (serialization hooks)
@@ -236,6 +238,11 @@ viewer/                   TypeScript Astro web renderer
       links.ts            Link helpers
       slugs.ts            URL slug utilities
       auth.ts             Auth helpers
+      preview.ts          PR preview namespace (id, URL prefix, storage dir)
+      preview-store.ts    Preview lifecycle: register / drop / TTL sweep
+      oidc.ts             GitHub Actions OIDC verification (trusted publishing)
+      request-context.ts  Per-request namespace (AsyncLocalStorage)
+      url-base.ts         URL prefix for the active namespace
       api-utils.ts        API response helpers
       version-utils.ts    PEP 440 version comparison
       theme.ts            Theme detection
@@ -253,7 +260,8 @@ viewer/                   TypeScript Astro web renderer
         nodes/            Node browser
         text-search/      Full-text search
       api/                API endpoints
-        bundle.ts         PUT /api/bundle — ingest endpoint
+        bundle.ts         PUT /api/bundle — ingest endpoint (main + previews)
+        preview.ts        GET/DELETE /api/preview — inspect / drop a preview
         reingest.ts       POST /api/reingest — replay raw archive
         bundles.json.ts   GET /api/bundles.json — bundle list
         inventory.ts      Intersphinx inventory register/list (external links)
@@ -272,6 +280,8 @@ viewer/                   TypeScript Astro web renderer
 examples/                 Example TOML configs for papyri gen
   papyri.toml             Self-gen config (papyri's own docs)
   numpy.toml, scipy.toml, matplotlib.toml, …
+action.yml                Composite GitHub Action: build a bundle and publish
+                          (or drop) a pull-request documentation preview
 docs/                     Project-level documentation (RST)
   IR.md                   IR schema reference
   IR-NODE-AUDIT.md        Node audit log
@@ -360,6 +370,9 @@ the graphstore and blob store is rebuildable via `POST /api/reingest`.
 | `PAPYRI_USERNAME` / `PAPYRI_PASSWORD` | viewer | Seed an initial admin user into the auth DB on first run (only when no users exist) |
 | `PAPYRI_DEV_SEED` | viewer | Seed a demo admin (`admin`/`password`) when the auth DB is empty: `1` forces (even in a build), `0` disables; unset = on under `pnpm dev` only |
 | `PAPYRI_VERSION` | `papyri upload` | Overrides the `papyri-upload/<version>` User-Agent string |
+| `PAPYRI_PREVIEW_DIR` | viewer | Root of the per-PR preview namespaces (default `~/.papyri/previews`); each holds its own `papyri.db`, blobs and `_raw/` |
+| `PAPYRI_OIDC_AUDIENCE` | viewer, `papyri upload --preview` | Audience a GitHub Actions ID token must carry (default `papyri`); both ends must agree |
+| `PAPYRI_OIDC_DISABLED` | viewer | Set to `1` to refuse OIDC (trusted-publishing) uploads entirely |
 | `PAPYRI_BUILD_COMMIT` | viewer build | Git commit surfaced on the admin panel |
 | `PAPYRI_BUILD_ADAPTER` | viewer build | Build adapter name surfaced on the admin panel |
 | `PAPYRI_FOOTER_COPYRIGHT` | viewer build | Copyright line in the site footer (e.g. `© 2025 Acme Corp.`). Footer is hidden when none of the `PAPYRI_FOOTER_*` vars are set. |
@@ -386,7 +399,12 @@ See `viewer/PLAN.md` for the detailed milestone tracker.
 
 - CLI entry: `papyri/__init__.py` (typer app, wires `papyri/cli/*`).
 - CLI subcommands: `papyri/cli/gen.py`, `upload.py`, `pack.py`, `unpack.py`,
-  `find.py`, `describe.py`, `diff.py`, `debug.py`, `about.py`, `bootstrap.py`.
+  `find.py`, `describe.py`, `diff.py`, `debug.py`, `about.py`, `bootstrap.py`,
+  `drop_preview.py`.
+- PR previews: `viewer/src/lib/preview.ts` (namespace), `preview-store.ts`
+  (lifecycle), `oidc.ts` (trusted publishing), `request-context.ts` +
+  `url-base.ts` (per-request namespace + URL prefix), root `action.yml`,
+  `docs/previews.rst`.
 - IR gen: `papyri/gen.py`.
 - RST→IR visitor + directive handlers: `papyri/tree.py`.
 - RST parsing via tree-sitter: `papyri/ts.py`.

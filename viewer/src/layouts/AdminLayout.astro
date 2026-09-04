@@ -8,7 +8,7 @@ import "../styles/admin.css";
 
 interface Props {
   title: string;
-  active: "overview" | "users" | "projects" | "inventories" | "maintenance";
+  active: "overview" | "users" | "projects" | "previews" | "inventories" | "maintenance";
 }
 
 const { title, active } = Astro.props;
@@ -17,6 +17,7 @@ const tabs = [
   { id: "overview", href: "/admin", label: "Overview" },
   { id: "users", href: "/admin/users", label: "Users" },
   { id: "projects", href: "/admin/projects", label: "Projects" },
+  { id: "previews", href: "/admin/previews", label: "Previews" },
   { id: "inventories", href: "/admin/inventories", label: "Inventories" },
   { id: "maintenance", href: "/admin/maintenance", label: "Maintenance" },
 ] as const;

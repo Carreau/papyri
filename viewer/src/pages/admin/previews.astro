@@ -1,0 +1,39 @@
+---
+// Admin: live PR preview namespaces + the trusted publishers that may create
+// them. Previews expire on their own and the papyri action drops one when its
+// pull request closes; this page is the manual override and the audit view.
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import PreviewsPanel from "../../components/PreviewsPanel.tsx";
+import TrustedPublisherPanel from "../../components/TrustedPublisherPanel.tsx";
+import { getAuthDb } from "../../lib/auth-db.ts";
+import { parsePreviewId, previewBase } from "../../lib/preview.ts";
+import { previewBundles } from "../../lib/preview-store.ts";
+
+export const prerender = false;
+
+const auth = await getAuthDb();
+const previews = await Promise.all(
+  auth.listPreviews().map(async (row) => {
+    const ref = parsePreviewId(row.id);
+    return {
+      ...row,
+      base: ref ? previewBase(ref) : "",
+      bundles: ref ? await previewBundles(ref) : [],
+    };
+  })
+);
+const publishers = auth.listOidcPublishers();
+const projects = auth.listProjects().map((p) => p.name);
+---
+
+<AdminLayout title="Admin · Previews — Papyri" active="previews">
+  <section class="admin-section">
+    <h2>PR previews</h2>
+    <PreviewsPanel client:load initialPreviews={previews} />
+  </section>
+
+  <section class="admin-section">
+    <h2>Trusted publishers</h2>
+    <TrustedPublisherPanel client:load initialPublishers={publishers} projects={projects} />
+  </section>
+</AdminLayout>

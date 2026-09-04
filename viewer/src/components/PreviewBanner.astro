@@ -1,0 +1,50 @@
+---
+// Persistent banner on every page served out of a PR preview namespace.
+//
+// A preview is deliberately unlike the main site: it holds only the bundles
+// one pull request uploaded, and cross-package links into other projects stay
+// unresolved because the preview never touches the main graph. Saying so on
+// every page is cheaper than fielding the bug report.
+import { currentPreview } from "../lib/request-context.ts";
+import { previewId } from "../lib/preview.ts";
+
+const preview = currentPreview();
+const repoUrl = preview ? `https://github.com/${preview.owner}/${preview.repo}` : null;
+const prUrl = preview ? `${repoUrl}/pull/${preview.pr}` : null;
+---
+
+{
+  preview && (
+    <div class="preview-banner" role="status">
+      <strong class="preview-banner-tag">PR preview</strong>
+      <span>
+        Documentation built from <a href={prUrl}>{previewId(preview)}</a>. Not published
+        documentation — links to other packages are not resolved here, and this preview is deleted
+        when the pull request closes.
+      </span>
+    </div>
+  )
+}
+
+<style>
+  .preview-banner {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: baseline;
+    padding: 0.5rem 1rem;
+    background: var(--admonition-warning-bg, #fff6e0);
+    border-bottom: 1px solid var(--border-color, #d8d8d8);
+    font-size: 0.9rem;
+  }
+
+  .preview-banner-tag {
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 0.75rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 0.25rem;
+    background: var(--admonition-warning-accent, #b26a00);
+    color: #fff;
+  }
+</style>

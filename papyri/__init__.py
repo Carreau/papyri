@@ -61,6 +61,7 @@ from .cli.bootstrap import bootstrap
 from .cli.debug import debug
 from .cli.describe import describe
 from .cli.diff import diff
+from .cli.drop_preview import drop_preview
 from .cli.find import find
 from .cli.gen import gen
 from .cli.lint import lint
@@ -131,6 +132,7 @@ for _cmd in (
     debug,
     diff,
     upload,
+    drop_preview,
 ):
     app.command()(_cmd)
 

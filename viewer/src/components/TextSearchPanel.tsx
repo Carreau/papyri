@@ -5,6 +5,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { TextSearchResponse, TextHit } from "../pages/api/[pkg]/[ver]/text-search.json.ts";
+import { withBase } from "../lib/url-base.ts";
 
 interface Props {
   /** Bundle-scoped search when both set; cross-bundle when both omitted. */
@@ -21,7 +22,9 @@ export default function TextSearchPanel({ pkg, ver }: Props) {
   const [error, setError] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const apiPath = pkg && ver ? `/api/${pkg}/${ver}/text-search.json` : `/api/text-search.json`;
+  const apiPath = withBase(
+    pkg && ver ? `/api/${pkg}/${ver}/text-search.json` : `/api/text-search.json`
+  );
   const placeholder =
     pkg && ver ? `Search text in ${pkg} ${ver}…` : "Search text across all bundles…";
 

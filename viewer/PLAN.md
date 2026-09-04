@@ -143,6 +143,17 @@ exploration and are kept because they stand on their own:
       hands it to `Ingester.ingestBundle(node)` — no temp dir, no `tar`
       spawn. Write path uses subquery-based link inserts so a single
       `db.batch([…])` is atomic.
+- [x] **PR previews.** `/preview/<owner>/<repo>/<pr>/…` serves a pull
+      request's own bundles out of an isolated storage triple
+      (`~/.papyri/previews/<owner>/<repo>/pr<N>/`: its own SQLite, blobs
+      and `_raw/`). The middleware rewrites the prefix away and publishes
+      the namespace on an `AsyncLocalStorage` request context, so preview
+      pages run the *same* routes; `links.ts` prefixes URLs through
+      `url-base.ts` and islands read the prefix from
+      `<meta name="papyri-url-base">`. Uploads authenticate with a GitHub
+      Actions OIDC token (`lib/oidc.ts`) whose claims — not the client —
+      name the preview. Registry + 30-day TTL sweep in
+      `lib/preview-store.ts`; `DELETE /api/preview` drops one.
 - [x] **Raw bundle archive.** Every `PUT /api/bundle` archives the
       compressed `.papyri.gz` bytes to `_raw/<pkg>/<ver>.papyri.gz`
       (`<ingest-dir>/_raw/` on the filesystem) before ingest runs.

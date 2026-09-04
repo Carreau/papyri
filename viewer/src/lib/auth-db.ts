@@ -18,6 +18,14 @@
  *   upload_tokens   — id, user_id, token_hash (unique), name, project_id,
  *                     created_at, last_used_at, expires_at — per-user personal
  *                     upload tokens
+ *   oidc_publishers — id, project_id, repository, workflow — which GitHub
+ *                     repository (and optionally which workflow file) may
+ *                     upload a project via a GitHub Actions OIDC token
+ *                     (trusted publishing; see `lib/oidc.ts`)
+ *   previews        — id ("owner/repo#42"), owner, repo, pr, created_at,
+ *                     updated_at, expires_at — registry of live PR preview
+ *                     namespaces (the content itself lives in its own
+ *                     directory + SQLite file, see `lib/preview.ts`)
  *
  * Authorization model: a `project` is a package/module name. An admin
  * (`users.is_admin`) creates projects and assigns users to them. A user mints
@@ -156,6 +164,31 @@ export interface Project {
   id: number;
   name: string;
   created_at: number;
+}
+
+/** A GitHub repository trusted to upload a project via an Actions OIDC token. */
+export interface OidcPublisher {
+  id: number;
+  project_id: number;
+  /** Project name, joined in for display. */
+  project: string;
+  /** `owner/repo`, lower-cased. */
+  repository: string;
+  /** Workflow file path, or "" for "any workflow in that repository". */
+  workflow: string;
+  created_at: number;
+}
+
+/** A live PR preview namespace. */
+export interface PreviewRecord {
+  /** `owner/repo#42`. */
+  id: string;
+  owner: string;
+  repo: string;
+  pr: number;
+  created_at: number;
+  updated_at: number;
+  expires_at: number;
 }
 
 /**
@@ -348,6 +381,23 @@ export class AuthDb {
         created_at    INTEGER NOT NULL,
         last_used_at  INTEGER
       );
+      CREATE TABLE IF NOT EXISTS oidc_publishers (
+        id         INTEGER PRIMARY KEY,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        repository TEXT    NOT NULL,
+        workflow   TEXT    NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL,
+        UNIQUE (project_id, repository, workflow)
+      );
+      CREATE TABLE IF NOT EXISTS previews (
+        id         TEXT    PRIMARY KEY,
+        owner      TEXT    NOT NULL,
+        repo       TEXT    NOT NULL,
+        pr         INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS passkey_challenges (
         challenge  TEXT    PRIMARY KEY,
         type       TEXT    NOT NULL,
@@ -359,6 +409,8 @@ export class AuthDb {
       CREATE INDEX IF NOT EXISTS idx_members_user ON project_members (user_id);
       CREATE INDEX IF NOT EXISTS idx_tokens_user ON upload_tokens (user_id);
       CREATE INDEX IF NOT EXISTS idx_passkey_creds_user ON passkey_credentials (user_id);
+      CREATE INDEX IF NOT EXISTS idx_oidc_repo ON oidc_publishers (repository);
+      CREATE INDEX IF NOT EXISTS idx_previews_expires ON previews (expires_at);
     `);
 
     // Roles were added after the first deployments. If an older auth.db
@@ -747,6 +799,100 @@ export class AuthDb {
       )
       .get(userId, projectName) as { ok: number } | undefined;
     return row !== undefined;
+  }
+
+  // -------------------------------------------------------------------------
+  // Trusted publishers (GitHub OIDC)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Trust a GitHub repository to upload `projectId` with an Actions OIDC
+   * token. `workflow` is a workflow *file path* as it appears in the token's
+   * `workflow_ref` claim (`.github/workflows/docs.yml`); the empty string
+   * trusts any workflow in that repository. Idempotent.
+   */
+  addOidcPublisher(projectId: number, repository: string, workflow = ""): void {
+    this.db
+      .prepare(
+        "INSERT OR IGNORE INTO oidc_publishers (project_id, repository, workflow, created_at) " +
+          "VALUES (?, ?, ?, ?)"
+      )
+      .run(projectId, repository.toLowerCase(), workflow, nowSeconds());
+  }
+
+  listOidcPublishers(): OidcPublisher[] {
+    return this.db
+      .prepare(
+        "SELECT o.id, o.project_id, p.name AS project, o.repository, o.workflow, o.created_at " +
+          "FROM oidc_publishers o JOIN projects p ON p.id = o.project_id " +
+          "ORDER BY o.repository, p.name"
+      )
+      .all() as OidcPublisher[];
+  }
+
+  deleteOidcPublisher(id: number): boolean {
+    return this.db.prepare("DELETE FROM oidc_publishers WHERE id = ?").run(id).changes > 0;
+  }
+
+  /**
+   * Project names `repository` may upload with an OIDC token produced by
+   * `workflow` (the workflow file path from the `workflow_ref` claim).
+   * Publishers registered with an empty `workflow` match any workflow.
+   */
+  projectsForRepository(repository: string, workflow: string): string[] {
+    return (
+      this.db
+        .prepare(
+          "SELECT DISTINCT p.name FROM oidc_publishers o JOIN projects p ON p.id = o.project_id " +
+            "WHERE o.repository = ? AND (o.workflow = '' OR o.workflow = ?) ORDER BY p.name"
+        )
+        .all(repository.toLowerCase(), workflow) as Array<{ name: string }>
+    ).map((r) => r.name);
+  }
+
+  // -------------------------------------------------------------------------
+  // PR preview registry
+  // -------------------------------------------------------------------------
+
+  /**
+   * Record (or refresh) a live preview namespace and push its expiry out by
+   * `ttlSeconds`. The content lives in the preview's own directory; this row
+   * is what makes the namespace *browsable* and what the eviction sweep reads.
+   */
+  recordPreview(id: string, owner: string, repo: string, pr: number, ttlSeconds: number): void {
+    const now = nowSeconds();
+    this.db
+      .prepare(
+        "INSERT INTO previews (id, owner, repo, pr, created_at, updated_at, expires_at) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?) " +
+          "ON CONFLICT(id) DO UPDATE SET updated_at = excluded.updated_at, " +
+          "expires_at = excluded.expires_at"
+      )
+      .run(id, owner, repo, pr, now, now, now + ttlSeconds);
+  }
+
+  getPreview(id: string): PreviewRecord | null {
+    const row = this.db.prepare("SELECT * FROM previews WHERE id = ?").get(id) as
+      | PreviewRecord
+      | undefined;
+    return row ?? null;
+  }
+
+  listPreviews(): PreviewRecord[] {
+    return this.db
+      .prepare("SELECT * FROM previews ORDER BY updated_at DESC")
+      .all() as PreviewRecord[];
+  }
+
+  /** Previews whose TTL has elapsed — the eviction sweep's work list. */
+  listExpiredPreviews(now: number = nowSeconds()): PreviewRecord[] {
+    return this.db
+      .prepare("SELECT * FROM previews WHERE expires_at <= ? ORDER BY expires_at")
+      .all(now) as PreviewRecord[];
+  }
+
+  deletePreview(id: string): boolean {
+    return this.db.prepare("DELETE FROM previews WHERE id = ?").run(id).changes > 0;
   }
 
   // -------------------------------------------------------------------------

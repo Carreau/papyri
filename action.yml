@@ -1,0 +1,140 @@
+name: "Papyri docs preview"
+description: >-
+  Build a papyri DocBundle for this project and publish it as a pull-request
+  documentation preview (or drop that preview when the pull request closes).
+author: "papyri"
+
+branding:
+  icon: book-open
+  color: purple
+
+inputs:
+  mode:
+    description: >-
+      "upload" (default) builds the bundle and publishes the preview;
+      "drop" deletes the preview for this pull request and does nothing else.
+    required: false
+    default: upload
+  url:
+    description: "Viewer ingest endpoint, e.g. https://papyri.example.com/api/bundle."
+    required: true
+  config:
+    description: "Path to the papyri.toml describing what to document."
+    required: false
+    default: papyri.toml
+  python-version:
+    description: "Python version used to import the project and build the bundle."
+    required: false
+    default: "3.13"
+  install:
+    description: >-
+      pip install arguments for the project being documented, run before `papyri
+      gen` so its modules are importable. Set to an empty string to skip
+      (the project is already installed by an earlier step).
+    required: false
+    default: "."
+  papyri-version:
+    description: "pip requirement specifier for papyri itself."
+    required: false
+    default: "papyri @ git+https://github.com/carreau/papyri"
+  gen-args:
+    description: "Extra arguments appended to `papyri gen` (e.g. --no-infer)."
+    required: false
+    default: ""
+  inject-script:
+    description: >-
+      Optional Python script run between `gen` and the upload, for projects
+      whose docs build generates pages (see docs/injecting.rst). It receives the
+      bundle directory as its single argument.
+    required: false
+    default: ""
+  audience:
+    description: >-
+      OIDC audience to request. Must match the viewer's PAPYRI_OIDC_AUDIENCE.
+    required: false
+    default: papyri
+
+outputs:
+  preview-url:
+    description: "URL of the published preview (upload mode only)."
+    value: ${{ steps.upload.outputs.preview-url }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install papyri
+      shell: bash
+      run: python -m pip install --upgrade pip "${PAPYRI_SPEC}"
+      env:
+        PAPYRI_SPEC: ${{ inputs.papyri-version }}
+
+    - name: Drop the preview
+      if: inputs.mode == 'drop'
+      shell: bash
+      run: papyri drop-preview --url "${PAPYRI_URL}" --oidc-audience "${PAPYRI_AUDIENCE}"
+      env:
+        PAPYRI_URL: ${{ inputs.url }}
+        PAPYRI_AUDIENCE: ${{ inputs.audience }}
+
+    - name: Install the project
+      if: inputs.mode != 'drop' && inputs.install != ''
+      shell: bash
+      run: python -m pip install ${PAPYRI_INSTALL}
+      env:
+        PAPYRI_INSTALL: ${{ inputs.install }}
+
+    - name: Generate the DocBundle
+      if: inputs.mode != 'drop'
+      shell: bash
+      run: papyri gen "${PAPYRI_CONFIG}" ${PAPYRI_GEN_ARGS}
+      env:
+        PAPYRI_CONFIG: ${{ inputs.config }}
+        PAPYRI_GEN_ARGS: ${{ inputs.gen-args }}
+
+    # Projects whose Sphinx build generates pages inject them straight into the
+    # bundle as IR nodes (papyri.bundle_edit). One line, between gen and upload.
+    - name: Inject generated pages
+      if: inputs.mode != 'drop' && inputs.inject-script != ''
+      shell: bash
+      run: |
+        set -euo pipefail
+        for bundle in "${HOME}"/.papyri/data/*/; do
+          python "${PAPYRI_INJECT}" "${bundle}"
+        done
+      env:
+        PAPYRI_INJECT: ${{ inputs.inject-script }}
+
+    # `papyri upload --preview` asks the Actions runtime for an OIDC token and
+    # sends it as the bearer, so this works on pull requests from forks where
+    # repository secrets are unavailable. The job must grant `id-token: write`.
+    - name: Upload the preview
+      id: upload
+      if: inputs.mode != 'drop'
+      shell: bash
+      run: |
+        set -euo pipefail
+        shopt -s nullglob
+        bundles=("${HOME}"/.papyri/data/*/)
+        if [ ${#bundles[@]} -eq 0 ]; then
+          echo "papyri gen produced no bundle under ~/.papyri/data/" >&2
+          exit 1
+        fi
+        papyri upload --preview --oidc-audience "${PAPYRI_AUDIENCE}" \
+          --url "${PAPYRI_URL}" "${bundles[@]}" | tee "${RUNNER_TEMP}/papyri-urls.txt"
+        url=$(tail -n 1 "${RUNNER_TEMP}/papyri-urls.txt")
+        echo "preview-url=${url}" >> "${GITHUB_OUTPUT}"
+        {
+          echo "### 📖 Documentation preview"
+          echo
+          while read -r u; do
+            [ -n "${u}" ] && echo "- ${u}"
+          done < "${RUNNER_TEMP}/papyri-urls.txt"
+        } >> "${GITHUB_STEP_SUMMARY}"
+      env:
+        PAPYRI_URL: ${{ inputs.url }}
+        PAPYRI_AUDIENCE: ${{ inputs.audience }}

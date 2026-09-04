@@ -141,6 +141,13 @@ W_SECTION_HEADING_NORMALIZED = _register(
     "section (trailing ':', missing trailing 's', or a known misspelling). "
     "The rewrite is recorded, never silent — fix the heading at the source.",
 )
+W_NONSTANDARD_ROLE = _register(
+    "W-nonstandard-role",
+    Severity.WARNING,
+    "A role spelled in a form papyri accepts but Sphinx does not "
+    "(:method: for :meth:). It resolves like the standard role; use the "
+    "standard spelling so the docstring also builds under Sphinx.",
+)
 W_UNSET_ROLE = _register(
     "W-unset-role",
     Severity.WARNING,

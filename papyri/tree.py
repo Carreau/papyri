@@ -46,6 +46,7 @@ from .directives import (
 from .error_collector import (
     W_MALFORMED_DIRECTIVE,
     W_MISSING_GITHUB_SLUG,
+    W_NONSTANDARD_ROLE,
     W_UNKNOWN_ROLE,
     W_UNRESOLVED_DEFAULT_ROLE,
     W_UNSET_ROLE,
@@ -599,8 +600,9 @@ _PYTHON_OBJECT_ROLES = frozenset(
         "func",
         "any",
         "meth",
-        # papyri-accepted long form of :meth: — pinned by test_parse, seen in
-        # docstrings in the wild even though Sphinx itself rejects it.
+        # papyri-accepted long form of :meth:, seen in docstrings in the
+        # wild even though Sphinx rejects it. Resolves like :meth: but every
+        # use emits W-nonstandard-role (see replace_InlineRole).
         "method",
         "class",
         "exc",
@@ -1270,6 +1272,16 @@ class DirectiveVisiter(TreeReplacer):
                 f"role_drop or a custom handler)",
             )
             return [directive]
+
+        # Accepted-but-nonstandard spellings resolve normally but never
+        # silently: Sphinx would reject them, so the docstring is wrong.
+        if directive.role == "method":
+            self.diagnostics.emit(
+                W_NONSTANDARD_ROLE,
+                self.qa,
+                f"role :method: is not a Sphinx role — use :meth: "
+                f"({directive.value!r})",
+            )
 
         loc: frozenset[str]
         loc = frozenset() if directive.role not in ["any", None] else self.local_refs

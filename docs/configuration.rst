@@ -375,6 +375,11 @@ The diagnostic codes papyri currently emits:
      - A docstring section heading was normalized to a canonical numpydoc
        section (trailing ``:``, missing trailing ``s``, or a known
        misspelling).  Never silent — fix the heading at the source.
+   * - ``W-nonstandard-role``
+     - ``warning``
+     - A role spelled in a form papyri accepts but Sphinx does not
+       (``:method:`` for ``:meth:``).  It resolves like the standard role;
+       use the standard spelling so the docstring also builds under Sphinx.
    * - ``W-unset-role``
      - ``warning``
      - A role is mapped to ``papyri.directives:role_unset`` — a declared

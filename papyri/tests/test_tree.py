@@ -2818,3 +2818,34 @@ def test_role_unset_standalone_logs(caplog) -> None:
         out = role_unset("x")
     assert isinstance(out[0], InlineCode)
     assert any("role_unset" in r.getMessage() for r in caplog.records)
+
+
+def test_method_role_resolves_but_warns_nonstandard() -> None:
+    # :method: is a papyri-accepted spelling Sphinx rejects: it resolves
+    # exactly like :meth:, and every use emits W-nonstandard-role.
+    from papyri.error_collector import W_NONSTANDARD_ROLE
+
+    v = DirectiveVisiter(
+        qa="pkg.mod",
+        known_refs=frozenset({RefInfo("pkg", "1.0", "module", "pkg.mod:K.f")}),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+    )
+    out = v.replace_InlineRole(InlineRole(domain=None, role="method", value="pkg.mod.K.f"))
+    assert isinstance(out[0], CrossRef)
+    assert out[0].reference == RefInfo("pkg", "1.0", "module", "pkg.mod:K.f")
+    codes = [r["code"] for r in v.diagnostics.records]
+    assert codes == [W_NONSTANDARD_ROLE]
+    assert ":meth:" in v.diagnostics.records[0]["message"]
+
+    # The standard spelling is silent.
+    v2 = DirectiveVisiter(
+        qa="pkg.mod",
+        known_refs=frozenset({RefInfo("pkg", "1.0", "module", "pkg.mod:K.f")}),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+    )
+    v2.replace_InlineRole(InlineRole(domain=None, role="meth", value="pkg.mod.K.f"))
+    assert v2.diagnostics.records == []

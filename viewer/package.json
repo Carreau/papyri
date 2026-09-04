@@ -8,6 +8,7 @@
     "dev": "astro dev",
     "start": "astro dev",
     "build": "astro build",
+    "build:static": "PAPYRI_STATIC=1 astro build",
     "preview": "astro preview",
     "serve": "node ./dist/server/entry.mjs",
     "astro": "astro",

@@ -252,6 +252,26 @@ layers. Do not write CBOR into the bundle directory or JSON into the artifact.
   (link builders, per-page counters) get it without global lookups. Defer
   until a handler actually needs it; `role_unset`/`role_verbatim`/
   `role_text`/`role_drop` are fine as plain functions.
+  Two design preferences to carry into both the role and directive
+  plugin APIs when they get built:
+  - *One context object, not a growing kwargs list.* Handlers should
+    receive a single object exposing attributes (`ctx.qa`, `ctx.doc_root`,
+    `ctx.warn`, …) rather than `handler(argument, options, content,
+    doc_path=…, doc_root=…, asset_store=…, warn=…)`. Beyond keeping
+    signatures stable as fields are added, an attribute-access object can
+    be instrumented (a recording proxy) so we can later *measure which
+    handler reads which fields* — useful for pruning the context, for
+    documenting each handler's real dependencies, and for spotting
+    handlers that reach for state they shouldn't.
+  - *Maybe let handlers ask for what they need, lazily.* Instead of the
+    visitor eagerly computing every context field for every call, a
+    handler could `yield` requests for the information it needs (a
+    generator/coroutine-style protocol: yield `Need("doc_titles")`, get
+    the value sent back, continue) so expensive fields (narrative title
+    maps, asset stores, execution namespaces) are built only when some
+    handler actually asks. Exploratory — weigh it against the plainer
+    attribute-object once there is a real handler with an expensive
+    dependency.
 - **`DirectiveContext` injection (context, not globals).** Directive handlers
   reach bundle state through ad-hoc closures (`make_image_handler` &c.) and,
   historically, module globals. Define an explicit `DirectiveContext` (at least

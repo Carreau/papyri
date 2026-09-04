@@ -476,6 +476,15 @@ class TreeReplacer:
                 if tuple(children) != tuple(new_children) and hasattr(self, "_cr"):
                     self._cr += 1
                 node_with_children.children = tuple(new_children)
+                # ``Section.title`` holds inline nodes outside ``children``, so
+                # the recursion above never reaches them; without this a
+                # SubstitutionRef or role in a heading escapes every
+                # replacement pass and lands in the IR verbatim.
+                if title := getattr(node, "title", None):
+                    new_title: list[Node] = []
+                    for t in title:
+                        new_title.extend(self.generic_visit(t))
+                    node_with_children.title = tuple(new_title)
                 new_nodes = [node]
             assert isinstance(new_nodes, list)
             return new_nodes

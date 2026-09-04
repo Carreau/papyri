@@ -1168,7 +1168,7 @@ def test_target_node_passes_through_generic_visit() -> None:
     )
     # Wrap a Target in a Section so the visitor has a root node with children.
     target = Target(label="my-anchor")
-    section = Section(children=[target], title="Overview")
+    section = Section(children=[target], title=(Text("Overview"),))
     result = v.visit(section)
     assert isinstance(result, Section)
     assert len(result.children) == 1
@@ -1288,7 +1288,7 @@ def test_section_with_mixed_children_traverses_target() -> None:
     p1 = Paragraph([Text("before")])
     anchor = Target(label="anchor")
     p2 = Paragraph([Text("after")])
-    section = Section(children=[p1, anchor, p2], title="T")
+    section = Section(children=[p1, anchor, p2], title=(Text("T"),))
     result = v.visit(section)
     types = [type(c).__name__ for c in result.children]
     assert types == ["Paragraph", "Target", "Paragraph"]

@@ -239,6 +239,19 @@ layers. Do not write CBOR into the bundle directory or JSON into the artifact.
   targets, doc-target maps), convert at the boundaries where each form is
   created, and let mypy reject cross-form mixing so those guards become
   type errors instead of runtime heuristics.
+- **Make the gen pass order irrelevant.** `gen()` runs API → examples →
+  narrative, and cross-pass linking only works in that direction because
+  each pass hands the *next* one what it collected (`_known_refs`, the
+  narrative label maps from `_scan_narrative_sources`); the sweep branch
+  had to swap examples after API docs just so example pages could link
+  to API objects. In the long run any pass may reference any other (an
+  API docstring pointing at an example, an example at a narrative
+  label), so order must not matter. Investigate a two-phase gen: a cheap
+  first phase that only *registers targets* for every kind (API qualnames,
+  example names, narrative doc keys + labels), then a visiting phase that
+  resolves against the complete target set — the `DelayedResolver` idea
+  already in `tree.py` (currently dead machinery) is the late-binding
+  alternative if a strict two-phase split proves awkward.
 - **Role handlers as configured, stateful objects (deferred).** Today a
   `[global.roles]` handler is a bare callable `(value) -> nodes`, with
   per-bundle state smuggled in ad hoc (the visitor `partial`-binds `role=`

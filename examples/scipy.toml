@@ -3,7 +3,7 @@ module = 'scipy'
 logo = "img/scipy_logo.png"
 execute_doctests = true
 docs_path = '~/dev/scipy/doc/source'
-submodules = [ "signal","misc"]
+submodules = [ "signal"]
 exclude = [
     # IncorrectInternalDocsLen
     "scipy.stats._ksstats:_kolmogn_PelzGood",

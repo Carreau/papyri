@@ -1741,9 +1741,17 @@ class Gen:
         extra_from_conf = [self.root + "." + s for s in subs]
         for name in extra_from_conf:
             _, *r = name.split(".")
-            nx = __import__(name)
-            for sub in r:
-                nx = getattr(nx, sub)
+            try:
+                nx = __import__(name)
+                for sub in r:
+                    nx = getattr(nx, sub)
+            except (ImportError, AttributeError) as e:
+                raise ValueError(
+                    f"Configured submodule {name!r} could not be imported: {e}. "
+                    "Remove it from the `submodules` list in the project's "
+                    "papyri config, or pin a version of "
+                    f"{self.root!r} that still provides it."
+                ) from e
             submodules.append(nx)
 
         self.log.debug(

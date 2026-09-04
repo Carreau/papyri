@@ -117,9 +117,13 @@ Python-isms must not leak into the wire encoding. Target state: gen keeps
 unhandled directives verbatim in the *lenient* bundle directory
 (`Directive.from_unprocessed` — inspectable, available to tooling), and
 `papyri pack` / `papyri lint` fail while any `Directive` node remains.
-(Current code differs: `Directive` is an `UnserializableNode` with
-`_reject_at_validate`, so gen hard-fails instead — the strictness sits one
-stage too early; see the enforcement item below.)
+(Current code differs, and is *worse* than previously recorded here:
+`Directive` is an `UnserializableNode` with `_reject_at_validate`, so
+`doc_blob.validate()` raises at gen time — but under the default
+`--fail-early=False` that exception lands in the per-object catch and the
+whole host object is **silently dropped** from the bundle; only
+`--fail-early` produces the hard failure. 2026-07 audit, finding N3; see
+the enforcement item below.)
 Every directive must be explicitly handled by pack time: by a built-in handler,
 a project-registered handler (see the `DirectiveContext` plugin API), or an
 explicit maintainer decision to unwrap or drop (via config). Dropping is
@@ -218,6 +222,69 @@ layers. Do not write CBOR into the bundle directory or JSON into the artifact.
 
 ## Open work — Gen (Python)
 
+- **Typed qa forms (NewType) instead of ambiguous strings.** At least three
+  string shapes travel through gen/tree under the name "qa" and are told
+  apart only by convention: dotted module paths (`numpy.ma.core`), full_qual
+  object form (`numpy.ma.core:MaskedArray.var` — colon splits module from
+  qualname; `utils.FullQual` exists but most signatures take plain `str`),
+  and narrative doc keys (`reference:ufuncs` — colon is a *directory*
+  separator). The ambiguity has already produced real bugs fixed by ad-hoc
+  guards: `resolve_` normalizes `":" → "."` before scope derivation,
+  `DirectiveVisiter._resolve` detects "qa is not a Python path under the
+  module" to fall back to the package root, and `:doc:` resolution needed an
+  is-API-context test to stop deriving phantom doc keys from object qa.
+  Introduce distinct NewTypes (or tiny dataclasses) — e.g. `ModulePath`,
+  `FullQual` (reuse), `DocKey` — annotate the qa-carrying signatures
+  (`resolve_`, `DirectiveVisiter`/`GenVisitor` constructors, diagnostics
+  targets, doc-target maps), convert at the boundaries where each form is
+  created, and let mypy reject cross-form mixing so those guards become
+  type errors instead of runtime heuristics.
+- **Make the gen pass order irrelevant.** `gen()` runs API → examples →
+  narrative, and cross-pass linking only works in that direction because
+  each pass hands the *next* one what it collected (`_known_refs`, the
+  narrative label maps from `_scan_narrative_sources`); the sweep branch
+  had to swap examples after API docs just so example pages could link
+  to API objects. In the long run any pass may reference any other (an
+  API docstring pointing at an example, an example at a narrative
+  label), so order must not matter. Investigate a two-phase gen: a cheap
+  first phase that only *registers targets* for every kind (API qualnames,
+  example names, narrative doc keys + labels), then a visiting phase that
+  resolves against the complete target set — the `DelayedResolver` idea
+  already in `tree.py` (currently dead machinery) is the late-binding
+  alternative if a strict two-phase split proves awkward.
+- **Role handlers as configured, stateful objects (deferred).** Today a
+  `[global.roles]` handler is a bare callable `(value) -> nodes`, with
+  per-bundle state smuggled in ad hoc (the visitor `partial`-binds `role=`
+  and `warn=` onto `role_unset`; `:ghpull:` reads the visitor's slug).
+  Mirror the direction chosen for directives: a role handler could be a
+  class constructed once from its config options (init args/kwargs, like
+  `[global.directives]` table entries already allow) carrying its own
+  state, with a method for the actual dispatch `(value, ctx)` and
+  state-mutating hooks the visitor calls as it moves — typically "now
+  entering page/object X" — so handlers that need the current location
+  (link builders, per-page counters) get it without global lookups. Defer
+  until a handler actually needs it; `role_unset`/`role_verbatim`/
+  `role_text`/`role_drop` are fine as plain functions.
+  Two design preferences to carry into both the role and directive
+  plugin APIs when they get built:
+  - *One context object, not a growing kwargs list.* Handlers should
+    receive a single object exposing attributes (`ctx.qa`, `ctx.doc_root`,
+    `ctx.warn`, …) rather than `handler(argument, options, content,
+    doc_path=…, doc_root=…, asset_store=…, warn=…)`. Beyond keeping
+    signatures stable as fields are added, an attribute-access object can
+    be instrumented (a recording proxy) so we can later *measure which
+    handler reads which fields* — useful for pruning the context, for
+    documenting each handler's real dependencies, and for spotting
+    handlers that reach for state they shouldn't.
+  - *Maybe let handlers ask for what they need, lazily.* Instead of the
+    visitor eagerly computing every context field for every call, a
+    handler could `yield` requests for the information it needs (a
+    generator/coroutine-style protocol: yield `Need("doc_titles")`, get
+    the value sent back, continue) so expensive fields (narrative title
+    maps, asset stores, execution namespaces) are built only when some
+    handler actually asks. Exploratory — weigh it against the plainer
+    attribute-object once there is a real handler with an expensive
+    dependency.
 - **`DirectiveContext` injection (context, not globals).** Directive handlers
   reach bundle state through ad-hoc closures (`make_image_handler` &c.) and,
   historically, module globals. Define an explicit `DirectiveContext` (at least
@@ -269,6 +336,12 @@ layers. Do not write CBOR into the bundle directory or JSON into the artifact.
   payload; `parse(text, qa, warn=…)` deep-copies (or rebuilds) the tree
   before handing it to mutating visitors and re-emits each warning with qa
   attached, routing to Diagnostics when a warn callback is passed.
+  2026-07 audit addition (N8): `TSVisitor.visit_ERROR` returns `[]` with
+  **no signal at any log level**, silently deleting the text under any
+  tree-sitter ERROR node; the Text-preserving fallback branch its code
+  comment describes is unreachable because `getattr` dispatch finds
+  `visit_ERROR` first. Fold into this refactor: make ERROR nodes the
+  Text-preserving fallback plus a queued warning.
 - **Per-reference version pins.** `"?"` is the expected version on almost all
   refs (see the ref-classification invariant); what's missing is the opt-in
   path for a doc to *pin* a specific version when it means one, plus an
@@ -331,11 +404,13 @@ layers. Do not write CBOR into the bundle directory or JSON into the artifact.
   `LocalRef("assets", name)` at all four sites, update the Figure check in
   `pack.py`, and delete the stale "todo: add version number here" comment
   in `tree.py`.
-- **Inline roles in table cells.** `csv-table` / `list-table` cells become
-  plain `Text` — role markup inside cells (`:kbd:` in docs-tree csv files)
+- **Inline roles in csv-table cells.** `csv-table` cells become plain
+  `Text` — role markup inside cells (`:kbd:` in docs-tree csv files)
   degrades to inert literal text. Upholds no-raw-HTML but reads noisily;
   run cell content through the inline parser once the `DirectiveContext`
-  work lands.
+  work lands. (2026-07 audit: the `list-table` half of this item was
+  refuted — list-table cell content goes through `parse()` and roles
+  resolve normally.)
 - **Raw-markup passthroughs.** Three places copy unparsed RST source into
   content nodes, against the no-raw-markup direction: `autosummary` renders
   its own directive markup as a visible `Code` block
@@ -353,24 +428,87 @@ layers. Do not write CBOR into the bundle directory or JSON into the artifact.
   shim like any package — no special-casing in the resolver. (The intersphinx
   inventory already covers stdlib links via CPython's `objects.inv`; the shim is
   the gen-time alternative for builtins specifically.)
-- **Unify the pack/lint check sets.** 2026-07 review finding: `papyri
-  pack` never calls `lint_bundle`, so `pack --strict` and `papyri lint`
-  enforce *disjoint* check sets — the SubstitutionRef/Def and
-  missing-Figure-asset checks already exist in `lint_bundle` (they are not
-  "to add") but never gate packing, so a bundle with substitution nodes
-  packs cleanly, violating the substitution invariant; conversely
-  `_assert_safe_urls` runs only on the pack path and lint never sees it.
-  Fix: call `lint_bundle` from `make_artifact_from_dir` (warn by default,
-  `BundleError` under `--strict`, matching `_check_local_refs` semantics)
-  and share `_assert_safe_urls` with lint. Also: `papyri lint` has no
-  `--strict` flag and its help text advertises a dangling-LocalRef check it
-  doesn't enforce (non-strict `read_bundle_dir` → warning, exit 0).
-  Remaining genuinely-new checks: the empty module-docstring sentinel
-  (`DocstringSentinel` carries a production tag and lints clean today), a
-  count of `Unimplemented` nodes (verbatim unparsed source rides into
-  artifacts untracked), and a heuristic raw-HTML scan over string leaves
-  (warn; `--strict` error) so the no-raw-HTML invariant is enforced at the
+- **Remaining pack/lint unification.** The core of the 2026-07 review
+  finding is closed: `make_artifact_from_dir` runs the lint checks
+  (substitution nodes and `DocstringSentinel` placeholders always fail;
+  missing Figure assets, leftover `InlineRole` residue, and
+  `Unimplemented` placeholder counts warn by default, fail under
+  `--strict`). Still open from that finding: share `_assert_safe_urls`
+  with `papyri lint` (today it runs only on the pack path); give `papyri
+  lint` a `--strict` flag and fix its help text (it advertises a
+  dangling-LocalRef check that non-strict `read_bundle_dir` only warns
+  about); and a heuristic raw-HTML scan over string leaves (warn;
+  `--strict` error) so the no-raw-HTML invariant is enforced at the
   boundary for *any* producer, not only by gen's handler table.
+- **Route every skipped object/page through Diagnostics (2026-07 audit
+  N3).** Per-object exceptions in `collect_api_docs` (ErrorCollector
+  unexpected errors, the post-processing catch) and per-page skips in
+  `collect_narrative_docs` discard the object/page with only a
+  `log.warning` — no coded diagnostic, so `error_on_warning` never gates
+  them and gen exits 0 with content missing. Verified triggers: any
+  admonition with a `:class:` option (`assert not options` in
+  `admonition_helper`), and an unhandled directive under the default
+  `--fail-early=False` (see the corrected directive-invariant note).
+  Add `E-object-dropped` / `E-page-dropped` codes (error default),
+  emit at every skip site, and fix `admonition_helper` to tolerate
+  options via `warn`.
+- **Toctree/narrative silent-skip chain (2026-07 audit N5).** A narrative
+  page that fails to parse vanishes together with its navigation entry on
+  console noise alone: gen skips it (`log.warning`), `toc.py` then drops
+  the dangling toctree entry with a bare `print("skip Path", …)` — so
+  pack's hard `_check_toc_refs` never sees the breakage. `:glob:` toctree
+  entries are skipped un-expanded with no signal at all, and
+  absolute-path (`/…`) entries are dropped with a `print`. Convert the
+  `print`s to diagnostics, add `W-narrative-page-skipped` (error default)
+  and `W-toctree-entry-dropped`.
+- **Placeholder English prose ships in packed artifacts (2026-07 audit
+  N6).** "No Docstrings", "This module has no documentation", and
+  `<No Title …>` toc titles are magic strings injected by gen with no
+  diagnostic and no lint shape-check — verified present in real packed
+  bundles. Replace with structured representations (empty summary +
+  flag; doc-key fallback titles), emit a diagnostic per undocumented
+  object / untitled doc, and lint the known placeholder shapes during
+  the transition.
+- **`papyri upload` packs lenient by default (2026-07 audit N10).** The
+  publish path calls `make_artifact_from_dir(strict=False)`: dangling
+  LocalRefs, orphan docs, and the warn-tier lint issues ship to the
+  viewer un-gated, against "the packed form must be linted and contain
+  no errors". Decide: default `--strict` on upload (with an explicit
+  opt-out), or at minimum a flag + loud nudge.
+- **Audit minors (2026-07, N-misc).** `literalinclude` drops file content
+  at `log.info` (not the `warn` binding); `rubric`/`topic`/`container`/
+  figure-caption silently discard bodies that don't parse as a leading
+  Section; the `:external+inv:` intersphinx prefix is parsed into
+  `InlineRole.inventory` then ignored — an explicitly-external ref is
+  resolved against the local bundle, overriding author intent;
+  `jedi_failure_mode="log"` replaces an example's token stream with
+  literal "jedi failed" tokens (and `W-doctest-syntax` injects
+  "fail"/"fail" tokens) that pass pack unchecked;
+  `TextSignatureParsingFailed` → `pass` ships an object without a
+  signature silently; `DelayedResolver.add_reference` is dead machinery
+  (never called) and its module-global duplicate-target assert can turn
+  into a silent page skip. Fold each into the nearest structural item
+  (DirectiveContext, ts.py wiring, diagnostics routing) as they land.
+- **Upstream the numpydoc leniencies, then delete them.** The See Also
+  backtick normalization and section-heading normalization in
+  `numpydoc_compat.py` are recorded-and-diagnosed rewrites
+  (`W-see-also-syntax` / `W-section-heading-normalized`), but the real
+  fix is upstream: either teach numpydoc the backticked See Also form
+  (send the patch, leave a pointer here), or fix the source projects'
+  docstrings (numpy.polynomial et al.). Once either lands, delete the
+  corresponding rewrite.
+- **Inline images in phrasing content (image substitutions).** matplotlib's
+  docstrings define `image`-type substitutions (`.. |m30| image:: …` used in
+  marker/mathtext tables); gen warns and drops them because `Image` is
+  FlowContent only — a `SubstitutionRef` inside a `Paragraph` has no legal
+  replacement. Supporting them means admitting `Image` into
+  `StaticPhrasingContent` (nodes.py union + ir-types/ir-schema + renderer) and
+  routing the substitution body through the image handler. IR schema change —
+  batch with the next schema-touching PR.
+- **numpydoc section fragments that tree-sitter cannot re-parse (#361).**
+  `numpy.ma.core:MaskedArray.resize` stays excluded: the full docstring parses
+  fine, but the numpydoc-section fragment gen re-parses trips
+  TreeSitterParseError. Fix is in how gen splits/re-parses section content.
 - **`:orphan:` flag in the IR.** Orphan-doc detection currently only *warns*
   because the IR can't tell an intentionally-unlisted page from an accidental
   one. Once gen reads the Sphinx field-list `:orphan:` metadata, promote
@@ -593,6 +731,70 @@ CI use the token path and pay their own compute.
 
 Terse, grep-able record of what exists so future work doesn't re-derive it.
 Newest areas first; each line names the key symbol/file.
+
+### Sphinx-fidelity pass (2026-07 example sweep)
+- Ref resolution: leading-`!` suppression → plain `InlineCode`, no warning;
+  trailing `()` stripped before resolve (display keeps parens); scope walk
+  most-specific-first *including the current scope*; colon-form qa
+  ("numpy:any") normalized before scope derivation — all in `tree.py`
+  (`replace_InlineRole` / `resolve_`).
+- Narrative↔API cross-linking: `Gen._scan_narrative_sources()` (cached first
+  pass) gives API visitors the narrative `doc_targets`/`external_targets`
+  maps (`:ref:` from docstrings resolves) and narrative visitors get the API
+  `known_refs` (`Gen._known_refs`); narrative doc keys resolve refs against
+  the package root (`DirectiveVisiter._resolve`).
+- `:doc:` role resolved through the visitor (`_resolve_doc_path`) → doc-key
+  LocalRefs ("api:axes_api", not "/api/axes_api"); free-function
+  `py_doc_handler` deleted.
+- plot directive: external-script arguments embedded (doc_path/doc_root),
+  doctest-format bodies execute with prompts stripped, exec namespace
+  pre-seeded with np/plt (matplotlib `plot_pre_code` default); `doc_root`
+  threaded into API visitors for `/`-rooted image paths.
+- numpydoc leniency: unknown section headings fall through to upstream
+  warn+skip (was: ValueError → sentinel/object drop); backticked See Also
+  entries (`numpy.polynomial`) accepted (`numpydoc_compat.py`).
+- Import solver: objects `full_qual()` cannot name (method descriptors,
+  numpy.ufunc.reduce) fall back to longest-imported-module-prefix qualname.
+- `W-unresolved-default-role` (default `info`): bare-backtick lookup misses
+  split off from `W-unresolved-ref` (Sphinx autolink degrades silently).
+- Doctest-execution `catch_warnings()` now actually encloses the run, so
+  example code cannot leak warning-filter mutations into gen.
+- Pack lint enforcement: `_check_lint` in the pack path — Substitution nodes
+  always fatal (IR invariant); missing Figure assets + `DocstringSentinel`
+  warn by default, error under `--strict`; sentinel check added to
+  `lint_bundle` (closes the former "pack strict-mode / lint gaps" item).
+- examples/numpy.toml exclusions pruned to just MaskedArray.resize (#361).
+- Examples collected *after* API docs and their visitor now gets
+  `known_refs` + narrative target maps, so example pages cross-link.
+- `[global.roles]` config table (`Config.roles` → `DirectiveVisiter`
+  `_role_handlers`): project-local roles map to handlers
+  (`role_verbatim`/`role_text`/`role_drop` in `directives.py`);
+  matplotlib's `:mpltype:` mapped in its example config. Docs:
+  `configuration.rst` `[global.roles]`.
+
+### Everything-explicit pass (2026-07 review + adversarial audit)
+- Unknown roles are a hard failure: `W-unknown-role` (default `error`),
+  emitted *before* any resolution attempt (`replace_InlineRole` gate on
+  `_PYTHON_OBJECT_ROLES` / `ref` / `doc`), so an unmapped role can never
+  accidentally cross-link. Standard Sphinx std-domain formatting roles
+  (`envvar`, `dfn`, `abbr`, `guilabel`, `menuselection`, `option`, …) are
+  built in as verbatim under both `py` (bare) and `std` domains; IPython,
+  distributed, and scikit-image example configs carry explicit
+  `[global.roles]` mappings for their project-local roles.
+- `DocstringSentinel` always refuses to pack (`_check_lint`), alongside
+  substitution nodes; `InlineRole` residue and `Unimplemented` placeholders
+  are counted by `lint_bundle` and refuse under `pack --strict`.
+- `resolve_` substring fallback (`ref in q`) deleted; both suffix searches
+  require a component boundary and dedupe through the RefInfo; ambiguity
+  is unresolved (audit N1).
+- numpydoc compat: `_guess_header` restricted to trailing-`:`/missing-`s`/
+  alias-table normalizations; every rewrite (heading, See Also backticks)
+  recorded on the instance and emitted by gen as
+  `W-section-heading-normalized` / `W-see-also-syntax` (audit N7).
+  `__setitem__` records only sections that landed (audit N2: unknown
+  sections used to KeyError and silently drop the object).
+- `exec_failure="fallback"` no longer trips the end-of-collection assert
+  (audit N9).
 
 ### Gen-time diagnostics
 - Core framework: `Severity`, `DIAGNOSTICS` registry, `DiagnosticConfig`

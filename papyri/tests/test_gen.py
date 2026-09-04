@@ -605,3 +605,126 @@ def test_lenient_narrative_skip_drops_doc_and_continues(
     # The failing page was skipped; the valid sibling survived.
     assert "index" not in gen.docs
     assert "page" in gen.docs
+
+
+def test_numpydoc_unknown_section_does_not_raise() -> None:
+    # Free-form section headings ("Goals", "Usage") are common in module
+    # docstrings. The lenient NumpyDocString must not raise on them —
+    # raising replaced module docstrings with a parse-failure sentinel and
+    # dropped non-module objects from the bundle entirely.
+    import warnings
+
+    doc = "Summary line.\n\nGoals\n-----\nSome free-form prose.\n"
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        ndoc = NumpyDocString(doc)
+    assert ndoc["Summary"] == ["Summary line."]
+
+
+def test_numpydoc_see_also_backticked_entries() -> None:
+    # `numpy.polynomial`-style (default-role backticked) See Also entries
+    # are legal RST; upstream numpydoc raises on them, which used to drop
+    # the whole docstring (numpy.polynomial.* module pages in the sweep).
+    doc = (
+        "Summary line.\n\n"
+        "See Also\n--------\n"
+        "`numpy.polynomial`\n"
+        "`foo`, `bar` : two at once\n"
+    )
+    ndoc = NumpyDocString(doc)
+    entries = [name for group in ndoc["See Also"] for (name, _role) in group[0]]
+    assert "numpy.polynomial" in entries
+    assert "foo" in entries and "bar" in entries
+
+
+def test_numpydoc_see_also_description_backticks_untouched() -> None:
+    # Only the names segment of a See Also entry is de-backticked; role
+    # references and inline code in the description must survive.
+    doc = "Summary line.\n\nSee Also\n--------\n`foo` : uses :meth:`bar` internally\n"
+    ndoc = NumpyDocString(doc)
+    (group,) = ndoc["See Also"]
+    names, desc = group
+    assert names == [("foo", None)]
+    assert ":meth:`bar`" in " ".join(desc)
+
+
+def test_unknown_section_does_not_drop_object() -> None:
+    # Audit N2: __setitem__ recorded unknown sections in ordered_sections
+    # even though upstream numpydoc warn-and-drops them, so APIObjectInfo's
+    # section loop raised KeyError and the whole object was silently
+    # dropped from the bundle.
+    import warnings
+
+    from papyri.gen import APIObjectInfo
+
+    doc = "Summary line.\n\nUsage\n-----\nSome free-form prose.\n"
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        ndoc = NumpyDocString(doc)
+        assert "Usage" not in ndoc.ordered_sections
+        # Every recorded section is actually retrievable.
+        for title in ndoc.ordered_sections:
+            ndoc[title]
+        # End to end: the construction that used to KeyError.
+        api = APIObjectInfo("function", doc, None, "fn", qa="pkg:fn")
+    assert api.kind == "function"
+
+
+def test_exec_failure_fallback_records_and_continues(tmp_path: Any) -> None:
+    # Audit N9: under exec_failure="fallback" a failing example emitted
+    # W-doctest-exec and was then re-asserted fatal at the end of
+    # collect_examples, defeating the escape hatch numpy/scipy/matplotlib
+    # configs rely on.
+    from papyri.error_collector import W_DOCTEST_EXEC
+
+    (tmp_path / "boom.py").write_text("raise RuntimeError('nope')\n")
+    (tmp_path / "ok.py").write_text("x = 1\n")
+    config = Config(
+        dummy_progress=True,
+        execute_doctests=True,
+        exec_failure="fallback",
+        infer=False,
+    )
+    gen = Gen(dummy_progress=True, config=config)
+    gen.root = "pkg"
+    gen.version = "1.0"
+    gen._meta = {"version": "1.0", "module": "pkg"}
+    acc = gen.collect_examples(tmp_path, config=config)
+    # Both examples are kept (the failing one un-executed), and the
+    # failure is recorded as a diagnostic instead of aborting gen.
+    assert len(acc) == 2
+    codes = [r["code"] for r in gen.diagnostics.records]
+    assert W_DOCTEST_EXEC in codes
+
+
+def test_guess_header_no_prefix_guessing() -> None:
+    # Audit N7: the open-ended prefix match rewrote "Ret" into "Returns"
+    # and re-parsed the prose as a parameter list — wrong structured
+    # content, silently. Only bounded normalizations remain, each recorded.
+    import warnings
+
+    doc = "Summary.\n\nRet\n---\nA sentence, not a param list.\n"
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        ndoc = NumpyDocString(doc)
+    assert "Ret" not in ndoc.ordered_sections
+    assert "Returns" not in ndoc.ordered_sections
+    assert ndoc.section_normalizations == []
+
+    doc2 = "Summary.\n\nReturn\n------\nint\n    the thing\n"
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        ndoc2 = NumpyDocString(doc2)
+    assert "Returns" in ndoc2.ordered_sections
+    assert ("Return", "Returns") in ndoc2.section_normalizations
+
+
+def test_see_also_normalization_is_recorded() -> None:
+    # The backtick rewrite must be accountable: recorded on the instance
+    # (and surfaced by gen as W-see-also-syntax).
+    doc = "Summary.\n\nSee Also\n--------\n`numpy.polynomial`\n"
+    ndoc = NumpyDocString(doc)
+    assert ndoc.seealso_normalized == ["`numpy.polynomial`"]
+    # A clean entry records nothing.
+    ndoc2 = NumpyDocString("Summary.\n\nSee Also\n--------\nnumpy.polynomial\n")
+    assert ndoc2.seealso_normalized == []

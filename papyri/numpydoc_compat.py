@@ -2,10 +2,37 @@
 vestigial things from velin.
 """
 
+import re
 from collections.abc import Iterator
 from typing import Any, ClassVar
 
 import numpydoc.docscrape as nds
+
+# A See Also entry line written with default-role backticks:
+# "`numpy.polynomial`" or "`foo`, `bar` : description". Upstream numpydoc
+# only accepts bare names or :role:`name` forms and raises on these.
+# The names segment (group 1) is captured separately from the optional
+# ": description" tail so only the names get rewritten — descriptions may
+# legitimately contain backticks and role references.
+#
+# TEMPORARY LENIENCY, not a feature: every normalization is recorded on the
+# instance (``seealso_normalized``) and surfaced by gen as a
+# W-see-also-syntax diagnostic so the docstring gets fixed at the source.
+# The proper resolutions are upstream — teach numpydoc the backticked form,
+# or patch the source projects to use valid syntax — after which this
+# rewrite gets deleted (tracked in PLAN.md).
+_SEE_ALSO_BACKTICKED_LINE = re.compile(
+    r"^(\s*(?:`[A-Za-z_][\w.]*`\s*,?\s*)+)(:.*)?$",
+)
+_BACKTICKED_NAME = re.compile(r"`([A-Za-z_][\w.]*)`")
+
+
+def _strip_see_also_backticks(line: str) -> str:
+    m = _SEE_ALSO_BACKTICKED_LINE.match(line)
+    if m is None:
+        return line
+    names, desc = m.group(1), m.group(2) or ""
+    return _BACKTICKED_NAME.sub(r"\1", names) + desc
 
 
 class NumpyDocString(nds.NumpyDocString):
@@ -13,7 +40,7 @@ class NumpyDocString(nds.NumpyDocString):
     subclass a littel bit more lenient on parsing
     """
 
-    __slots__ = ("ordered_sections",)
+    __slots__ = ("ordered_sections", "section_normalizations", "seealso_normalized")
 
     aliases: ClassVar[dict[str, tuple[str, ...]]] = {
         "Parameters": (
@@ -30,6 +57,11 @@ class NumpyDocString(nds.NumpyDocString):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         self.ordered_sections: list[str] = []
+        # Accountability for the leniencies below: every rewrite this
+        # subclass performs is recorded so gen can emit a diagnostic —
+        # normalization must never be silent.
+        self.section_normalizations: list[tuple[str, str]] = []
+        self.seealso_normalized: list[str] = []
         super().__init__(*args, **kwargs)
 
     def __setitem__(self, key: str, value: Any) -> None:
@@ -37,6 +69,13 @@ class NumpyDocString(nds.NumpyDocString):
             value = [d.rstrip() for d in value]
 
         super().__setitem__(key, value)
+        # Upstream numpydoc warns-and-drops unknown sections instead of
+        # storing them. Only record keys that actually landed: otherwise
+        # ordered_sections lists a key ``__getitem__`` raises on, and every
+        # consumer that iterates it (``APIObjectInfo``) KeyErrors — which
+        # used to silently drop the whole object from the bundle.
+        if key not in self._parsed_data:
+            return
         assert key not in self.ordered_sections, (
             f"assert {key!r} not in {self.ordered_sections}, {super().__getitem__(key)}, {value}"
         )
@@ -45,19 +84,51 @@ class NumpyDocString(nds.NumpyDocString):
     def _guess_header(self, header: str) -> str:
         if header in self.sections:
             return header
-        # handle missing trailing `s`, and trailing `:`
+        # Deliberate, bounded normalizations only — each one recorded in
+        # ``section_normalizations`` for gen to surface as a diagnostic:
+        # a trailing ":", a missing trailing "s" ("Return" → "Returns",
+        # case-insensitive exact otherwise), and the explicit misspelling
+        # alias table. The historical open-ended prefix match was a guess:
+        # it rewrote "Ret" to "Returns" and re-parsed the section's prose
+        # as a parameter list — wrong structured content, silently.
+        normalized = header.rstrip(":")
         for s in self.sections:
-            if s.lower().startswith(header.rstrip(":").lower()):
+            if s.lower() in (normalized.lower(), normalized.lower() + "s"):
+                self.section_normalizations.append((header, str(s)))
                 return str(s)
         for k, v in self.aliases.items():
             if header.lower() in v:
+                self.section_normalizations.append((header, k))
                 return k
-        raise ValueError("Could not find match for section:", header)
+        # Not a recognizable numpydoc section ("Goals", "Usage", …) — return
+        # it unchanged and let upstream numpydoc handle it (warn + skip).
+        # Raising here failed the whole docstring: module docstrings got
+        # replaced by a parse-failure sentinel and non-module objects were
+        # dropped from the bundle entirely, both far worse than losing one
+        # free-form section from the structured data (modules keep the full
+        # text via the ts.parse "arbitrary" sections anyway).
+        return header
 
     def _read_sections(self) -> Iterator[tuple[str, Any]]:
         for name, data in super()._read_sections():
             name = self._guess_header(name)
             yield name, data
+
+    def _parse_see_also(self, content: list[str]) -> Any:
+        """Tolerate default-role backticks around See Also entry names.
+
+        Authors write ``See Also`` entries like ```numpy.polynomial``` —
+        legal RST, but upstream numpydoc raises ParseError, which previously
+        dropped the whole docstring. Strip the backticks from entry lines
+        (description lines are left untouched).
+        """
+        fixed = []
+        for line in content:
+            new = _strip_see_also_backticks(line)
+            if new != line:
+                self.seealso_normalized.append(line.strip())
+            fixed.append(new)
+        return super()._parse_see_also(fixed)
 
     def _parse_param_list(self, *args: Any, **kwargs: Any) -> list[Any]:
         """

@@ -3,17 +3,8 @@
 module = 'numpy'
 
 exclude = [
-    # token errror
-    'numpy:__array_namespace_info__',
-
-
-    'numpy:tensordot',
     # See https://github.com/jupyter/papyri/issues/361'
     'numpy.ma.core:MaskedArray.resize',
-    # Docstring trips NumpydocParseError; not worth a special-case fix yet.
-    'numpy.polynomial._polybase:ABCPolyBase',
-    # Internal helper with a malformed docstring (IncorrectInternalDocsLen).
-    'numpy._core._internal:_view_is_safe',
 ]
 
 execute_exclude_patterns = [

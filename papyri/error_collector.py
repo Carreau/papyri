@@ -117,6 +117,54 @@ W_UNRESOLVED_REF = _register(
     "target. Common across packages whose targets are not yet built, so it "
     "defaults to a warning; promote to error for a strictly clean bundle.",
 )
+W_UNRESOLVED_DEFAULT_ROLE = _register(
+    "W-unresolved-default-role",
+    Severity.INFO,
+    "Bare interpreted text (default role, no explicit :role:) did not "
+    "resolve to any object. Docstring authors routinely use bare backticks "
+    "for variable names, and Sphinx's autolink default role degrades to "
+    "plain text silently, so this defaults to info; promote per project if "
+    "bare backticks are expected to link.",
+)
+W_SEE_ALSO_SYNTAX = _register(
+    "W-see-also-syntax",
+    Severity.WARNING,
+    "A See Also entry is written with default-role backticks (`name`), "
+    "which upstream numpydoc rejects. papyri normalized it to keep the "
+    "page, but the leniency is temporary: fix the docstring at the source "
+    "(or upstream the syntax to numpydoc).",
+)
+W_SECTION_HEADING_NORMALIZED = _register(
+    "W-section-heading-normalized",
+    Severity.WARNING,
+    "A docstring section heading was normalized to a canonical numpydoc "
+    "section (trailing ':', missing trailing 's', or a known misspelling). "
+    "The rewrite is recorded, never silent — fix the heading at the source.",
+)
+W_NONSTANDARD_ROLE = _register(
+    "W-nonstandard-role",
+    Severity.WARNING,
+    "A role spelled in a form papyri accepts but Sphinx does not "
+    "(:method: for :meth:). It resolves like the standard role; use the "
+    "standard spelling so the docstring also builds under Sphinx.",
+)
+W_UNSET_ROLE = _register(
+    "W-unset-role",
+    Severity.WARNING,
+    "A role is mapped to papyri.directives:role_unset — a declared "
+    "placeholder rendered as inline code. The mapping keeps gen green while "
+    "the role's real handling is undecided; replace it with a handler (or "
+    "role_verbatim / role_text / role_drop) once decided.",
+)
+W_UNKNOWN_ROLE = _register(
+    "W-unknown-role",
+    Severity.ERROR,
+    "An inline role papyri does not know: not a built-in handler and not "
+    "mapped in [global.roles]. Every role must be an explicit decision — "
+    "Sphinx reports unknown roles and keeps building, papyri fails the gen "
+    "by default. Map the role in [global.roles] (role_verbatim / role_text "
+    "/ role_drop or a custom handler) or downgrade this code.",
+)
 W_UNSUPPORTED_SUBSTITUTION = _register(
     "W-unsupported-substitution",
     Severity.WARNING,

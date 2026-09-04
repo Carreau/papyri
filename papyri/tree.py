@@ -34,6 +34,7 @@ from .directives import (
     note_handler,
     only_handler,
     raw_handler,
+    role_unset,
     rubric_handler,
     seealso_handler,
     tip_handler,
@@ -45,7 +46,11 @@ from .directives import (
 from .error_collector import (
     W_MALFORMED_DIRECTIVE,
     W_MISSING_GITHUB_SLUG,
+    W_NONSTANDARD_ROLE,
+    W_UNKNOWN_ROLE,
+    W_UNRESOLVED_DEFAULT_ROLE,
     W_UNRESOLVED_REF,
+    W_UNSET_ROLE,
     W_UNSUPPORTED_SUBSTITUTION,
     DiagnosticConfig,
     Diagnostics,
@@ -232,6 +237,12 @@ def resolve_(
     if hk not in _cache:
         _cache[hk] = _build_resolver_cache(known_refs)
 
+    # qa uses full_qual "module:qualname" notation ("numpy:any",
+    # "numpy.ma.core:MaskedArray.var") while the lookup keys are indexed in
+    # dotted form; normalize before deriving enclosing scopes, otherwise no
+    # relative ref inside an object page can ever resolve.
+    qa = qa.replace(":", ".")
+
     # this is a mapping from the key to the most relevant
     # Refinfo to a document
     k_path_map: dict[str, RefInfo]
@@ -273,37 +284,49 @@ def resolve_(
             else:
                 root = qa.split(".")[0]
                 sub1 = root_start(root, keyset)
-                # endswith needs the ref without the leading dot so that
-                # "pkg.mod.Name".endswith("mod.Name") matches correctly.
-                subset = endswith(abs_ref, sub1)
+                # Suffix search on a *component boundary*: ".mod.Name" so
+                # that "pkg.mod.Name" matches but "pkg.altmod.Name" via a
+                # bare-string suffix ("od.Name") cannot. A bare endswith
+                # let ".shape" match "numpy.reshape" — a silently wrong
+                # link, indistinguishable from an exact hit.
+                # Dedupe through the RefInfo: the colon key and its dotted
+                # alias both match the suffix but name the same object.
+                subset = {k_path_map[q] for q in endswith("." + abs_ref, sub1)}
                 if len(subset) == 1:
-                    return k_path_map[next(iter(subset))]
-                    # return RefInfo(None, None, "exists", next(iter(subset)))
-                else:
-                    if len(subset) > 1:
-                        # ambiguous ref
-                        pass
-
+                    return next(iter(subset))
+                # Zero or many hits: unresolved. Ambiguity must surface as
+                # a diagnostic at the caller, never an arbitrary pick.
                 return RefInfo(None, None, "missing", ref)
 
+        # Walk the enclosing scopes most-specific-first (Sphinx resolves
+        # relative to the closest enclosing module/class): try "qa.ref"
+        # first, then each parent scope, down to "root.ref". The previous
+        # form of this loop computed the attempt *before* extending the
+        # prefix, so the current scope itself ("qa.ref") was never tried —
+        # a module docstring could not resolve a ref relative to its own
+        # module.
         parts = qa.split(".")
-        prefix = ""
-        for part in parts:
-            attempt = prefix + "." + ref
+        for i in range(len(parts), 0, -1):
+            attempt = ".".join(parts[:i]) + "." + ref
             if attempt in k_path_map:
                 return k_path_map[attempt]
-            prefix = part if not prefix else prefix + "." + part
 
+    # Last chance: an exact component-boundary suffix match anywhere under
+    # the bundle root ("linspace" → "numpy.linspace", "Chebyshev.fit" →
+    # "numpy.polynomial.chebyshev.Chebyshev.fit"), mirroring Sphinx's
+    # suffix search. The historical substring fallback (`ref in q`) is
+    # gone: a single accidental substring hit ("cos" inside "numpy.arccos")
+    # shipped a silently wrong link, indistinguishable from an exact match
+    # — no fuzzy matching may decide what reaches the IR. Ambiguity (two
+    # boundary matches) is also unresolved, never an arbitrary pick; the
+    # caller emits the diagnostic.
     q0 = parts[0]
     rs = root_start(q0, keyset)
-    attempts = [q for q in rs if (ref in q)]
-    if len(attempts) == 1:
-        # return RefInfo(None, None, "exists", attempts[0])
-        return k_path_map[attempts[0]]
-    else:
-        trail = [q for q in attempts if q.split(".")[-1] == ref]
-        if len(trail) == 1:
-            return k_path_map[trail[0]]
+    # Dedupe through the RefInfo: the colon key and its dotted alias both
+    # match the suffix but name the same object.
+    trail = {k_path_map[q] for q in rs if q.endswith("." + ref)}
+    if len(trail) == 1:
+        return next(iter(trail))
 
     return RefInfo(None, None, "missing", ref)
 
@@ -508,6 +531,29 @@ _PY_VERBATIM_ROLES = (
     "sub",
     "sup",
     "term",
+    # Standard Sphinx std-domain / docutils formatting roles. They are part
+    # of the documented RST/Sphinx vocabulary (not project inventions), so
+    # they are built in rather than requiring every project to map them in
+    # [global.roles]; papyri has no target index for them, so render as code.
+    "abbr",
+    "code",  # docutils inline code role
+    "dfn",
+    "envvar",
+    "guilabel",
+    "mailheader",
+    "makevar",
+    "manpage",
+    "menuselection",
+    "mimetype",
+    "newsgroup",
+    "option",
+    "regexp",
+    "token",
+    # Sphinx math-domain references (":eq:`label`", ":math:numref:`fig`").
+    # papyri keeps no equation/figure-number index, so the label renders as
+    # code rather than pretending to link.
+    "eq",
+    "numref",
 )
 
 # Cross-reference roles (any/attr/class/const/data/exc/func/meth/method/mod/obj
@@ -517,10 +563,16 @@ _PY_VERBATIM_ROLES = (
 # generated.  ``ref`` (section-label refs) also falls through: if resolve can't
 # find the target the original ``InlineRole`` is returned and rendered as
 # styled code, matching the previous verbatim appearance.
-for role in _PY_VERBATIM_ROLES:
-    directive_handler("py", role)(
-        lambda value, _role=role: _x_any_unimplemented_to_verbatim("py", _role, value)
-    )
+# Registered under "py" (the default when a role is written without a
+# domain), "std" (their real Sphinx domain, for the explicit
+# ``:std:envvar:`` spelling) and "math" (``:math:numref:`` / ``:math:eq:``).
+for domain in ("py", "std", "math"):
+    for role in _PY_VERBATIM_ROLES:
+        directive_handler(domain, role)(
+            lambda value, _domain=domain, _role=role: _x_any_unimplemented_to_verbatim(
+                _domain, _role, value
+            )
+        )
 
 
 # :ghpull: / :ghissue: are IPython-invented roles honoured for any project
@@ -533,6 +585,31 @@ for role in _PY_VERBATIM_ROLES:
 # instead of getting a silent link to the wrong repo (historically hardcoded to
 # ``ipython/ipython``, which was correct for exactly one project).
 _GH_ROLE_PATH_SEGMENT = {"ghpull": "pull", "ghissue": "issues"}
+
+# Roles that name a Python object and are resolved by the cross-reference
+# machinery in ``replace_InlineRole`` (in-bundle lookup, then the import
+# solver). The domain must be None (role written without a domain prefix,
+# e.g. :func:`…`) or "py" (explicit Python domain, e.g. :py:func:`…`).
+# ``None`` is the bare default role.
+_PYTHON_OBJECT_ROLES = frozenset(
+    {
+        None,
+        "mod",
+        "func",
+        "any",
+        "meth",
+        # papyri-accepted long form of :meth:, seen in docstrings in the
+        # wild even though Sphinx rejects it. Resolves like :meth: but every
+        # use emits W-nonstandard-role (see replace_InlineRole).
+        "method",
+        "class",
+        "exc",
+        "data",
+        "attr",
+        "obj",
+        "const",
+    }
+)
 
 
 @directive_handler("py", "math")
@@ -552,17 +629,6 @@ def py_pep_hander(value: str) -> list[Any]:
             title="",
         )
     ]
-
-
-@directive_handler("py", "doc")
-def py_doc_handler(value: str) -> list[Any]:
-    text = value
-    path = value
-    if " <" in value and value.endswith(">"):
-        text, path = value.split(" <", 1)
-        text = text.rstrip()
-        path = path.rstrip(">")
-    return [CrossRef(text, LocalRef("docs", path), "docs")]
 
 
 @directive_handler("py", "param")
@@ -652,6 +718,7 @@ class DirectiveVisiter(TreeReplacer):
         param_names: frozenset[str] | set[str] | None = None,
         diagnostics: Diagnostics | None = None,
         github_slug: str | None = None,
+        roles: dict[str, str] | None = None,
     ):
         """
         qa: str
@@ -728,6 +795,20 @@ class DirectiveVisiter(TreeReplacer):
                 self._handlers[k] = obj_from_qualname(
                     handler_ref, ctor_args, ctor_kwargs
                 )
+
+        # ``[global.roles]`` — project-local inline roles ("mpltype" or
+        # "domain:role") mapped to a handler that receives the role body.
+        # Consulted in ``replace_InlineRole`` before the built-in registry.
+        self._role_handlers: dict[str, Callable[[str], list[Any] | None]] = {}
+        for k, v in (roles or {}).items():
+            handler = obj_from_qualname(v)
+            if handler is role_unset:
+                # The declared placeholder: bind the role name and route its
+                # warning through Diagnostics as W-unset-role so every use
+                # stays visible. ``_unset_role_warn`` reads ``self.diagnostics``
+                # / ``self.qa`` at call time (both are assigned below).
+                handler = partial(role_unset, role=k, warn=self._unset_role_warn)
+            self._role_handlers[k] = handler
 
         self.known_refs = frozenset(known_refs)
         self.local_refs = frozenset(local_refs)
@@ -820,6 +901,8 @@ class DirectiveVisiter(TreeReplacer):
                 version=self.version,
                 execute=execute,
                 qa=self.qa,
+                doc_path=doc_path,
+                doc_root=doc_root,
                 warn=self._directive_warn,
             ),
         )
@@ -859,6 +942,15 @@ class DirectiveVisiter(TreeReplacer):
         ``log.warning``.
         """
         self.diagnostics.emit(W_MALFORMED_DIRECTIVE, self.qa, message)
+
+    def _unset_role_warn(self, message: str) -> None:
+        """Report a use of a ``role_unset`` placeholder mapping as ``W-unset-role``.
+
+        Bound as the ``warn`` callback of every ``[global.roles]`` entry that
+        maps to ``papyri.directives.role_unset``, so each use is recorded
+        against the current object rather than logged loosely.
+        """
+        self.diagnostics.emit(W_UNSET_ROLE, self.qa, message)
 
     def collect_substitutions(self, *sections: Section) -> None:
         """Pre-scan sections for SubstitutionDef nodes to build the substitution map.
@@ -1056,8 +1148,18 @@ class DirectiveVisiter(TreeReplacer):
 
         """
         assert isinstance(text, str)
+        # Narrative doc keys ("reference:ufuncs") are not Python paths under
+        # the package root; resolve those relative to the root module so the
+        # in-bundle scope walk and suffix search still apply.
+        qa = self.qa
+        if not (
+            qa == self.module
+            or qa.startswith(self.module + ".")
+            or qa.startswith(self.module + ":")
+        ):
+            qa = self.module
         return resolve_(
-            self.qa,
+            qa,
             self.known_refs,
             loc,
             text,
@@ -1079,9 +1181,22 @@ class DirectiveVisiter(TreeReplacer):
         if not all(are_id):
             return None
         else:
-            target_qa = full_qual(_obj_from_path(parts))
+            target = _obj_from_path(parts)
+            target_qa = full_qual(target)
             if target_qa is not None:
                 return target_qa
+            if target is not None:
+                # Objects with no usable __module__/__qualname__ (e.g. method
+                # descriptors like numpy.ufunc.reduce): the successful
+                # attribute traversal itself proves the path exists, so derive
+                # module:qualname from the longest imported module prefix.
+                import sys
+
+                for i in range(len(parts), 0, -1):
+                    mod = ".".join(parts[:i])
+                    if mod in sys.modules:
+                        qual = ".".join(parts[i:])
+                        return FullQual(f"{mod}:{qual}") if qual else FullQual(mod)
 
         # Builtin fallback: names like True, False, None, repr, KeyError, dict
         # that belong to the `builtins` module.  full_qual() returns None for
@@ -1115,6 +1230,18 @@ class DirectiveVisiter(TreeReplacer):
             role = "py"
         if domain == "py" and role in _GH_ROLE_PATH_SEGMENT:
             return self._gh_link_or_warn(role, directive.value)
+        # Config-supplied role handlers ([global.roles]) win over the
+        # built-in registry; keyed by bare role name or "domain:role".
+        if self._role_handlers and directive.role is not None:
+            key = (
+                f"{directive.domain}:{directive.role}"
+                if directive.domain
+                else directive.role
+            )
+            if (rh := self._role_handlers.get(key)) is not None:
+                res = rh(directive.value)
+                if res is not None:
+                    return res
         domain_handler: dict[str, list[Handler]] = DIRECTIVE_MAP.get(domain, {})
         handlers: list[Handler] = domain_handler.get(role, [])
         for h in handlers:
@@ -1122,12 +1249,59 @@ class DirectiveVisiter(TreeReplacer):
             if res is not None:
                 return res
 
+        # Any role still unhandled here is *unknown*: not a built-in, not
+        # config-mapped, and not one of the cross-reference roles resolved
+        # below (default role, py object roles, :ref:, :doc:). Do not fall
+        # through to resolution — an unknown role accidentally matching a
+        # known path would silently cross-link, the implicit behaviour that
+        # plagues Sphinx. Every role must be an explicit decision: register
+        # it in [global.roles] or downgrade W-unknown-role (error by
+        # default, so gen fails fast).
+        is_crossref_role = directive.role in ("ref", "doc") or (
+            directive.role in _PYTHON_OBJECT_ROLES and directive.domain in (None, "py")
+        )
+        if not is_crossref_role:
+            role_key = (
+                f"{directive.domain}:{directive.role}"
+                if directive.domain
+                else directive.role
+            )
+            self.diagnostics.emit(
+                W_UNKNOWN_ROLE,
+                self.qa,
+                f"unknown role :{role_key}: — no handler registered; map it in "
+                f"[global.roles] (papyri.directives:role_verbatim / role_text / "
+                f"role_drop or a custom handler)",
+            )
+            return [directive]
+
+        # Accepted-but-nonstandard spellings resolve normally but never
+        # silently: Sphinx would reject them, so the docstring is wrong.
+        if directive.role == "method":
+            self.diagnostics.emit(
+                W_NONSTANDARD_ROLE,
+                self.qa,
+                f"role :method: is not a Sphinx role — use :meth: "
+                f"({directive.value!r})",
+            )
+
         loc: frozenset[str]
         loc = frozenset() if directive.role not in ["any", None] else self.local_refs
         text = directive.value
         assert "`" not in text
         text = text.replace("\n", " ")
         to_resolve = text
+
+        # Sphinx: a leading "!" on the raw role text suppresses
+        # cross-referencing entirely — the target renders as plain inline
+        # code, no lookup, no warning. Sphinx strips it *before* the
+        # "Title <target>" split, so check here and again on the target
+        # after the split.
+        suppress = False
+        if to_resolve.startswith("!"):
+            suppress = True
+            text = text[1:]
+            to_resolve = to_resolve[1:]
 
         if (
             ("<" in text)
@@ -1147,11 +1321,21 @@ class DirectiveVisiter(TreeReplacer):
             assert to_resolve.endswith(">"), (text, to_resolve)
             to_resolve = to_resolve.rstrip(">")
 
+        if to_resolve.startswith("!"):
+            suppress = True
+            stripped = to_resolve[1:]
+            if text == to_resolve:
+                text = stripped
+            to_resolve = stripped
+
         if to_resolve.startswith("~"):
             stripped = to_resolve[1:]
             if text == to_resolve:
                 text = stripped.split(".")[-1]
             to_resolve = stripped
+
+        if suppress:
+            return [InlineCode(text)]
 
         if to_resolve.startswith(("https://", "http://", "mailto://")):
             to_resolve = to_resolve.replace(" ", "")
@@ -1179,6 +1363,26 @@ class DirectiveVisiter(TreeReplacer):
                     f"unresolved :ref: label {label!r}",
                 )
                 return [directive]
+
+        # :doc:`path` — RST cross-reference to another document. Paths use
+        # "/" separators ("/" prefix anchors at the docs root, otherwise
+        # relative to the current document); normalize to the ":"-joined doc
+        # key so the LocalRef matches how narrative docs are stored.
+        if role == "doc":
+            doc_path = to_resolve
+            in_api_docstring = (
+                self.qa == self.module
+                or self.qa.startswith(self.module + ".")
+                or self.qa.startswith(self.module + ":")
+            )
+            if in_api_docstring and not doc_path.startswith("/"):
+                # API objects are not documents — there is no "current
+                # document directory" to resolve against, so anchor
+                # relative :doc: paths at the docs root.
+                doc_path = "/" + doc_path
+            doc_key = self._resolve_doc_path(doc_path)
+            display = text if text != to_resolve else self.doc_titles.get(doc_key, text)
+            return [CrossRef(display, LocalRef("docs", doc_key), "docs")]
 
         # Plain RST hyperlink with angle-bracket syntax (``text <label>`_``) or
         # bare named reference (``label_``) where the target matches a known
@@ -1216,6 +1420,11 @@ class DirectiveVisiter(TreeReplacer):
                         )
                     ]
 
+        # Sphinx py roles ignore a trailing pair of parentheses on the target
+        # (":meth:`foo()`" links to foo); the display text keeps them.
+        if to_resolve.endswith("()"):
+            to_resolve = to_resolve[:-2]
+
         r = self._resolve(loc, to_resolve)
         # this is now likely incorrect as Ref kind should not be exists,
         # but things like "local", "api", "gallery..."
@@ -1229,25 +1438,8 @@ class DirectiveVisiter(TreeReplacer):
                 assert None not in r, r
                 self._targets.add(r)
             return [self._ref_to_crossref(text, r, exists)]
-        # Roles that name a Python object and should be resolved via the import
-        # solver when the local-ref lookup above produced no match.  The domain
-        # must be None (role written without a domain prefix, e.g. :func:`…`)
-        # or "py" (explicit Python domain, e.g. :py:func:`…`).
-        _PYTHON_OBJECT_ROLES = frozenset(
-            {
-                None,
-                "mod",
-                "func",
-                "any",
-                "meth",
-                "class",
-                "exc",
-                "data",
-                "attr",
-                "obj",
-                "const",
-            }
-        )
+        # Python-object roles fall back to the import solver when the
+        # in-bundle lookup above produced no match.
         if directive.role in _PYTHON_OBJECT_ROLES and directive.domain in (None, "py"):
             text = directive.value
             tqa = directive.value
@@ -1282,8 +1474,16 @@ class DirectiveVisiter(TreeReplacer):
                 )
                 return [CrossRef(text, ri, "module")]
         role_desc = directive.role or "(default)"
+        # Bare backticks (no explicit role) are routinely used for variable
+        # names; Sphinx's autolink default role degrades to plain text
+        # silently, so an unresolved default role gets its own, quieter code.
+        code = (
+            W_UNRESOLVED_REF
+            if directive.role is not None
+            else W_UNRESOLVED_DEFAULT_ROLE
+        )
         self.diagnostics.emit(
-            W_UNRESOLVED_REF,
+            code,
             self.qa,
             f"unresolved reference {directive.value!r} (role {role_desc})",
         )

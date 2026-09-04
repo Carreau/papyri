@@ -357,6 +357,41 @@ The diagnostic codes papyri currently emits:
      - A cross-reference could not be resolved to a local or cross-bundle
        target.  Common across not-yet-built packages, so it defaults to a
        warning; promote to ``error`` for a strictly clean bundle.
+   * - ``W-unresolved-default-role``
+     - ``info``
+     - Bare interpreted text (default role, no explicit ``:role:``) did not
+       resolve to any object.  Docstring authors routinely use bare
+       backticks for variable names, and Sphinx's ``autolink`` default role
+       degrades to plain text silently, so this defaults to ``info``;
+       promote it per project if bare backticks are expected to link.
+   * - ``W-see-also-syntax``
+     - ``warning``
+     - A See Also entry is written with default-role backticks
+       (```name```), which upstream numpydoc rejects.  papyri normalizes
+       it to keep the page; the leniency is temporary — fix the docstring
+       at the source (or upstream the syntax to numpydoc).
+   * - ``W-section-heading-normalized``
+     - ``warning``
+     - A docstring section heading was normalized to a canonical numpydoc
+       section (trailing ``:``, missing trailing ``s``, or a known
+       misspelling).  Never silent — fix the heading at the source.
+   * - ``W-nonstandard-role``
+     - ``warning``
+     - A role spelled in a form papyri accepts but Sphinx does not
+       (``:method:`` for ``:meth:``).  It resolves like the standard role;
+       use the standard spelling so the docstring also builds under Sphinx.
+   * - ``W-unset-role``
+     - ``warning``
+     - A role is mapped to ``papyri.directives:role_unset`` — a declared
+       placeholder rendered as inline code.  Keeps gen green while the
+       role's real handling is undecided; replace the mapping once decided.
+   * - ``W-unknown-role``
+     - ``error``
+     - An inline role papyri does not know: not a built-in handler and not
+       mapped in :ref:`[global.roles] <config-roles>`.  Sphinx reports
+       unknown roles and keeps building; papyri fails the gen by default so
+       every role is an explicit decision.  Map the role or downgrade this
+       code.
    * - ``W-unsupported-substitution``
      - ``warning``
      - An RST substitution uses a directive papyri can't represent in the
@@ -594,6 +629,47 @@ To silently drop a directive instead of raising an error, map it to
 
 The handler callable must accept ``(argument, options, content)`` and
 return an IR node or ``None``.
+
+
+.. _config-roles:
+
+``[global.roles]``
+~~~~~~~~~~~~~~~~~~
+
+**Type:** ``dict[str, str]`` — default ``{}``
+
+Custom inline *role* handlers for project-local roles that papyri's
+built-in registry doesn't know (e.g. roles provided by a project's own
+Sphinx extension).  Keys are the bare role name as written in RST
+(``mpltype`` for ``:mpltype:`color```) or ``domain:role`` for
+domain-qualified roles; values are ``'module:callable'`` strings.  The
+handler receives the role body text and returns a list of IR nodes (or
+``None`` to fall through to the built-in behaviour).
+
+Three ready-made handlers cover the common cases:
+
+.. code:: toml
+
+   [global.roles]
+   mpltype  = 'papyri.directives:role_verbatim'  # render as inline code
+   somerole = 'papyri.directives:role_text'      # render as plain text
+   internal = 'papyri.directives:role_drop'      # drop entirely
+   newrole  = 'papyri.directives:role_unset'     # placeholder: inline code + W-unset-role
+
+``role_unset`` is the deliberate stopgap: it renders like
+``role_verbatim`` but emits ``W-unset-role`` on every use, so a project
+can acknowledge a role exists (keeping gen green) while its real handling
+is undecided — and grep for ``role_unset`` later to find what is still
+outstanding.
+
+Without a mapping, an unknown role is a hard failure: gen emits
+``W-unknown-role`` (default severity ``error``, so the run exits
+non-zero) and the role is *not* fed to cross-reference resolution — an
+unknown role that happened to match a known path would silently
+cross-link, which is exactly the implicit behaviour papyri refuses to
+inherit from Sphinx.  Every role must be an explicit decision: map it
+here, or downgrade ``W-unknown-role`` in ``[global.diagnostics]`` during
+incremental adoption.
 
 
 ``[meta]`` reference

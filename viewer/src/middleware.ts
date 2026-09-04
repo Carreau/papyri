@@ -8,9 +8,18 @@ import { previewContext, runInRequestContext } from "./lib/request-context.ts";
 // endpoints, bundle upload). Any new pre-auth route needs an entry here.
 // `/api/bundle` is the upload endpoint hit by `papyri upload`; it carries
 // its own bearer-token check and must stay reachable without a session cookie.
-// `/api/preview` (drop / list-own) is authenticated by a GitHub OIDC token
+// `/api/preview` (drop / status) is authenticated by a GitHub OIDC token
 // exactly like the upload endpoint, so it too must bypass the session gate.
-const PUBLIC_PREFIXES = ["/login", "/api/auth/", "/api/bundle", "/api/preview"] as const;
+// `/api/oidc/audience` is read by `papyri upload` before it has any credential
+// at all (it needs the audience to mint the token), so it stays public; the
+// rest of `/api/oidc` is session-gated below.
+const PUBLIC_PREFIXES = [
+  "/login",
+  "/api/auth/",
+  "/api/bundle",
+  "/api/preview",
+  "/api/oidc/audience",
+] as const;
 
 // Routes restricted to authenticated users. Everything not listed here (and
 // not in PUBLIC_PREFIXES) is accessible to guests so they can browse docs
@@ -38,7 +47,9 @@ const ADMIN_ONLY_PREFIXES = [
 // Routes any signed-in user may reach but guests may not — self-service
 // account management (change password, mint/revoke personal upload tokens).
 // These require a session but NOT admin.
-const AUTH_REQUIRED_PREFIXES = ["/settings", "/api/account"] as const;
+// `/api/oidc` (bar the public audience route above) manages a project's
+// trusted publishers; the endpoint itself enforces admin-or-member.
+const AUTH_REQUIRED_PREFIXES = ["/settings", "/api/account", "/api/oidc"] as const;
 
 /** True when `pathname` equals `prefix`, `prefix + "/"`, or any deeper path. */
 function matchesPrefix(prefix: string, pathname: string): boolean {

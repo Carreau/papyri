@@ -1,55 +1,85 @@
 import { useState } from "react";
+import type { PublisherScope } from "../lib/auth-db.ts";
 
-/** One `(project, repository, workflow)` trust entry, as the API returns it. */
+/** Row shape returned by `/api/oidc/publishers`. */
 export interface PanelPublisher {
   id: number;
-  project: string;
+  project_name: string;
   repository: string;
-  workflow: string;
+  workflow_ref: string;
+  environment: string | null;
+  scope: PublisherScope;
+  repository_owner_id: string | null;
   created_at: number;
+  last_used_at: number | null;
 }
 
 interface Props {
-  initialPublishers: PanelPublisher[];
+  initial: PanelPublisher[];
+  /** Projects the viewer may register a publisher for. */
   projects: string[];
 }
 
-function fmtDate(epochSeconds: number): string {
-  return new Date(epochSeconds * 1000).toLocaleString();
+/** How each scope reads in the table. */
+const SCOPE_LABEL: Record<PublisherScope, string> = {
+  preview: "PR previews",
+  release: "releases",
+  both: "previews + releases",
+};
+
+function fmtDate(epochSeconds: number | null): string {
+  return epochSeconds ? new Date(epochSeconds * 1000).toLocaleString() : "never";
 }
 
 /**
- * Admin panel: which GitHub repositories may publish PR doc previews for a
- * project using an Actions OIDC token (trusted publishing — no shared secret,
- * so it works from fork pull requests).
+ * Register the GitHub Actions workflows allowed to upload a project without a
+ * token — papyri's equivalent of PyPI trusted publishing. The value over a
+ * stored secret is that it works from a fork PR, where repository secrets are
+ * unavailable.
  */
-export default function TrustedPublisherPanel({ initialPublishers, projects }: Props) {
-  const [publishers, setPublishers] = useState<PanelPublisher[]>(initialPublishers);
+export default function TrustedPublisherPanel({ initial, projects }: Props) {
+  const [publishers, setPublishers] = useState<PanelPublisher[]>(initial);
   const [project, setProject] = useState(projects[0] ?? "");
   const [repository, setRepository] = useState("");
-  const [workflow, setWorkflow] = useState("");
+  const [workflowRef, setWorkflowRef] = useState("");
+  const [environment, setEnvironment] = useState("");
+  const [scope, setScope] = useState<PublisherScope>("preview");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
-  const send = async (method: "POST" | "DELETE", body: unknown, okMsg: string) => {
+  const add = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
     setBusy(true);
     setResult(null);
     try {
-      const resp = await fetch("/api/projects/publishers", {
-        method,
+      const resp = await fetch("/api/oidc/publishers", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          project,
+          repository: repository.trim(),
+          workflowRef: workflowRef.trim(),
+          environment: environment.trim() || null,
+          scope,
+        }),
       });
-      const parsed = (await resp.json()) as {
+      const body = (await resp.json()) as {
         ok: boolean;
-        publishers?: PanelPublisher[];
+        publisher?: PanelPublisher;
         error?: string;
       };
-      if (!resp.ok || !parsed.ok || !parsed.publishers) {
-        setResult({ ok: false, msg: parsed.error ?? `HTTP ${resp.status}` });
+      if (!resp.ok || !body.ok || !body.publisher) {
+        setResult({ ok: false, msg: body.error ?? `HTTP ${resp.status}` });
       } else {
-        setPublishers(parsed.publishers);
-        setResult({ ok: true, msg: okMsg });
+        const created = body.publisher;
+        setPublishers((prev) => [...prev, created]);
+        setResult({
+          ok: true,
+          msg: `${created.repository} may now publish ${created.project_name}.`,
+        });
+        setRepository("");
+        setWorkflowRef("");
+        setEnvironment("");
       }
     } catch (err) {
       setResult({ ok: false, msg: `network error: ${err}` });
@@ -57,73 +87,99 @@ export default function TrustedPublisherPanel({ initialPublishers, projects }: P
     setBusy(false);
   };
 
-  const add = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const repo = repository.trim();
-    if (!project || !repo) return;
-    await send(
-      "POST",
-      { project, repository: repo, workflow: workflow.trim() },
-      `${repo} may now publish previews for ${project}.`
+  const remove = async (pub: PanelPublisher) => {
+    const ok = window.confirm(
+      `Stop trusting ${pub.repository} (${pub.workflow_ref}) to publish ${pub.project_name}?`
     );
-    setRepository("");
-    setWorkflow("");
-  };
-
-  const remove = async (p: PanelPublisher) => {
-    if (!window.confirm(`Stop trusting ${p.repository} to publish previews for ${p.project}?`)) {
-      return;
+    if (!ok) return;
+    setBusy(true);
+    setResult(null);
+    try {
+      const resp = await fetch("/api/oidc/publishers", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: pub.id }),
+      });
+      const body = (await resp.json()) as { ok: boolean; error?: string };
+      if (!resp.ok || !body.ok) {
+        setResult({ ok: false, msg: body.error ?? `HTTP ${resp.status}` });
+      } else {
+        setPublishers((prev) => prev.filter((p) => p.id !== pub.id));
+        setResult({ ok: true, msg: `Removed ${pub.repository} (${pub.workflow_ref}).` });
+      }
+    } catch (err) {
+      setResult({ ok: false, msg: `network error: ${err}` });
     }
-    await send("DELETE", { id: p.id }, `Removed ${p.repository} → ${p.project}.`);
+    setBusy(false);
   };
 
   return (
     <div className="ext-inv">
       <p className="ext-inv-desc">
-        A trusted publisher lets a GitHub workflow upload PR doc previews with a short-lived OpenID
-        Connect token instead of a shared secret, so previews work on pull requests from forks.
-        Leave the workflow field empty to trust any workflow in the repository.
+        A trusted publisher lets one GitHub Actions workflow upload a project with no stored token:
+        the workflow asks GitHub for a short-lived OIDC token and papyri verifies GitHub&apos;s
+        signature. Unlike a secret, this works in workflows triggered by fork pull requests. The
+        workflow file must live in the repository itself, and the job needs
+        <code> permissions: id-token: write</code>.
       </p>
 
-      <form className="ext-inv-form" onSubmit={(e) => void add(e)}>
-        <select
-          value={project}
-          onChange={(e) => setProject(e.currentTarget.value)}
-          aria-label="Project"
-          disabled={projects.length === 0}
-        >
-          {projects.map((p) => (
-            <option key={p} value={p}>
-              {p}
-            </option>
-          ))}
-        </select>
-        <input
-          type="text"
-          value={repository}
-          onChange={(e) => setRepository(e.currentTarget.value)}
-          placeholder="owner/repo"
-          aria-label="GitHub repository"
-        />
-        <input
-          type="text"
-          value={workflow}
-          onChange={(e) => setWorkflow(e.currentTarget.value)}
-          placeholder=".github/workflows/docs.yml (optional)"
-          aria-label="Workflow file"
-          size={38}
-        />
-        <button
-          className="ext-inv-btn"
-          type="submit"
-          disabled={busy || projects.length === 0 || !repository.trim()}
-        >
-          Trust repository
-        </button>
-      </form>
-
-      {projects.length === 0 && (
-        <p className="ext-inv-desc">Create a project first — a publisher always maps to one.</p>
+      {projects.length === 0 ? (
+        <p className="ext-inv-empty">
+          You are not a member of any project yet — ask an admin to assign you one.
+        </p>
+      ) : (
+        <form className="ext-inv-form" onSubmit={add}>
+          <label>
+            Project
+            <select value={project} onChange={(e) => setProject(e.target.value)}>
+              {projects.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Repository
+            <input
+              type="text"
+              value={repository}
+              onChange={(e) => setRepository(e.target.value)}
+              placeholder="numpy/numpy"
+              required
+            />
+          </label>
+          <label>
+            Workflow file
+            <input
+              type="text"
+              value={workflowRef}
+              onChange={(e) => setWorkflowRef(e.target.value)}
+              placeholder="docs.yml"
+              required
+            />
+          </label>
+          <label>
+            Environment (optional)
+            <input
+              type="text"
+              value={environment}
+              onChange={(e) => setEnvironment(e.target.value)}
+              placeholder="docs"
+            />
+          </label>
+          <label>
+            May publish
+            <select value={scope} onChange={(e) => setScope(e.target.value as PublisherScope)}>
+              <option value="preview">Pull-request previews</option>
+              <option value="release">Releases</option>
+              <option value="both">Previews and releases</option>
+            </select>
+          </label>
+          <button className="ext-inv-btn" type="submit" disabled={busy}>
+            {busy ? "Saving…" : "Add publisher"}
+          </button>
+        </form>
       )}
 
       {result && (
@@ -133,33 +189,47 @@ export default function TrustedPublisherPanel({ initialPublishers, projects }: P
       )}
 
       {publishers.length === 0 ? (
-        <p className="ext-inv-desc">No trusted publishers yet.</p>
+        <p className="ext-inv-empty">No trusted publishers yet.</p>
       ) : (
         <table className="ext-inv-table">
           <thead>
             <tr>
-              <th>Repository</th>
               <th>Project</th>
+              <th>Repository</th>
               <th>Workflow</th>
-              <th>Added</th>
+              <th>Environment</th>
+              <th>Publishes</th>
+              <th>Last used</th>
               <th />
             </tr>
           </thead>
           <tbody>
-            {publishers.map((p) => (
-              <tr key={p.id}>
+            {publishers.map((pub) => (
+              <tr key={pub.id}>
                 <td>
-                  <code>{p.repository}</code>
+                  <code>{pub.project_name}</code>
                 </td>
-                <td>{p.project}</td>
-                <td>{p.workflow === "" ? <em>any</em> : <code>{p.workflow}</code>}</td>
-                <td>{fmtDate(p.created_at)}</td>
                 <td>
+                  <code>{pub.repository}</code>
+                </td>
+                <td>
+                  <code>{pub.workflow_ref}</code>
+                </td>
+                <td>
+                  {pub.environment ? (
+                    <code>{pub.environment}</code>
+                  ) : (
+                    <em className="ext-inv-muted">any</em>
+                  )}
+                </td>
+                <td>{SCOPE_LABEL[pub.scope]}</td>
+                <td>{fmtDate(pub.last_used_at)}</td>
+                <td className="ext-inv-actions">
                   <button
-                    className="ext-inv-drop ext-inv-btn--small"
+                    className="ext-inv-drop"
                     type="button"
-                    onClick={() => void remove(p)}
                     disabled={busy}
+                    onClick={() => void remove(pub)}
                   >
                     Remove
                   </button>

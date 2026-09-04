@@ -145,6 +145,76 @@ papyri upload --token your-secret-here \
 In CI, store the token as a repository secret and inject it as
 `PAPYRI_UPLOAD_TOKEN` in the workflow environment.
 
+## Trusted publishing from GitHub Actions (OIDC)
+
+A workflow can upload **without any stored secret**: it asks GitHub for a
+short-lived OIDC ID token, and the viewer verifies GitHub's signature and
+matches the token's claims against the workflows a project has registered
+as trusted publishers (PyPI's trusted-publisher model). This is the only
+upload path available to a workflow triggered by a **fork pull request** —
+repository secrets are not exposed there, so a bearer token silently fails
+on the most common contribution flow.
+
+### Server configuration
+
+Set the audience the deployment expects in an OIDC token:
+
+```sh
+export PAPYRI_OIDC_AUDIENCE=https://docs.example.com   # or any fixed string
+```
+
+`PAPYRI_SITE` is used when `PAPYRI_OIDC_AUDIENCE` is unset. If neither is
+set, the viewer falls back to the request's own origin and logs a warning:
+that origin comes from a client-controlled `Host` header, so a real
+deployment must set one of the two — audience binding is what stops a token
+minted for another service being replayed here.
+
+Clients discover the value at `GET /api/oidc/audience` (public).
+
+### Registering a publisher
+
+On `/settings` → **Trusted publishers**, a project member (or an admin)
+registers, per project:
+
+| Field           | Example                | Meaning                                        |
+| --------------- | ---------------------- | ---------------------------------------------- |
+| Repository      | `numpy/numpy`          | `owner/repo` the workflow runs in               |
+| Workflow file   | `docs.yml`             | stored as `.github/workflows/docs.yml`          |
+| Environment     | `publish-docs` (opt.)  | GitHub Environment the job must declare         |
+
+Rules the viewer enforces on top of the signature check:
+
+- the workflow named by `job_workflow_ref` must live in the repository
+  itself — a job running inside another repository's **reusable workflow**
+  is refused;
+- a publisher with an environment matches only runs declaring it; without
+  one, any run of that workflow matches (so on a public repo the trust
+  covers every branch and every fork PR of it — use an environment when
+  that is too wide);
+- the repository owner's numeric id is pinned on first use and required to
+  match afterwards, so releasing an org name does not hand the trust to
+  whoever registers it next;
+- a match authorizes exactly the one project the publisher names.
+
+### Workflow snippet
+
+```yaml
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # required: without it, no OIDC token is issued
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install papyri .
+      - run: papyri gen papyri.toml
+      - run: papyri upload --oidc --url https://docs.example.com/api/bundle ~/.papyri/data/*
+```
+
+`papyri upload` uses OIDC automatically when no token is configured and the
+job has `id-token: write`; `--oidc` requires it (and fails loudly if it is
+unavailable), `--no-oidc` disables it.
+
 ## Storage model
 
 The viewer's state lives on the server's local filesystem and a SQLite

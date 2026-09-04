@@ -41,18 +41,22 @@ import { isSafeSegment } from "../../lib/paths.ts";
 import { getBackends, getUploadToken } from "../../lib/backends.ts";
 import { respond, sha256Hex } from "../../lib/api-utils.ts";
 import { getAuthDb } from "../../lib/auth-db.ts";
-import { makePreviewRef, previewBase, previewId, type PreviewRef } from "../../lib/preview.ts";
+import { scopeAllows, type PublisherScope } from "../../lib/auth-db.ts";
+import {
+  makePreviewRef,
+  previewBase,
+  previewId,
+  previewRefFromClaims,
+  type PreviewRef,
+} from "../../lib/preview.ts";
 import { linkForBundle } from "../../lib/links.ts";
 import { sweepExpiredPreviews, touchPreview } from "../../lib/preview-store.ts";
 import {
+  audienceIsDerived,
+  getOidcAudience,
   looksLikeJwt,
-  oidcEnabled,
-  OidcError,
-  previewRefFromClaims,
   verifyGithubOidcToken,
-  workflowFile,
-  type GithubOidcClaims,
-} from "../../lib/oidc.ts";
+} from "../../lib/github-oidc.ts";
 
 export const prerender = false;
 
@@ -63,16 +67,28 @@ export const prerender = false;
 //     upload the projects that account is a member of (admins: any). When the
 //     token is scoped to a single project, `scopedProject` names it and the
 //     token may upload only that project.
+//   - oidc:   presented a GitHub Actions OIDC token whose claims match a
+//     registered trusted publisher. May upload exactly the project that
+//     publisher names — no account, no stored secret (see github-oidc.ts).
+//     Where it may write is decided by the run, not by the request: a
+//     pull_request run publishes into that pull request's preview namespace,
+//     any other event into the published store, and the publisher's `scope`
+//     says which of the two it was trusted for.
 //   - open:   no token required and none presented, on a fresh install with no
 //     users — the local-dev "everything open" mode.
-//   - oidc:   presented a GitHub Actions ID token (trusted publishing). May
-//     upload the projects its repository is a registered publisher for, and
-//     only into the preview namespace of its own pull request.
 type UploadPrincipal =
   | { kind: "global" }
   | { kind: "open" }
   | { kind: "user"; userId: number; isAdmin: boolean; scopedProject: string | null }
-  | { kind: "oidc"; claims: GithubOidcClaims; preview: PreviewRef; projects: string[] };
+  | {
+      kind: "oidc";
+      project: string;
+      repository: string;
+      workflowRef: string;
+      scope: PublisherScope;
+      /** Preview this run owns, or null when the run is not a pull request. */
+      preview: PreviewRef | null;
+    };
 
 /** Constant-time string compare that tolerates length differences. */
 function timingSafeEqualStr(a: string, b: string): boolean {
@@ -86,66 +102,13 @@ const UNAUTHORIZED = () =>
   respond({ ok: false, error: "unauthorized" }, 401, { "WWW-Authenticate": "Bearer" });
 
 /**
- * Authenticate a GitHub Actions ID token to an `oidc` principal.
- *
- * The token's claims decide everything: which repository is speaking, which
- * projects that repository may publish (the `oidc_publishers` table), and
- * which preview namespace it owns. Nothing here is client-supplied.
- */
-async function authenticateOidc(bearer: string): Promise<UploadPrincipal | Response> {
-  if (!oidcEnabled()) {
-    return respond({ ok: false, error: "OIDC uploads are disabled on this server" }, 403);
-  }
-  let claims: GithubOidcClaims;
-  try {
-    claims = await verifyGithubOidcToken(bearer);
-  } catch (err) {
-    if (err instanceof OidcError) {
-      return respond({ ok: false, error: `OIDC token rejected: ${err.message}` }, 401, {
-        "WWW-Authenticate": "Bearer",
-      });
-    }
-    console.error("OIDC verification error:", err);
-    return respond({ ok: false, error: "could not verify OIDC token" }, 500);
-  }
-
-  const preview = previewRefFromClaims(claims);
-  if (!preview) {
-    return respond(
-      {
-        ok: false,
-        error:
-          "OIDC uploads are accepted for pull-request previews only " +
-          `(event_name=${claims.event_name}, ref=${claims.ref})`,
-      },
-      403
-    );
-  }
-
-  const projects = (await getAuthDb()).projectsForRepository(
-    claims.repository,
-    workflowFile(claims)
-  );
-  if (projects.length === 0) {
-    return respond(
-      {
-        ok: false,
-        error:
-          `"${claims.repository}" is not a registered trusted publisher for any project; ` +
-          "an admin must add it before this repository can upload previews",
-      },
-      403
-    );
-  }
-  return { kind: "oidc", claims, preview, projects };
-}
-
-/**
  * Authenticate an upload request to a principal, WITHOUT yet checking which
  * project it targets. Returns a 401 Response when the caller cannot be
  * authenticated. Auth policy (see PLAN.md "per-user authorization scopes"):
  *
  *   - A bearer that matches PAPYRI_UPLOAD_TOKEN (timing-safe) → global.
+ *   - A JWT-shaped bearer verified as a GitHub Actions OIDC
+ *     token covered by a registered publisher                  → oidc.
  *   - A bearer that resolves as a personal upload token        → user.
  *   - A bearer that matches neither                            → 401.
  *   - No bearer, PAPYRI_UPLOAD_TOKEN set                       → 401.
@@ -163,10 +126,11 @@ async function authenticateUpload(request: Request): Promise<UploadPrincipal | R
     if (globalToken && timingSafeEqualStr(bearer, globalToken)) {
       return { kind: "global" };
     }
-    // A JWT-shaped bearer is a GitHub Actions ID token, never a papyri token
-    // (those are opaque `papyri_pat_…` strings), so it is safe to branch on
-    // shape before any DB lookup.
-    if (looksLikeJwt(bearer)) return authenticateOidc(bearer);
+    // A JWT-shaped bearer is a GitHub Actions OIDC token, never a papyri
+    // token (those are opaque `papyri_pat_…` strings), so it is safe to branch
+    // on shape before any DB lookup: verify GitHub's signature, then map the
+    // claims to a registered trusted publisher.
+    if (looksLikeJwt(bearer)) return authenticateOidc(bearer, request);
     const resolved = (await getAuthDb()).resolveUploadToken(bearer);
     if (resolved)
       return {
@@ -186,6 +150,68 @@ async function authenticateUpload(request: Request): Promise<UploadPrincipal | R
   return UNAUTHORIZED();
 }
 
+/** Why a verified OIDC token still does not authorize an upload. */
+const OIDC_REJECTION: Record<string, string> = {
+  "bad-claims": "the token's job_workflow_ref claim is not a workflow reference papyri understands",
+  "reusable-workflow":
+    "the publishing job runs in a reusable workflow from another repository; " +
+    "papyri only trusts workflows stored in the repository itself",
+  "no-match":
+    "no papyri project trusts this repository + workflow. Register it under the " +
+    "project's trusted publishers first",
+  "environment-mismatch":
+    "the trusted publisher for this workflow requires a GitHub Environment the job did not declare",
+  "owner-mismatch":
+    "this repository's owner id differs from the one recorded when the publisher was first used",
+};
+
+/**
+ * Authenticate a GitHub Actions OIDC token: verify GitHub's signature and the
+ * generic JWT claims, then match repository/workflow/environment against the
+ * `oidc_publishers` table. A 401 covers "not a token we can trust at all"; a
+ * verified token that no publisher covers gets a 403 naming the reason, since
+ * that is a configuration problem the caller can act on.
+ */
+async function authenticateOidc(
+  token: string,
+  request: Request
+): Promise<UploadPrincipal | Response> {
+  const audience = getOidcAudience(request.url);
+  if (audienceIsDerived()) {
+    console.warn(
+      "[oidc] neither PAPYRI_OIDC_AUDIENCE nor PAPYRI_SITE is set — falling back to the " +
+        "request origin as the OIDC audience. Set one of them in any real deployment."
+    );
+  }
+  const verified = await verifyGithubOidcToken(token, { audience });
+  if (!verified.ok) {
+    return respond({ ok: false, error: `OIDC token rejected: ${verified.error}` }, 401, {
+      "WWW-Authenticate": "Bearer",
+    });
+  }
+  const { claims } = verified;
+  const match = (await getAuthDb()).resolveOidcPublisher(claims);
+  if (!match.ok) {
+    console.warn(
+      `[oidc] refused ${claims.repository} (${claims.job_workflow_ref}): ${match.reason}`
+    );
+    return respond(
+      { ok: false, error: `OIDC token not authorized: ${OIDC_REJECTION[match.reason]}` },
+      403
+    );
+  }
+  return {
+    kind: "oidc",
+    project: match.publisher.project_name,
+    repository: claims.repository,
+    workflowRef: match.publisher.workflow_ref,
+    scope: match.publisher.scope,
+    // Derived from the claims, never from the request: a pull_request run owns
+    // exactly one preview namespace and cannot address another.
+    preview: previewRefFromClaims(claims),
+  };
+}
+
 /**
  * Authorize an already-authenticated principal to upload `project` (the
  * bundle's module name). Returns a 403 Response when not permitted, or null to
@@ -196,14 +222,15 @@ async function authorizeUploadProject(
   project: string
 ): Promise<Response | null> {
   if (principal.kind === "global" || principal.kind === "open") return null;
+  // A trusted publisher authorizes exactly the project it was registered for.
   if (principal.kind === "oidc") {
-    if (principal.projects.includes(project)) return null;
+    if (principal.project === project) return null;
     return respond(
       {
         ok: false,
         error:
-          `"${principal.claims.repository}" is not a trusted publisher for project ` +
-          `"${project}" (allowed: ${principal.projects.join(", ")})`,
+          `${principal.repository} (${principal.workflowRef}) is a trusted publisher for ` +
+          `project "${principal.project}", not "${project}"`,
       },
       403
     );
@@ -227,14 +254,35 @@ async function authorizeUploadProject(
 /**
  * Which namespace this upload targets: the main store (null) or a PR preview.
  *
- * An OIDC principal always writes into the preview its claims name — the query
- * string cannot move it. The deployment-wide token may name a preview
+ * An OIDC principal always writes where its claims say — a pull_request run
+ * into that pull request's preview, any other event into the published store;
+ * the query string cannot move it. The deployment-wide token may name a preview
  * explicitly (`?preview=owner/repo%2342`), which is how a preview is exercised
  * locally without minting GitHub tokens. Per-user tokens cannot: previews are
  * the CI path.
  */
 function resolveTargetPreview(principal: UploadPrincipal, url: URL): PreviewRef | null | Response {
-  if (principal.kind === "oidc") return principal.preview;
+  if (principal.kind === "oidc") {
+    // The event that minted the token decides the target, and the publisher's
+    // scope says whether it was trusted for that target. Registering a
+    // repository so contributors get preview links does not, by itself, let it
+    // overwrite published documentation — and vice versa.
+    const target = principal.preview ? "preview" : "release";
+    if (!scopeAllows(principal.scope, target)) {
+      return respond(
+        {
+          ok: false,
+          error:
+            `${principal.repository} (${principal.workflowRef}) is trusted to publish ` +
+            `${principal.scope === "preview" ? "pull-request previews" : "releases"} for ` +
+            `"${principal.project}", but this run would publish a ${target}. ` +
+            "Widen the trusted publisher's scope if that is intended.",
+        },
+        403
+      );
+    }
+    return principal.preview;
+  }
   const raw = url.searchParams.get("preview");
   if (!raw) return null;
   if (principal.kind !== "global" && principal.kind !== "open") {

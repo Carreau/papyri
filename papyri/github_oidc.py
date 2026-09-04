@@ -9,7 +9,7 @@ sends *that* as the bearer.
 
 The viewer verifies the signature against GitHub's public keys and derives the
 preview namespace from the claims, so nothing sensitive travels and nothing the
-client says can widen what the token may write. See ``viewer/src/lib/oidc.ts``.
+client says can widen what the token may write. See ``viewer/src/lib/github-oidc.ts``.
 """
 
 from __future__ import annotations
@@ -18,15 +18,17 @@ import json
 import os
 import urllib.parse
 import urllib.request
+from importlib.metadata import PackageNotFoundError, version
 
-#: Audience both ends default to. It must match the viewer's
-#: ``PAPYRI_OIDC_AUDIENCE`` exactly, so it is a fixed string rather than
-#: something derived from a URL (which could differ by a trailing slash).
-DEFAULT_AUDIENCE = "papyri"
-
-#: The Actions token endpoint is on GitHub's own infrastructure and answers
-#: immediately; a short bound keeps a hung runner from stalling the job.
+#: Bound on the two small HTTP calls involved (audience discovery and the
+#: token request). Both are quick metadata lookups; a finite bound stops a
+#: hung endpoint from stalling a CI job indefinitely.
 _TOKEN_TIMEOUT_S = 30
+
+try:
+    _PAPYRI_VERSION = version("papyri")
+except PackageNotFoundError:
+    _PAPYRI_VERSION = "0+unknown"
 
 
 class OidcUnavailable(RuntimeError):
@@ -46,17 +48,52 @@ def id_token_available() -> bool:
     )
 
 
-def default_audience() -> str:
-    """Audience to request, honouring ``$PAPYRI_OIDC_AUDIENCE``."""
-    return os.environ.get("PAPYRI_OIDC_AUDIENCE") or DEFAULT_AUDIENCE
+def resolve_audience(upload_url: str, override: str | None = None) -> str:
+    """Audience the viewer at ``upload_url`` expects in an ID token.
+
+    An ID token is bound to an audience, and the viewer only accepts tokens
+    carrying its own — that binding is what stops a token minted for another
+    service being replayed at papyri. Resolution order: an explicit override
+    (``--oidc-audience``), ``$PAPYRI_OIDC_AUDIENCE``, the value the viewer
+    publishes at ``/api/oidc/audience``, and finally the upload origin, which
+    is also that endpoint's own default when the deployment sets nothing.
+    """
+    if override:
+        return override
+    env = os.environ.get("PAPYRI_OIDC_AUDIENCE")
+    if env:
+        return env
+
+    parsed = urllib.parse.urlsplit(upload_url)
+    origin = f"{parsed.scheme}://{parsed.netloc}"
+    req = urllib.request.Request(
+        f"{origin}/api/oidc/audience",
+        method="GET",
+        headers={
+            "Accept": "application/json",
+            "User-Agent": f"papyri-upload/{_PAPYRI_VERSION}",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=_TOKEN_TIMEOUT_S) as resp:
+            audience = json.loads(resp.read()).get("audience")
+        if isinstance(audience, str) and audience:
+            return audience
+    except Exception:
+        # An older viewer, or one behind a proxy that hides the route: fall
+        # back to the origin rather than failing the upload here.
+        pass
+    return origin
 
 
-def request_id_token(audience: str | None = None) -> str:
-    """Ask the Actions runtime for an ID token with ``audience``.
+def request_id_token(audience: str) -> str:
+    """Ask the Actions runtime for an ID token bound to ``audience``.
 
-    Raises ``OidcUnavailable`` when the request environment is missing (not a
-    GitHub Actions run, or the job lacks ``id-token: write``) or the runtime
-    refuses.
+    Only works inside a GitHub Actions job that declares
+    ``permissions: id-token: write`` — that is what makes GitHub inject
+    ``ACTIONS_ID_TOKEN_REQUEST_URL`` / ``ACTIONS_ID_TOKEN_REQUEST_TOKEN`` into
+    the environment. Raises ``OidcUnavailable`` when they are absent or the
+    request fails.
     """
     request_url = os.environ.get("ACTIONS_ID_TOKEN_REQUEST_URL")
     request_token = os.environ.get("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
@@ -66,25 +103,19 @@ def request_id_token(audience: str | None = None) -> str:
             "Actions job whose permissions include `id-token: write`"
         )
 
-    aud = audience or default_audience()
-    parsed = urllib.parse.urlsplit(request_url)
-    query = urllib.parse.parse_qsl(parsed.query)
-    query.append(("audience", aud))
-    url = urllib.parse.urlunsplit(
-        (
-            parsed.scheme,
-            parsed.netloc,
-            parsed.path,
-            urllib.parse.urlencode(query),
-            "",
-        )
+    # safe="" so a URL-shaped audience (the usual case) is fully encoded — its
+    # slashes and colon must not read as query structure.
+    separator = "&" if urllib.parse.urlsplit(request_url).query else "?"
+    token_url = (
+        f"{request_url}{separator}audience={urllib.parse.quote(audience, safe='')}"
     )
     req = urllib.request.Request(
-        url,
+        token_url,
         method="GET",
         headers={
             "Authorization": f"Bearer {request_token}",
             "Accept": "application/json; api-version=2.0",
+            "User-Agent": f"papyri-upload/{_PAPYRI_VERSION}",
         },
     )
     try:

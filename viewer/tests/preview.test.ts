@@ -8,8 +8,10 @@ import {
   previewBase,
   previewDir,
   previewId,
+  previewRefFromClaims,
   previewRoot,
 } from "../src/lib/preview.ts";
+import { scopeAllows } from "../src/lib/auth-db.ts";
 import { linkForBundle, linkForQualname, viewerRoute } from "../src/lib/links.ts";
 import { previewContext, runInRequestContext } from "../src/lib/request-context.ts";
 import { urlBase } from "../src/lib/url-base.ts";
@@ -44,6 +46,43 @@ describe("preview identity", () => {
     const dir = previewDir(REF);
     expect(dir.startsWith(previewRoot())).toBe(true);
     expect(dir.endsWith("/numpy/numpy/pr42")).toBe(true);
+  });
+});
+
+describe("preview derived from OIDC claims", () => {
+  const base = {
+    repository: "numpy/numpy",
+    event_name: "pull_request",
+    ref: "refs/pull/42/merge",
+  };
+
+  it("names the pull request the run belongs to", () => {
+    expect(previewRefFromClaims(base)).toEqual({ owner: "numpy", repo: "numpy", pr: 42 });
+    expect(previewRefFromClaims({ ...base, ref: "refs/pull/42/head" })).toEqual({
+      owner: "numpy",
+      repo: "numpy",
+      pr: 42,
+    });
+  });
+
+  it("returns null for runs that own no preview", () => {
+    // A push publishes a release, not a preview.
+    expect(previewRefFromClaims({ ...base, event_name: "push", ref: "refs/heads/main" })).toBeNull();
+    // pull_request_target runs untrusted code with base-repo permissions.
+    expect(previewRefFromClaims({ ...base, event_name: "pull_request_target" })).toBeNull();
+    expect(previewRefFromClaims({ ...base, ref: "refs/heads/main" })).toBeNull();
+    expect(previewRefFromClaims({ repository: "numpy/numpy" })).toBeNull();
+  });
+});
+
+describe("publisher scope", () => {
+  it("gates each target independently", () => {
+    expect(scopeAllows("preview", "preview")).toBe(true);
+    expect(scopeAllows("preview", "release")).toBe(false);
+    expect(scopeAllows("release", "release")).toBe(true);
+    expect(scopeAllows("release", "preview")).toBe(false);
+    expect(scopeAllows("both", "preview")).toBe(true);
+    expect(scopeAllows("both", "release")).toBe(true);
   });
 });
 
@@ -121,55 +160,32 @@ describe("preview registry", () => {
   });
 });
 
-describe("trusted publishers", () => {
+describe("trusted publishers: preview scope", () => {
   let auth: AuthDb;
 
   beforeEach(() => {
     auth = new AuthDb(new Database(":memory:"));
     auth.createProject("numpy");
-    auth.createProject("scipy");
   });
   afterEach(() => auth.close());
 
-  it("maps a repository to the projects it may publish", () => {
+  it("defaults a new publisher to previews only", () => {
     const numpy = auth.getProjectByName("numpy")!;
-    auth.addOidcPublisher(numpy.id, "numpy/numpy");
-    expect(auth.projectsForRepository("numpy/numpy", ".github/workflows/docs.yml")).toEqual([
-      "numpy",
-    ]);
-    expect(auth.projectsForRepository("evil/numpy", ".github/workflows/docs.yml")).toEqual([]);
+    const pub = auth.createOidcPublisher(numpy.id, "numpy/numpy", "docs.yml");
+    expect(pub.scope).toBe("preview");
+    expect(scopeAllows(pub.scope, "release")).toBe(false);
   });
 
-  it("matches the repository case-insensitively", () => {
+  it("records an explicit scope and reads it back through resolve", () => {
     const numpy = auth.getProjectByName("numpy")!;
-    auth.addOidcPublisher(numpy.id, "NumPy/NumPy");
-    expect(auth.projectsForRepository("numpy/numpy", "any.yml")).toEqual(["numpy"]);
-  });
-
-  it("narrows to one workflow file when one is registered", () => {
-    const scipy = auth.getProjectByName("scipy")!;
-    auth.addOidcPublisher(scipy.id, "scipy/scipy", ".github/workflows/docs.yml");
-    expect(auth.projectsForRepository("scipy/scipy", ".github/workflows/docs.yml")).toEqual([
-      "scipy",
-    ]);
-    expect(auth.projectsForRepository("scipy/scipy", ".github/workflows/other.yml")).toEqual([]);
-  });
-
-  it("is idempotent and removable", () => {
-    const numpy = auth.getProjectByName("numpy")!;
-    auth.addOidcPublisher(numpy.id, "numpy/numpy");
-    auth.addOidcPublisher(numpy.id, "numpy/numpy");
-    expect(auth.listOidcPublishers()).toHaveLength(1);
-    const [row] = auth.listOidcPublishers();
-    expect(row!.project).toBe("numpy");
-    expect(auth.deleteOidcPublisher(row!.id)).toBe(true);
-    expect(auth.listOidcPublishers()).toHaveLength(0);
-  });
-
-  it("drops publishers with their project", () => {
-    const numpy = auth.getProjectByName("numpy")!;
-    auth.addOidcPublisher(numpy.id, "numpy/numpy");
-    auth.deleteProject(numpy.id);
-    expect(auth.listOidcPublishers()).toHaveLength(0);
+    auth.createOidcPublisher(numpy.id, "numpy/numpy", "release.yml", null, null, "both");
+    const match = auth.resolveOidcPublisher({
+      repository: "numpy/numpy",
+      repository_owner_id: "1",
+      job_workflow_ref: "numpy/numpy/.github/workflows/release.yml@refs/heads/main",
+    });
+    expect(match.ok).toBe(true);
+    if (!match.ok) return;
+    expect(match.publisher.scope).toBe("both");
   });
 });

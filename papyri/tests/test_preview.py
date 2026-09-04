@@ -18,10 +18,10 @@ from papyri.cli.drop_preview import _preview_endpoint, drop_preview
 from papyri.cli.upload import upload
 from papyri.github_oidc import (
     OidcUnavailable,
-    default_audience,
     id_token_available,
     preview_id_from_environment,
     request_id_token,
+    resolve_audience,
 )
 
 _upload_app = typer.Typer()
@@ -74,20 +74,19 @@ def test_id_token_requires_actions_environment(monkeypatch: Any) -> None:
     monkeypatch.delenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", raising=False)
     assert id_token_available() is False
     with pytest.raises(OidcUnavailable, match="id-token: write"):
-        request_id_token()
+        request_id_token("papyri")
 
 
 def test_id_token_request_carries_audience_and_runtime_token(monkeypatch: Any) -> None:
     for k, v in _ACTIONS_ENV.items():
         monkeypatch.setenv(k, v)
     monkeypatch.delenv("PAPYRI_OIDC_AUDIENCE", raising=False)
-    assert default_audience() == "papyri"
 
     with patch(
         "urllib.request.urlopen",
         return_value=_json_response({"value": "the.jwt.token"}),
     ) as mock_open:
-        assert request_id_token() == "the.jwt.token"
+        assert request_id_token("papyri") == "the.jwt.token"
 
     req: urllib.request.Request = mock_open.call_args[0][0]
     query = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(req.full_url).query))
@@ -103,7 +102,27 @@ def test_id_token_rejects_a_response_without_a_token(monkeypatch: Any) -> None:
         patch("urllib.request.urlopen", return_value=_json_response({"nope": 1})),
         pytest.raises(OidcUnavailable, match="carried no token"),
     ):
-        request_id_token()
+        request_id_token("papyri")
+
+
+def test_resolve_audience_prefers_override_then_env_then_discovery(
+    monkeypatch: Any,
+) -> None:
+    url = "https://docs.example.com/api/bundle"
+    monkeypatch.setenv("PAPYRI_OIDC_AUDIENCE", "from-env")
+    with patch("urllib.request.urlopen") as mock_open:
+        # An explicit --oidc-audience beats the environment...
+        assert resolve_audience(url, "from-flag") == "from-flag"
+        # ...and the environment beats asking the viewer.
+        assert resolve_audience(url) == "from-env"
+    mock_open.assert_not_called()
+
+    monkeypatch.delenv("PAPYRI_OIDC_AUDIENCE", raising=False)
+    with patch(
+        "urllib.request.urlopen",
+        return_value=_json_response({"audience": "https://docs.example.com"}),
+    ):
+        assert resolve_audience(url) == "https://docs.example.com"
 
 
 def test_preview_id_from_environment(monkeypatch: Any) -> None:
@@ -124,6 +143,8 @@ def test_upload_preview_sends_the_oidc_token(tmp_path: Path, monkeypatch: Any) -
     for k, v in _ACTIONS_ENV.items():
         monkeypatch.setenv(k, v)
     monkeypatch.delenv("PAPYRI_UPLOAD_TOKEN", raising=False)
+    # Pin the audience so no discovery request joins the mocked sequence.
+    monkeypatch.setenv("PAPYRI_OIDC_AUDIENCE", "papyri")
     bundle = _make_bundle(tmp_path / "mypkg_1.0")
 
     responses = [
@@ -165,6 +186,7 @@ def test_upload_preview_fails_clearly_outside_actions(
 ) -> None:
     monkeypatch.delenv("ACTIONS_ID_TOKEN_REQUEST_URL", raising=False)
     monkeypatch.delenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", raising=False)
+    monkeypatch.setenv("PAPYRI_OIDC_AUDIENCE", "papyri")
     bundle = _make_bundle(tmp_path / "mypkg_1.0")
 
     with patch("urllib.request.urlopen") as mock_open:
@@ -244,6 +266,7 @@ def test_drop_preview_by_id(monkeypatch: Any) -> None:
 def test_drop_preview_uses_oidc_in_actions(monkeypatch: Any) -> None:
     for k, v in _ACTIONS_ENV.items():
         monkeypatch.setenv(k, v)
+    monkeypatch.setenv("PAPYRI_OIDC_AUDIENCE", "papyri")
     responses = [
         _json_response({"value": "id.token.value"}),
         _json_response({"ok": True, "id": "numpy/numpy#42", "dropped": True}),

@@ -1,10 +1,10 @@
 ---
-// Admin: live PR preview namespaces + the trusted publishers that may create
-// them. Previews expire on their own and the papyri action drops one when its
-// pull request closes; this page is the manual override and the audit view.
+// Admin: live PR preview namespaces. Previews expire on their own and the
+// papyri action drops one when its pull request closes; this page is the
+// manual override and the audit view. Registering the workflows allowed to
+// create them is project-level self-service and lives on /settings.
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import PreviewsPanel from "../../components/PreviewsPanel.tsx";
-import TrustedPublisherPanel from "../../components/TrustedPublisherPanel.tsx";
 import { getAuthDb } from "../../lib/auth-db.ts";
 import { parsePreviewId, previewBase } from "../../lib/preview.ts";
 import { previewBundles } from "../../lib/preview-store.ts";
@@ -22,8 +22,6 @@ const previews = await Promise.all(
     };
   })
 );
-const publishers = auth.listOidcPublishers();
-const projects = auth.listProjects().map((p) => p.name);
 ---
 
 <AdminLayout title="Admin · Previews — Papyri" active="previews">
@@ -34,6 +32,10 @@ const projects = auth.listProjects().map((p) => p.name);
 
   <section class="admin-section">
     <h2>Trusted publishers</h2>
-    <TrustedPublisherPanel client:load initialPublishers={publishers} projects={projects} />
+    <p class="admin-help">
+      Which GitHub workflows may publish previews (and releases) lives with the projects themselves,
+      on <a href="/settings">your settings page</a> — a project member registers their own repository
+      there; as an admin you see every project's.
+    </p>
   </section>
 </AdminLayout>

@@ -151,8 +151,9 @@ exploration and are kept because they stand on their own:
       pages run the *same* routes; `links.ts` prefixes URLs through
       `url-base.ts` and islands read the prefix from
       `<meta name="papyri-url-base">`. Uploads authenticate with a GitHub
-      Actions OIDC token (`lib/oidc.ts`) whose claims — not the client —
-      name the preview. Registry + 30-day TTL sweep in
+      Actions OIDC token (`lib/github-oidc.ts`) whose claims — not the
+      client — name the preview; a publisher's `scope` says whether it may
+      publish previews, releases or both. Registry + 30-day TTL sweep in
       `lib/preview-store.ts`; `DELETE /api/preview` drops one.
 - [x] **Raw bundle archive.** Every `PUT /api/bundle` archives the
       compressed `.papyri.gz` bytes to `_raw/<pkg>/<ver>.papyri.gz`

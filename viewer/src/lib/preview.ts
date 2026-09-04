@@ -110,6 +110,28 @@ export function previewDir(ref: PreviewRef): string {
 }
 
 /**
+ * Preview namespace a verified OIDC token is allowed to write, derived
+ * entirely from its claims. Null when the run is not a pull request — a push
+ * or tag build owns no preview, and publishes a release instead (the
+ * publisher's scope decides whether it may, see `auth-db.ts`).
+ *
+ * `pull_request_target` runs with the *base* repository's permissions on
+ * untrusted code and is deliberately not accepted.
+ */
+export function previewRefFromClaims(claims: {
+  repository: string;
+  ref?: string;
+  event_name?: string;
+}): PreviewRef | null {
+  if (claims.event_name !== "pull_request") return null;
+  const m = /^refs\/pull\/(\d+)\/(?:merge|head)$/.exec(claims.ref ?? "");
+  if (!m) return null;
+  const [owner, repo] = claims.repository.split("/");
+  if (!owner || !repo) return null;
+  return makePreviewRef(owner, repo, m[1]!);
+}
+
+/**
  * Default lifetime of a preview namespace. Every push to every PR of every
  * enrolled repository uploads a bundle, so previews must expire on their own;
  * an explicit drop on merge/close is the fast path, not the only one.

@@ -50,9 +50,10 @@ inputs:
     default: ""
   audience:
     description: >-
-      OIDC audience to request. Must match the viewer's PAPYRI_OIDC_AUDIENCE.
+      OIDC audience to request. Leave empty (the default) to use the value the
+      viewer publishes at /api/oidc/audience; set it only to override that.
     required: false
-    default: papyri
+    default: ""
 
 outputs:
   preview-url:
@@ -76,7 +77,11 @@ runs:
     - name: Drop the preview
       if: inputs.mode == 'drop'
       shell: bash
-      run: papyri drop-preview --url "${PAPYRI_URL}" --oidc-audience "${PAPYRI_AUDIENCE}"
+      run: |
+        set -euo pipefail
+        args=(--url "${PAPYRI_URL}")
+        [ -n "${PAPYRI_AUDIENCE}" ] && args+=(--oidc-audience "${PAPYRI_AUDIENCE}")
+        papyri drop-preview "${args[@]}"
       env:
         PAPYRI_URL: ${{ inputs.url }}
         PAPYRI_AUDIENCE: ${{ inputs.audience }}
@@ -124,8 +129,9 @@ runs:
           echo "papyri gen produced no bundle under ~/.papyri/data/" >&2
           exit 1
         fi
-        papyri upload --preview --oidc-audience "${PAPYRI_AUDIENCE}" \
-          --url "${PAPYRI_URL}" "${bundles[@]}" | tee "${RUNNER_TEMP}/papyri-urls.txt"
+        args=(--preview --url "${PAPYRI_URL}")
+        [ -n "${PAPYRI_AUDIENCE}" ] && args+=(--oidc-audience "${PAPYRI_AUDIENCE}")
+        papyri upload "${args[@]}" "${bundles[@]}" | tee "${RUNNER_TEMP}/papyri-urls.txt"
         url=$(tail -n 1 "${RUNNER_TEMP}/papyri-urls.txt")
         echo "preview-url=${url}" >> "${GITHUB_OUTPUT}"
         {

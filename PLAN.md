@@ -678,9 +678,14 @@ Caveat: the free-compute
 argument holds for public repos on github.com; private repos and non-GitHub
 CI use the token path and pay their own compute.
 
-- **PR previews are implemented; what is left is adoption.** The Action
-  (`action.yml`), OIDC trusted publishing, the isolated preview namespace and
-  its eviction all landed (see the done log). Remaining, in order:
+- **PR previews and trusted publishing are implemented; what is left is
+  adoption.** The Action (`action.yml`), OIDC upload auth, the isolated
+  preview namespace and its eviction all landed (see the done log). The
+  earlier worry that "a fork PR upload would land as a real version" is
+  closed by construction: a `pull_request` run publishes into that pull
+  request's own preview namespace, and a publisher's `scope` (default
+  `preview`) decides whether it may publish releases at all. Remaining, in
+  order:
   - *First adoption target: IPython.* Register the trusted publisher, add the
     two-job workflow, and fix whatever the first real project trips over. The
     bar stays "works on the first try in a repo whose tests already pass in CI".
@@ -699,6 +704,8 @@ CI use the token path and pay their own compute.
     once, or how large one may be; the 30-day TTL is the only limit. Add a
     per-repository cap (and a per-preview byte ceiling) before opening
     registration beyond invited projects.
+  - *Non-GitHub CI* stays on per-project tokens; there is no second OIDC
+    provider and no plan for one until someone asks.
 - **Staging for release candidates (previews do not cover this).** The preview
   namespace answers the PR case only: identity comes from an OIDC claim, so
   there is no way to stage an RC bundle for human review, and no `promote`
@@ -751,12 +758,15 @@ Newest areas first; each line names the key symbol/file.
   prefixes every URL it builds via `url-base.ts`; hydrated islands read the
   same prefix from `<meta name="papyri-url-base">`. Admin/account/upload
   routes are refused under a preview prefix.
-- Auth: `PUT /api/bundle` accepts a GitHub Actions ID token as bearer
-  (`lib/oidc.ts` — JWKS fetch + RS256 verify with `node:crypto`, no new
-  dependency); the preview identity comes from the `repository` + `ref`
-  claims, never the client. `oidc_publishers` (auth DB) maps
-  `(repository, workflow) → project`; admin UI at `/admin/previews`.
-  `pull_request_target` is rejected.
+- Auth: shares the trusted-publishing path (`lib/github-oidc.ts`, see Auth /
+  security below) — no second verifier. Which target a verified token may
+  write is decided by the run, not the request: `previewRefFromClaims`
+  (`preview.ts`) reads `event_name`/`ref`, so a `pull_request` run publishes
+  into its own preview and anything else into the published store, and
+  `oidc_publishers.scope` (`preview` | `release` | `both`, default `preview`)
+  says which of the two that publisher was trusted for. `pull_request_target`
+  is rejected. Registration is project-member self-service at `/settings`;
+  `/admin/previews` lists live previews.
 - Lifecycle: `previews` registry table + `preview-store.ts`
   (`touchPreview` / `dropPreview` / `sweepExpiredPreviews`), 30-day TTL swept
   opportunistically on upload; `DELETE /api/preview` drops one (OIDC token
@@ -943,6 +953,21 @@ Newest areas first; each line names the key symbol/file.
   personal `upload_tokens` (SHA-256 stored) minted at `/settings`; `PUT
   /api/bundle` authenticates bearer → principal, authorizes per `module`
   (global `PAPYRI_UPLOAD_TOKEN` = escape hatch).
+- Trusted publishing from GitHub Actions (OIDC): `github-oidc.ts` verifies
+  GitHub's RS256 ID token (pinned issuer + alg, JWKS via OIDC discovery pinned
+  to the issuer origin and cached, audience from
+  `PAPYRI_OIDC_AUDIENCE`/`PAPYRI_SITE`), `oidc_publishers` maps
+  repository + workflow (+ optional environment) to a project with the owner id
+  pinned on first use; `PUT /api/bundle` gains an `oidc` principal scoped to
+  that one project. Managed at `/settings` (`TrustedPublisherPanel.tsx`,
+  `/api/oidc/publishers`), audience advertised at `/api/oidc/audience`,
+  minted client-side by `papyri upload --oidc` (auto inside Actions).
+  Reusable workflows from another repository are refused. A publisher's
+  `scope` (`preview` | `release` | `both`, default `preview`) gates which
+  target it may publish, so enrolling a repository for PR doc previews does
+  not by itself let it overwrite published documentation. Verification also
+  bounds the token size and the JWKS fetch, and compares the audience in
+  constant time.
 - Path traversal closed via `safeJoin` (`fs-safe.ts`) in `FsBlobStore`/
   `FsRawStore`; `_safe_child` in `pack.py` for `papyri unpack`.
 - `javascript:`/`data:` URL blocking: `isSafeUrl` (`url-safety.ts`) enforced at

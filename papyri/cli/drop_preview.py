@@ -70,7 +70,11 @@ def drop_preview(
         str | None,
         typer.Option(
             "--oidc-audience",
-            help="Audience for the OIDC token; must match the viewer's PAPYRI_OIDC_AUDIENCE.",
+            help=(
+                "Audience to request for the OIDC token.  Overrides "
+                "$PAPYRI_OIDC_AUDIENCE and the value the viewer publishes at "
+                "/api/oidc/audience."
+            ),
         ),
     ] = None,
 ) -> None:
@@ -99,10 +103,16 @@ def drop_preview(
     if preview_id:
         endpoint += "?" + urllib.parse.urlencode({"id": preview_id})
     else:
-        from papyri.github_oidc import OidcUnavailable, request_id_token
+        from papyri.github_oidc import (
+            OidcUnavailable,
+            request_id_token,
+            resolve_audience,
+        )
 
         try:
-            effective_token = request_id_token(oidc_audience)
+            effective_token = request_id_token(
+                resolve_audience(effective_url, oidc_audience)
+            )
         except OidcUnavailable as exc:
             typer.echo(f"error: {exc}", err=True)
             typer.echo(

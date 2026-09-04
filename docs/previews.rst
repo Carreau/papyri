@@ -38,7 +38,8 @@ straight out of the claims:
 
 ============================ ==========================================
 ``repository``               ``numpy/numpy`` — who is uploading
-``workflow_ref``             which workflow file minted the token
+``job_workflow_ref``         which workflow file is actually running
+``repository_owner_id``      the owner's stable numeric id
 ``event_name`` / ``ref``     which pull request the preview belongs to
 ============================ ==========================================
 
@@ -46,10 +47,27 @@ The preview namespace is derived from those claims alone, so a workflow can
 only ever write into the preview of its own pull request. No secret is
 configured on the project side.
 
-For a repository to publish, an administrator of the viewer registers it once,
-under *Admin → Previews → Trusted publishers*: a ``(project, repository,
-workflow)`` triple, where an empty workflow means "any workflow in that
-repository". Without that entry every OIDC upload is refused.
+For a repository to publish, someone who already has upload rights on the
+project registers it once, on the viewer's ``/settings`` page, under
+*Trusted publishers*. A registration names the project, the repository, the
+workflow file, optionally a GitHub Environment the job must declare, and what
+the workflow may publish:
+
+``preview``
+    Pull-request previews only. The default, and what a project enrolling for
+    doc previews wants: it does not let the repository touch published
+    documentation.
+``release``
+    The published store only.
+``both``
+    Either, with the target decided by the event that minted the token.
+
+Without a matching registration every OIDC upload is refused. Two further
+rules are enforced on the claims themselves: the workflow must live in the
+repository that is running it (a reusable workflow borrowed from elsewhere is
+refused), and the repository's numeric owner id is pinned on first use, so
+releasing an account name and having someone else register it does not inherit
+the trust.
 
 Adding the Action to a project
 ------------------------------
@@ -115,6 +133,10 @@ Doing it by hand
     papyri upload --preview --url https://papyri.example.com/api/bundle \
         ~/.papyri/data/numpy_2.3.5
 
+The audience the token is minted for comes from the viewer itself
+(``GET /api/oidc/audience``); ``--oidc-audience`` overrides it if a deployment
+needs something else.
+
 Outside GitHub Actions there is no OIDC token to be had, so name the namespace
 explicitly and authenticate with the deployment-wide upload token — the viewer
 accepts an explicit ``--preview-id`` from that token only::
@@ -129,8 +151,11 @@ Server configuration
 ===============================  ==========================================
 ``PAPYRI_PREVIEW_DIR``           Root of the preview namespaces (default
                                  ``~/.papyri/previews``).
-``PAPYRI_OIDC_AUDIENCE``         Audience the ID token must carry (default
-                                 ``papyri``). Must match the uploading side's
-                                 ``--oidc-audience``.
-``PAPYRI_OIDC_DISABLED``         Set to ``1`` to refuse OIDC uploads entirely.
+``PAPYRI_OIDC_AUDIENCE``         Audience the ID token must carry. The viewer
+                                 publishes it at ``GET /api/oidc/audience``
+                                 and the client asks for it, so the two ends
+                                 agree without being configured twice. When
+                                 unset it falls back to ``PAPYRI_SITE``; a
+                                 deployment should set one of them (see
+                                 ``viewer/DEPLOY.md``).
 ===============================  ==========================================

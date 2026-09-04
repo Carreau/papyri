@@ -19,16 +19,15 @@ import { timingSafeEqual } from "node:crypto";
 import { respond } from "../../lib/api-utils.ts";
 import { getAuthDb, SESSION_COOKIE } from "../../lib/auth-db.ts";
 import { getUploadToken } from "../../lib/backends.ts";
-import { makePreviewRef, previewBase, previewId, type PreviewRef } from "../../lib/preview.ts";
-import { dropPreview, previewBundles } from "../../lib/preview-store.ts";
 import {
-  looksLikeJwt,
-  oidcEnabled,
-  OidcError,
+  makePreviewRef,
+  previewBase,
+  previewId,
   previewRefFromClaims,
-  verifyGithubOidcToken,
-  workflowFile,
-} from "../../lib/oidc.ts";
+  type PreviewRef,
+} from "../../lib/preview.ts";
+import { dropPreview, previewBundles } from "../../lib/preview-store.ts";
+import { getOidcAudience, looksLikeJwt, verifyGithubOidcToken } from "../../lib/github-oidc.ts";
 
 export const prerender = false;
 
@@ -61,44 +60,36 @@ async function authorizePreview(
   const globalToken = await getUploadToken();
 
   if (bearer && looksLikeJwt(bearer)) {
-    if (!oidcEnabled()) {
-      return respond({ ok: false, error: "OIDC is disabled on this server" }, 403);
+    const verified = await verifyGithubOidcToken(bearer, {
+      audience: getOidcAudience(url),
+    });
+    if (!verified.ok) {
+      return respond({ ok: false, error: `OIDC token rejected: ${verified.error}` }, 401, {
+        "WWW-Authenticate": "Bearer",
+      });
     }
-    try {
-      const claims = await verifyGithubOidcToken(bearer);
-      const ref = previewRefFromClaims(claims);
-      if (!ref) {
-        return respond(
-          {
-            ok: false,
-            error: `token names no pull request (event_name=${claims.event_name}, ref=${claims.ref})`,
-          },
-          403
-        );
-      }
-      // Same trust check as the upload path: the repository must be a
-      // registered publisher, so an arbitrary repository cannot drive this
-      // endpoint even for its own PR numbers.
-      const projects = (await getAuthDb()).projectsForRepository(
-        claims.repository,
-        workflowFile(claims)
+    const { claims } = verified;
+    const ref = previewRefFromClaims(claims);
+    if (!ref) {
+      return respond(
+        { ok: false, error: "this token names no pull request, so it owns no preview to drop" },
+        403
       );
-      if (projects.length === 0) {
-        return respond(
-          { ok: false, error: `"${claims.repository}" is not a registered trusted publisher` },
-          403
-        );
-      }
-      return ref;
-    } catch (err) {
-      if (err instanceof OidcError) {
-        return respond({ ok: false, error: `OIDC token rejected: ${err.message}` }, 401, {
-          "WWW-Authenticate": "Bearer",
-        });
-      }
-      console.error("OIDC verification error:", err);
-      return respond({ ok: false, error: "could not verify OIDC token" }, 500);
     }
+    // Same trust check as the upload path: the run must match a registered
+    // publisher, so an arbitrary repository cannot drive this endpoint even
+    // for its own PR numbers.
+    const match = (await getAuthDb()).resolveOidcPublisher(claims);
+    if (!match.ok) {
+      return respond(
+        {
+          ok: false,
+          error: `no trusted publisher covers ${claims.repository} (${claims.job_workflow_ref})`,
+        },
+        403
+      );
+    }
+    return ref;
   }
 
   const privileged =

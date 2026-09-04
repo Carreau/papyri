@@ -2810,7 +2810,7 @@ def test_role_unset_placeholder_renders_verbatim_and_warns() -> None:
     assert v.diagnostics.records[0]["target"] == "pkg.mod"
 
 
-def test_role_unset_standalone_logs(caplog) -> None:
+def test_role_unset_standalone_logs(caplog: pytest.LogCaptureFixture) -> None:
     # Outside gen (no Diagnostics bound) it still renders and warns via log.
     from papyri.directives import role_unset
 
@@ -2832,7 +2832,9 @@ def test_method_role_resolves_but_warns_nonstandard() -> None:
         aliases={},
         version="1.0",
     )
-    out = v.replace_InlineRole(InlineRole(domain=None, role="method", value="pkg.mod.K.f"))
+    out = v.replace_InlineRole(
+        InlineRole(domain=None, role="method", value="pkg.mod.K.f")
+    )
     assert isinstance(out[0], CrossRef)
     assert out[0].reference == RefInfo("pkg", "1.0", "module", "pkg.mod:K.f")
     codes = [r["code"] for r in v.diagnostics.records]

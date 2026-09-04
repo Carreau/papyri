@@ -14,7 +14,6 @@ from typing import Any, TypeVar, cast
 
 from .directives import (
     admonition_handler,
-    role_unset,
     attention_handler,
     block_math_handler,
     caution_handler,
@@ -35,6 +34,7 @@ from .directives import (
     note_handler,
     only_handler,
     raw_handler,
+    role_unset,
     rubric_handler,
     seealso_handler,
     tip_handler,
@@ -49,8 +49,8 @@ from .error_collector import (
     W_NONSTANDARD_ROLE,
     W_UNKNOWN_ROLE,
     W_UNRESOLVED_DEFAULT_ROLE,
-    W_UNSET_ROLE,
     W_UNRESOLVED_REF,
+    W_UNSET_ROLE,
     W_UNSUPPORTED_SUBSTITUTION,
     DiagnosticConfig,
     Diagnostics,
@@ -291,9 +291,7 @@ def resolve_(
                 # link, indistinguishable from an exact hit.
                 # Dedupe through the RefInfo: the colon key and its dotted
                 # alias both match the suffix but name the same object.
-                subset = {
-                    k_path_map[q] for q in endswith("." + abs_ref, sub1)
-                }
+                subset = {k_path_map[q] for q in endswith("." + abs_ref, sub1)}
                 if len(subset) == 1:
                     return next(iter(subset))
                 # Zero or many hits: unresolved. Ambiguity must surface as
@@ -807,13 +805,9 @@ class DirectiveVisiter(TreeReplacer):
             if handler is role_unset:
                 # The declared placeholder: bind the role name and route its
                 # warning through Diagnostics as W-unset-role so every use
-                # stays visible (the lambda is lazy — ``self.diagnostics`` is
-                # assigned below).
-                handler = partial(
-                    role_unset,
-                    role=k,
-                    warn=lambda msg: self.diagnostics.emit(W_UNSET_ROLE, self.qa, msg),
-                )
+                # stays visible. ``_unset_role_warn`` reads ``self.diagnostics``
+                # / ``self.qa`` at call time (both are assigned below).
+                handler = partial(role_unset, role=k, warn=self._unset_role_warn)
             self._role_handlers[k] = handler
 
         self.known_refs = frozenset(known_refs)
@@ -948,6 +942,15 @@ class DirectiveVisiter(TreeReplacer):
         ``log.warning``.
         """
         self.diagnostics.emit(W_MALFORMED_DIRECTIVE, self.qa, message)
+
+    def _unset_role_warn(self, message: str) -> None:
+        """Report a use of a ``role_unset`` placeholder mapping as ``W-unset-role``.
+
+        Bound as the ``warn`` callback of every ``[global.roles]`` entry that
+        maps to ``papyri.directives.role_unset``, so each use is recorded
+        against the current object rather than logged loosely.
+        """
+        self.diagnostics.emit(W_UNSET_ROLE, self.qa, message)
 
     def collect_substitutions(self, *sections: Section) -> None:
         """Pre-scan sections for SubstitutionDef nodes to build the substitution map.
@@ -1255,8 +1258,7 @@ class DirectiveVisiter(TreeReplacer):
         # it in [global.roles] or downgrade W-unknown-role (error by
         # default, so gen fails fast).
         is_crossref_role = directive.role in ("ref", "doc") or (
-            directive.role in _PYTHON_OBJECT_ROLES
-            and directive.domain in (None, "py")
+            directive.role in _PYTHON_OBJECT_ROLES and directive.domain in (None, "py")
         )
         if not is_crossref_role:
             role_key = (

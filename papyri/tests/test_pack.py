@@ -1164,9 +1164,7 @@ def test_lint_bundle_counts_unimplemented_nodes() -> None:
     from papyri.nodes import Section, Unimplemented
 
     doc = GeneratedDoc.new()
-    doc._content = {
-        "summary": Section([Unimplemented("rubric", ".. rubric:: x")], ())
-    }
+    doc._content = {"summary": Section([Unimplemented("rubric", ".. rubric:: x")], ())}
     bundle = _make_bundle_node(api={"mod": doc})
 
     issues = lint_bundle(bundle)

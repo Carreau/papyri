@@ -2,11 +2,21 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 /**
+ * Absolute path to the bundle data root (blob store + raw archive).
+ * Override with PAPYRI_INGEST_DIR.
+ */
+export function ingestDir(): string {
+  return process.env.PAPYRI_INGEST_DIR ?? join(homedir(), ".papyri", "ingest");
+}
+
+/**
  * Absolute path to the SQLite graph DB used by the Node/local backend.
- * Override with PAPYRI_INGEST_DB for testing or custom installations.
+ * Override with PAPYRI_INGEST_DB for testing or custom installations;
+ * otherwise it sits inside `ingestDir()`, so pointing PAPYRI_INGEST_DIR
+ * somewhere else moves the DB with it.
  */
 export function ingestDb(): string {
-  return process.env.PAPYRI_INGEST_DB ?? join(homedir(), ".papyri", "ingest", "papyri.db");
+  return process.env.PAPYRI_INGEST_DB ?? join(ingestDir(), "papyri.db");
 }
 
 /**

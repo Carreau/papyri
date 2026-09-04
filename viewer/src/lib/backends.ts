@@ -20,6 +20,7 @@ import {
   type GraphDb,
   type RawStore,
 } from "papyri-ingest";
+import { ingestDb, ingestDir } from "./paths.ts";
 // Type-only import; erased at compile time.
 import type BetterSqlite3 from "better-sqlite3";
 
@@ -32,17 +33,20 @@ export interface Backends {
 async function nodeBackends(): Promise<Backends> {
   const fs = await import(/* @vite-ignore */ "node:fs");
   const path = await import(/* @vite-ignore */ "node:path");
-  const os = await import(/* @vite-ignore */ "node:os");
   const url = await import(/* @vite-ignore */ "node:url");
   const sqliteMod = (await import(/* @vite-ignore */ "better-sqlite3")) as {
     default: typeof BetterSqlite3;
   };
   const Database = sqliteMod.default;
 
-  const ingestDir = process.env.PAPYRI_INGEST_DIR ?? path.join(os.homedir(), ".papyri", "ingest");
-  const dbPath = path.join(ingestDir, "papyri.db");
+  // Both paths come from `lib/paths.ts` so PAPYRI_INGEST_DIR and
+  // PAPYRI_INGEST_DB are honoured here exactly as documented; the DB may
+  // live outside the data root, so create its directory too.
+  const dataDir = ingestDir();
+  const dbPath = ingestDb();
 
-  fs.mkdirSync(ingestDir, { recursive: true });
+  fs.mkdirSync(dataDir, { recursive: true });
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   const db = new Database(dbPath) as BetterSqlite3.Database;
   for (const sql of ["PRAGMA journal_mode = WAL", "PRAGMA synchronous = NORMAL"]) {
     db.prepare(sql).run();
@@ -57,9 +61,9 @@ async function nodeBackends(): Promise<Backends> {
   applyMigrations(db, migrationsPath);
 
   return {
-    blobStore: new FsBlobStore(ingestDir),
+    blobStore: new FsBlobStore(dataDir),
     graphDb: new SqliteGraphDb(db),
-    rawStore: new FsRawStore(ingestDir),
+    rawStore: new FsRawStore(dataDir),
   };
 }
 

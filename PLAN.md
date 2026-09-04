@@ -602,6 +602,26 @@ Old raw archives in the CBOR format are re-generated, not migrated
 
 ## Open work — Viewer / ingest
 
+- **Design & layout review follow-ups (2026-09, `viewer/design-review/`).**
+  The review found seven P1 problems (class/module pages render the summary
+  *after* a 116-chip member wall; developer tooling in reader navigation;
+  no prose measure and the active API-tree item never visible on load; 34
+  undefined CSS custom properties leaving admin/login/settings on
+  hard-coded light fallbacks; inverted heading hierarchy; mobile horizontal
+  scroll + `aria-hidden` focusable toggles; three unrelated searches). Plan:
+  (1) land the "Direction 0" token set, type scale and quick wins
+  (`viewer/design-review/prototypes/0-evolve/`) as the first viewer PR;
+  (2) restructure towards "Direction B" one route at a time (header search
+  with scope tabs, contextual sidebar, kind-grouped member tables whose rows
+  expand on demand — which *is* the inline-members feature below and
+  removes the always-rendered `InlineMemberDoc` islands, "On this page" on
+  API pages, overview absorbing `/project/<pkg>/`). Two decisions to make
+  before (2): section tabs in the navbar vs. sidebar sections for guides;
+  search-first home with an upload feed vs. cards. Gen-side data bugs the
+  review surfaced: numpydoc `Returns` on `InteractiveShell.run_cell` ships
+  as raw `Returns / -------` text; module pages carry an untitled arbitrary
+  section duplicating the summary ("Additional content"); `item_type`
+  exposes metaclass names (`MetaHasTraits`) and says `function` for methods.
 - **"0 errors / N warnings" badge per bundle.** Gen records resolved
   diagnostics under `papyri.json`'s `diagnostics` key, but it's a list of dicts
   and `pack._read_meta` only lifts *scalar* manifest keys into `Bundle.extra`,

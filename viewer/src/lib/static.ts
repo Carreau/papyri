@@ -11,10 +11,15 @@
 // The flag is a build-time constant substituted by Vite (see the `buildDefine`
 // block in `astro.config.mjs`), so dead branches are eliminated from the
 // client bundles rather than shipped and skipped.
+//
+// It is deliberately *not* named after the `PAPYRI_STATIC` env var that
+// selects the mode: Astro exposes process env vars on `import.meta.env`
+// itself, and a same-named var wins over the injected constant — which would
+// silently hand every caller the string "1" instead of a boolean.
 
 /** True while rendering a static snapshot (`PAPYRI_STATIC=1 astro build`). */
 export function isStaticBuild(): boolean {
-  return import.meta.env.PAPYRI_STATIC === true;
+  return import.meta.env.PAPYRI_STATIC_BUILD === true;
 }
 
 /**

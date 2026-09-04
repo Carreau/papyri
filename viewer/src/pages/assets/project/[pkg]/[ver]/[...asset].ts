@@ -10,6 +10,7 @@ import { extname } from "node:path";
 import type { APIRoute } from "astro";
 import { loadAsset } from "../../../../../lib/ir-reader.ts";
 import { getBackends } from "../../../../../lib/backends.ts";
+import { assetParams } from "../../../../../lib/static-paths.ts";
 import { slugToQualname } from "../../../../../lib/slugs.ts";
 
 const MIME: Record<string, string> = {
@@ -28,7 +29,11 @@ const MIME: Record<string, string> = {
   ".pdf": "application/pdf",
 };
 
-export const prerender = false;
+// Every URL this route serves, for the static build. Ignored in server mode,
+// where routes are rendered on demand.
+export async function getStaticPaths() {
+  return (await assetParams(await getBackends())).map((params) => ({ params }));
+}
 
 export const GET: APIRoute = async ({ params }) => {
   const { pkg, ver, asset } = params;

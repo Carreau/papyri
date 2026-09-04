@@ -28,24 +28,23 @@ const PAPYRI_SITE = process.env.PAPYRI_SITE;
 // false` and land in `dist/server/`, absent from the snapshot.
 const PAPYRI_STATIC = process.env.PAPYRI_STATIC === "1";
 
-// Sub-path the site is served from (e.g. "/docs/" behind a reverse proxy or on
-// a project page host). Astro rewrites its own asset URLs for it; internal
-// links go through `withBase()` in src/lib/links.ts.
-const PAPYRI_BASE = process.env.PAPYRI_BASE ?? "/";
-
 // Build-time constants injected into import.meta.env.
 // Statically replaced by Vite at bundle time.
 const buildDefine = {
   "import.meta.env.PAPYRI_BUILD_COMMIT": JSON.stringify(PAPYRI_BUILD_COMMIT),
   "import.meta.env.PAPYRI_BUILD_ADAPTER": JSON.stringify("node"),
-  "import.meta.env.PAPYRI_STATIC": JSON.stringify(PAPYRI_STATIC),
+  "import.meta.env.PAPYRI_STATIC_BUILD": JSON.stringify(PAPYRI_STATIC),
 };
 
 export default defineConfig({
   output: PAPYRI_STATIC ? "static" : "server",
-  base: PAPYRI_BASE,
   adapter: node({ mode: "standalone" }),
   integrations: [react()],
+  // Sessions are cookie-backed, and the Node adapter wires a default driver.
+  // A snapshot has no sessions (see lib/static.ts), and leaving them on makes
+  // the session runtime read request headers on every prerendered page, which
+  // Astro warns about once per page.
+  ...(PAPYRI_STATIC ? { session: false } : {}),
   server: { port: 4321 },
   vite: { define: buildDefine },
   // All mutating endpoints carry their own bearer-token / session-cookie

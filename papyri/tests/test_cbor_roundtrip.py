@@ -250,3 +250,28 @@ def test_nested_directive_is_not_serializable() -> None:
         encoder.encode(sec)
     with pytest.raises(NotImplementedError, match="someunknowndirective"):
         sec.to_json()
+
+
+def test_serializer_raises_instead_of_writing_null_on_type_mismatch() -> None:
+    # Regression: `node_serializer.serialize` had no terminal branch, so a
+    # value that matched none of its cases fell off the end and returned
+    # None implicitly. The field was then written to the bundle as JSON
+    # `null` and its content was lost with no diagnostic.
+    import pytest
+
+    from papyri.node_serializer import serialize
+
+    with pytest.raises(AssertionError, match="cannot serialize"):
+        serialize(object(), Text)
+
+
+def test_classvars_are_not_serialized() -> None:
+    # ClassVar annotations describe the class, not the instance, so they
+    # carry no IR. `serde.get_type_hints` filters them out; the node
+    # serializer resolves its hints through the same helper, otherwise every
+    # GeneratedDoc would grow a `sections` key holding JSON null.
+    from papyri.doc import GeneratedDoc
+    from papyri.node_serializer import gth
+
+    assert "sections" in GeneratedDoc.__annotations__
+    assert "sections" not in gth(GeneratedDoc)

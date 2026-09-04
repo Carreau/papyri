@@ -239,6 +239,19 @@ layers. Do not write CBOR into the bundle directory or JSON into the artifact.
   targets, doc-target maps), convert at the boundaries where each form is
   created, and let mypy reject cross-form mixing so those guards become
   type errors instead of runtime heuristics.
+- **Role handlers as configured, stateful objects (deferred).** Today a
+  `[global.roles]` handler is a bare callable `(value) -> nodes`, with
+  per-bundle state smuggled in ad hoc (the visitor `partial`-binds `role=`
+  and `warn=` onto `role_unset`; `:ghpull:` reads the visitor's slug).
+  Mirror the direction chosen for directives: a role handler could be a
+  class constructed once from its config options (init args/kwargs, like
+  `[global.directives]` table entries already allow) carrying its own
+  state, with a method for the actual dispatch `(value, ctx)` and
+  state-mutating hooks the visitor calls as it moves — typically "now
+  entering page/object X" — so handlers that need the current location
+  (link builders, per-page counters) get it without global lookups. Defer
+  until a handler actually needs it; `role_unset`/`role_verbatim`/
+  `role_text`/`role_drop` are fine as plain functions.
 - **`DirectiveContext` injection (context, not globals).** Directive handlers
   reach bundle state through ad-hoc closures (`make_image_handler` &c.) and,
   historically, module globals. Define an explicit `DirectiveContext` (at least

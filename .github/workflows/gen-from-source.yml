@@ -111,6 +111,46 @@ jobs:
               "pypi_name": "traitlets"
             },
             {
+              "lib": "ipykernel",
+              "repo": "https://github.com/ipython/ipykernel.git",
+              "tags": ["v7.3.0", "main"],
+              "clone_dir": "ipykernel",
+              "config": "examples/ipykernel.toml",
+              "gen_flags": "",
+              "install_cmd": "",
+              "pypi_name": "ipykernel"
+            },
+            {
+              "lib": "jupyter_core",
+              "repo": "https://github.com/jupyter/jupyter_core.git",
+              "tags": ["v5.9.1", "main"],
+              "clone_dir": "jupyter_core",
+              "config": "examples/jupyter_core.toml",
+              "gen_flags": "",
+              "install_cmd": "",
+              "pypi_name": "jupyter-core"
+            },
+            {
+              "lib": "jupyter_client",
+              "repo": "https://github.com/jupyter/jupyter_client.git",
+              "tags": ["v8.10.0", "main"],
+              "clone_dir": "jupyter_client",
+              "config": "examples/jupyter_client.toml",
+              "gen_flags": "",
+              "install_cmd": "",
+              "pypi_name": "jupyter-client"
+            },
+            {
+              "lib": "nbformat",
+              "repo": "https://github.com/jupyter/nbformat.git",
+              "tags": ["v5.11.1", "main"],
+              "clone_dir": "nbformat",
+              "config": "examples/nbformat.toml",
+              "gen_flags": "",
+              "install_cmd": "",
+              "pypi_name": "nbformat"
+            },
+            {
               "lib": "scikit-image",
               "repo": "https://github.com/scikit-image/scikit-image.git",
               "tags": ["main"],

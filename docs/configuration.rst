@@ -375,6 +375,11 @@ The diagnostic codes papyri currently emits:
      - A docstring section heading was normalized to a canonical numpydoc
        section (trailing ``:``, missing trailing ``s``, or a known
        misspelling).  Never silent — fix the heading at the source.
+   * - ``W-unset-role``
+     - ``warning``
+     - A role is mapped to ``papyri.directives:role_unset`` — a declared
+       placeholder rendered as inline code.  Keeps gen green while the
+       role's real handling is undecided; replace the mapping once decided.
    * - ``W-unknown-role``
      - ``error``
      - An inline role papyri does not know: not a built-in handler and not
@@ -644,6 +649,13 @@ Three ready-made handlers cover the common cases:
    mpltype  = 'papyri.directives:role_verbatim'  # render as inline code
    somerole = 'papyri.directives:role_text'      # render as plain text
    internal = 'papyri.directives:role_drop'      # drop entirely
+   newrole  = 'papyri.directives:role_unset'     # placeholder: inline code + W-unset-role
+
+``role_unset`` is the deliberate stopgap: it renders like
+``role_verbatim`` but emits ``W-unset-role`` on every use, so a project
+can acknowledge a role exists (keeping gen green) while its real handling
+is undecided — and grep for ``role_unset`` later to find what is still
+outstanding.
 
 Without a mapping, an unknown role is a hard failure: gen emits
 ``W-unknown-role`` (default severity ``error``, so the run exits

@@ -81,6 +81,33 @@ def role_drop(value: str) -> list[Any]:
     return []
 
 
+def role_unset(
+    value: str, *, role: str = "?", warn: DirectiveWarn = _log_warn
+) -> list[Any]:
+    """Placeholder role handler: renders like ``role_verbatim`` but warns.
+
+    Map a project-local role to it to *acknowledge* the role exists without
+    deciding its rendering yet — gen stays green (no ``W-unknown-role``
+    error), the role stays visible (a ``W-unset-role`` warning on every
+    use), and the config string is easy to grep for when the real handler
+    gets written::
+
+        [global.roles]
+        mpltype = 'papyri.directives:role_unset'
+
+    Inside ``papyri gen`` the visitor binds ``role`` and ``warn`` so the
+    warning carries the role name and reaches the Diagnostics collector.
+    """
+    from .nodes import InlineCode
+
+    warn(
+        f"role :{role}: is mapped to role_unset — placeholder rendered as "
+        f"inline code; write a handler or map it to role_verbatim / "
+        f"role_text / role_drop"
+    )
+    return [InlineCode(value)]
+
+
 def drop(argument: str, options: dict[str, str], content: str) -> list[Any]:
     """Directive handler that silently discards the directive and returns nothing.
 

@@ -14,6 +14,7 @@ from typing import Any, TypeVar, cast
 
 from .directives import (
     admonition_handler,
+    role_unset,
     attention_handler,
     block_math_handler,
     caution_handler,
@@ -47,6 +48,7 @@ from .error_collector import (
     W_MISSING_GITHUB_SLUG,
     W_UNKNOWN_ROLE,
     W_UNRESOLVED_DEFAULT_ROLE,
+    W_UNSET_ROLE,
     W_UNRESOLVED_REF,
     W_UNSUPPORTED_SUBSTITUTION,
     DiagnosticConfig,
@@ -797,9 +799,20 @@ class DirectiveVisiter(TreeReplacer):
         # ``[global.roles]`` — project-local inline roles ("mpltype" or
         # "domain:role") mapped to a handler that receives the role body.
         # Consulted in ``replace_InlineRole`` before the built-in registry.
-        self._role_handlers: dict[str, Callable[[str], list[Any] | None]] = {
-            k: obj_from_qualname(v) for k, v in (roles or {}).items()
-        }
+        self._role_handlers: dict[str, Callable[[str], list[Any] | None]] = {}
+        for k, v in (roles or {}).items():
+            handler = obj_from_qualname(v)
+            if handler is role_unset:
+                # The declared placeholder: bind the role name and route its
+                # warning through Diagnostics as W-unset-role so every use
+                # stays visible (the lambda is lazy — ``self.diagnostics`` is
+                # assigned below).
+                handler = partial(
+                    role_unset,
+                    role=k,
+                    warn=lambda msg: self.diagnostics.emit(W_UNSET_ROLE, self.qa, msg),
+                )
+            self._role_handlers[k] = handler
 
         self.known_refs = frozenset(known_refs)
         self.local_refs = frozenset(local_refs)

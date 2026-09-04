@@ -141,6 +141,14 @@ W_SECTION_HEADING_NORMALIZED = _register(
     "section (trailing ':', missing trailing 's', or a known misspelling). "
     "The rewrite is recorded, never silent — fix the heading at the source.",
 )
+W_UNSET_ROLE = _register(
+    "W-unset-role",
+    Severity.WARNING,
+    "A role is mapped to papyri.directives:role_unset — a declared "
+    "placeholder rendered as inline code. The mapping keeps gen green while "
+    "the role's real handling is undecided; replace it with a handler (or "
+    "role_verbatim / role_text / role_drop) once decided.",
+)
 W_UNKNOWN_ROLE = _register(
     "W-unknown-role",
     Severity.ERROR,

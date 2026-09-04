@@ -2784,3 +2784,37 @@ def test_standard_std_domain_roles_are_builtin_verbatim() -> None:
         assert isinstance(out[0], InlineCode), (domain, role)
         assert out[0].value == "X"
     assert v.diagnostics.records == []
+
+
+def test_role_unset_placeholder_renders_verbatim_and_warns() -> None:
+    # role_unset is the declared stopgap: no W-unknown-role error, the
+    # body renders as inline code, and every use emits W-unset-role naming
+    # the role so it stays visible and greppable.
+    from papyri.error_collector import W_UNSET_ROLE
+
+    v = DirectiveVisiter(
+        qa="pkg.mod",
+        known_refs=frozenset(),
+        local_refs=frozenset(),
+        aliases={},
+        version="1.0",
+        roles={"mpltype": "papyri.directives:role_unset"},
+    )
+    out = v.replace_InlineRole(InlineRole(domain=None, role="mpltype", value="color"))
+    assert len(out) == 1
+    assert isinstance(out[0], InlineCode)
+    assert out[0].value == "color"
+    codes = [r["code"] for r in v.diagnostics.records]
+    assert codes == [W_UNSET_ROLE]
+    assert "mpltype" in v.diagnostics.records[0]["message"]
+    assert v.diagnostics.records[0]["target"] == "pkg.mod"
+
+
+def test_role_unset_standalone_logs(caplog) -> None:
+    # Outside gen (no Diagnostics bound) it still renders and warns via log.
+    from papyri.directives import role_unset
+
+    with caplog.at_level("WARNING", logger="papyri"):
+        out = role_unset("x")
+    assert isinstance(out[0], InlineCode)
+    assert any("role_unset" in r.getMessage() for r in caplog.records)

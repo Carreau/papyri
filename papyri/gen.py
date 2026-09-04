@@ -2154,13 +2154,15 @@ class Gen:
                 )
                 doc_blob.arbitrary = tuple(dv.visit(s) for s in arbitrary)
                 doc_blob.example_section_data = dv.visit(doc_blob.example_section_data)
-                doc_blob._content = {
-                    k: dv.visit(v) for (k, v) in doc_blob._content.items()
-                }
-
-                for section in ["Extended Summary", "Summary", "Notes", *sections_]:
-                    if section in doc_blob.content:
-                        doc_blob.content[section] = dv.visit(doc_blob.content[section])
+                # Update in place: `GeneratedDoc.content` is an
+                # `_OrderedDictProxy` that captured this dict by reference at
+                # construction, so rebinding `_content` to a fresh dict would
+                # leave the proxy pointing at the old one. This visits every
+                # section exactly once; the named-section loop that used to
+                # follow was a second pass over a subset of these same keys,
+                # writing into the dict the rebind had just orphaned.
+                for _k in list(doc_blob._content):
+                    doc_blob._content[_k] = dv.visit(doc_blob._content[_k])
 
                 doc_blob.see_also = tuple(
                     sorted(set(doc_blob.see_also), key=lambda sa: sa.name.value)
@@ -2205,7 +2207,6 @@ class Gen:
                         existing = doc_blob._content["Summary"]
                         if isinstance(existing, Section):
                             # Create a new Section (don't mutate the existing one in case it's shared)
-                            # Note: use direct _content assignment, not the proxy, because the proxy may be stale
                             doc_blob._content["Summary"] = Section(
                                 children=(sentinel, *existing.children),
                                 title=existing.title,

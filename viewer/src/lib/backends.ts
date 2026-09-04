@@ -5,10 +5,21 @@
  * filesystem + SQLite under `~/.papyri/ingest/` (or the paths set by
  * `PAPYRI_INGEST_DIR` / `PAPYRI_INGEST_DB`).
  *
- * The Node-side modules are loaded via dynamic `import()` so Vite/Rollup can
- * tree-shake them in future build targets.
+ * Node built-ins and the native `better-sqlite3` binding are loaded via dynamic
+ * `import()` so Vite/Rollup can tree-shake them in future build targets.
+ * `papyri-ingest` is imported statically: it is a workspace package whose
+ * `import` condition points at TypeScript source, so it must be bundled rather
+ * than left as a runtime external.
  */
-import { FsRawStore, type BlobStore, type GraphDb, type RawStore } from "papyri-ingest";
+import {
+  applyMigrations,
+  FsBlobStore,
+  FsRawStore,
+  SqliteGraphDb,
+  type BlobStore,
+  type GraphDb,
+  type RawStore,
+} from "papyri-ingest";
 // Type-only import; erased at compile time.
 import type BetterSqlite3 from "better-sqlite3";
 
@@ -19,7 +30,6 @@ export interface Backends {
 }
 
 async function nodeBackends(): Promise<Backends> {
-  const ingest = await import(/* @vite-ignore */ "papyri-ingest");
   const fs = await import(/* @vite-ignore */ "node:fs");
   const path = await import(/* @vite-ignore */ "node:path");
   const os = await import(/* @vite-ignore */ "node:os");
@@ -44,11 +54,11 @@ async function nodeBackends(): Promise<Backends> {
   // directly — instead we let Node.js search node_modules upward at runtime.
   const sentinelUrl = import.meta.resolve("papyri-ingest/migrations/0001_init.sql");
   const migrationsPath = path.dirname(url.fileURLToPath(sentinelUrl));
-  ingest.applyMigrations(db, migrationsPath);
+  applyMigrations(db, migrationsPath);
 
   return {
-    blobStore: new ingest.FsBlobStore(ingestDir),
-    graphDb: new ingest.SqliteGraphDb(db),
+    blobStore: new FsBlobStore(ingestDir),
+    graphDb: new SqliteGraphDb(db),
     rawStore: new FsRawStore(ingestDir),
   };
 }

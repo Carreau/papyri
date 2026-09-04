@@ -1,13 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { ingestDb, isSafeSegment } from "../src/lib/paths.ts";
+import { ingestDb, ingestDir, isSafeSegment } from "../src/lib/paths.ts";
 
 describe("paths", () => {
   let orig: NodeJS.ProcessEnv;
   beforeEach(() => {
     orig = { ...process.env };
     delete process.env.PAPYRI_INGEST_DB;
+    delete process.env.PAPYRI_INGEST_DIR;
   });
   afterEach(() => {
     process.env = orig;
@@ -18,6 +19,26 @@ describe("paths", () => {
   });
 
   it("ingestDb respects PAPYRI_INGEST_DB", () => {
+    process.env.PAPYRI_INGEST_DB = "/tmp/custom.db";
+    expect(ingestDb()).toBe("/tmp/custom.db");
+  });
+
+  it("ingestDir defaults to ~/.papyri/ingest", () => {
+    expect(ingestDir()).toBe(join(homedir(), ".papyri", "ingest"));
+  });
+
+  it("ingestDir respects PAPYRI_INGEST_DIR", () => {
+    process.env.PAPYRI_INGEST_DIR = "/tmp/data";
+    expect(ingestDir()).toBe("/tmp/data");
+  });
+
+  it("ingestDb follows PAPYRI_INGEST_DIR when PAPYRI_INGEST_DB is unset", () => {
+    process.env.PAPYRI_INGEST_DIR = "/tmp/data";
+    expect(ingestDb()).toBe(join("/tmp/data", "papyri.db"));
+  });
+
+  it("PAPYRI_INGEST_DB wins over PAPYRI_INGEST_DIR", () => {
+    process.env.PAPYRI_INGEST_DIR = "/tmp/data";
     process.env.PAPYRI_INGEST_DB = "/tmp/custom.db";
     expect(ingestDb()).toBe("/tmp/custom.db");
   });

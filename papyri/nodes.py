@@ -404,10 +404,16 @@ class Strong(Node):
 @register(4049)
 class Link(Node):
     """Inline hyperlink.  ``url`` is the destination; ``title`` is the
-    hover text (empty string when absent)."""
+    hover text (empty string when absent).
+
+    Children are the full inline vocabulary rather than only the static
+    subset: markdown link text routinely nests emphasis and images
+    (``[**bold** link](url)``, ``[![badge](img)](url)``), which RST's
+    hyperlink syntax cannot express.
+    """
 
     type = "link"
-    children: tuple[StaticPhrasingContent, ...]
+    children: tuple[LinkContent, ...]
     url: str
     title: str
 
@@ -449,7 +455,7 @@ class Paragraph(Node):
     """Block-level paragraph containing inline content."""
 
     type = "paragraph"
-    children: tuple[PhrasingContent | UnimplementedInline, ...]
+    children: tuple[ParagraphContent | UnimplementedInline, ...]
 
 
 @register(4053)
@@ -667,7 +673,14 @@ class Target(Node):
 
 @register(4062)
 class Image(Node):
-    """Inline image.  ``url`` is the asset path; ``alt`` is the alt text."""
+    """Image.  ``url`` is the asset path; ``alt`` is the alt text.
+
+    Block-level from RST (``.. image::`` is a directive) and inline from
+    markdown (``![alt](url)``).  It is therefore in ``FlowContent``,
+    ``ParagraphContent`` and ``LinkContent`` — but *not* in
+    ``PhrasingContent``, which would also make it legal in a
+    ``Section.title``.
+    """
 
     type = "image"
     url: str
@@ -1178,6 +1191,17 @@ StaticPhrasingContent: TypeAlias = (
 )
 
 PhrasingContent: TypeAlias = StaticPhrasingContent | Emphasis | Strong | Link
+
+# Link text: everything inline except a nested Link, which markdown and RST
+# both forbid.  ``Image`` is admitted because ``[![badge](img)](url)`` is in
+# nearly every README.
+LinkContent: TypeAlias = StaticPhrasingContent | Emphasis | Strong | Image
+
+# Paragraph body: phrasing plus ``Image``.  Markdown's ``![alt](url)`` is
+# genuinely inline and can sit mid-sentence, but ``Image`` is deliberately
+# kept out of ``PhrasingContent`` itself so it cannot appear in a
+# ``Section.title``.
+ParagraphContent: TypeAlias = PhrasingContent | Image
 
 FlowContent: TypeAlias = (
     Code

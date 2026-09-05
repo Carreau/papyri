@@ -1,6 +1,6 @@
 # Viewer design & layout review (2026-09)
 
-A review of the papyri viewer as it renders today, three alternative directions, and
+A review of the papyri viewer as it renders today, four directions (one incremental, three alternatives), and
 clickable prototypes for each. Generated against commit `8a9661c` with IPython 9.17.1
 and papyri 0.0.10 ingested into a local dev server.
 
@@ -9,7 +9,7 @@ and papyri 0.0.10 ingested into a local dev server.
 | [`01-design-review.md`](01-design-review.md) | Visual system: tokens, contrast (computed WCAG tables for both themes), type scale, components, IR-node skin, brand, accessibility. Ends with a replacement token set + type scale and 15 quick wins. |
 | [`02-layout-review.md`](02-layout-review.md) | Information architecture, page templates, sidebar, grid/responsive (measured at 390–1920), navigation, where PLAN.md features land. Ends with page-template / sidebar / responsive specs and 15 quick wins. |
 | [`03-benchmarks.md`](03-benchmarks.md) | How docs.rs, pkg.go.dev, hexdocs, pydata, Furo, Material, Docusaurus, Starlight, MDN, Stripe and DevDocs solve each page type, and three coherent directions. |
-| [`prototypes/`](prototypes/) | Self-contained HTML prototypes, one directory per direction (see below). Open any `.html` directly in a browser, or use `prototypes/gallery.html` to flip between directions, pages, viewport widths and themes. |
+| [`prototypes/`](prototypes/) | Self-contained HTML prototypes, one directory per direction (see below). Open any `.html` directly in a browser. A single-page gallery that flips between directions, pages, viewport widths and themes is published at <https://claude.ai/code/artifact/9c1ef4e8-f8ca-4b5d-814e-191091b51fb6>; rebuild it locally with `node tools/build-gallery.mjs prototypes /tmp/gallery.html`. |
 | [`shots/`](shots/) | Curated screenshots of the current viewer referenced by the reviews. `tools/screenshots.mjs` regenerates the full set (needs Playwright and a running `pnpm dev` with the two bundles). |
 
 ## Executive summary
@@ -55,7 +55,7 @@ migration note listing the `viewer/src/` files that change.
 
 | Direction | One line | Optimises for | Main cost |
 | --- | --- | --- | --- |
-| **0 · Evolve** | Today's markup + the token set + every quick win. `_build/evolve.css` is a section-for-section drop-in candidate for `global.css` + `ir-nodes.css`. | Lowest risk: one CSS swap plus ~10 template edits, every class name survives. | Global 180-row tree, card-grid home and per-route sidebar stay; the flat member wall becomes a table but the tree still has no sibling collapse. |
+| **0 · Evolve** | Today's markup + the token set + every quick win. `evolve.css` is a section-for-section drop-in candidate for `global.css` + `ir-nodes.css`. | Lowest risk: one CSS swap plus ~10 template edits, every class name survives. | Global 180-row tree, card-grid home and per-route sidebar stay; the flat member wall becomes a table but the tree still has no sibling collapse. |
 | **A · Reference** | docs.rs / pkg.go.dev-style dense reference: per-page left rail (sections → members by kind → siblings → collapsed tree), no right column, kind-grouped `<details>` member tables, metadata strip, search-first home with an upload feed. | API readers at numpy/scipy scale; keyboard users; density that looks intentional. | Narrative docs get the same shell; cross-module orientation relies on trail + siblings + search. |
 | **B · Reading-first** | pydata / Furo-style three columns done properly: sticky navbar with section tabs (Guide · API · Examples) and header search, *contextual* left rail (toctree on guide pages, module tree on API pages), "On this page" on every page including API pages, A's page anatomy inside. | The audience papyri targets first (people who already read numpy/pandas docs in this layout); narrative and API share one visual system; smallest redesign of the three restructures. | Three columns cost width at 1024–1280; two rails to keep in sync per route. |
 | **C · App shell** | DevDocs / hexdocs-style persistent left column that *is* navigation and search (all packages as disclosure rows with version state; `pkg ` + Tab scoping), one 72ch column with a Stripe-style sticky secondary panel, a preferences page instead of a header gear. | The hosted multi-package promise: cross-package browsing and search as the primary interaction, scales to hundreds of bundles. | It is an app: fights Astro per-route SSR (needs `<ClientRouter>` + `transition:persist`), no-JS/SEO floor, virtualised trees, loses the Sphinx look maintainers expect. |
@@ -67,7 +67,7 @@ Take **B as the destination, in two steps, borrowing from A and C**:
 1. **Land Direction 0 first** (one or two PRs, days of work). The token set, type scale and the
    ~30 quick wins from both reviews are independent of any structural decision, remove every P1
    contrast/a11y/mobile bug, and reorder the class page so the summary comes first. The
-   `_build/evolve.css` file in `prototypes/0-evolve/` is the starting point; its README lists
+   `evolve.css` file in `prototypes/0-evolve/` is the starting point; its README lists
    the ten template edits and the file each one touches.
 2. **Then restructure towards B** one route at a time: header search with scope tabs (`/`,
    `Ctrl+K`) as the single search entry and the future home of cross-bundle search; contextual

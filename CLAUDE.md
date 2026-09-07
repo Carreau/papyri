@@ -236,6 +236,7 @@ viewer/                   TypeScript Astro web renderer
       links.ts            Link helpers
       slugs.ts            URL slug utilities
       auth.ts             Auth helpers
+      github-oidc.ts      GitHub Actions OIDC token verification (trusted publishing)
       api-utils.ts        API response helpers
       version-utils.ts    PEP 440 version comparison
       theme.ts            Theme detection
@@ -260,6 +261,7 @@ viewer/                   TypeScript Astro web renderer
         nodes.json.ts, ir-stats.json.ts, search.json.ts, text-search.json.ts
         [pkg]/[ver]/{nodes,raw,text-search}.json.ts  Per-bundle data endpoints
         auth/login.ts, auth/logout.ts  Session login/logout
+        oidc/audience.ts, oidc/publishers.ts  GitHub OIDC trusted publishing
         clear.ts, clear-raw.ts, health.json.ts, stats.ts
       admin/              Admin panel (auth-gated)
       login.astro         Login page
@@ -355,8 +357,9 @@ the graphstore and blob store is rebuildable via `POST /api/reingest`.
 | `PAPYRI_UPLOAD_TOKEN` | `papyri upload`, viewer | Bearer token for `PUT /api/bundle`. On the viewer this is the deployment-wide "global" upload token (CI / local-dev escape hatch) that may upload any project; per-user project-scoped tokens (minted at `/settings`, prefix `papyri_pat_`) are accepted at the same endpoint. On the client it is the token `papyri upload` sends — set it to either form. |
 | `PAPYRI_INGEST_DIR` | viewer | Bundle data root (default `~/.papyri/ingest`) |
 | `PAPYRI_INGEST_DB` | viewer | SQLite graph DB (default `~/.papyri/ingest/papyri.db`) |
-| `PAPYRI_AUTH_DB` | viewer | SQLite auth DB — users, sessions, roles, projects, memberships, upload tokens; separate from the graph store (default `~/.papyri/auth.db`) |
-| `PAPYRI_SITE` | viewer build | Canonical external origin for canonical-URL generation behind a reverse proxy |
+| `PAPYRI_AUTH_DB` | viewer | SQLite auth DB — users, sessions, roles, projects, memberships, upload tokens, OIDC trusted publishers; separate from the graph store (default `~/.papyri/auth.db`) |
+| `PAPYRI_SITE` | viewer build | Canonical external origin for canonical-URL generation behind a reverse proxy; also the fallback OIDC audience |
+| `PAPYRI_OIDC_AUDIENCE` | viewer, `papyri upload` | Audience a GitHub Actions OIDC token must carry for trusted publishing. Viewer: what `PUT /api/bundle` requires and `GET /api/oidc/audience` advertises (falls back to `PAPYRI_SITE`, then the request origin with a warning). Client: skips audience discovery and mints the token for this value. |
 | `PAPYRI_USERNAME` / `PAPYRI_PASSWORD` | viewer | Seed an initial admin user into the auth DB on first run (only when no users exist) |
 | `PAPYRI_DEV_SEED` | viewer | Seed a demo admin (`admin`/`password`) when the auth DB is empty: `1` forces (even in a build), `0` disables; unset = on under `pnpm dev` only |
 | `PAPYRI_VERSION` | `papyri upload` | Overrides the `papyri-upload/<version>` User-Agent string |

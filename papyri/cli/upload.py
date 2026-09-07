@@ -34,6 +34,10 @@ _DEDUP_TIMEOUT_S = 30
 # doesn't trip it prematurely.
 _UPLOAD_IDLE_TIMEOUT_S = 300
 
+# Timeout for the two small OIDC metadata requests (audience discovery, and
+# GitHub's token endpoint). Both are quick JSON round-trips.
+_OIDC_TIMEOUT_S = 30
+
 # Maximum uncompressed size accepted for a .papyri member inside a .zip.
 # A crafted zip could advertise a small compressed size that expands
 # arbitrarily; reject before full expansion if reported or actual size exceeds
@@ -120,6 +124,85 @@ def _resolve_upload_params(
     return effective_url, effective_token
 
 
+def _oidc_audience(url: str) -> str:
+    """Return the OIDC audience the viewer at ``url`` expects.
+
+    An OIDC ID token is bound to an audience, and the viewer only accepts
+    tokens carrying its own — that binding is what stops a token minted for
+    another service being replayed at papyri. The viewer publishes the value at
+    ``/api/oidc/audience``; ``$PAPYRI_OIDC_AUDIENCE`` overrides it, and the
+    upload origin is the fallback when the endpoint is unreachable (an older
+    viewer, say), which is also that endpoint's own default.
+    """
+    override = os.environ.get("PAPYRI_OIDC_AUDIENCE")
+    if override:
+        return override
+
+    parsed = urllib.parse.urlsplit(url)
+    origin = f"{parsed.scheme}://{parsed.netloc}"
+    req = urllib.request.Request(
+        f"{origin}/api/oidc/audience",
+        method="GET",
+        headers={
+            "Accept": "application/json",
+            "User-Agent": f"papyri-upload/{_PAPYRI_VERSION}",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=_OIDC_TIMEOUT_S) as resp:
+            audience = json.loads(resp.read()).get("audience")
+        if isinstance(audience, str) and audience:
+            return audience
+    except Exception:
+        pass
+    return origin
+
+
+def _github_oidc_token(audience: str) -> str:
+    """Mint a GitHub Actions OIDC ID token for ``audience``.
+
+    Only works inside a GitHub Actions job that declares
+    ``permissions: id-token: write`` — that is what makes GitHub inject
+    ``ACTIONS_ID_TOKEN_REQUEST_URL`` / ``ACTIONS_ID_TOKEN_REQUEST_TOKEN`` into
+    the environment. Raises ``RuntimeError`` when they are absent or the
+    request fails.
+    """
+    request_url = os.environ.get("ACTIONS_ID_TOKEN_REQUEST_URL")
+    request_token = os.environ.get("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+    if not request_url or not request_token:
+        raise RuntimeError(
+            "no GitHub Actions OIDC token available: "
+            "ACTIONS_ID_TOKEN_REQUEST_URL/ACTIONS_ID_TOKEN_REQUEST_TOKEN are unset. "
+            "Inside a workflow, add `permissions:\n  id-token: write` to the job."
+        )
+
+    separator = "&" if urllib.parse.urlsplit(request_url).query else "?"
+    # safe="" so a URL-shaped audience (the usual case) is fully encoded — its
+    # slashes and colon must not read as query structure.
+    token_url = (
+        f"{request_url}{separator}audience={urllib.parse.quote(audience, safe='')}"
+    )
+    req = urllib.request.Request(
+        token_url,
+        method="GET",
+        headers={
+            "Authorization": f"Bearer {request_token}",
+            "Accept": "application/json; api-version=2.0",
+            "User-Agent": f"papyri-upload/{_PAPYRI_VERSION}",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=_OIDC_TIMEOUT_S) as resp:
+            value = json.loads(resp.read()).get("value")
+    except Exception as exc:
+        raise RuntimeError(
+            f"could not obtain a GitHub Actions OIDC token: {exc}"
+        ) from exc
+    if not isinstance(value, str) or not value:
+        raise RuntimeError("GitHub returned an empty OIDC token")
+    return value
+
+
 def _bundle_already_uploaded(
     url: str, pkg: str, version: str, bundle_hash: str, token: str | None
 ) -> bool:
@@ -199,6 +282,20 @@ def upload(
             ),
         ),
     ] = None,
+    oidc: Annotated[
+        bool | None,
+        typer.Option(
+            "--oidc/--no-oidc",
+            help=(
+                "Authenticate with a GitHub Actions OIDC token (trusted "
+                "publishing) instead of a stored bearer token.  "
+                "Default: automatic — used when no token is configured and the "
+                "run is inside GitHub Actions with `id-token: write`.  "
+                "--oidc requires it (and overrides any token); --no-oidc "
+                "disables it."
+            ),
+        ),
+    ] = None,
     verbose: Annotated[
         bool,
         typer.Option(
@@ -261,6 +358,15 @@ def upload(
     **URL resolution order**: ``--url`` flag > ``--to`` target > ``$PAPYRI_UPLOAD_URL``
     env var > ``http://localhost:4321/api/bundle``.
 
+    **Trusted publishing (GitHub Actions)**: inside a workflow job that grants
+    ``permissions: id-token: write``, and with no token configured, the upload
+    authenticates with a short-lived GitHub OIDC token instead.  The viewer
+    verifies GitHub's signature and matches the repository + workflow against
+    the project's registered trusted publishers, so no secret is stored
+    anywhere — which is also why this is the only path that works for a
+    workflow triggered by a fork pull request.  ``--oidc`` requires that path;
+    ``--no-oidc`` disables it.
+
     Deduplication: before each upload the SHA-256 of the artifact is checked
     against the viewer (a ``GET`` to the same endpoint).  When the server
     already holds an identical bundle for that ``(module, version)`` the
@@ -276,6 +382,26 @@ def upload(
     except (KeyError, ValueError, RuntimeError) as exc:
         typer.echo(f"error: {exc}", err=True)
         raise typer.Exit(1) from exc
+
+    # Trusted publishing. `--oidc` demands an OIDC token (and supersedes any
+    # configured bearer token); with no flag we mint one only when nothing else
+    # authenticates us and we are demonstrably inside a GitHub Actions job that
+    # asked for `id-token: write` — that combination is unambiguous, and it is
+    # the only credential a fork-PR workflow can get at all.
+    in_actions = bool(
+        os.environ.get("ACTIONS_ID_TOKEN_REQUEST_URL")
+        and os.environ.get("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+    )
+    if oidc or (oidc is None and effective_token is None and in_actions):
+        try:
+            audience = _oidc_audience(effective_url)
+            effective_token = _github_oidc_token(audience)
+            typer.echo(
+                f"using a GitHub Actions OIDC token (audience {audience})", err=True
+            )
+        except RuntimeError as exc:
+            typer.echo(f"error: {exc}", err=True)
+            raise typer.Exit(1) from exc
 
     ok = True
     total = len(paths)

@@ -4,6 +4,7 @@ import AccountSettingsPanel from "../components/AccountSettingsPanel.tsx";
 import GithubSettingsPanel from "../components/GithubSettingsPanel.tsx";
 import UploadTokenPanel from "../components/UploadTokenPanel.tsx";
 import PasskeyPanel from "../components/PasskeyPanel.tsx";
+import TrustedPublisherPanel from "../components/TrustedPublisherPanel.tsx";
 import { getSessionUser } from "../lib/auth.ts";
 import { getAuthDb } from "../lib/auth-db.ts";
 import "../styles/admin.css";
@@ -25,6 +26,12 @@ const tokens = auth.listUploadTokens(user.id);
 const projects = user.is_admin
   ? auth.listProjects().map((p) => p.name)
   : auth.listUserProjects(user.id);
+// Trusted publishers of the same projects: an admin sees every registration,
+// everyone else only those of the projects they belong to.
+const allPublishers = auth.listOidcPublishers();
+const publishers = user.is_admin
+  ? allPublishers
+  : allPublishers.filter((pub) => projects.includes(pub.project_name));
 const passkeys = auth.listPasskeyCredentials(user.id).map((c) => ({
   id: c.id,
   name: c.name,
@@ -53,6 +60,9 @@ const passkeys = auth.listPasskeyCredentials(user.id).map((c) => ({
 
       <h2 class="settings-section-title">Upload tokens</h2>
       <UploadTokenPanel client:load initial={tokens} projects={projects} isAdmin={user.is_admin} />
+
+      <h2 class="settings-section-title">Trusted publishers (GitHub Actions)</h2>
+      <TrustedPublisherPanel client:load initial={publishers} projects={projects} />
 
       <h2 class="settings-section-title">Password</h2>
       {

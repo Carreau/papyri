@@ -18,6 +18,15 @@
  *   upload_tokens   — id, user_id, token_hash (unique), name, project_id,
  *                     created_at, last_used_at, expires_at — per-user personal
  *                     upload tokens
+ *   oidc_publishers — id, project_id, repository, workflow_ref, environment,
+ *                     scope, repository_owner_id, created_at/by, last_used_at
+ *                     — the GitHub Actions workflows trusted to upload a
+ *                     project without a secret (see `github-oidc.ts`), and
+ *                     whether each may publish releases, PR previews, or both
+ *   previews        — id ("owner/repo#42"), owner, repo, pr, created_at,
+ *                     updated_at, expires_at — registry of live PR preview
+ *                     namespaces (the content itself lives in its own
+ *                     directory + SQLite file, see `lib/preview.ts`)
  *
  * Authorization model: a `project` is a package/module name. An admin
  * (`users.is_admin`) creates projects and assigns users to them. A user mints
@@ -26,6 +35,13 @@
  * user is a member of (admins may upload any project). Authority is resolved
  * dynamically from current membership, so revoking a membership takes effect
  * immediately without touching the token.
+ *
+ * Trusted publishing: a project may additionally list GitHub Actions workflows
+ * (`oidc_publishers`) allowed to upload it with no stored secret at all. An
+ * upload presenting a GitHub OIDC token verified by `github-oidc.ts` is matched
+ * against those rows; a match authorizes that one project. This is the path
+ * fork PRs can use — repository secrets are unavailable there, so a bearer
+ * token cannot cover them.
  *
  * A token may optionally be scoped to a single project (`upload_tokens.project_id`):
  * when set, that token may upload only that one project (subject to the same
@@ -41,6 +57,7 @@
  * `base64(user:timestamp)` cookie.
  */
 import { randomBytes, createHash } from "node:crypto";
+import { isValidRepository, normalizeWorkflowRef, parseJobWorkflowRef } from "./github-oidc.ts";
 // Type-only; erased at compile time. Both this and `better-sqlite3` ship native
 // bindings, so the concrete modules are loaded lazily via dynamic import (see
 // `argon2()` / `openAuthDb()`) rather than statically bundled by Vite.
@@ -158,6 +175,18 @@ export interface Project {
   created_at: number;
 }
 
+/** A live PR preview namespace. */
+export interface PreviewRecord {
+  /** `owner/repo#42`. */
+  id: string;
+  owner: string;
+  repo: string;
+  pr: number;
+  created_at: number;
+  updated_at: number;
+  expires_at: number;
+}
+
 /**
  * Public view of an upload token. Never carries the secret or its hash — the
  * plaintext is returned exactly once, at creation, by `createUploadToken`.
@@ -183,6 +212,81 @@ export interface PublicUploadToken {
 export interface ResolvedUploadToken {
   user: PublicUser;
   projectName: string | null;
+}
+
+/**
+ * A registered trusted publisher: "this GitHub Actions workflow may upload
+ * this project". Everything here is public — there is no secret in the row;
+ * the trust is in the OIDC signature GitHub puts on the token.
+ */
+export interface PublicOidcPublisher {
+  id: number;
+  project_id: number;
+  /** Project (package) name this publisher may upload. */
+  project_name: string;
+  /** `owner/repo` as registered. */
+  repository: string;
+  /** Workflow file, always in `.github/workflows/<file>` form. */
+  workflow_ref: string;
+  /** GitHub Environment the job must declare, or null for "any". */
+  environment: string | null;
+  /** What this trust may publish. */
+  scope: PublisherScope;
+  /** Owner id pinned on first successful use, or null until then. */
+  repository_owner_id: string | null;
+  created_at: number;
+  created_by: number | null;
+  last_used_at: number | null;
+}
+
+/**
+ * What a trusted publisher may publish.
+ *
+ *   preview — pull-request doc previews only (isolated namespace, dropped
+ *             when the PR closes). The default: enrolling a repository so
+ *             contributors get preview links must not, on its own, hand that
+ *             repository the ability to overwrite published documentation.
+ *   release — the published store only.
+ *   both    — either, with the target chosen by the event that minted the
+ *             token (a pull_request run publishes a preview, anything else a
+ *             release).
+ */
+export type PublisherScope = "preview" | "release" | "both";
+
+export const PUBLISHER_SCOPES: readonly PublisherScope[] = ["preview", "release", "both"];
+
+export function isPublisherScope(v: unknown): v is PublisherScope {
+  return typeof v === "string" && (PUBLISHER_SCOPES as readonly string[]).includes(v);
+}
+
+/** Whether `scope` permits publishing to `target`. */
+export function scopeAllows(scope: PublisherScope, target: "preview" | "release"): boolean {
+  return scope === "both" || scope === target;
+}
+
+/** Outcome of matching verified OIDC claims against `oidc_publishers`. */
+export type OidcPublisherMatch =
+  | { ok: true; publisher: PublicOidcPublisher }
+  | {
+      ok: false;
+      reason:
+        | "bad-claims"
+        | "reusable-workflow"
+        | "no-match"
+        | "environment-mismatch"
+        | "owner-mismatch";
+    };
+
+/** Columns/join shared by every `oidc_publishers` read. */
+const OIDC_PUBLISHER_SELECT =
+  "SELECT pub.id, pub.project_id, p.name AS project_name, pub.repository, pub.workflow_ref, " +
+  "pub.environment, pub.scope, pub.repository_owner_id, pub.created_at, pub.created_by, " +
+  "pub.last_used_at " +
+  "FROM oidc_publishers pub JOIN projects p ON p.id = pub.project_id";
+
+/** A row we just inserted must be readable back. */
+function assertPublisher(row: PublicOidcPublisher | null): asserts row is PublicOidcPublisher {
+  if (!row) throw new Error("publisher disappeared immediately after insert");
 }
 
 /** A raw `users` row as selected for the public view (0/1 integer flags). */
@@ -336,6 +440,22 @@ export class AuthDb {
         last_used_at INTEGER,
         expires_at   INTEGER
       );
+      CREATE TABLE IF NOT EXISTS oidc_publishers (
+        id                  INTEGER PRIMARY KEY,
+        project_id          INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        repository          TEXT    NOT NULL,
+        workflow_ref        TEXT    NOT NULL,
+        environment         TEXT,
+        -- What this trust may publish: 'preview' (PR previews only),
+        -- 'release' (the published store only), or 'both'. Enrolling a
+        -- repository for doc previews must not silently hand it the ability
+        -- to overwrite published documentation, so previews are the default.
+        scope               TEXT    NOT NULL DEFAULT 'preview',
+        repository_owner_id TEXT,
+        created_at          INTEGER NOT NULL,
+        created_by          INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        last_used_at        INTEGER
+      );
       CREATE TABLE IF NOT EXISTS passkey_credentials (
         id            INTEGER PRIMARY KEY,
         user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -348,6 +468,15 @@ export class AuthDb {
         created_at    INTEGER NOT NULL,
         last_used_at  INTEGER
       );
+      CREATE TABLE IF NOT EXISTS previews (
+        id         TEXT    PRIMARY KEY,
+        owner      TEXT    NOT NULL,
+        repo       TEXT    NOT NULL,
+        pr         INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS passkey_challenges (
         challenge  TEXT    PRIMARY KEY,
         type       TEXT    NOT NULL,
@@ -359,6 +488,14 @@ export class AuthDb {
       CREATE INDEX IF NOT EXISTS idx_members_user ON project_members (user_id);
       CREATE INDEX IF NOT EXISTS idx_tokens_user ON upload_tokens (user_id);
       CREATE INDEX IF NOT EXISTS idx_passkey_creds_user ON passkey_credentials (user_id);
+      -- Repository lookup is the hot path on every OIDC upload; the unique
+      -- index additionally makes registering the same trust twice a no-op
+      -- (environment is normalized to '' rather than NULL so it takes part in
+      -- the uniqueness).
+      CREATE INDEX IF NOT EXISTS idx_oidc_pub_repo ON oidc_publishers (repository);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_oidc_pub_unique
+        ON oidc_publishers (project_id, repository, workflow_ref, IFNULL(environment, ''));
+      CREATE INDEX IF NOT EXISTS idx_previews_expires ON previews (expires_at);
     `);
 
     // Roles were added after the first deployments. If an older auth.db
@@ -387,6 +524,18 @@ export class AuthDb {
       this.db.exec(
         "ALTER TABLE upload_tokens ADD COLUMN project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE"
       );
+    }
+
+    // Publisher scope was added when PR previews landed: an auth.db written
+    // before then has `oidc_publishers` without it. Existing rows predate
+    // previews and were registered to publish releases, so that is what they
+    // keep; new rows default to previews (the lower-risk grant).
+    const pubCols = this.db.prepare("PRAGMA table_info(oidc_publishers)").all() as {
+      name: string;
+    }[];
+    if (pubCols.length > 0 && !pubCols.some((c) => c.name === "scope")) {
+      this.db.exec("ALTER TABLE oidc_publishers ADD COLUMN scope TEXT NOT NULL DEFAULT 'preview'");
+      this.db.exec("UPDATE oidc_publishers SET scope = 'release'");
     }
 
     // GitHub username was added after early deployments.
@@ -750,6 +899,51 @@ export class AuthDb {
   }
 
   // -------------------------------------------------------------------------
+  // PR preview registry
+  // -------------------------------------------------------------------------
+
+  /**
+   * Record (or refresh) a live preview namespace and push its expiry out by
+   * `ttlSeconds`. The content lives in the preview's own directory; this row
+   * is what makes the namespace *browsable* and what the eviction sweep reads.
+   */
+  recordPreview(id: string, owner: string, repo: string, pr: number, ttlSeconds: number): void {
+    const now = nowSeconds();
+    this.db
+      .prepare(
+        "INSERT INTO previews (id, owner, repo, pr, created_at, updated_at, expires_at) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?) " +
+          "ON CONFLICT(id) DO UPDATE SET updated_at = excluded.updated_at, " +
+          "expires_at = excluded.expires_at"
+      )
+      .run(id, owner, repo, pr, now, now, now + ttlSeconds);
+  }
+
+  getPreview(id: string): PreviewRecord | null {
+    const row = this.db.prepare("SELECT * FROM previews WHERE id = ?").get(id) as
+      | PreviewRecord
+      | undefined;
+    return row ?? null;
+  }
+
+  listPreviews(): PreviewRecord[] {
+    return this.db
+      .prepare("SELECT * FROM previews ORDER BY updated_at DESC")
+      .all() as PreviewRecord[];
+  }
+
+  /** Previews whose TTL has elapsed — the eviction sweep's work list. */
+  listExpiredPreviews(now: number = nowSeconds()): PreviewRecord[] {
+    return this.db
+      .prepare("SELECT * FROM previews WHERE expires_at <= ? ORDER BY expires_at")
+      .all(now) as PreviewRecord[];
+  }
+
+  deletePreview(id: string): boolean {
+    return this.db.prepare("DELETE FROM previews WHERE id = ?").run(id).changes > 0;
+  }
+
+  // -------------------------------------------------------------------------
   // Personal upload tokens
   // -------------------------------------------------------------------------
 
@@ -850,6 +1044,131 @@ export class AuthDb {
     const user = this.getUser(row.user_id);
     if (!user) return null;
     return { user, projectName: row.project_name };
+  }
+
+  // -------------------------------------------------------------------------
+  // Trusted publishers (GitHub Actions OIDC)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Register a GitHub Actions workflow as a trusted publisher of `projectId`.
+   * `repository` is `owner/repo` and `workflowRef` a workflow file (either
+   * `docs.yml` or `.github/workflows/docs.yml`); `environment` narrows the
+   * trust to jobs declaring that GitHub Environment, which is the recommended
+   * way to keep the trust from covering every branch of the repository.
+   * `scope` says whether the workflow may publish PR previews, releases or
+   * both; it defaults to previews, the lower-risk grant.
+   *
+   * Throws on invalid input or a duplicate registration.
+   */
+  createOidcPublisher(
+    projectId: number,
+    repository: string,
+    workflowRef: string,
+    environment: string | null = null,
+    createdBy: number | null = null,
+    scope: PublisherScope = "preview"
+  ): PublicOidcPublisher {
+    if (!isValidRepository(repository)) throw new Error("invalid repository (expected owner/repo)");
+    const normalizedWorkflow = normalizeWorkflowRef(workflowRef);
+    if (!normalizedWorkflow) throw new Error("invalid workflow file name");
+    const env = environment?.trim() ? environment.trim() : null;
+    if (env !== null && env.length > 255) throw new Error("environment name too long");
+    const created_at = nowSeconds();
+    const info = this.db
+      .prepare(
+        "INSERT INTO oidc_publishers " +
+          "(project_id, repository, workflow_ref, environment, created_at, created_by, scope) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?)"
+      )
+      .run(projectId, repository, normalizedWorkflow, env, created_at, createdBy, scope);
+    const publisher = this.getOidcPublisher(Number(info.lastInsertRowid));
+    assertPublisher(publisher);
+    return publisher;
+  }
+
+  getOidcPublisher(id: number): PublicOidcPublisher | null {
+    const row = this.db.prepare(`${OIDC_PUBLISHER_SELECT} WHERE pub.id = ?`).get(id) as
+      | PublicOidcPublisher
+      | undefined;
+    return row ?? null;
+  }
+
+  /** Registered publishers, optionally narrowed to one project. */
+  listOidcPublishers(projectId?: number): PublicOidcPublisher[] {
+    const where = projectId === undefined ? "" : " WHERE pub.project_id = ?";
+    const args = projectId === undefined ? [] : [projectId];
+    return this.db
+      .prepare(`${OIDC_PUBLISHER_SELECT}${where} ORDER BY p.name, pub.repository, pub.workflow_ref`)
+      .all(...args) as PublicOidcPublisher[];
+  }
+
+  deleteOidcPublisher(id: number): boolean {
+    return this.db.prepare("DELETE FROM oidc_publishers WHERE id = ?").run(id).changes > 0;
+  }
+
+  /**
+   * Match verified OIDC claims to a registered publisher, and with it to the
+   * project the token may upload. Rules:
+   *
+   *   - The workflow named by `job_workflow_ref` must live in the repository
+   *     the run belongs to. A job running inside a *reusable* workflow from
+   *     another repository is refused: the registration describes the code the
+   *     repo owner vouched for, and a reusable workflow is somebody else's.
+   *   - A publisher with an `environment` matches only runs declaring that
+   *     environment (case-insensitively, as GitHub treats them); a publisher
+   *     without one matches regardless.
+   *   - `repository_owner_id` is pinned on first use and required to match
+   *     afterwards, so releasing an account/org name and having someone else
+   *     register it does not inherit the trust.
+   *
+   * On a match, `last_used_at` is stamped (and the owner id pinned).
+   */
+  resolveOidcPublisher(claims: {
+    repository: string;
+    repository_owner_id: string;
+    job_workflow_ref: string;
+    environment?: string;
+  }): OidcPublisherMatch {
+    const parsed = parseJobWorkflowRef(claims.job_workflow_ref);
+    if (!parsed) return { ok: false, reason: "bad-claims" };
+    if (parsed.repository.toLowerCase() !== claims.repository.toLowerCase()) {
+      return { ok: false, reason: "reusable-workflow" };
+    }
+
+    // SQLite's default collation is case-sensitive; GitHub treats owner/repo
+    // names case-insensitively, so compare lowered on both sides.
+    const candidates = (
+      this.db
+        .prepare(`${OIDC_PUBLISHER_SELECT} WHERE LOWER(pub.repository) = LOWER(?)`)
+        .all(claims.repository) as PublicOidcPublisher[]
+    ).filter((pub) => pub.workflow_ref === parsed.workflowRef);
+    if (candidates.length === 0) return { ok: false, reason: "no-match" };
+
+    const runEnv = claims.environment?.toLowerCase() ?? null;
+    const envMatched = candidates.filter(
+      (pub) => pub.environment === null || pub.environment.toLowerCase() === runEnv
+    );
+    if (envMatched.length === 0) return { ok: false, reason: "environment-mismatch" };
+
+    // A publisher whose pinned owner id disagrees with the token is not this
+    // repository, whatever the name says.
+    const ownerOk = envMatched.filter(
+      (pub) =>
+        pub.repository_owner_id === null || pub.repository_owner_id === claims.repository_owner_id
+    );
+    if (ownerOk.length === 0) return { ok: false, reason: "owner-mismatch" };
+
+    // Prefer the most specific match (an environment-scoped row over an
+    // unscoped one) so the recorded usage points at the rule that applied.
+    const publisher = ownerOk.find((p) => p.environment !== null) ?? ownerOk[0];
+    this.db
+      .prepare("UPDATE oidc_publishers SET last_used_at = ?, repository_owner_id = ? WHERE id = ?")
+      .run(nowSeconds(), claims.repository_owner_id, publisher.id);
+    return {
+      ok: true,
+      publisher: { ...publisher, repository_owner_id: claims.repository_owner_id },
+    };
   }
 
   // -------------------------------------------------------------------------

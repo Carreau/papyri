@@ -5,13 +5,14 @@
 import SettingsMenu from "./SettingsMenu.tsx";
 import UserMenu from "./UserMenu.tsx";
 import { getSessionUser } from "../lib/auth.ts";
+import { viewerRoute } from "../lib/links.ts";
 
 const user = await getSessionUser(Astro);
 const authenticated = user !== null;
 ---
 
 <header class="site-header">
-  <a class="site-wordmark" href="/">
+  <a class="site-wordmark" href={viewerRoute("home")}>
     <span class="site-wordmark-mark" aria-hidden="true">&para;</span>
     <span class="site-wordmark-text">papyri</span>
   </a>

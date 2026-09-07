@@ -9,7 +9,8 @@
 
 import { useEffect, useState } from "react";
 import { DEBUG_TYPE_NAMES, IR_TYPE_NAMES, slugFromType } from "../lib/ir-types.ts";
-import { linkForNodeType, linkForNodes, VIEWER_ROUTES } from "../lib/links.ts";
+import { linkForNodeType, linkForNodes, viewerRoute } from "../lib/links.ts";
+import { withBase } from "../lib/url-base.ts";
 
 interface PageRef {
   label: string;
@@ -61,10 +62,10 @@ export default function NodesPanel({ pkg, ver, nodetype }: Props) {
   const [data, setData] = useState<ApiResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const apiPath = pkg && ver ? `/api/${pkg}/${ver}/nodes.json` : `/api/nodes.json`;
-  const allNodesHref = pkg && ver ? linkForNodes(pkg, ver) : VIEWER_ROUTES.globalNodes;
+  const apiPath = withBase(pkg && ver ? `/api/${pkg}/${ver}/nodes.json` : `/api/nodes.json`);
+  const allNodesHref = pkg && ver ? linkForNodes(pkg, ver) : viewerRoute("globalNodes");
   const nodeTypeHref = (slug: string) =>
-    pkg && ver ? linkForNodeType(pkg, ver, slug) : (`/nodes/${slug}/` as const);
+    pkg && ver ? linkForNodeType(pkg, ver, slug) : withBase(`/nodes/${slug}/`);
 
   useEffect(() => {
     const u = new URL(apiPath, window.location.origin);

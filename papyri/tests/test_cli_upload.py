@@ -595,3 +595,164 @@ def test_upload_env_var_used_when_no_to_and_no_config(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.output
     req: urllib.request.Request = mock_open.call_args[0][0]
     assert req.full_url == env_url
+
+
+# ---------------------------------------------------------------------------
+# Trusted publishing (GitHub Actions OIDC)
+# ---------------------------------------------------------------------------
+
+_ACTIONS_ENV = {
+    "ACTIONS_ID_TOKEN_REQUEST_URL": "https://actions.example/token?api-version=2.0",
+    "ACTIONS_ID_TOKEN_REQUEST_TOKEN": "runtime-token",
+}
+
+
+def _mock_json_response(body: dict[str, Any]) -> MagicMock:
+    resp = MagicMock()
+    resp.status = 200
+    resp.read = MagicMock(return_value=json.dumps(body).encode())
+    resp.__enter__ = lambda s: s
+    resp.__exit__ = MagicMock(return_value=False)
+    return resp
+
+
+def _oidc_urlopen(
+    audience: str = "https://docs.example.com", jwt: str = "header.payload.signature"
+) -> Any:
+    """Route the three requests an OIDC upload makes to canned responses."""
+
+    def dispatch(req: Any, *args: Any, **kwargs: Any) -> MagicMock:
+        url = req.full_url
+        if "/api/oidc/audience" in url:
+            return _mock_json_response({"ok": True, "audience": audience})
+        if url.startswith("https://actions.example/token"):
+            return _mock_json_response({"value": jwt})
+        if req.get_method() == "GET":  # dedup existence check
+            return _mock_exists_response(False)
+        return _mock_response({"ok": True, "pkg": "mypkg", "version": "1.0"})
+
+    return dispatch
+
+
+def test_upload_uses_oidc_inside_actions_when_no_token(tmp_path: Path) -> None:
+    """No token configured + an Actions job with id-token: write → OIDC."""
+    bundle = _make_bundle(tmp_path / "mypkg_1.0")
+
+    with (
+        patch("urllib.request.urlopen", side_effect=_oidc_urlopen()) as mock_open,
+        patch.dict("os.environ", _ACTIONS_ENV, clear=False),
+    ):
+        result = runner.invoke(
+            _app, [str(bundle), "--url", "https://docs.example.com/api/bundle"]
+        )
+
+    assert result.exit_code == 0, result.output
+    assert "OIDC token" in result.output
+
+    requests = [c[0][0] for c in mock_open.call_args_list]
+    token_req = next(
+        r for r in requests if r.full_url.startswith("https://actions.example/token")
+    )
+    # The audience the viewer advertised is what the token is minted for.
+    assert "audience=https%3A%2F%2Fdocs.example.com" in token_req.full_url
+    assert token_req.get_header("Authorization") == "Bearer runtime-token"
+
+    put_req = next(r for r in requests if r.get_method() == "PUT")
+    assert put_req.get_header("Authorization") == "Bearer header.payload.signature"
+
+
+def test_upload_oidc_not_used_when_a_token_is_configured(tmp_path: Path) -> None:
+    bundle = _make_bundle(tmp_path / "mypkg_1.0")
+
+    with (
+        patch("urllib.request.urlopen", side_effect=_oidc_urlopen()) as mock_open,
+        patch.dict("os.environ", _ACTIONS_ENV, clear=False),
+    ):
+        result = runner.invoke(_app, [str(bundle), "--token", "papyri_pat_abc"])
+
+    assert result.exit_code == 0, result.output
+    put_req = next(
+        c[0][0] for c in mock_open.call_args_list if c[0][0].get_method() == "PUT"
+    )
+    assert put_req.get_header("Authorization") == "Bearer papyri_pat_abc"
+
+
+def test_upload_oidc_flag_overrides_a_configured_token(tmp_path: Path) -> None:
+    bundle = _make_bundle(tmp_path / "mypkg_1.0")
+
+    with (
+        patch("urllib.request.urlopen", side_effect=_oidc_urlopen()) as mock_open,
+        patch.dict("os.environ", _ACTIONS_ENV, clear=False),
+    ):
+        result = runner.invoke(
+            _app,
+            [
+                str(bundle),
+                "--oidc",
+                "--token",
+                "papyri_pat_abc",
+                "--url",
+                "https://docs.example.com/api/bundle",
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    put_req = next(
+        c[0][0] for c in mock_open.call_args_list if c[0][0].get_method() == "PUT"
+    )
+    assert put_req.get_header("Authorization") == "Bearer header.payload.signature"
+
+
+def test_upload_oidc_flag_fails_outside_actions(tmp_path: Path) -> None:
+    bundle = _make_bundle(tmp_path / "mypkg_1.0")
+
+    env = {k: "" for k in _ACTIONS_ENV}
+    with (
+        patch("urllib.request.urlopen", side_effect=_oidc_urlopen()),
+        patch.dict("os.environ", env, clear=False),
+    ):
+        result = runner.invoke(_app, [str(bundle), "--oidc"])
+
+    assert result.exit_code == 1
+    assert "id-token: write" in result.output
+
+
+def test_upload_no_oidc_flag_disables_it(tmp_path: Path) -> None:
+    bundle = _make_bundle(tmp_path / "mypkg_1.0")
+
+    with (
+        patch("urllib.request.urlopen", side_effect=_oidc_urlopen()) as mock_open,
+        patch.dict("os.environ", _ACTIONS_ENV, clear=False),
+    ):
+        result = runner.invoke(_app, [str(bundle), "--no-oidc"])
+
+    assert result.exit_code == 0, result.output
+    put_req = next(
+        c[0][0] for c in mock_open.call_args_list if c[0][0].get_method() == "PUT"
+    )
+    assert put_req.get_header("Authorization") is None
+
+
+def test_oidc_audience_env_override_skips_discovery(tmp_path: Path) -> None:
+    from papyri.github_oidc import resolve_audience
+
+    with (
+        patch.dict("os.environ", {"PAPYRI_OIDC_AUDIENCE": "papyri"}, clear=False),
+        patch("urllib.request.urlopen") as mock_open,
+    ):
+        assert resolve_audience("https://docs.example.com/api/bundle") == "papyri"
+    mock_open.assert_not_called()
+
+
+def test_oidc_audience_falls_back_to_origin(tmp_path: Path) -> None:
+    from papyri.github_oidc import resolve_audience
+
+    env = {"PAPYRI_OIDC_AUDIENCE": ""}
+    with (
+        patch.dict("os.environ", env, clear=False),
+        patch("urllib.request.urlopen", side_effect=urllib.error.URLError("nope")),
+    ):
+        assert (
+            resolve_audience("https://docs.example.com/api/bundle")
+            == "https://docs.example.com"
+        )

@@ -5,16 +5,17 @@
 // as close to a static HTML document as possible so it renders even if
 // something's badly broken elsewhere in the site.
 import BaseLayout from "../layouts/BaseLayout.astro";
+import { viewerRoute } from "../lib/links.ts";
 ---
 
 <BaseLayout title="Not found — Papyri viewer">
-  <p class="crumb"><a href="/">&larr; bundles</a></p>
+  <p class="crumb"><a href={viewerRoute("home")}>&larr; bundles</a></p>
   <h1>Page not found</h1>
   <p class="lede">
     This URL doesn&apos;t match any ingested bundle or qualname. It may have moved between papyri
     versions, or the bundle hasn&apos;t been ingested on this site.
   </p>
   <p>
-    Head back to <a href="/">the bundle index</a> and browse from there.
+    Head back to <a href={viewerRoute("home")}>the bundle index</a> and browse from there.
   </p>
 </BaseLayout>

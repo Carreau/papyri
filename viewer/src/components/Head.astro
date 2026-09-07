@@ -10,6 +10,7 @@
 // through a bundler — Astro emits it verbatim with `is:inline`.
 import { THEME_STORAGE_KEY } from "../lib/theme.ts";
 import { HIDE_TYPES_KEY, HIDE_PRIVATE_KEY, INLINE_MEMBERS_KEY } from "../lib/visibility.ts";
+import { URL_BASE_META, urlBase } from "../lib/url-base.ts";
 
 export interface Props {
   title: string;
@@ -32,6 +33,12 @@ try {
 
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+{
+  /* URL prefix of the namespace this page was served from ("" outside a PR
+    preview). Hydrated islands read it so client-built links and fetches stay
+    in the same namespace — see lib/url-base.ts. */
+}
+<meta name={URL_BASE_META} content={urlBase()} />
 <title>{title}</title>
 <link rel="icon" type="image/png" href="/favicon.png" />
 <script is:inline set:html={themeInit} />

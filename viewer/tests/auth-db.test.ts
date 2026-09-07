@@ -585,3 +585,128 @@ describe("demoSeedActive policy", () => {
     expect(demoSeedActive()).toBe(true);
   });
 });
+
+describe("trusted publishers (GitHub Actions OIDC)", () => {
+  let auth: AuthDb;
+  let projectId: number;
+
+  const CLAIMS = {
+    repository: "octo/papyri-docs",
+    repository_owner_id: "12345",
+    job_workflow_ref: "octo/papyri-docs/.github/workflows/docs.yml@refs/heads/main",
+  };
+
+  beforeEach(() => {
+    auth = makeAuth();
+    projectId = auth.createProject("numpy").id;
+  });
+
+  afterEach(() => auth.close());
+
+  it("registers a publisher, normalizing the workflow file name", () => {
+    const pub = auth.createOidcPublisher(projectId, "octo/papyri-docs", "docs.yml");
+    expect(pub.workflow_ref).toBe(".github/workflows/docs.yml");
+    expect(pub.project_name).toBe("numpy");
+    expect(pub.environment).toBeNull();
+    expect(pub.repository_owner_id).toBeNull();
+    expect(auth.listOidcPublishers(projectId)).toHaveLength(1);
+  });
+
+  it("rejects a malformed repository or workflow", () => {
+    expect(() => auth.createOidcPublisher(projectId, "octo", "docs.yml")).toThrow();
+    expect(() => auth.createOidcPublisher(projectId, "octo/repo", "../docs.yml")).toThrow();
+  });
+
+  it("refuses the same registration twice", () => {
+    auth.createOidcPublisher(projectId, "octo/papyri-docs", "docs.yml");
+    expect(() => auth.createOidcPublisher(projectId, "octo/papyri-docs", "docs.yml")).toThrow();
+    // The same workflow may publish a second project, though.
+    const other = auth.createProject("scipy").id;
+    expect(auth.createOidcPublisher(other, "octo/papyri-docs", "docs.yml").project_name).toBe(
+      "scipy"
+    );
+  });
+
+  it("matches claims to the project and pins the owner id on first use", () => {
+    auth.createOidcPublisher(projectId, "octo/papyri-docs", "docs.yml");
+    const match = auth.resolveOidcPublisher(CLAIMS);
+    expect(match.ok).toBe(true);
+    if (!match.ok) return;
+    expect(match.publisher.project_name).toBe("numpy");
+    expect(match.publisher.repository_owner_id).toBe("12345");
+    const stored = auth.listOidcPublishers(projectId)[0];
+    expect(stored.repository_owner_id).toBe("12345");
+    expect(stored.last_used_at).not.toBeNull();
+  });
+
+  it("matches the repository case-insensitively", () => {
+    auth.createOidcPublisher(projectId, "Octo/Papyri-Docs", "docs.yml");
+    expect(auth.resolveOidcPublisher(CLAIMS).ok).toBe(true);
+  });
+
+  it("rejects an owner id that changed after pinning", () => {
+    auth.createOidcPublisher(projectId, "octo/papyri-docs", "docs.yml");
+    expect(auth.resolveOidcPublisher(CLAIMS).ok).toBe(true);
+    const match = auth.resolveOidcPublisher({ ...CLAIMS, repository_owner_id: "999" });
+    expect(match).toEqual({ ok: false, reason: "owner-mismatch" });
+  });
+
+  it("rejects an unregistered repository or workflow", () => {
+    auth.createOidcPublisher(projectId, "octo/papyri-docs", "docs.yml");
+    expect(
+      auth.resolveOidcPublisher({
+        ...CLAIMS,
+        repository: "evil/repo",
+        job_workflow_ref: "evil/repo/.github/workflows/docs.yml@refs/heads/main",
+      })
+    ).toEqual({ ok: false, reason: "no-match" });
+    expect(
+      auth.resolveOidcPublisher({
+        ...CLAIMS,
+        job_workflow_ref: "octo/papyri-docs/.github/workflows/other.yml@refs/heads/main",
+      })
+    ).toEqual({ ok: false, reason: "no-match" });
+  });
+
+  it("refuses a job running in another repository's reusable workflow", () => {
+    auth.createOidcPublisher(projectId, "octo/papyri-docs", "docs.yml");
+    expect(
+      auth.resolveOidcPublisher({
+        ...CLAIMS,
+        job_workflow_ref: "evil/repo/.github/workflows/docs.yml@refs/heads/main",
+      })
+    ).toEqual({ ok: false, reason: "reusable-workflow" });
+  });
+
+  it("enforces an environment when the publisher names one", () => {
+    auth.createOidcPublisher(projectId, "octo/papyri-docs", "docs.yml", "publish-docs");
+    expect(auth.resolveOidcPublisher(CLAIMS)).toEqual({
+      ok: false,
+      reason: "environment-mismatch",
+    });
+    expect(auth.resolveOidcPublisher({ ...CLAIMS, environment: "PUBLISH-DOCS" }).ok).toBe(true);
+  });
+
+  it("matches any environment when the publisher names none", () => {
+    auth.createOidcPublisher(projectId, "octo/papyri-docs", "docs.yml");
+    expect(auth.resolveOidcPublisher({ ...CLAIMS, environment: "whatever" }).ok).toBe(true);
+  });
+
+  it("rejects a job_workflow_ref it cannot parse", () => {
+    auth.createOidcPublisher(projectId, "octo/papyri-docs", "docs.yml");
+    expect(auth.resolveOidcPublisher({ ...CLAIMS, job_workflow_ref: "nonsense" })).toEqual({
+      ok: false,
+      reason: "bad-claims",
+    });
+  });
+
+  it("drops publishers with their project, and can be removed directly", () => {
+    const pub = auth.createOidcPublisher(projectId, "octo/papyri-docs", "docs.yml");
+    expect(auth.deleteOidcPublisher(pub.id)).toBe(true);
+    expect(auth.listOidcPublishers()).toHaveLength(0);
+
+    auth.createOidcPublisher(projectId, "octo/papyri-docs", "docs.yml");
+    auth.deleteProject(projectId);
+    expect(auth.listOidcPublishers()).toHaveLength(0);
+  });
+});

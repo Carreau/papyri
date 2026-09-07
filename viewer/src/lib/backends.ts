@@ -5,6 +5,13 @@
  * filesystem + SQLite under `~/.papyri/ingest/` (or the paths set by
  * `PAPYRI_INGEST_DIR` / `PAPYRI_INGEST_DB`).
  *
+ * A PR preview is the same triple rooted at its own directory
+ * (`~/.papyri/previews/<owner>/<repo>/pr<N>/`, see `preview.ts`) with its own
+ * SQLite file, so a preview is fully isolated from the main graph and dropping
+ * it is a directory removal. Callers that don't pass one explicitly get the
+ * preview of the in-flight request (`request-context.ts`), which is how pages
+ * serve preview content without threading the namespace through every call.
+ *
  * Node built-ins and the native `better-sqlite3` binding are loaded via dynamic
  * `import()` so Vite/Rollup can tree-shake them in future build targets.
  * `papyri-ingest` is imported statically: it is a workspace package whose
@@ -23,6 +30,8 @@ import {
 import { ingestDb, ingestDir } from "./paths.ts";
 // Type-only import; erased at compile time.
 import type BetterSqlite3 from "better-sqlite3";
+import { previewDir, previewId, type PreviewRef } from "./preview.ts";
+import { currentPreview } from "./request-context.ts";
 
 export interface Backends {
   blobStore: BlobStore;
@@ -30,7 +39,14 @@ export interface Backends {
   rawStore: RawStore;
 }
 
-async function nodeBackends(): Promise<Backends> {
+/**
+ * How many preview databases stay open at once. Previews are numerous and
+ * mostly cold; the main store is cached separately and never evicted.
+ */
+const MAX_OPEN_PREVIEWS = 8;
+
+/** Open one namespace: the main store when `previewRoot` is null. */
+async function nodeBackends(previewRoot: string | null): Promise<Backends> {
   const fs = await import(/* @vite-ignore */ "node:fs");
   const path = await import(/* @vite-ignore */ "node:path");
   const url = await import(/* @vite-ignore */ "node:url");
@@ -39,11 +55,14 @@ async function nodeBackends(): Promise<Backends> {
   };
   const Database = sqliteMod.default;
 
-  // Both paths come from `lib/paths.ts` so PAPYRI_INGEST_DIR and
-  // PAPYRI_INGEST_DB are honoured here exactly as documented; the DB may
-  // live outside the data root, so create its directory too.
-  const dataDir = ingestDir();
-  const dbPath = ingestDb();
+  // The main store reads its two paths from `lib/paths.ts`, so
+  // PAPYRI_INGEST_DIR and PAPYRI_INGEST_DB are honoured exactly as documented
+  // and the DB may live outside the data root. A preview is self-contained by
+  // definition — its database sits in its own directory, and it must NOT
+  // follow PAPYRI_INGEST_DB, which would point every preview at the main
+  // graph and defeat the isolation.
+  const dataDir = previewRoot ?? ingestDir();
+  const dbPath = previewRoot === null ? ingestDb() : path.join(previewRoot, "papyri.db");
 
   fs.mkdirSync(dataDir, { recursive: true });
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
@@ -67,11 +86,56 @@ async function nodeBackends(): Promise<Backends> {
   };
 }
 
-let _cached: Promise<Backends> | null = null;
+let _main: Promise<Backends> | null = null;
+// Insertion-ordered — the first key is the least recently opened preview.
+const _previews = new Map<string, Promise<Backends>>();
 
-export async function getBackends(): Promise<Backends> {
-  if (!_cached) _cached = nodeBackends();
-  return _cached;
+/**
+ * Storage triple for the main store, or for `preview` when given. With no
+ * argument the preview of the in-flight request is used (null outside one).
+ */
+export async function getBackends(preview?: PreviewRef | null): Promise<Backends> {
+  const ref = preview === undefined ? currentPreview() : preview;
+  if (!ref) {
+    if (!_main) _main = nodeBackends(null);
+    return _main;
+  }
+  const key = previewId(ref);
+  const cached = _previews.get(key);
+  if (cached) {
+    // Refresh recency.
+    _previews.delete(key);
+    _previews.set(key, cached);
+    return cached;
+  }
+  const created = nodeBackends(previewDir(ref));
+  _previews.set(key, created);
+  while (_previews.size > MAX_OPEN_PREVIEWS) {
+    const oldest = _previews.keys().next();
+    if (oldest.done) break;
+    const evicted = _previews.get(oldest.value)!;
+    _previews.delete(oldest.value);
+    // Close on a best-effort basis: an in-flight request may still hold the
+    // handle, and better-sqlite3 tolerates a close after the last statement.
+    void evicted.then((b) => b.graphDb.close()).catch(() => {});
+  }
+  return created;
+}
+
+/**
+ * Forget (and close) a cached preview backend. Called before a preview
+ * directory is deleted so no open SQLite handle keeps the files alive.
+ */
+export async function closePreviewBackends(ref: PreviewRef): Promise<void> {
+  const key = previewId(ref);
+  const cached = _previews.get(key);
+  if (!cached) return;
+  _previews.delete(key);
+  try {
+    (await cached).graphDb.close();
+  } catch {
+    /* already closed or failed to open — nothing to release. */
+  }
 }
 
 /**

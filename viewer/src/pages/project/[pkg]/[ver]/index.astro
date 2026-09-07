@@ -2,7 +2,12 @@
 import { loadBundleNav } from "../../../../lib/nav.ts";
 import { resolveVersion } from "../../../../lib/ir-reader.ts";
 import { getBackends } from "../../../../lib/backends.ts";
-import { linkForBackrefValidate, linkForQualname, linkForValidate } from "../../../../lib/links.ts";
+import {
+  linkForBackrefValidate,
+  linkForQualname,
+  linkForValidate,
+  viewerRoute,
+} from "../../../../lib/links.ts";
 import { countBrokenBackrefs } from "../../../../lib/graph.ts";
 import BundleLayout from "../../../../layouts/BundleLayout.astro";
 
@@ -31,7 +36,7 @@ const apiHref = nav.qualnames.includes(pkg)
 ---
 
 <BundleLayout pkg={pkg} ver={ver} actualVer={actualVer} title={`${pkg} ${ver} — Papyri viewer`}>
-  <p class="crumb"><a href="/">&larr; bundles</a></p>
+  <p class="crumb"><a href={viewerRoute("home")}>&larr; bundles</a></p>
   <h1>
     {pkg}
     <span class="version">{ver}</span>

@@ -27,6 +27,7 @@ import {
   type GraphDb,
   type RawStore,
 } from "papyri-ingest";
+import { ingestDb, ingestDir } from "./paths.ts";
 // Type-only import; erased at compile time.
 import type BetterSqlite3 from "better-sqlite3";
 import { previewDir, previewId, type PreviewRef } from "./preview.ts";
@@ -44,7 +45,8 @@ export interface Backends {
  */
 const MAX_OPEN_PREVIEWS = 8;
 
-async function nodeBackends(root: string): Promise<Backends> {
+/** Open one namespace: the main store when `previewRoot` is null. */
+async function nodeBackends(previewRoot: string | null): Promise<Backends> {
   const fs = await import(/* @vite-ignore */ "node:fs");
   const path = await import(/* @vite-ignore */ "node:path");
   const url = await import(/* @vite-ignore */ "node:url");
@@ -53,9 +55,17 @@ async function nodeBackends(root: string): Promise<Backends> {
   };
   const Database = sqliteMod.default;
 
-  const dbPath = path.join(root, "papyri.db");
+  // The main store reads its two paths from `lib/paths.ts`, so
+  // PAPYRI_INGEST_DIR and PAPYRI_INGEST_DB are honoured exactly as documented
+  // and the DB may live outside the data root. A preview is self-contained by
+  // definition — its database sits in its own directory, and it must NOT
+  // follow PAPYRI_INGEST_DB, which would point every preview at the main
+  // graph and defeat the isolation.
+  const dataDir = previewRoot ?? ingestDir();
+  const dbPath = previewRoot === null ? ingestDb() : path.join(previewRoot, "papyri.db");
 
-  fs.mkdirSync(root, { recursive: true });
+  fs.mkdirSync(dataDir, { recursive: true });
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   const db = new Database(dbPath) as BetterSqlite3.Database;
   for (const sql of ["PRAGMA journal_mode = WAL", "PRAGMA synchronous = NORMAL"]) {
     db.prepare(sql).run();
@@ -70,18 +80,10 @@ async function nodeBackends(root: string): Promise<Backends> {
   applyMigrations(db, migrationsPath);
 
   return {
-    blobStore: new FsBlobStore(root),
+    blobStore: new FsBlobStore(dataDir),
     graphDb: new SqliteGraphDb(db),
-    rawStore: new FsRawStore(root),
+    rawStore: new FsRawStore(dataDir),
   };
-}
-
-/** Directory holding the main (non-preview) store. */
-export async function mainIngestDir(): Promise<string> {
-  if (process.env.PAPYRI_INGEST_DIR) return process.env.PAPYRI_INGEST_DIR;
-  const path = await import(/* @vite-ignore */ "node:path");
-  const os = await import(/* @vite-ignore */ "node:os");
-  return path.join(os.homedir(), ".papyri", "ingest");
 }
 
 let _main: Promise<Backends> | null = null;
@@ -95,7 +97,7 @@ const _previews = new Map<string, Promise<Backends>>();
 export async function getBackends(preview?: PreviewRef | null): Promise<Backends> {
   const ref = preview === undefined ? currentPreview() : preview;
   if (!ref) {
-    if (!_main) _main = mainIngestDir().then(nodeBackends);
+    if (!_main) _main = nodeBackends(null);
     return _main;
   }
   const key = previewId(ref);

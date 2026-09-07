@@ -11,9 +11,9 @@ Used by ``Node.to_dict`` / ``Node.to_json``.
 """
 
 from typing import Any
-from typing import get_type_hints as gth
 
 from .serde import _is_union, _union_args
+from .serde import get_type_hints as gth
 
 base_types = {int, str, bool, type(None)}
 
@@ -65,7 +65,7 @@ def serialize(instance: Any, annotation: Any) -> Any:
             return {"data": serialized_data, "type": type_}
         if (
             (type(annotation) is type)
-            and type.__module__ not in ("builtins", "typing")
+            and annotation.__module__ not in ("builtins", "typing")
             and (instance.__class__.__name__ == getattr(annotation, "__name__", None))
         ) or type(instance) == annotation:
             data = {}
@@ -73,9 +73,18 @@ def serialize(instance: Any, annotation: Any) -> Any:
             if hasattr(instance, "type"):
                 type_ = instance.type
             data["type"] = type_
-            for k, ann in gth(type(instance)).items():
+            for k, ann in gth(type(instance)).items():  # type: ignore[arg-type]
                 data[k] = serialize(getattr(instance, k), ann)
             return data
+        # Every branch above returns. Falling through means the value does not
+        # match its declared annotation -- e.g. a node subclass in a field
+        # typed as the base class. Without this the function returned None
+        # implicitly and the field was written to the bundle as JSON ``null``,
+        # losing the content with no diagnostic.
+        raise AssertionError(
+            f"cannot serialize {instance!r} of type {type(instance)} "
+            f"as annotation {annotation!r}"
+        )
     except Exception as e:
         e.add_note(f"serializing {instance.__class__}")
         raise

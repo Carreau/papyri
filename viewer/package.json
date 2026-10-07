@@ -30,7 +30,7 @@
     "astro": "^7.3.1",
     "better-sqlite3": "^12.9.0",
     "cbor-x": "^1.6.4",
-    "katex": "^0.16.45",
+    "katex": "^0.18.2",
     "papyri-ingest": "workspace:*",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

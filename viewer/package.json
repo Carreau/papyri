@@ -26,11 +26,11 @@
     "@astrojs/react": "^6.0.5",
     "@node-rs/argon2": "^2.0.2",
     "@simplewebauthn/browser": "^13.3.0",
-    "@simplewebauthn/server": "^13.3.1",
+    "@simplewebauthn/server": "^13.3.2",
     "astro": "^7.3.1",
     "better-sqlite3": "^12.9.0",
     "cbor-x": "^1.6.4",
-    "katex": "^0.16.45",
+    "katex": "^0.18.2",
     "papyri-ingest": "workspace:*",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -54,7 +54,7 @@
     "prettier-plugin-astro": "^0.14.1",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "typescript-eslint": "^8.17.0",
-    "vitest": "^4.1.4"
+    "vitest": "^4.1.11"
   },
   "engines": {
     "node": ">=22.12.0"

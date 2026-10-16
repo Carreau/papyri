@@ -1,0 +1,611 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>papyri</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232b6cb0'/%3E%3Ctext x='16' y='23' text-anchor='middle' font-family='sans-serif' font-size='20' font-weight='700' fill='white'%3E¶%3C/text%3E%3C/svg%3E">
+<meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f1419" media="(prefers-color-scheme: dark)">
+<style>
+:root{
+  --bg:#fafafa;--surface:#ffffff;--surface-alt:#eeeeee;--surface-raised:#ffffff;--code-bg:#f6f8fa;
+  --fg:#1a1a1a;--fg-muted:#555555;--fg-subtle:#6b7280;--border:#e2e2e2;--border-strong:#b8bfc7;
+  --accent:#2b6cb0;--accent-fill:#2b6cb0;--accent-fg:#ffffff;--accent-soft:color-mix(in oklab,var(--accent) 12%,transparent);
+  --link-visited:#366699;--xref-external:#0f766e;--type:#6b46c1;
+  --ok:#15803d;--ok-bg:#eefaf1;--warn:#b45309;--warn-bg:#fffbeb;--danger:#b91c1c;--danger-bg:#fef2f2;
+  --info:#2b6cb0;--info-bg:#eef4fb;--adm-neutral:#475569;--adm-neutral-bg:#f1f5f9;--adm-important:#7c3aed;--adm-important-bg:#f5f0fe;
+  --table-stripe:rgb(0 0 0/.025);
+  --shadow-1:0 1px 2px rgb(0 0 0/.06),0 4px 12px rgb(0 0 0/.08);--shadow-2:0 8px 32px rgb(0 0 0/.18);
+  --radius-sm:3px;--radius-md:6px;--radius-lg:10px;--radius-pill:999px;
+  --space-1:.25rem;--space-2:.5rem;--space-3:.75rem;--space-4:1rem;--space-5:1.5rem;--space-6:2rem;
+  --measure:72ch;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  --text-xs:.6875rem;--text-sm:.8125rem;--text-base:1rem;--text-md:1.0625rem;--text-lg:1.25rem;--text-xl:1.5rem;--text-2xl:1.75rem;
+  --mono-xs:12px;--mono-sm:13px;--mono-base:14px;
+  --rail-w:20rem;--panel-w:17rem;--topbar-h:3rem;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1419;--surface:#1a1f26;--surface-alt:#242b33;--surface-raised:#20262e;--code-bg:#161b22;
+  --fg:#e6e6e6;--fg-muted:#9aa0a6;--fg-subtle:#8b949e;--border:#2b333c;--border-strong:#4b5563;
+  --accent:#5ea2eb;--accent-fill:#2563eb;--link-visited:#6da2da;--xref-external:#4fd1c5;--type:#b794f4;
+  --ok:#4ade80;--ok-bg:#0f2418;--warn:#fbbf24;--warn-bg:#2a1f00;--danger:#f87171;--danger-bg:#2d0f0f;
+  --info:#5ea2eb;--info-bg:#15212e;--adm-neutral:#94a3b8;--adm-neutral-bg:#1c2128;--adm-important:#b794f4;--adm-important-bg:#1f1830;
+  --table-stripe:rgb(255 255 255/.03);
+  --shadow-1:0 1px 2px rgb(0 0 0/.4),0 4px 12px rgb(0 0 0/.4);--shadow-2:0 8px 32px rgb(0 0 0/.55);
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0f1419;--surface:#1a1f26;--surface-alt:#242b33;--surface-raised:#20262e;--code-bg:#161b22;
+  --fg:#e6e6e6;--fg-muted:#9aa0a6;--fg-subtle:#8b949e;--border:#2b333c;--border-strong:#4b5563;
+  --accent:#5ea2eb;--accent-fill:#2563eb;--link-visited:#6da2da;--xref-external:#4fd1c5;--type:#b794f4;
+  --ok:#4ade80;--ok-bg:#0f2418;--warn:#fbbf24;--warn-bg:#2a1f00;--danger:#f87171;--danger-bg:#2d0f0f;
+  --info:#5ea2eb;--info-bg:#15212e;--adm-neutral:#94a3b8;--adm-neutral-bg:#1c2128;--adm-important:#b794f4;--adm-important-bg:#1f1830;
+  --table-stripe:rgb(255 255 255/.03);
+  --shadow-1:0 1px 2px rgb(0 0 0/.4),0 4px 12px rgb(0 0 0/.4);--shadow-2:0 8px 32px rgb(0 0 0/.55);
+  color-scheme:dark;
+}
+html[data-wide]{--measure:100ch}
+
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--fg);font:400 var(--text-base)/1.55 var(--sans);-webkit-text-size-adjust:100%;overflow-x:hidden}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:var(--accent);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:2px}
+a:visited{color:var(--link-visited)}
+a:hover{text-decoration-thickness:2px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:2px}
+code,kbd,pre{font-family:var(--mono);font-feature-settings:"calt" 0}
+code{font-size:.925em;background:var(--surface-alt);padding:.05em .3em;border-radius:var(--radius-sm)}
+pre code,.sig-code,code.mname,.pname,.qualname code{background:none;padding:0;font-size:inherit}
+h1,h2,h3,h4{line-height:1.25;text-wrap:balance;margin:1.5em 0 .5em}
+h1{font-size:var(--text-2xl);font-weight:650;line-height:1.15;margin:0}
+h2{font-size:var(--text-lg);font-weight:600}
+h3{font-size:var(--text-md);font-weight:600}
+h4{font-size:var(--text-base);font-weight:600;color:var(--fg-muted)}
+.doc h2{font-size:var(--text-xl);border-bottom:1px solid var(--border);padding-bottom:.25rem}
+.doc h3{font-size:var(--text-lg)}
+p,ul,ol,dl,blockquote{margin:0 0 1em}
+.i{flex:none;vertical-align:-3px}
+kbd{font:500 var(--text-xs)/1 var(--mono);border:1px solid var(--border-strong);border-bottom-width:2px;border-radius:var(--radius-sm);padding:.15rem .35rem;background:var(--surface);color:var(--fg-muted);white-space:nowrap}
+.skip-link{position:absolute;left:.5rem;top:-3rem;z-index:100;background:var(--accent-fill);color:var(--accent-fg);padding:.5rem .75rem;border-radius:var(--radius-md)}
+.skip-link:focus{top:.5rem}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.btn{display:inline-flex;align-items:center;gap:.375rem;font:500 var(--text-sm)/1 var(--sans);padding:.375rem .75rem;border:1px solid var(--border-strong);border-radius:var(--radius-md);background:var(--surface);color:var(--fg);cursor:pointer;text-decoration:none}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn-primary{background:var(--accent-fill);color:var(--accent-fg);border-color:transparent}
+.btn-primary:hover{color:var(--accent-fg);filter:brightness(1.08)}
+.btn-icon{padding:.375rem;width:2rem;height:2rem;justify-content:center;border-color:transparent;background:none}
+.btn-icon:hover{background:var(--surface-alt)}
+.btn-sm{padding:.2rem .5rem;font-size:var(--text-xs)}
+.muted{color:var(--fg-muted)}
+.subtle{color:var(--fg-subtle)}
+.cnt{font:400 var(--mono-xs)/1 var(--mono);color:var(--fg-subtle);margin-left:auto;padding-left:.5rem}
+
+/* ---------- app shell ---------- */
+.app{min-height:100vh}
+.rail{position:fixed;top:0;bottom:0;left:0;width:var(--rail-w);background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;z-index:30;transition:width .15s,transform .15s}
+.rail-head{padding:.625rem .75rem .5rem;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:.5rem}
+.brand{display:flex;align-items:center;gap:.5rem;text-decoration:none;color:var(--fg);font-weight:600;font-size:var(--text-sm)}
+.brand .pil{color:var(--accent);font-size:1.2rem;font-weight:700;line-height:1}
+.brand-row{display:flex;align-items:center;justify-content:space-between;gap:.25rem}
+.search{display:flex;align-items:center;gap:.375rem;border:1px solid var(--border-strong);border-radius:var(--radius-md);background:var(--bg);padding:.3rem .5rem;position:relative}
+.search:focus-within{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.search input{flex:1;border:0;background:none;min-width:0;font-size:var(--text-sm);outline:none;padding:0}
+.search input::placeholder{color:var(--fg-subtle)}
+.search .scope{display:none;font:500 var(--mono-xs)/1 var(--mono);background:var(--accent-soft);color:var(--accent);border-radius:var(--radius-sm);padding:.2rem .35rem;white-space:nowrap}
+.search[data-scoped] .scope{display:inline-flex;gap:.25rem;align-items:center}
+.search .kbd-hint{opacity:.9}
+.search:focus-within .kbd-hint{display:none}
+.search-tip{font-size:var(--text-xs);color:var(--fg-subtle);margin:0;display:none}
+.search:focus-within + .search-tip{display:block}
+.rail-scroll{flex:1;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.rail-foot{border-top:1px solid var(--border);padding:.375rem .5rem;display:flex;align-items:center;gap:.125rem}
+.rail-foot .spacer{flex:1}
+.rail-foot a.btn-icon{color:var(--fg-muted)}
+.rail-foot .status{font-size:var(--text-xs);color:var(--fg-subtle);padding:0 .25rem}
+
+/* results (search mode) */
+.results{display:none;padding:.25rem 0 .5rem}
+.rail[data-searching] .results{display:block}
+.rail[data-searching] .pkgs{display:none}
+.results h3{font:700 var(--text-xs)/1.3 var(--sans);text-transform:uppercase;letter-spacing:.06em;color:var(--fg-subtle);margin:.75rem .75rem .25rem}
+.results ul{list-style:none;margin:0;padding:0}
+.hit{display:grid;grid-template-columns:auto 1fr;gap:.1rem .5rem;padding:.35rem .75rem;text-decoration:none;color:var(--fg);align-items:baseline}
+.hit:hover,.hit[aria-selected="true"]{background:var(--accent-soft)}
+.hit .k{font:500 var(--text-xs)/1.4 var(--sans);color:var(--type);text-transform:uppercase;letter-spacing:.04em;width:3.6rem}
+.hit .k.doc{color:var(--xref-external)}
+.hit .n{font:400 var(--mono-sm)/1.4 var(--mono);overflow-wrap:anywhere}
+.hit .n b{font-weight:600;color:var(--accent)}
+.hit .s{grid-column:2;font-size:var(--text-xs);color:var(--fg-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hit .p{grid-column:2;font:500 var(--text-xs)/1.4 var(--sans);color:var(--fg-subtle)}
+.results .empty{padding:.75rem;font-size:var(--text-sm);color:var(--fg-muted)}
+
+/* package list */
+.pkgs{list-style:none;margin:0;padding:.25rem 0}
+.pkg{border-bottom:1px solid transparent}
+.pkg>summary{display:flex;align-items:center;gap:.5rem;padding:.4rem .75rem;cursor:pointer;list-style:none;font-size:var(--text-sm);color:var(--fg)}
+summary::-webkit-details-marker{display:none}
+.pkg>summary:hover{background:var(--surface-alt)}
+.pkg[open]>summary{font-weight:600;position:sticky;top:0;background:var(--surface);z-index:1;box-shadow:0 1px 0 var(--border)}
+.pkg.is-current>summary .pkg-name{color:var(--accent)}
+.mono{width:1.375rem;height:1.375rem;border-radius:var(--radius-sm);display:inline-grid;place-items:center;font:700 .58rem/1 var(--sans);letter-spacing:.02em;color:#fff;background:oklch(52% .13 var(--h));flex:none}
+.mono.lg{width:2.75rem;height:2.75rem;font-size:1rem;border-radius:var(--radius-md)}
+.mono.md{width:1.75rem;height:1.75rem;font-size:.7rem}
+.pkg-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pill{font:500 var(--mono-xs)/1 var(--mono);padding:.2rem .45rem;border-radius:var(--radius-pill);border:1px solid var(--border);color:var(--fg-muted);white-space:nowrap;text-decoration:none}
+.pill-latest{color:var(--ok);background:var(--ok-bg);border-color:transparent}
+.pill-older{color:var(--warn);background:var(--warn-bg);border-color:transparent}
+.pill-staged{color:var(--adm-important);background:var(--adm-important-bg);border-color:transparent}
+.pill-older .arr{opacity:.8}
+.sections{list-style:none;margin:0;padding:0 0 .375rem}
+summary{list-style:none}
+summary::marker{content:"";display:none}
+.sec>details>summary,.sec>a{display:flex;align-items:center;gap:.375rem;padding:.3rem .75rem .3rem 1.55rem;font-size:var(--text-sm);color:var(--fg-muted);text-decoration:none;cursor:pointer;list-style:none}
+.sec>details>summary:hover,.sec>a:hover{color:var(--fg);background:var(--surface-alt)}
+.sec.is-current>details>summary{color:var(--fg);font-weight:600}
+.chev{width:.7rem;height:.7rem;flex:none;color:var(--fg-subtle);transition:transform .15s}
+details[open]>summary>.chev{transform:rotate(90deg)}
+.tree,.toc{list-style:none;margin:0;padding:.125rem 0 .25rem 1.75rem}
+.tree{font:400 var(--mono-xs)/1.5 var(--mono)}
+.toc{font-size:var(--text-sm)}
+.tree ul,.toc ul{list-style:none;margin:0;padding-left:.75rem;border-left:1px solid var(--border)}
+.tree summary,.tree a,.toc summary,.toc a{display:flex;align-items:center;gap:.25rem;padding:.14rem .5rem .14rem .2rem;border-radius:var(--radius-sm);color:var(--fg);text-decoration:none;cursor:pointer;list-style:none;min-width:0}
+.tree summary>a,.toc summary>a{flex:1;padding:0}
+.tree a span.l,.toc a span.l{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tree a:hover,.toc a:hover{background:var(--surface-alt)}
+.tree a[aria-current="page"],.toc a[aria-current="page"]{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.tree li.priv{color:var(--fg-subtle)}
+.tree .lazy{color:var(--fg-subtle);padding:.14rem .25rem;font-style:italic}
+html[data-hide-private] .tree li.priv,html[data-hide-private] .members-private{display:none}
+.tree .kind{color:var(--fg-subtle);font-size:10px;text-transform:uppercase;letter-spacing:.04em;margin-left:auto;padding-left:.35rem;font-family:var(--sans)}
+
+/* content column */
+.content{margin-left:var(--rail-w);min-width:0}
+.topbar{display:none;position:sticky;top:0;height:var(--topbar-h);background:var(--surface);border-bottom:1px solid var(--border);align-items:center;gap:.5rem;padding:0 .75rem;z-index:20}
+.topbar .brand{flex:1}
+.rail-backdrop{display:none;position:fixed;inset:0;background:rgb(0 0 0/.35);z-index:29}
+main{padding:2rem 2.5rem 4rem;display:grid;grid-template-columns:minmax(0,var(--measure));gap:1.5rem 2.5rem;align-items:start}
+main>*{grid-column:1;min-width:0}
+
+/* title block */
+.trail{list-style:none;margin:0 0 .5rem;padding:0;display:flex;flex-wrap:wrap;gap:.25rem;font-size:var(--text-sm);color:var(--fg-muted)}
+.trail li+li::before{content:"›";margin-right:.25rem;color:var(--fg-subtle)}
+.trail a{color:inherit;text-decoration:none}
+.trail a:hover{color:var(--accent);text-decoration:underline}
+.title-block{display:flex;flex-direction:column;gap:.375rem}
+.title-row{display:flex;align-items:center;flex-wrap:wrap;gap:.5rem .75rem}
+.kind{font:700 var(--text-xs)/1.3 var(--sans);text-transform:uppercase;letter-spacing:.06em;color:var(--type);background:color-mix(in oklab,var(--type) 10%,transparent);padding:.15rem .45rem;border-radius:var(--radius-sm)}
+.kind.doc{color:var(--xref-external);background:color-mix(in oklab,var(--xref-external) 10%,transparent)}
+.title-block h1{overflow-wrap:anywhere}
+.title-block h1 code{font:600 var(--text-xl)/1.15 var(--mono);background:none;padding:0}
+.ver-mark{font:500 var(--mono-xs)/1 var(--mono);padding:.25rem .5rem;border-radius:var(--radius-pill);color:var(--ok);background:var(--ok-bg);white-space:nowrap}
+.ver-mark.older{color:var(--warn);background:var(--warn-bg)}
+.ver-mark.staged{color:var(--adm-important);background:var(--adm-important-bg)}
+.qualname{display:flex;align-items:center;gap:.375rem;flex-wrap:wrap;font-size:var(--text-sm);color:var(--fg-muted)}
+.qualname code{font:400 var(--mono-sm)/1.5 var(--mono);color:var(--fg-muted);overflow-wrap:anywhere}
+.copy{border:0;background:none;padding:.15rem;color:var(--fg-subtle);cursor:pointer;border-radius:var(--radius-sm);display:inline-flex}
+.copy:hover{color:var(--accent);background:var(--surface-alt)}
+.copy[data-done]::after{content:"copied";font:500 var(--text-xs)/1 var(--sans);color:var(--ok);margin-left:.25rem}
+.meta-row{display:flex;flex-wrap:wrap;gap:.25rem 1rem;font-size:var(--text-sm);color:var(--fg-muted)}
+.meta-row a{color:inherit}
+.meta-row code{font-size:var(--mono-xs)}
+.lede{font-size:var(--text-md);color:var(--fg-muted);margin:.25rem 0 0}
+.empty-line{color:var(--fg-subtle);font-style:italic}
+
+/* secondary panel */
+.panel{font-size:var(--text-sm)}
+.panel-d{border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface)}
+.panel-d>summary{display:flex;align-items:center;gap:.5rem;padding:.5rem .75rem;cursor:pointer;list-style:none;font-weight:600}
+.panel-body{padding:.25rem .75rem .75rem}
+.panel h2{font:700 var(--text-xs)/1.3 var(--sans);text-transform:uppercase;letter-spacing:.06em;color:var(--fg-subtle);margin:.75rem 0 .375rem}
+.panel h2:first-child{margin-top:.25rem}
+.panel ul{list-style:none;margin:0;padding:0}
+.panel li a{display:block;padding:.15rem 0;color:var(--fg-muted);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.panel li a:hover{color:var(--accent)}
+.panel li a[aria-current="true"]{color:var(--accent);font-weight:600}
+.panel li.l3 a{padding-left:.75rem;font-size:var(--text-xs)}
+.panel .pgroup{display:flex;align-items:center;font-weight:600;color:var(--fg);margin:.5rem 0 .125rem}
+.panel .pgroup a{color:inherit;text-decoration:none}
+.panel .pindex{font:400 var(--mono-xs)/1.5 var(--mono);max-height:14rem;overflow:auto;border-left:2px solid var(--border);padding-left:.5rem;margin-bottom:.25rem}
+.panel .toggle{display:flex;align-items:center;gap:.5rem;padding:.35rem 0;color:var(--fg);cursor:pointer}
+.panel .toggle input{margin:0;accent-color:var(--accent-fill)}
+.panel .sigcard{background:var(--code-bg);border:1px solid var(--border);border-radius:var(--radius-md);padding:.5rem .625rem;font:400 var(--mono-xs)/1.55 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere}
+.panel .sigcard .sig-param{display:block;padding-left:1.25rem}
+.panel .sigcard .sig-param::after{content:",";color:var(--fg-subtle)}
+.panel .empty{color:var(--fg-subtle);font-style:italic;margin:0}
+.dev-only{display:none}
+html[data-dev] .dev-only{display:block}
+html[data-dev] .dev-only.inline{display:inline-flex}
+.dev-box{border:1px dashed var(--warn);border-radius:var(--radius-md);padding:.5rem .625rem;margin-top:.75rem;background:var(--warn-bg)}
+.dev-box h2{color:var(--warn);margin-top:0}
+.dev-box ul li a{color:var(--fg)}
+.diag{display:inline-flex;align-items:center;gap:.3rem;font:500 var(--text-xs)/1 var(--sans);padding:.25rem .45rem;border-radius:var(--radius-pill);background:var(--surface-alt);color:var(--fg-muted)}
+.diag .ok{color:var(--ok)}.diag .warn{color:var(--warn)}
+
+/* body */
+.page-body{min-width:0}
+.page-body>section{margin-top:1.5rem;scroll-margin-top:1rem}
+.page-body>section:first-child{margin-top:0}
+.page-body h2{margin-top:0}
+.sig{background:var(--code-bg);border:1px solid var(--border);border-radius:var(--radius-md);padding:.75rem 1rem;overflow-x:auto;font:400 var(--mono-base)/1.6 var(--mono)}
+.sig-code{white-space:pre-wrap;overflow-wrap:anywhere}
+.sig-qualifier{color:var(--type);font-style:italic}
+.sig-name{font-weight:600}
+.sig-annotation,.sig-return{color:var(--type)}
+.sig-default{color:var(--fg-muted)}
+.sig-param-name{color:var(--fg)}
+dl.params{margin:0}
+dl.params dt{font:400 var(--mono-base)/1.5 var(--mono);margin-top:.6rem}
+dl.params dt .pname{font-weight:600;color:var(--fg)}
+dl.params dt .ptype{color:var(--type);font-family:var(--mono)}
+dl.params dd{margin:.15rem 0 .6rem 1rem;padding-left:.75rem;border-left:2px solid var(--border);max-width:var(--measure)}
+dl.params dd p:last-child{margin-bottom:0}
+pre.code,pre{background:var(--code-bg);border:1px solid var(--border);border-radius:var(--radius-md);padding:.75rem 1rem;overflow-x:auto;font:400 var(--mono-base)/1.55 var(--mono);margin:0 0 1em;max-width:100%}
+pre .k{color:var(--type)}pre .s{color:var(--ok)}pre .c{color:var(--fg-subtle);font-style:italic}
+.xref{color:var(--accent)}
+.xref.unresolved{color:inherit;text-decoration:underline dotted var(--fg-subtle);text-underline-offset:3px}
+html[data-dev] .xref.unresolved{outline:2px solid var(--warn);outline-offset:1px;background:var(--warn-bg);border-radius:2px;cursor:help;position:relative}
+html[data-dev] .xref.unresolved.broken-local{outline-color:var(--danger);background:var(--danger-bg)}
+html[data-dev] .xref.unresolved:hover::after{content:attr(data-debug);position:absolute;left:0;top:1.5em;z-index:5;background:var(--surface-raised);border:1px solid var(--border-strong);box-shadow:var(--shadow-1);padding:.25rem .5rem;font:400 var(--text-xs)/1.4 var(--mono);color:var(--fg);white-space:nowrap;border-radius:var(--radius-sm)}
+code.role{font-size:.925em}
+a.ext-link::after{content:"";display:inline-block;width:.7em;height:.7em;margin-left:.15em;vertical-align:-.05em;background:currentColor;-webkit-mask:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>') center/contain no-repeat;mask:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>') center/contain no-repeat}
+.admonition{border:1px solid var(--border);border-left:4px solid var(--info);border-radius:var(--radius-md);background:var(--info-bg);padding:.6rem .9rem;margin:0 0 1em}
+.admonition-title{font-weight:600;color:var(--info);margin:0 0 .25rem}
+.admonition p:last-child{margin:0}
+.doc ul,.doc ol{padding-left:1.5rem}
+.doc li{margin-bottom:.25rem}
+table{border-collapse:collapse;font-size:.9375rem;max-width:100%}
+.table-scroll{overflow-x:auto;margin:0 0 1em}
+th,td{border:1px solid var(--border);padding:.35rem .6rem;text-align:left;vertical-align:top}
+th{background:var(--surface);border-bottom:2px solid var(--border-strong)}
+tbody tr:nth-child(even){background:var(--table-stripe)}
+.img-placeholder{display:inline-block;background:var(--surface-alt);color:var(--fg-subtle);font-size:var(--text-xs);padding:.25rem .5rem;border-radius:var(--radius-sm)}
+
+/* members */
+.members h2{display:flex;align-items:center;gap:.5rem}
+.mgroup{margin-top:1.25rem}
+.mgroup>h3,.mgroup>summary>h3{display:flex;align-items:center;gap:.5rem;margin:0 0 .375rem;font-size:var(--text-base)}
+.mgroup>h3 .cnt,.mgroup>summary>h3 .cnt{margin-left:0}
+.mgroup>h3 .btn{margin-left:auto}
+.mrows{list-style:none;margin:0;padding:0;border-top:1px solid var(--border)}
+.mrow{border-bottom:1px solid var(--border)}
+.mrow>details>summary{display:grid;grid-template-columns:minmax(8rem,12rem) 1fr auto;gap:.75rem;align-items:baseline;padding:.4rem .25rem;cursor:pointer;list-style:none}
+.mrow>details>summary:hover{background:var(--surface-alt)}
+.mrow .mname{font:500 var(--mono-sm)/1.5 var(--mono);color:var(--accent);overflow-wrap:anywhere}
+.mrow .msum{font-size:var(--text-sm);color:var(--fg-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mrow .msum.empty{color:var(--fg-subtle)}
+.mrow .chev{align-self:center}
+.mrow>details[open]>summary{background:var(--surface-alt)}
+.mrow>details[open]>summary .msum{white-space:normal}
+.mbody{padding:.5rem .5rem 1rem 1rem;border-left:2px solid var(--accent-soft);margin:.25rem 0 .5rem .25rem;font-size:.9375rem}
+.mbody .sig{padding:.5rem .75rem;font-size:var(--mono-sm);margin-bottom:.5rem}
+.mbody h4{margin:.75rem 0 .25rem;font-size:var(--text-sm);text-transform:uppercase;letter-spacing:.05em}
+.mbody .permalink{font-size:var(--text-sm)}
+.mbody p{margin-bottom:.5em}
+.members-private>summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:.5rem}
+.members-private>summary h3{margin:0}
+.members-private ul{list-style:none;padding:0;margin:.375rem 0 0;display:flex;flex-wrap:wrap;gap:.35rem}
+.members-private li code{font-size:var(--mono-sm);color:var(--fg-muted)}
+.aliases ul{list-style:none;padding:0}
+.aliases code{font-size:var(--mono-sm)}
+
+/* prev/next */
+.pn{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:2.5rem;padding-top:1rem;border-top:1px solid var(--border)}
+.pn a{display:flex;flex-direction:column;gap:.15rem;border:1px solid var(--border);border-radius:var(--radius-md);padding:.6rem .9rem;text-decoration:none;color:var(--fg);background:var(--surface)}
+.pn a:hover{border-color:var(--accent)}
+.pn a.next{text-align:right;align-items:flex-end}
+.pn .lbl{font-size:var(--text-xs);color:var(--fg-subtle);text-transform:uppercase;letter-spacing:.06em;display:flex;gap:.35rem;align-items:center}
+.pn .t{font-weight:500}
+.pn-hint{grid-column:1/-1;font-size:var(--text-xs);color:var(--fg-subtle);text-align:center}
+.pn-hint kbd{font-size:10px}
+
+/* home welcome */
+.welcome{display:flex;flex-direction:column;gap:1.5rem}
+.welcome .big-search{display:flex;align-items:center;gap:.5rem;border:1px solid var(--border-strong);background:var(--surface);border-radius:var(--radius-lg);padding:.75rem 1rem;font-size:var(--text-md);color:var(--fg-subtle);cursor:text;text-align:left;width:100%}
+.welcome .big-search:hover{border-color:var(--accent)}
+.tips{display:grid;grid-template-columns:repeat(auto-fit,minmax(13rem,1fr));gap:.75rem;margin:0;padding:0;list-style:none;font-size:var(--text-sm);color:var(--fg-muted)}
+.tips li{border:1px solid var(--border);border-radius:var(--radius-md);padding:.5rem .75rem;background:var(--surface)}
+.tips code{font-size:var(--mono-xs)}
+.shortcuts{display:grid;grid-template-columns:auto 1fr;gap:.35rem 1rem;font-size:var(--text-sm);margin:0;align-items:center}
+.shortcuts dt{text-align:right;white-space:nowrap}
+.shortcuts dd{margin:0;color:var(--fg-muted)}
+.recent{list-style:none;margin:0;padding:0;border-top:1px solid var(--border)}
+.recent li{display:grid;grid-template-columns:auto 1fr auto;gap:.25rem .75rem;padding:.5rem .25rem;border-bottom:1px solid var(--border);align-items:center;font-size:var(--text-sm)}
+.recent .n{font-weight:500;color:var(--fg)}
+.recent .n a{text-decoration:none;color:inherit}
+.recent .n code{font-size:var(--mono-xs);margin-left:.35rem}
+.recent .s{grid-column:2;color:var(--fg-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.recent .t{color:var(--fg-subtle);font-size:var(--text-xs);text-align:right;white-space:nowrap}
+.recent .st{display:inline-flex;align-items:center;gap:.25rem;font-size:var(--text-xs)}
+.recent .st.ok{color:var(--ok)}.recent .st.fail{color:var(--danger)}.recent .st.staged{color:var(--adm-important)}
+
+/* overview */
+.masthead{display:flex;gap:1rem;align-items:flex-start}
+.masthead .mono.lg{margin-top:.25rem}
+.jump{display:grid;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr));gap:.75rem;margin:0;padding:0;list-style:none}
+.jump a{display:flex;flex-direction:column;gap:.1rem;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);padding:.6rem .9rem;text-decoration:none;color:var(--fg)}
+.jump a:hover{border-color:var(--accent)}
+.jump .t{font-weight:600}
+.jump .c{font-size:var(--text-sm);color:var(--fg-muted)}
+.links{display:flex;flex-wrap:wrap;gap:.375rem;margin:.5rem 0 0;padding:0;list-style:none}
+.versions td:first-child{font-family:var(--mono);font-size:var(--mono-sm)}
+
+/* prefs */
+.prefs{display:flex;flex-direction:column;gap:1.25rem}
+.prefs fieldset{border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);padding:.75rem 1rem 1rem;margin:0}
+.prefs legend{font-weight:600;padding:0 .35rem}
+.prefs label{display:flex;gap:.6rem;align-items:flex-start;padding:.35rem 0;cursor:pointer}
+.prefs label input{margin-top:.3rem;accent-color:var(--accent-fill)}
+.prefs label .d{display:block;font-size:var(--text-sm);color:var(--fg-muted)}
+.prefs .radios{display:flex;gap:1rem;flex-wrap:wrap}
+.prefs .radios label{padding:.25rem 0}
+.saved{font-size:var(--text-sm);color:var(--ok);min-height:1.2em}
+
+/* dialogs */
+dialog{border:1px solid var(--border-strong);border-radius:var(--radius-lg);background:var(--surface-raised);color:var(--fg);box-shadow:var(--shadow-2);padding:1rem 1.25rem;max-width:min(32rem,90vw)}
+dialog::backdrop{background:rgb(0 0 0/.45)}
+dialog h2{margin:0 0 .75rem;font-size:var(--text-md)}
+dialog .close{position:absolute;right:.5rem;top:.5rem}
+
+/* ---------- responsive tiers ---------- */
+@media (min-width:90em){
+  main{grid-template-columns:minmax(0,var(--measure)) var(--panel-w)}
+  .panel{grid-column:2;grid-row:1/span 4;position:sticky;top:1.5rem;max-height:calc(100vh - 3rem);overflow:auto;scrollbar-width:thin}
+  .panel-d{border:0;background:none}
+  .panel-d>summary{display:none}
+  .panel-body{padding:0 0 0 1rem;border-left:1px solid var(--border)}
+}
+@media (min-width:64em) and (max-width:79.99em){
+  :root{--rail-w:3.5rem}
+  html:not([data-rail="open"]) .rail .rail-text,
+  html:not([data-rail="open"]) .rail .search input,
+  html:not([data-rail="open"]) .rail .search .kbd-hint,
+  html:not([data-rail="open"]) .rail .search .scope,
+  html:not([data-rail="open"]) .rail .pkg>summary>:not(.mono),
+  html:not([data-rail="open"]) .rail .pkg>.sections,
+  html:not([data-rail="open"]) .rail .results,
+  html:not([data-rail="open"]) .rail .rail-foot>:not(.rail-expand){display:none}
+  html:not([data-rail="open"]) .rail .brand-row{justify-content:center}
+  html:not([data-rail="open"]) .rail .search{padding:.3rem;justify-content:center;cursor:pointer}
+  html:not([data-rail="open"]) .rail .pkg>summary{justify-content:center;padding:.35rem 0}
+  html:not([data-rail="open"]) .rail .pkg[open]>summary{box-shadow:none}
+  html:not([data-rail="open"]) .rail .rail-foot{justify-content:center}
+  html[data-rail="open"] .rail{width:20rem;box-shadow:var(--shadow-2)}
+  html[data-rail="open"] .rail-backdrop{display:block}
+  .rail-expand{display:inline-flex}
+  main{padding:1.5rem 2rem 4rem}
+}
+@media (min-width:64em){.rail-expand.only-icon{display:none}}
+@media (min-width:64em) and (max-width:79.99em){.rail-expand.only-icon{display:inline-flex}}
+@media (max-width:63.99em){
+  .rail{transform:translateX(-100%);width:min(20rem,88vw);box-shadow:none}
+  html[data-rail="open"] .rail{transform:none;box-shadow:var(--shadow-2)}
+  html[data-rail="open"] .rail-backdrop{display:block}
+  .content{margin-left:0}
+  .topbar{display:flex}
+  main{padding:1.25rem 1rem 3rem}
+  .mrow>details>summary{grid-template-columns:1fr auto;gap:.15rem .75rem}
+  .mrow .mname{grid-column:1;grid-row:1}
+  .mrow .chev{grid-column:2;grid-row:1}
+  .mrow .msum{grid-column:1/-1;grid-row:2;white-space:normal}
+  .pn{grid-template-columns:1fr}
+  .masthead{flex-direction:column}
+}
+@media (max-width:40em){
+  main{padding:1rem .875rem 3rem}
+  .title-block h1{font-size:1.5rem}
+  .shortcuts{grid-template-columns:1fr}
+  .shortcuts dt{text-align:left}
+}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition-duration:0s!important;animation:none!important}}
+</style>
+<script>
+(function(){
+  const H=document.documentElement;
+  const PK='papyri:prefs';
+  const load=()=>{try{return JSON.parse(localStorage.getItem(PK)||'{}')}catch(e){return {}}};
+  const save=(p)=>{try{localStorage.setItem(PK,JSON.stringify(p))}catch(e){}};
+  window.papyriPrefs={load,save,apply};
+  function apply(p){
+    p=p||load();
+    if(p.theme==='dark'||p.theme==='light')H.dataset.theme=p.theme;else delete H.dataset.theme;
+    ['dev','wide','hidePrivate'].forEach(k=>{const a='data-'+k.replace(/[A-Z]/g,m=>'-'+m.toLowerCase());p[k]?H.setAttribute(a,''):H.removeAttribute(a)});
+    document.querySelectorAll('[data-pref-state]').forEach(el=>{el.setAttribute('aria-pressed',String(!!p[el.dataset.prefState]))});
+  }
+  apply();
+  document.addEventListener('DOMContentLoaded',()=>{
+    const p=load();
+    // theme + contributor toggles (rail footer)
+    document.querySelectorAll('[data-toggle-theme]').forEach(b=>b.addEventListener('click',()=>{
+      const q=load();const dark=matchMedia('(prefers-color-scheme:dark)').matches;
+      const cur=q.theme||(dark?'dark':'light');q.theme=cur==='dark'?'light':'dark';save(q);apply(q)}));
+    document.querySelectorAll('[data-toggle-dev]').forEach(b=>b.addEventListener('click',()=>{const q=load();q.dev=!q.dev;save(q);apply(q)}));
+    // rail open/close
+    const rail=document.getElementById('rail');
+    const openRail=(v)=>{v?H.setAttribute('data-rail','open'):H.removeAttribute('data-rail')};
+    document.querySelectorAll('[data-rail-toggle]').forEach(b=>b.addEventListener('click',()=>openRail(!H.hasAttribute('data-rail'))));
+    document.querySelector('.rail-backdrop')?.addEventListener('click',()=>openRail(false));
+    const iconTier=()=>matchMedia('(min-width:64em) and (max-width:79.99em)').matches;
+    rail?.addEventListener('click',(e)=>{if(iconTier()&&!H.hasAttribute('data-rail')){e.preventDefault();openRail(true);
+      const s=e.target.closest('.pkg');if(s)s.open=true;if(e.target.closest('.search'))setTimeout(()=>q.focus(),50)}});
+    // search
+    const q=document.getElementById('q');const box=q?.closest('.search');const scope=box?.querySelector('.scope');
+    const results=document.getElementById('results');
+    const IDX=window.PAPYRI_INDEX||[];const PK_NAMES=window.PAPYRI_PKGS||[];
+    let scoped=null;
+    function render(){
+      const v=q.value.trim();
+      if(!v&&!scoped){rail.removeAttribute('data-searching');return}
+      rail.setAttribute('data-searching','');
+      const lc=v.toLowerCase();
+      const pk=scoped?[]:PK_NAMES.filter(p=>p[0].toLowerCase().includes(lc)).slice(0,6);
+      const sy=IDX.filter(h=>(!scoped||h[1]===scoped)&&h[0]!=='doc'&&(lc===''||h[2].toLowerCase().includes(lc))).slice(0,12);
+      const dc=IDX.filter(h=>(!scoped||h[1]===scoped)&&h[0]==='doc'&&(lc===''||h[2].toLowerCase().includes(lc))).slice(0,6);
+      const hl=s=>{if(!lc)return s;const i=s.toLowerCase().indexOf(lc);return i<0?s:s.slice(0,i)+'<b>'+s.slice(i,i+lc.length)+'</b>'+s.slice(i+lc.length)};
+      let h='';
+      if(pk.length){h+='<h3>Packages</h3><ul>'+pk.map(p=>`<li><a class="hit" href="overview.html"><span class="k">pkg</span><span class="n">${hl(p[0])}</span><span class="s">${p[1]} · ${p[2]}</span></a></li>`).join('')+'</ul>'}
+      if(sy.length){h+='<h3>Symbols'+(scoped?' in '+scoped:'')+'</h3><ul>'+sy.map(x=>`<li><a class="hit" href="${x[4]||'#'}"><span class="k">${x[0]}</span><span class="n">${hl(x[2])}</span><span class="s">${x[3]}</span>${scoped?'':`<span class="p">${x[1]}</span>`}</a></li>`).join('')+'</ul>'}
+      if(dc.length){h+='<h3>Docs</h3><ul>'+dc.map(x=>`<li><a class="hit" href="${x[4]||'#'}"><span class="k doc">doc</span><span class="n" style="font-family:var(--sans)">${hl(x[2])}</span><span class="s">${x[1]} › ${x[3]}</span></a></li>`).join('')+'</ul>'}
+      if(!h)h='<p class="empty">No matches for “'+v.replace(/</g,'&lt;')+'”'+(scoped?' in '+scoped:'')+'. Try <code>class:</code>, <code>fn:</code>, or a package prefix.</p>';
+      results.innerHTML=h;sel=-1;
+    }
+    let sel=-1;
+    function setScope(name){scoped=name;if(name){box.setAttribute('data-scoped','');scope.innerHTML=name+' <span aria-hidden="true">×</span>';q.placeholder='Search in '+name+'…'}else{box.removeAttribute('data-scoped');q.placeholder=q.dataset.ph}render()}
+    if(q){
+      q.dataset.ph=q.placeholder;
+      q.addEventListener('input',render);
+      q.addEventListener('keydown',(e)=>{
+        if(e.key==='Tab'&&!e.shiftKey){const m=q.value.match(/^(\S+)\s*$/);if(m){const p=PK_NAMES.find(x=>x[0].toLowerCase()===m[1].toLowerCase());if(p){e.preventDefault();q.value='';setScope(p[0]);return}}}
+        if(e.key==='Backspace'&&q.value===''&&scoped){setScope(null);return}
+        if(e.key==='Escape'){if(q.value||scoped){q.value='';setScope(null)}else{q.blur();openRail(false)}return}
+        const hits=[...results.querySelectorAll('.hit')];
+        if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();if(!hits.length)return;sel=(sel+(e.key==='ArrowDown'?1:-1)+hits.length)%hits.length;hits.forEach((h,i)=>h.setAttribute('aria-selected',String(i===sel)));hits[sel].scrollIntoView({block:'nearest'})}
+        if(e.key==='Enter'&&sel>=0&&hits[sel]){hits[sel].click()}
+      });
+      scope?.addEventListener('click',()=>{setScope(null);q.focus()});
+      if(q.dataset.scope){setScope(q.dataset.scope)}
+      if(q.dataset.value){q.value=q.dataset.value;render()}
+    }
+    // keyboard model
+    const help=document.getElementById('help');
+    document.addEventListener('keydown',(e)=>{
+      const t=e.target;const typing=t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable);
+      if((e.key==='/'&&!typing)||((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k')){e.preventDefault();if(matchMedia('(max-width:79.99em)').matches)openRail(true);q?.focus();q?.select();return}
+      if(e.key==='?'&&!typing){e.preventDefault();help?.showModal();return}
+      if((e.ctrlKey||e.metaKey)&&e.key===','){e.preventDefault();location.href='prefs.html';return}
+      if(e.altKey&&(e.key==='ArrowLeft'||e.key==='ArrowRight')){const a=document.querySelector(e.key==='ArrowLeft'?'a[rel=prev]':'a[rel=next]');if(a){e.preventDefault();a.click()}return}
+      if(e.altKey&&e.key.toLowerCase()==='r'){e.preventDefault();reveal();return}
+      if(e.key==='Escape'&&H.hasAttribute('data-rail')){openRail(false)}
+    });
+    function reveal(){const a=rail.querySelector('[aria-current="page"]');if(!a)return;let el=a;while(el&&el!==rail){if(el.tagName==='DETAILS')el.open=true;el=el.parentElement}
+      if(matchMedia('(max-width:79.99em)').matches)openRail(true);
+      a.scrollIntoView({block:'center'});a.animate([{outline:'2px solid var(--accent)'},{outline:'2px solid transparent'}],{duration:1200})}
+    // reveal on load (quietly)
+    const cur=rail?.querySelector('[aria-current="page"]');if(cur){const sc=rail.querySelector('.rail-scroll');const r=cur.getBoundingClientRect();const s=sc.getBoundingClientRect();if(r.top<s.top||r.bottom>s.bottom)cur.scrollIntoView({block:'center'})}
+    // copy qualname
+    document.querySelectorAll('.copy').forEach(b=>b.addEventListener('click',()=>{const v=b.dataset.copy;navigator.clipboard?.writeText(v).catch(()=>{});b.setAttribute('data-done','');setTimeout(()=>b.removeAttribute('data-done'),1200)}));
+    // secondary panel fold/unfold with the wide tier
+    const pd=document.querySelector('.panel-d');const mq=matchMedia('(min-width:90em)');
+    const syncPanel=()=>{if(pd){if(mq.matches)pd.open=true;else if(!pd.dataset.user)pd.open=false}};
+    syncPanel();mq.addEventListener('change',syncPanel);pd?.addEventListener('toggle',()=>{if(!mq.matches)pd.dataset.user='1'});
+    // members: expand all / inline toggle
+    const rows=()=>[...document.querySelectorAll('.mrow>details')];
+    const inl=document.getElementById('inline-all');
+    inl?.addEventListener('change',()=>rows().forEach(d=>d.open=inl.checked));
+    document.querySelectorAll('[data-expand-group]').forEach(b=>b.addEventListener('click',()=>{const g=b.closest('.mgroup');const ds=[...g.querySelectorAll('.mrow>details')];const open=ds.some(d=>!d.open);ds.forEach(d=>d.open=open);b.textContent=open?'Collapse all':'Expand all'}));
+    if(p.expandMembers&&inl){inl.checked=true;rows().forEach(d=>d.open=true)}
+    const hp=document.getElementById('hide-private');if(hp){hp.checked=!!p.hidePrivate;hp.addEventListener('change',()=>{const q2=load();q2.hidePrivate=hp.checked;save(q2);apply(q2)})}
+    // open the member row targeted by the hash
+    const openHash=()=>{const id=location.hash.slice(1);if(!id)return;const d=document.getElementById(id)?.querySelector('details');if(d)d.open=true};
+    openHash();addEventListener('hashchange',openHash);
+    // scroll spy for on-this-page
+    const spyLinks=[...document.querySelectorAll('.panel [data-spy] a')];
+    if(spyLinks.length&&'IntersectionObserver' in window){
+      const map=new Map(spyLinks.map(a=>[a.getAttribute('href').slice(1),a]));let active=null;
+      const io=new IntersectionObserver((es)=>{es.forEach(en=>{if(en.isIntersecting){active?.removeAttribute('aria-current');active=map.get(en.target.id);active?.setAttribute('aria-current','true')}})},{rootMargin:'0px 0px -70% 0px'});
+      map.forEach((a,id)=>{const el=document.getElementById(id);if(el)io.observe(el)});
+    }
+    // lazy tree branches (mock)
+    document.querySelectorAll('.tree details[data-lazy]').forEach(d=>d.addEventListener('toggle',()=>{if(!d.open||d.dataset.loaded)return;d.dataset.loaded='1';const ul=d.querySelector('ul');const n=d.dataset.lazy;setTimeout(()=>{ul.innerHTML=Array.from({length:Math.min(+n,8)},(_,i)=>`<li><a href="#"><span class="l">${d.dataset.stub||'item'}_${i+1}</span></a></li>`).join('')+(+n>8?`<li class="lazy">… ${(+n-8)} more (fetched on scroll)</li>`:'')},250)}));
+    document.querySelectorAll('[data-href]').forEach(a=>a.addEventListener('click',e=>{e.preventDefault()}));
+  });
+})();
+</script>
+</head>
+<body data-page="home">
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="app">
+
+<aside class="rail" id="rail" aria-label="Packages and search">
+  <div class="rail-head">
+    <div class="brand-row">
+      <a class="brand" href="home.html"><span class="pil" aria-hidden="true">¶</span><span class="rail-text">papyri</span></a>
+      <button class="btn btn-icon rail-text" data-rail-toggle aria-label="Close navigation" title="Close"><svg class="i" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>
+    <form class="search" role="search" onsubmit="return false">
+      <svg class="i" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <span class="scope" role="status"></span>
+      <label for="q" class="vh">Search packages, symbols and docs</label>
+      <input id="q" type="search" autocomplete="off" spellcheck="false" placeholder="Search 24 packages…" aria-label="Search packages, symbols and docs" aria-controls="results">
+      <kbd class="kbd-hint" aria-hidden="true">/</kbd>
+    </form>
+    <p class="search-tip rail-text">Type a package name + <kbd>Tab</kbd> to scope · <code>class:</code> <code>fn:</code> prefixes · <kbd>↑</kbd><kbd>↓</kbd> <kbd>⏎</kbd></p>
+  </div>
+  <div class="rail-scroll">
+    <div class="results" id="results" role="listbox" aria-label="Search results"></div>
+    <nav class="pkgs-nav" aria-label="Packages"><ul class="pkgs"><li><details class="pkg"><summary title="Fundamental package for array computing in Python."><span class="mono" style="--h:210" aria-hidden="true">NU</span><span class="pkg-name rail-text">numpy</span><span class="pill pill-latest" title="2.3.1 is the latest version">2.3.1 · latest</span></summary><ul class="sections"><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">Guide</span><span class="cnt">61</span></summary><ul class="toc"><li class="lazy subtle" style="padding:.2rem .5rem;font-style:italic">fetched on expand</li></ul></details></li><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">API</span><span class="cnt">2,140</span></summary><ul class="tree"><li class="lazy">fetched on expand</li></ul></details></li><li class="sec"><a href="#"><span class="rail-text">Examples</span><span class="cnt">21</span></a></li></ul></details></li><li><details class="pkg"><summary title="Fundamental algorithms for scientific computing in Python."><span class="mono" style="--h:200" aria-hidden="true">SC</span><span class="pkg-name rail-text">scipy</span><span class="pill pill-older" title="Viewing 1.11.4; latest is 1.16.0">1.11.4 · older <span class="arr">→</span> 1.16.0</span></summary><ul class="sections"><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">Guide</span><span class="cnt">44</span></summary><ul class="toc"><li class="lazy subtle" style="padding:.2rem .5rem;font-style:italic">fetched on expand</li></ul></details></li><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">API</span><span class="cnt">3,891</span></summary><ul class="tree"><li class="lazy">fetched on expand</li></ul></details></li><li class="sec"><a href="#"><span class="rail-text">Examples</span><span class="cnt">20</span></a></li></ul></details></li><li><details class="pkg"><summary title="Comprehensive library for creating static, animated and interactive visualizations."><span class="mono" style="--h:30" aria-hidden="true">MA</span><span class="pkg-name rail-text">matplotlib</span><span class="pill pill-staged" title="Staged preview build pr-1234">staged · pr-1234</span></summary><ul class="sections"><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">Guide</span><span class="cnt">118</span></summary><ul class="toc"><li class="lazy subtle" style="padding:.2rem .5rem;font-style:italic">fetched on expand</li></ul></details></li><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">API</span><span class="cnt">4,120</span></summary><ul class="tree"><li class="lazy">fetched on expand</li></ul></details></li><li class="sec"><a href="#"><span class="rail-text">Examples</span><span class="cnt">3</span></a></li></ul></details></li><li><details class="pkg"><summary title="Powerful data structures for data analysis, time series and statistics."><span class="mono" style="--h:280" aria-hidden="true">PA</span><span class="pkg-name rail-text">pandas</span><span class="pill pill-latest" title="2.3.1 is the latest version">2.3.1 · latest</span></summary><ul class="sections"><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">Guide</span><span class="cnt">97</span></summary><ul class="toc"><li class="lazy subtle" style="padding:.2rem .5rem;font-style:italic">fetched on expand</li></ul></details></li><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">API</span><span class="cnt">2,650</span></summary><ul class="tree"><li class="lazy">fetched on expand</li></ul></details></li><li class="sec"><a href="#"><span class="rail-text">Examples</span><span class="cnt">5</span></a></li></ul></details></li><li><details class="pkg"><summary title="N-D labeled arrays and datasets in Python."><span class="mono" style="--h:190" aria-hidden="true">XA</span><span class="pkg-name rail-text">xarray</span><span class="pill pill-latest" title="2025.7.1 is the latest version">2025.7.1 · latest</span></summary><ul class="sections"><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">Guide</span><span class="cnt">52</span></summary><ul class="toc"><li class="lazy subtle" style="padding:.2rem .5rem;font-style:italic">fetched on expand</li></ul></details></li><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">API</span><span class="cnt">1,180</span></summary><ul class="tree"><li class="lazy">fetched on expand</li></ul></details></li><li class="sec"><a href="#"><span class="rail-text">Examples</span><span class="cnt">19</span></a></li></ul></details></li><li><details class="pkg"><summary title="Parallel PyData with task scheduling."><span class="mono" style="--h:40" aria-hidden="true">DA</span><span class="pkg-name rail-text">dask</span><span class="pill pill-latest" title="2025.7.0 is the latest version">2025.7.0 · latest</span></summary><ul class="sections"><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">Guide</span><span class="cnt">71</span></summary><ul class="toc"><li class="lazy subtle" style="padding:.2rem .5rem;font-style:italic">fetched on expand</li></ul></details></li><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">API</span><span class="cnt">930</span></summary><ul class="tree"><li class="lazy">fetched on expand</li></ul></details></li><li class="sec"><a href="#"><span class="rail-text">Examples</span><span class="cnt">4</span></a></li></ul></details></li><li><details class="pkg"><summary title="IPython: tools for interactive and parallel computing in Python."><span class="mono" style="--h:220" aria-hidden="true">IP</span><span class="pkg-name rail-text">IPython</span><span class="pill pill-latest" title="9.17.1 is the latest version">9.17.1 · latest</span></summary><ul class="sections"><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">Guide</span><span class="cnt">73</span></summary><ul class="toc"><li><a href="#"><span class="l">IPython Documentation</span></a></li><li><a href="#"><span class="l">Overview</span></a></li><li><a href="#"><span class="l">What&#x27;s new in IPython</span></a></li><li><a href="#"><span class="l">Installation</span></a></li><li><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><a href="#"><span class="l">Tutorial</span></a><span class="cnt">8</span></summary><ul><li><a href="doc.html"><span class="l">Introducing IPython</span></a></li><li><a href="#"><span class="l">Rich Outputs</span></a></li><li><a href="#"><span class="l">IPython reference</span></a></li><li><a href="#"><span class="l">IPython as a system shell</span></a></li><li><a href="#"><span class="l">Asynchronous in REPL: Autoawait</span></a></li><li><a href="#"><span class="l">IPython Tips &amp; Tricks</span></a></li><li><a href="#"><span class="l">Python vs IPython</span></a></li><li><a href="#"><span class="l">Built-in magic commands</span></a></li></ul></details></li><li><a href="#"><span class="l">Configuration and customization</span></a></li><li><a href="#"><span class="l">Developer&#x27;s guide for third party tools and libraries</span></a></li><li><a href="#"><span class="l">Guide for IPython core Developers</span></a></li><li><a href="#"><span class="l">The IPython API</span></a></li><li><a href="#"><span class="l">IPython Sphinx Directive</span></a></li><li><a href="#"><span class="l">About IPython</span></a></li></ul></details></li><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">API</span><span class="cnt">1,395</span></summary><ul class="tree"><li><details open><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><a href="#"><span class="l">IPython</span></a></summary><ul><li><details open><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><a href="#"><span class="l">core</span></a></summary><ul></ul></details></li><li class=priv><a href="#"><span class="l">__dir__</span></a></li><li class=priv><a href="#"><span class="l">__getattr__</span></a></li><li><a href="#"><span class="l">embed_kernel</span></a></li><li><a href="#"><span class="l">start_ipython</span></a></li></ul></details></li></ul></details></li><li class="sec"><a href="#"><span class="rail-text">Examples</span><span class="cnt">0</span></a></li></ul></details></li><li><details class="pkg"><summary title="Configuration system for Python applications."><span class="mono" style="--h:160" aria-hidden="true">TR</span><span class="pkg-name rail-text">traitlets</span><span class="pill pill-latest" title="5.14.3 is the latest version">5.14.3 · latest</span></summary><ul class="sections"><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">Guide</span><span class="cnt">9</span></summary><ul class="toc"><li class="lazy subtle" style="padding:.2rem .5rem;font-style:italic">fetched on expand</li></ul></details></li><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">API</span><span class="cnt">312</span></summary><ul class="tree"><li class="lazy">fetched on expand</li></ul></details></li><li class="sec"><a href="#"><span class="rail-text">Examples</span><span class="cnt">16</span></a></li></ul></details></li><li><details class="pkg"><summary title="Python package for creating and manipulating graphs and networks."><span class="mono" style="--h:100" aria-hidden="true">NE</span><span class="pkg-name rail-text">networkx</span><span class="pill pill-latest" title="3.5 is the latest version">3.5 · latest</span></summary><ul class="sections"><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">Guide</span><span class="cnt">38</span></summary><ul class="toc"><li class="lazy subtle" style="padding:.2rem .5rem;font-style:italic">fetched on expand</li></ul></details></li><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">API</span><span class="cnt">1,470</span></summary><ul class="tree"><li class="lazy">fetched on expand</li></ul></details></li><li class="sec"><a href="#"><span class="rail-text">Examples</span><span class="cnt">10</span></a></li></ul></details></li><li><details class="pkg"><summary title="Image processing in Python."><span class="mono" style="--h:340" aria-hidden="true">SC</span><span class="pkg-name rail-text">scikit-image</span><span class="pill pill-latest" title="0.25.2 is the latest version">0.25.2 · latest</span></summary><ul class="sections"><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">Guide</span><span class="cnt">33</span></summary><ul class="toc"><li class="lazy subtle" style="padding:.2rem .5rem;font-style:italic">fetched on expand</li></ul></details></li><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">API</span><span class="cnt">760</span></summary><ul class="tree"><li class="lazy">fetched on expand</li></ul></details></li><li class="sec"><a href="#"><span class="rail-text">Examples</span><span class="cnt">11</span></a></li></ul></details></li><li><details class="pkg"><summary title="Astronomy and astrophysics core library."><span class="mono" style="--h:260" aria-hidden="true">AS</span><span class="pkg-name rail-text">astropy</span><span class="pill pill-latest" title="7.1.0 is the latest version">7.1.0 · latest</span></summary><ul class="sections"><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">Guide</span><span class="cnt">140</span></summary><ul class="toc"><li class="lazy subtle" style="padding:.2rem .5rem;font-style:italic">fetched on expand</li></ul></details></li><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">API</span><span class="cnt">5,210</span></summary><ul class="tree"><li class="lazy">fetched on expand</li></ul></details></li><li class="sec"><a href="#"><span class="rail-text">Examples</span><span class="cnt">3</span></a></li></ul></details></li><li><details class="pkg"><summary title="Computer algebra system written in pure Python."><span class="mono" style="--h:120" aria-hidden="true">SY</span><span class="pkg-name rail-text">sympy</span><span class="pill pill-latest" title="1.14.0 is the latest version">1.14.0 · latest</span></summary><ul class="sections"><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">Guide</span><span class="cnt">96</span></summary><ul class="toc"><li class="lazy subtle" style="padding:.2rem .5rem;font-style:italic">fetched on expand</li></ul></details></li><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">API</span><span class="cnt">6,830</span></summary><ul class="tree"><li class="lazy">fetched on expand</li></ul></details></li><li class="sec"><a href="#"><span class="rail-text">Examples</span><span class="cnt">12</span></a></li></ul></details></li><li><details class="pkg"><summary title="Jupyter protocol implementation and client libraries."><span class="mono" style="--h:25" aria-hidden="true">JU</span><span class="pkg-name rail-text">jupyter_client</span><span class="pill pill-latest" title="8.6.3 is the latest version">8.6.3 · latest</span></summary><ul class="sections"><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">Guide</span><span class="cnt">12</span></summary><ul class="toc"><li class="lazy subtle" style="padding:.2rem .5rem;font-style:italic">fetched on expand</li></ul></details></li><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">API</span><span class="cnt">188</span></summary><ul class="tree"><li class="lazy">fetched on expand</li></ul></details></li><li class="sec"><a href="#"><span class="rail-text">Examples</span><span class="cnt">14</span></a></li></ul></details></li><li><details class="pkg"><summary title="Documentation build and rendering pipeline for Python packages."><span class="mono" style="--h:300" aria-hidden="true">PA</span><span class="pkg-name rail-text">papyri</span><span class="pill pill-latest" title="0.0.10 is the latest version">0.0.10 · latest</span></summary><ul class="sections"><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">Guide</span><span class="cnt">10</span></summary><ul class="toc"><li class="lazy subtle" style="padding:.2rem .5rem;font-style:italic">fetched on expand</li></ul></details></li><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">API</span><span class="cnt">568</span></summary><ul class="tree"><li class="lazy">fetched on expand</li></ul></details></li><li class="sec"><a href="#"><span class="rail-text">Examples</span><span class="cnt">7</span></a></li></ul></details></li><li><details class="pkg"><summary title="Machine learning in Python."><span class="mono" style="--h:60" aria-hidden="true">SC</span><span class="pkg-name rail-text">scikit-learn</span><span class="pill pill-latest" title="1.7.1 is the latest version">1.7.1 · latest</span></summary><ul class="sections"><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">Guide</span><span class="cnt">84</span></summary><ul class="toc"><li class="lazy subtle" style="padding:.2rem .5rem;font-style:italic">fetched on expand</li></ul></details></li><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">API</span><span class="cnt">2,310</span></summary><ul class="tree"><li class="lazy">fetched on expand</li></ul></details></li><li class="sec"><a href="#"><span class="rail-text">Examples</span><span class="cnt">6</span></a></li></ul></details></li><li><details class="pkg"><summary title="Blazingly fast DataFrame library."><span class="mono" style="--h:240" aria-hidden="true">PO</span><span class="pkg-name rail-text">polars</span><span class="pill pill-latest" title="1.31.0 is the latest version">1.31.0 · latest</span></summary><ul class="sections"><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">Guide</span><span class="cnt">55</span></summary><ul class="toc"><li class="lazy subtle" style="padding:.2rem .5rem;font-style:italic">fetched on expand</li></ul></details></li><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">API</span><span class="cnt">1,740</span></summary><ul class="tree"><li class="lazy">fetched on expand</li></ul></details></li><li class="sec"><a href="#"><span class="rail-text">Examples</span><span class="cnt">1</span></a></li></ul></details></li><li><details class="pkg"><summary title="Compiling Python code using LLVM."><span class="mono" style="--h:320" aria-hidden="true">NU</span><span class="pkg-name rail-text">numba</span><span class="pill pill-latest" title="0.61.2 is the latest version">0.61.2 · latest</span></summary><ul class="sections"><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">Guide</span><span class="cnt">47</span></summary><ul class="toc"><li class="lazy subtle" style="padding:.2rem .5rem;font-style:italic">fetched on expand</li></ul></details></li><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">API</span><span class="cnt">640</span></summary><ul class="tree"><li class="lazy">fetched on expand</li></ul></details></li><li class="sec"><a href="#"><span class="rail-text">Examples</span><span class="cnt">9</span></a></li></ul></details></li><li><details class="pkg"><summary title="Read and write HDF5 files from Python."><span class="mono" style="--h:80" aria-hidden="true">H5</span><span class="pkg-name rail-text">h5py</span><span class="pill pill-latest" title="3.14.0 is the latest version">3.14.0 · latest</span></summary><ul class="sections"><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">Guide</span><span class="cnt">18</span></summary><ul class="toc"><li class="lazy subtle" style="padding:.2rem .5rem;font-style:italic">fetched on expand</li></ul></details></li><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">API</span><span class="cnt">210</span></summary><ul class="tree"><li class="lazy">fetched on expand</li></ul></details></li><li class="sec"><a href="#"><span class="rail-text">Examples</span><span class="cnt">8</span></a></li></ul></details></li><li><details class="pkg"><summary title="Python Imaging Library (Fork)."><span class="mono" style="--h:20" aria-hidden="true">PI</span><span class="pkg-name rail-text">pillow</span><span class="pill pill-latest" title="11.3.0 is the latest version">11.3.0 · latest</span></summary><ul class="sections"><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">Guide</span><span class="cnt">29</span></summary><ul class="toc"><li class="lazy subtle" style="padding:.2rem .5rem;font-style:italic">fetched on expand</li></ul></details></li><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">API</span><span class="cnt">890</span></summary><ul class="tree"><li class="lazy">fetched on expand</li></ul></details></li><li class="sec"><a href="#"><span class="rail-text">Examples</span><span class="cnt">2</span></a></li></ul></details></li><li><details class="pkg"><summary title="Python HTTP for Humans."><span class="mono" style="--h:200" aria-hidden="true">RE</span><span class="pkg-name rail-text">requests</span><span class="pill pill-latest" title="2.32.4 is the latest version">2.32.4 · latest</span></summary><ul class="sections"><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">Guide</span><span class="cnt">14</span></summary><ul class="toc"><li class="lazy subtle" style="padding:.2rem .5rem;font-style:italic">fetched on expand</li></ul></details></li><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">API</span><span class="cnt">96</span></summary><ul class="tree"><li class="lazy">fetched on expand</li></ul></details></li><li class="sec"><a href="#"><span class="rail-text">Examples</span><span class="cnt">20</span></a></li></ul></details></li><li><details class="pkg"><summary title="Database Abstraction Library."><span class="mono" style="--h:350" aria-hidden="true">SQ</span><span class="pkg-name rail-text">sqlalchemy</span><span class="pill pill-latest" title="2.0.41 is the latest version">2.0.41 · latest</span></summary><ul class="sections"><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">Guide</span><span class="cnt">122</span></summary><ul class="toc"><li class="lazy subtle" style="padding:.2rem .5rem;font-style:italic">fetched on expand</li></ul></details></li><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">API</span><span class="cnt">3,980</span></summary><ul class="tree"><li class="lazy">fetched on expand</li></ul></details></li><li class="sec"><a href="#"><span class="rail-text">Examples</span><span class="cnt">12</span></a></li></ul></details></li><li><details class="pkg"><summary title="Statistical data visualization."><span class="mono" style="--h:180" aria-hidden="true">SE</span><span class="pkg-name rail-text">seaborn</span><span class="pill pill-latest" title="0.13.2 is the latest version">0.13.2 · latest</span></summary><ul class="sections"><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">Guide</span><span class="cnt">21</span></summary><ul class="toc"><li class="lazy subtle" style="padding:.2rem .5rem;font-style:italic">fetched on expand</li></ul></details></li><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">API</span><span class="cnt">190</span></summary><ul class="tree"><li class="lazy">fetched on expand</li></ul></details></li><li class="sec"><a href="#"><span class="rail-text">Examples</span><span class="cnt">18</span></a></li></ul></details></li><li><details class="pkg"><summary title="Statistical computations and models for Python."><span class="mono" style="--h:140" aria-hidden="true">ST</span><span class="pkg-name rail-text">statsmodels</span><span class="pill pill-latest" title="0.14.5 is the latest version">0.14.5 · latest</span></summary><ul class="sections"><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">Guide</span><span class="cnt">66</span></summary><ul class="toc"><li class="lazy subtle" style="padding:.2rem .5rem;font-style:italic">fetched on expand</li></ul></details></li><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">API</span><span class="cnt">2,870</span></summary><ul class="tree"><li class="lazy">fetched on expand</li></ul></details></li><li class="sec"><a href="#"><span class="rail-text">Examples</span><span class="cnt">14</span></a></li></ul></details></li><li><details class="pkg"><summary title="Chunked, compressed N-dimensional arrays."><span class="mono" style="--h:90" aria-hidden="true">ZA</span><span class="pkg-name rail-text">zarr</span><span class="pill pill-latest" title="3.1.0 is the latest version">3.1.0 · latest</span></summary><ul class="sections"><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">Guide</span><span class="cnt">25</span></summary><ul class="toc"><li class="lazy subtle" style="padding:.2rem .5rem;font-style:italic">fetched on expand</li></ul></details></li><li class="sec"><details><summary><svg class="i chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span class="rail-text">API</span><span class="cnt">420</span></summary><ul class="tree"><li class="lazy">fetched on expand</li></ul></details></li><li class="sec"><a href="#"><span class="rail-text">Examples</span><span class="cnt">9</span></a></li></ul></details></li></ul></nav>
+  </div>
+  <div class="rail-foot">
+    <a class="btn btn-icon" href="prefs.html" aria-label="Preferences (Ctrl+,)" title="Preferences"><svg class="i" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></a>
+    <button class="btn btn-icon" data-toggle-theme aria-label="Toggle theme" title="Theme"><svg class="i" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button>
+    <button class="btn btn-icon" data-toggle-dev data-pref-state="dev" aria-pressed="false" aria-label="Toggle contributor mode" title="Contributor mode"><svg class="i" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0 5 5L13 18l-3-3 6.7-6.7zM10 15l-5.5 5.5a1.4 1.4 0 0 1-2-2L8 13"/></svg></button>
+    <button class="btn btn-icon" onclick="document.getElementById('help').showModal()" aria-label="Keyboard shortcuts (?)" title="Shortcuts"><svg class="i" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01"/></svg></button>
+    <span class="spacer"></span>
+    <span class="status rail-text">24 packages · 47,131 symbols</span>
+    <button class="btn btn-icon rail-expand only-icon" data-rail-toggle aria-label="Expand navigation" title="Expand"><svg class="i" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></button>
+  </div>
+</aside>
+<div class="rail-backdrop" aria-hidden="true"></div>
+<script>window.PAPYRI_PKGS=[["numpy", "2.3.1", "Fundamental package for array computing in Python."], ["scipy", "1.11.4", "Fundamental algorithms for scientific computing in Python."], ["matplotlib", "3.10.3", "Comprehensive library for creating static, animated and interactive visualizations."], ["pandas", "2.3.1", "Powerful data structures for data analysis, time series and statistics."], ["xarray", "2025.7.1", "N-D labeled arrays and datasets in Python."], ["dask", "2025.7.0", "Parallel PyData with task scheduling."], ["IPython", "9.17.1", "IPython: tools for interactive and parallel computing in Python."], ["traitlets", "5.14.3", "Configuration system for Python applications."], ["networkx", "3.5", "Python package for creating and manipulating graphs and networks."], ["scikit-image", "0.25.2", "Image processing in Python."], ["astropy", "7.1.0", "Astronomy and astrophysics core library."], ["sympy", "1.14.0", "Computer algebra system written in pure Python."], ["jupyter_client", "8.6.3", "Jupyter protocol implementation and client libraries."], ["papyri", "0.0.10", "Documentation build and rendering pipeline for Python packages."], ["scikit-learn", "1.7.1", "Machine learning in Python."], ["polars", "1.31.0", "Blazingly fast DataFrame library."], ["numba", "0.61.2", "Compiling Python code using LLVM."], ["h5py", "3.14.0", "Read and write HDF5 files from Python."], ["pillow", "11.3.0", "Python Imaging Library (Fork)."], ["requests", "2.32.4", "Python HTTP for Humans."], ["sqlalchemy", "2.0.41", "Database Abstraction Library."], ["seaborn", "0.13.2", "Statistical data visualization."], ["statsmodels", "0.14.5", "Statistical computations and models for Python."], ["zarr", "3.1.0", "Chunked, compressed N-dimensional arrays."]];window.PAPYRI_INDEX=[["class", "numpy", "numpy.ndarray", "An array object of fixed size.", "#"], ["function", "numpy", "numpy.linspace", "Return evenly spaced numbers over a specified interval.", "#"], ["function", "numpy", "numpy.arange", "Return evenly spaced values within a given interval.", "#"], ["function", "numpy", "numpy.fft.fft", "Compute the one-dimensional discrete Fourier Transform.", "#"], ["function", "scipy", "scipy.optimize.minimize", "Minimization of scalar function of one or more variables.", "#"], ["function", "scipy", "scipy.linalg.solve", "Solves the linear equation set a @ x == b.", "#"], ["function", "scipy", "scipy.fft.fft", "Compute the 1-D discrete Fourier Transform.", "#"], ["class", "pandas", "pandas.DataFrame", "Two-dimensional, size-mutable, tabular data.", "#"], ["function", "pandas", "pandas.read_csv", "Read a comma-separated values (csv) file into DataFrame.", "#"], ["function", "matplotlib", "matplotlib.pyplot.plot", "Plot y versus x as lines and/or markers.", "#"], ["function", "matplotlib", "matplotlib.pyplot.subplots", "Create a figure and a set of subplots.", "#"], ["class", "IPython", "IPython.core.interactiveshell:InteractiveShell", "An enhanced, interactive shell for Python.", "class.html"], ["method", "IPython", "IPython.core.interactiveshell:InteractiveShell.run_cell", "Run a complete IPython cell.", "function.html"], ["method", "IPython", "IPython.core.interactiveshell:InteractiveShell.run_cell_async", "Run a complete IPython cell asynchronously.", "#"], ["function", "IPython", "IPython.display:display", "Display a Python object in all frontends.", "#"], ["function", "IPython", "IPython:start_ipython", "Launch a normal IPython instance (as opposed to embedded).", "#"], ["class", "xarray", "xarray.DataArray", "N-dimensional array with labeled coordinates and dimensions.", "#"], ["function", "dask", "dask.array.from_array", "Create dask array from something that looks like an array.", "#"], ["class", "traitlets", "traitlets.HasTraits", "Base class for objects with typed attributes.", "#"], ["class", "networkx", "networkx.Graph", "Base class for undirected graphs.", "#"], ["function", "scikit-image", "skimage.io.imread", "Load an image from file.", "#"], ["class", "astropy", "astropy.units.Quantity", "A Quantity represents a number with an associated unit.", "#"], ["function", "sympy", "sympy.solve", "Algebraically solves equations and systems of equations.", "#"], ["class", "jupyter_client", "jupyter_client.KernelManager", "Manages a single kernel in a subprocess.", "#"], ["class", "papyri", "papyri.gen:Gen", "Drive IR generation for one package.", "#"], ["function", "seaborn", "seaborn.lineplot", "Draw a line plot with possibility of semantic groupings.", "#"], ["doc", "IPython", "Introducing IPython", "Tutorial", "doc.html"], ["doc", "IPython", "Built-in magic commands", "Tutorial", "#"], ["doc", "IPython", "Rich Outputs", "Tutorial", "#"], ["doc", "numpy", "NumPy quickstart", "User guide", "#"], ["doc", "pandas", "10 minutes to pandas", "Getting started", "#"], ["doc", "matplotlib", "Quick start guide", "Users guide", "#"]];</script>
+
+<div class="content">
+  <header class="topbar">
+    <button class="btn btn-icon" data-rail-toggle aria-label="Open navigation" aria-controls="rail"><svg class="i" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    <a class="brand" href="home.html"><span class="pil" aria-hidden="true">¶</span>papyri</a>
+    <button class="btn btn-icon" data-rail-toggle aria-label="Search" onclick="setTimeout(()=>document.getElementById('q').focus(),160)"><svg class="i" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
+  </header>
+  <main id="main">
+
+<header class="title-block">
+  <div class="title-row"><h1>Python documentation, cross-linked</h1></div>
+  <p class="lede">24 packages · 47,131 API objects · 1,326 guide pages, rendered from one place. Nothing is selected — pick a package on the left, or search.</p>
+</header>
+<div class="page-body welcome">
+  <button class="big-search" type="button" onclick="document.getElementById('q').focus()"><svg class="i" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg> Search packages, symbols and docs… <kbd style="margin-left:auto">/</kbd></button>
+  <ul class="tips" aria-label="Search tips">
+    <li><code>linspace</code> — a symbol in any package</li>
+    <li><code>numpy</code> + <kbd>Tab</kbd> — scope to one package, then <code>linspace</code></li>
+    <li><code>class:Shell</code> / <code>fn:run_</code> — filter by kind</li>
+    <li><code>"exact name"</code> — exact match only</li>
+  </ul>
+  <section aria-labelledby="h-recent">
+    <h2 id="h-recent">Recently updated</h2>
+    <ul class="recent"><li><span class="mono md" style="--h:30" aria-hidden="true">MA</span><span class="n"><a href="#">matplotlib</a><code>3.10.3+pr1234.a1b2c3d</code></span><span class="t">8 minutes ago<br><span class="st staged"><svg class="i" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 8-4 4 4 4m8-8 4 4-4 4m-6 3 4-14"/></svg> staged</span></span><span class="s">PR #1234 preview · expires in 6 days</span></li><li><span class="mono md" style="--h:220" aria-hidden="true">IP</span><span class="n"><a href="overview.html">IPython</a><code>9.17.1</code></span><span class="t">2 hours ago<br><span class="st ok"><svg class="i" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg> ingested</span></span><span class="s">IPython: tools for interactive and parallel computing in Python.</span></li><li><span class="mono md" style="--h:280" aria-hidden="true">PA</span><span class="n"><a href="#">pandas</a><code>2.3.1</code></span><span class="t">yesterday<br><span class="st ok"><svg class="i" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg> ingested</span></span><span class="s">Powerful data structures for data analysis, time series and statistics.</span></li><li><span class="mono md" style="--h:200" aria-hidden="true">SC</span><span class="n"><a href="#">scipy</a><code>1.16.0</code></span><span class="t">2 days ago<br><span class="st ok"><svg class="i" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg> ingested</span></span><span class="s">Fundamental algorithms for scientific computing in Python.</span></li><li><span class="mono md" style="--h:90" aria-hidden="true">ZA</span><span class="n"><a href="#">zarr</a><code>3.1.0</code></span><span class="t">3 days ago<br><span class="st fail"><svg class="i" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 20h20L12 3zm0 7v4m0 3h.01"/></svg> failed</span></span><span class="s">ingest failed: 2 unresolvable figure assets</span></li><li><span class="mono md" style="--h:210" aria-hidden="true">NU</span><span class="n"><a href="#">numpy</a><code>2.3.1</code></span><span class="t">5 days ago<br><span class="st ok"><svg class="i" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg> ingested</span></span><span class="s">Fundamental package for array computing in Python.</span></li><li><span class="mono md" style="--h:190" aria-hidden="true">XA</span><span class="n"><a href="#">xarray</a><code>2025.7.1</code></span><span class="t">last week<br><span class="st ok"><svg class="i" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg> ingested</span></span><span class="s">N-D labeled arrays and datasets in Python.</span></li><li><span class="mono md" style="--h:300" aria-hidden="true">PA</span><span class="n"><a href="#">papyri</a><code>0.0.10</code></span><span class="t">2 weeks ago<br><span class="st ok"><svg class="i" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg> ingested</span></span><span class="s">Documentation build and rendering pipeline for Python packages.</span></li></ul>
+    <p class="muted" style="font-size:var(--text-sm);margin-top:.5rem">Staged builds are PR previews: excluded from search and from “Referenced by” until promoted. Failed ingests are visible to maintainers only in the deployed service.</p>
+  </section>
+  <section aria-labelledby="h-keys">
+    <h2 id="h-keys">Keyboard</h2>
+    <dl class="shortcuts">
+      <dt><kbd>/</kbd> <kbd>Ctrl</kbd>+<kbd>K</kbd></dt><dd>Search — results replace the package list in the sidebar</dd>
+      <dt><kbd>?</kbd></dt><dd>All shortcuts</dd>
+      <dt><kbd>Alt</kbd>+<kbd>←</kbd> <kbd>Alt</kbd>+<kbd>→</kbd></dt><dd>Previous / next page in a guide, or sibling member in a class</dd>
+      <dt><kbd>Alt</kbd>+<kbd>R</kbd></dt><dd>Reveal the current page in the sidebar</dd>
+      <dt><kbd>Ctrl</kbd>+<kbd>,</kbd></dt><dd>Preferences (theme, private members, wide layout, contributor mode)</dd>
+    </dl>
+  </section>
+</div>
+
+  </main>
+</div>
+</div>
+
+<dialog id="help" aria-labelledby="help-h">
+  <button class="btn btn-icon close" onclick="this.closest('dialog').close()" aria-label="Close"><svg class="i" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+  <h2 id="help-h">Keyboard shortcuts</h2>
+  <dl class="shortcuts">
+    <dt><kbd>/</kbd> or <kbd>Ctrl</kbd>+<kbd>K</kbd></dt><dd>Focus search (the sidebar becomes the result list)</dd>
+    <dt><kbd>pkg</kbd> + <kbd>Tab</kbd></dt><dd>Scope search to one package; <kbd>⌫</kbd> on empty input unscopes</dd>
+    <dt><kbd>↑</kbd> <kbd>↓</kbd> <kbd>⏎</kbd></dt><dd>Move through results, open</dd>
+    <dt><kbd>Esc</kbd></dt><dd>Clear search / close sidebar overlay</dd>
+    <dt><kbd>Alt</kbd>+<kbd>←</kbd> / <kbd>→</kbd></dt><dd>Previous / next page in the guide</dd>
+    <dt><kbd>Alt</kbd>+<kbd>R</kbd></dt><dd>Reveal the current page in the sidebar tree</dd>
+    <dt><kbd>Ctrl</kbd>+<kbd>,</kbd></dt><dd>Preferences</dd>
+    <dt><kbd>?</kbd></dt><dd>This help</dd>
+  </dl>
+</dialog>
+
+</body>
+</html>

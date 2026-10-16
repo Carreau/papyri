@@ -4,7 +4,7 @@ build-backend = "flit_core.buildapi"
 
 [project]
 name = "papyri"
-authors = [{name = "Matthias Bussonnier", email = "bussonniermatthias@gmail.com"}]
+authors = [{name = "M Bussonnier", email = "bussonniermatthias@gmail.com"}]
 classifiers = ["License :: OSI Approved :: MIT License"]
 readme = "Readme.md"
 license = {file = "LICENSE"}

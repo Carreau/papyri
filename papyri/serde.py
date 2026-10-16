@@ -32,13 +32,13 @@ Example::
         ...:
 
 
-    In [17]: obj = Book([Author("Matthias", "B"), Reviewer("Tony", "Fast")], "pyshs")
+    In [17]: obj = Book([Author("M", "B"), Reviewer("Tony", "Fast")], "pyshs")
         ...:
         ...: data = serialize(obj , Book)
         ...:
         ...: deserialize(Book, Book, data)
 
-    Out[17]: Book(author=[Author(first='Matthias', last='B'), Reviewer(first='Tony', last='Fast')], title='pyshs')
+    Out[17]: Book(author=[Author(first='M', last='B'), Reviewer(first='Tony', last='Fast')], title='pyshs')
 
                           ^...................................^
                                             .
